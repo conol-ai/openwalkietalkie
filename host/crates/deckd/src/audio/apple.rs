@@ -22,6 +22,7 @@
 //! nothing at all. Neither of them is what §7.8's prompting flow is about,
 //! and nothing here may be read as evidence about the daemon's TCC path
 //! (V9).
+use super::apple_transcript::{AppleTranscript, SpeechSpan};
 use super::mainloop;
 use super::traits::{
     AudioError, AudioFormat, BoxFuture, EngineInfo, OnDevice, SttEngine, SttEvent, SttSession,
@@ -377,11 +378,30 @@ impl SttEngine for AppleStt {
                     let refs: Vec<&NSString> = strings.iter().map(AsRef::as_ref).collect();
                     request.setContextualStrings(&NSArray::from_slice(&refs));
                 }
+                let transcript = RefCell::new(AppleTranscript::default());
                 let handler = RcBlock::new(
                     move |result: *mut SFSpeechRecognitionResult,
                           error: *mut objc2_foundation::NSError| {
                         if let Some(result) = result.as_ref() {
-                            let text = result.bestTranscription().formattedString().to_string();
+                            let best = result.bestTranscription();
+                            // A pause can settle a phrase without ending the
+                            // task. The next partial then starts from scratch.
+                            // Metadata identifies these settled results; their
+                            // audio ranges also handle repeated callbacks and
+                            // cumulative finals without duplicating words.
+                            let span = result.speechRecognitionMetadata().map(|metadata| {
+                                let start = metadata.speechStartTimestamp();
+                                let end = best
+                                    .segments()
+                                    .iter()
+                                    .fold(start + metadata.speechDuration(), |end, word| {
+                                        end.max(word.timestamp() + word.duration())
+                                    });
+                                SpeechSpan { start, end }
+                            });
+                            let text = transcript
+                                .borrow_mut()
+                                .update(best.formattedString().to_string(), span);
                             if result.isFinal() {
                                 let _ = final_tx.try_send(Ok(text.clone()));
                                 let _ = events_tx.send(SttEvent::Final(text));

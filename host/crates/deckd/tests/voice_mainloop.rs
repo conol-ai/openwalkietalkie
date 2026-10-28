@@ -17,7 +17,9 @@
 
 use deckd::audio::apple::{AppleStt, AppleTts};
 use deckd::audio::mainloop::{call, is_main_thread, post, turn};
-use deckd::audio::traits::{OnDevice, SttEngine, TtsChunk, TtsEngine, TtsRequest};
+use deckd::audio::traits::{
+    OnDevice, SttEngine, SttEvent, SttStart, TtsChunk, TtsEngine, TtsRequest,
+};
 use deckd::audio::FromAudio;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -38,6 +40,103 @@ fn row(name: &str, ok: bool, failures: &mut usize) {
         println!("FAIL  mainloop {name}");
         *failures += 1;
     }
+}
+
+/// Opt-in real-framework regression: no microphone, playback, or messages
+/// sent to an agent. Generate three sentences, feed them in real time with
+/// three-second pauses, then release PTT while the last phrase is pending.
+fn speech_with_pauses() -> String {
+    let tts = AppleTts::new();
+    let voice = tts
+        .voices()
+        .into_iter()
+        .find(|voice| voice.locale == "en-US" && voice.name == "Samantha")
+        .expect("install the Samantha en-US voice for this optional regression");
+    let mut recording = Vec::new();
+    let mut rate = 0;
+    for phrase in [
+        "Please keep the first sentence.",
+        "Then add the second sentence.",
+        "Finally keep all three sentences.",
+    ] {
+        let job = tts
+            .synthesize(&TtsRequest {
+                text: phrase.into(),
+                voice: Some(voice.id.clone()),
+                rate: 0.45,
+            })
+            .expect("synthesize a test phrase");
+        let format = job.format();
+        assert_eq!(format.channels, 1);
+        if rate == 0 {
+            rate = format.rate;
+        }
+        assert_eq!(rate, format.rate);
+        if !recording.is_empty() {
+            recording.resize(recording.len() + rate as usize * 3, 0.0);
+        }
+        let chunks = job.chunks();
+        loop {
+            match chunks
+                .recv_timeout(Duration::from_secs(10))
+                .expect("TTS chunk")
+            {
+                TtsChunk::Pcm(samples) => recording.extend(samples),
+                TtsChunk::End => break,
+                TtsChunk::Error(error) => panic!("TTS failed: {error}"),
+            }
+        }
+    }
+    let mut session = AppleStt::new()
+        .start(&SttStart {
+            locale: "en-US".into(),
+            contextual: Vec::new(),
+            allow_server: false,
+        })
+        .expect("start on-device STT");
+    let events = session.events();
+    let mut preview_with_all_phrases = false;
+    for chunk in recording.chunks(rate as usize / 10) {
+        session.feed(chunk, rate);
+        std::thread::sleep(Duration::from_millis(100));
+        for event in events.try_iter() {
+            match event {
+                SttEvent::Partial(text) => {
+                    preview_with_all_phrases |= contains_all_phrases(&text);
+                }
+                SttEvent::Error { code, message } => panic!("STT failed: {code}: {message}"),
+                SttEvent::Final(_) => panic!("STT ended before the simulated PTT release"),
+            }
+        }
+    }
+    let final_text =
+        deckd::audio::block_on_until(session.finish(), Instant::now() + Duration::from_secs(10))
+            .expect("STT final deadline")
+            .expect("STT final result");
+    assert!(
+        preview_with_all_phrases,
+        "preview lost a phrase across a pause"
+    );
+    assert!(
+        contains_all_phrases(&final_text),
+        "incomplete final: {final_text}"
+    );
+    for word in ["first", "second", "finally"] {
+        assert_eq!(
+            final_text.to_lowercase().matches(word).count(),
+            1,
+            "duplicated phrase: {final_text}"
+        );
+    }
+    final_text
+}
+
+fn contains_all_phrases(text: &str) -> bool {
+    let text = text.to_lowercase();
+    matches!(
+        (text.find("first sentence"), text.find("second sentence"), text.find("all three")),
+        (Some(first), Some(second), Some(third)) if first < second && second < third
+    )
 }
 
 fn main() {
@@ -278,6 +377,37 @@ fn main() {
         None => {
             println!("skip  AVSpeech produced no buffers on this machine");
         }
+    }
+
+    if std::env::var("OWT_TEST_STT_PAUSES").as_deref() == Ok("1") {
+        let (done_tx, done) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            let text = speech_with_pauses();
+            let _ = done_tx.send(text);
+        });
+        let deadline = Instant::now() + Duration::from_secs(90);
+        let result = loop {
+            turn(0.05);
+            match done.try_recv() {
+                Ok(text) => break Some(text),
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => break None,
+                Err(std::sync::mpsc::TryRecvError::Empty) if Instant::now() < deadline => {}
+                Err(std::sync::mpsc::TryRecvError::Empty) => break None,
+            }
+        };
+        if let Some(text) = &result {
+            println!("      pause regression final: {text}");
+        }
+        row(
+            "AppleStt preserves speech across pauses",
+            result.is_some(),
+            &mut failures,
+        );
+        if worker.is_finished() {
+            let _ = worker.join();
+        }
+    } else {
+        println!("skip  real STT pause regression (set OWT_TEST_STT_PAUSES=1)");
     }
 
     println!("mainloop result: {} failed", failures);

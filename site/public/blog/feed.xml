@@ -5,8 +5,16 @@
   <id>https://openwalkietalkie.org/blog/</id>
   <link href="https://openwalkietalkie.org/blog/" />
   <link rel="self" type="application/atom+xml" href="https://openwalkietalkie.org/blog/feed.xml" />
-  <updated>2026-10-28T03:07:14Z</updated>
+  <updated>2026-10-28T06:26:49Z</updated>
   <author><name>Tony Huang</name></author>
+  <entry>
+    <title>OpenWalkieTalkie v0.11.1: Keep your words across pauses</title>
+    <id>https://openwalkietalkie.org/blog/ptt-pauses-keep-your-words/</id>
+    <link href="https://openwalkietalkie.org/blog/ptt-pauses-keep-your-words/" />
+    <published>2026-10-28T06:26:49Z</published>
+    <updated>2026-10-28T06:26:49Z</updated>
+    <summary>Pause while holding PTT and keep speaking. Earlier phrases now stay in the preview and final transcript with Apple on-device recognition.</summary>
+  </entry>
   <entry>
     <title>OpenWalkieTalkie v0.11.0: Conol and native companions</title>
     <id>https://openwalkietalkie.org/blog/conol-and-native-companions/</id>

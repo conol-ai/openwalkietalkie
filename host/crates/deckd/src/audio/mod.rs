@@ -44,6 +44,8 @@ pub mod fakes;
 #[cfg(target_os = "macos")]
 pub mod apple;
 #[cfg(target_os = "macos")]
+mod apple_transcript;
+#[cfg(target_os = "macos")]
 pub mod coreaudio;
 #[cfg(target_os = "macos")]
 pub mod engine;

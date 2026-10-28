@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie v0.11.1: Keep your words across pauses · OpenWalkieTalkie</title>
+<meta name="description" content="Pause while holding PTT and keep speaking. Earlier phrases now stay in the preview and final transcript with Apple on-device recognition." />
+<link rel="canonical" href="https://openwalkietalkie.org/blog/ptt-pauses-keep-your-words/" />
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.11.1: Keep your words across pauses · OpenWalkieTalkie" />
+<meta property="og:description" content="Pause while holding PTT and keep speaking. Earlier phrases now stay in the preview and final transcript with Apple on-device recognition." />
+<meta property="og:url" content="https://openwalkietalkie.org/blog/ptt-pauses-keep-your-words/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie Blog" href="/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">Skip to content</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/" aria-label="OpenWalkieTalkie — home">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="Sections">
+      <a href="/#pile">The Pile</a>
+      <a href="/#features">Features</a>
+      <a href="/#demo">Try It</a>
+      <a href="/#faces">Faces</a>
+      <a href="/#blueprint">Blueprint</a>
+      <a href="/docs/">Docs</a>
+      <a href="/blog/" aria-current="true">Blog</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle day and night theme" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">DAY</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="Open menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">THE BLOG · RELEASE NOTES</p>
+  <h1>OpenWalkieTalkie v0.11.1: Keep your words across pauses</h1>
+  <p class="post-meta"><span>October 28, 2026</span><span>Mac app and service patch</span></p>
+</header>
+<article class="post-body">
+  <p>You should be able to think between sentences without losing what you already said. Version 0.11.1 fixes a dictation bug where pausing while holding PTT could leave only the last phrase in your message.</p>
+  <h2>One button hold, every phrase</h2>
+  <p>With Apple on-device recognition, a pause can complete a phrase while the recording continues. The next recognition result may contain only the new phrase. The service previously treated that result as a replacement for the whole transcript.</p>
+  <p>The service now keeps completed phrases throughout the PTT hold. The live preview includes earlier sentences, and releasing the button sends the complete transcript. Corrections still replace the words being recognized, and intentionally repeated phrases are kept.</p>
+  <h2>Tested with real pauses</h2>
+  <p>We reproduced the loss with three synthesized English sentences separated by three-second pauses. Running the same scenario through Apple's on-device recognizer with the fix preserved all three sentences in both the preview and the final result. Regression tests also cover corrected words, repeated phrases, cumulative results and empty final results.</p>
+  <h2>Update the Mac app</h2>
+  <p>Choose <strong>Check for Updates</strong>, or install the signed, notarized 0.11.1 Mac app for Apple Silicon or Intel. If the service still reports an older version, choose <strong>Service → Restart</strong>. macOS 13 or later is required.</p>
+  <p>This fix is in the Mac service. Firmware remains at <strong>0.11.0</strong>; no firmware or bootloader update is needed for this patch. Your settings and Bluetooth pairing are preserved.</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.11.1" rel="noopener">Get OpenWalkieTalkie v0.11.1 and checksums on GitHub →</a></p>
+  <p class="post-back"><a href="/blog/">← Back to the blog</a></p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · A COHDL project · MIT software · CERN-OHL-P hardware</span>
+    <nav aria-label="Footer">
+      <a href="/#waitlist">Join the waitlist</a>
+      <a href="/privacy/">Privacy Policy</a>
+      <a href="/cookies/">Cookie information</a>
+      <a href="/cookies/" data-privacy-open>Privacy notice</a>
+      <a href="/">Home</a>
+      <a href="/#demo">Try It</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Join the CoHDL and OpenWalkieTalkie community on Discord">Discord</a>
+      <a href="/blog/feed.xml">Feed</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>
