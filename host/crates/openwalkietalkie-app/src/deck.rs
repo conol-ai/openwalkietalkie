@@ -151,6 +151,10 @@ impl Shell {
                 .ts(12., 16.)
                 .medium()
                 .text_color(p.muted.opacity(0.75))
+                .when(group.agents.first().is_some_and(|a| a.kind == deck_model::Kind::Conol), |this| {
+                    let (mark, color) = ui::kind_mark(deck_model::Kind::Conol, &p);
+                    this.child(ui::icon(mark, 18., color))
+                })
                 .child(
                     div()
                         .min_w_0()

@@ -295,6 +295,7 @@ mod tests {
                 order: OrderCap::Inject,
                 focus: true,
             },
+            companion: None,
             card: None,
             reply: None,
             messages: Vec::new(),

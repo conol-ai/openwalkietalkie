@@ -378,6 +378,9 @@ pub struct Agent {
     pub owner: Owner,
     pub session: SessionInfo,
     pub caps: Caps,
+    /// Optional native companion grouping and launcher/session identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub companion: Option<crate::companion::CompanionProfile>,
     pub card: Option<Card>,
     pub reply: Option<Reply>,
     /// Recent conversation, bounded to 64 messages / 512 KiB per agent.
@@ -404,10 +407,21 @@ pub struct Agent {
 }
 
 impl Agent {
+    pub fn native_companion(&self) -> bool { self.companion.is_some() || self.kind == Kind::Conol }
+
+    /// Native clients use the app/session grammar on the deck. Brand-specific
+    /// artwork can remain, while provider kinds stay intact in the API.
+    pub fn device_kind(&self) -> Kind {
+        if self.companion.is_some() && self.kind != Kind::Conol { Kind::Other } else { self.kind }
+    }
+
     /// The project the session runs in: `project_label` of its cwd. State,
     /// not content — it is what the roster is grouped by on every surface.
     #[must_use]
     pub fn project(&self) -> Option<String> {
+        if let Some(profile) = &self.companion { return Some(profile.group_label.clone()); }
+        // Legacy registrations retain the Conol brand grouping.
+        if self.kind == Kind::Conol { return Some("Conol".into()); }
         self.session
             .cwd
             .as_deref()

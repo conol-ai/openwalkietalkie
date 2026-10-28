@@ -221,6 +221,15 @@ fn elapsed(now_ms: u32, since_ms: u32) -> u32 {
 /// Sees every control first. `true` = consumed.
 pub(super) fn on_control(ui: &mut UiState, control: Control, at_ms: u32, out: &mut Update) -> bool {
     ui.global.last_input_ms = at_ms;
+    // A fresh gesture supersedes a deferred host selection. Release edges
+    // only finish the input that prevented the focus from being shown.
+    if match control {
+        Control::Button(_, Edge::Press) | Control::Wheel(_) => true,
+        Control::Touch(touch) => touch.phase == TouchPhase::Down,
+        _ => false,
+    } {
+        ui.agents.deferred_focus = 0;
+    }
     // A change of mind ends a power-off hold: any button or detent (the
     // CANCEL's own release included) or a new finger. SHIFT edges and the
     // tail of a gesture that was already down are not one.

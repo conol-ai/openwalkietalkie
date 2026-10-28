@@ -186,6 +186,7 @@ impl Store {
                 terminal: r.terminal.clone(),
             },
             caps: r.caps,
+            companion: None,
             card: None,
             reply: None,
             messages: Vec::new(),
@@ -691,6 +692,28 @@ impl Store {
         Ok(self.rev())
     }
 
+    /// Opening a native session can replace an unpinned sibling of the same
+    /// owning connection, application and account/workspace. Launchers stay.
+    fn promote_companion_chat(&mut self, id: &AgentId) {
+        let agent = &self.snapshot.agents[id];
+        if agent.companion.is_none() || agent.slot.is_some() { return; }
+        self.assign_slot(id, None, None);
+        let agent = &self.snapshot.agents[id];
+        if agent.slot.is_some() { return; }
+        let profile = agent.companion.as_ref().unwrap();
+        let victim = self.snapshot.agents.values().filter(|other| {
+            other.slot.is_some() && !other.pinned && other.owner.session == agent.owner.session
+                && other.companion.as_ref().is_some_and(|p| p.app_id == profile.app_id
+                    && p.group_id == profile.group_id && p.role != crate::companion::CompanionRole::Launcher)
+        }).min_by_key(|other| (
+            other.card.as_ref().is_some_and(|card| card.status.on_device()),
+            other.state == AgentState::Working, other.since, other.id.clone(),
+        )).map(|other| other.id.clone());
+        if let Some(victim) = victim {
+            if let Some(slot) = self.unslot(&victim) { self.place(id, slot); }
+        }
+    }
+
     /// `agent.focus` / `op.focus`: the desktop, then `focus` to the device
     /// without `ack` (§4.7).
     pub(crate) fn focus_agent(
@@ -700,11 +723,14 @@ impl Store {
         principal: Principal,
     ) -> ApiResult {
         self.exists(id)?;
+        self.promote_companion_chat(id);
         let slot = self.snapshot.agents[id].slot;
         self.snapshot.focus.agent = Some(id.clone());
         self.snapshot.focus.source = Some(source);
-        self.effects
-            .push(Effect::Desktop(DesktopCmd::Focus { agent: id.clone() }));
+        // Native clients receive focus.changed and bring their own window forward.
+        if !self.snapshot.agents[id].native_companion() {
+            self.effects.push(Effect::Desktop(DesktopCmd::Focus { agent: id.clone() }));
+        }
         self.put_focus(slot);
         self.emit(
             EventKind::FocusChanged,
@@ -1896,4 +1922,82 @@ mod tests {
         assert_eq!(project_label("/a/b/"), Some("b".into()));
         assert_eq!(project_label("/"), None);
     }
+}
+
+#[cfg(test)]
+mod companion_tests {
+    use super::*;
+    use crate::testkit::{Sim, UID, register};
+    use crate::Request;
+
+    #[test]
+    fn native_conol_groups_without_a_cwd_and_focus_never_injects_a_terminal() {
+        let mut sim = Sim::new();
+        let mut registration = register("Chat", Some("conol:account:chat"));
+        registration.kind = crate::Kind::Conol;
+        registration.cwd = None;
+        let result = sim.api(UID, SessionId(1), crate::Request::AgentRegister(registration)).unwrap();
+        let id: AgentId = serde_json::from_value(result["agent"].clone()).unwrap();
+        assert_eq!(sim.store.snapshot().agents[&id].project().as_deref(), Some("Conol"));
+        sim.api(UID, SessionId(1), crate::Request::AgentFocus { agent: id.clone() }).unwrap();
+        assert!(sim.events.iter().any(|e| e.kind == EventKind::FocusChanged));
+        assert!(!sim.effects.iter().any(|e| matches!(e, Effect::Desktop(_))));
+        sim.apply(crate::Command::Device(crate::DeviceLine::Channel { slot: 1, seq: 1 }));
+        assert!(sim.events.iter().any(|e| e.kind == EventKind::FocusChanged));
+        assert!(!sim.effects.iter().any(|e| matches!(e, Effect::Desktop(_))));
+    }
+    #[test]
+    fn opening_an_overflow_companion_chat_preserves_launcher_other_apps_and_accounts() {
+        let mut sim = Sim::new();
+        let mut ids = Vec::new();
+        for i in 0..9 {
+            let mut r = register(&format!("Chat {i}"), Some(&format!("conol:{i}")));
+            r.kind = crate::Kind::Other;
+            let result = sim.api(UID, SessionId(1), Request::AgentRegister(r)).unwrap();
+            let id: AgentId = serde_json::from_value(result["agent"].clone()).unwrap();
+            let configure = serde_json::from_value(serde_json::json!({"method":"agent.companion.set", "params": {
+                "agent": id, "profile": {"app_id": if i == 2 { "other-app" } else { "example" },
+                    "group_id": if i == 1 { "other-account" } else { "mine" }, "group_label": "Example",
+                    "role": if i == 0 { "launcher" } else { "session" }}
+            }})).unwrap();
+            sim.api(UID, SessionId(1), configure).unwrap();
+            let update = serde_json::from_value(serde_json::json!({"method":"agent.update", "params":{"agent":id,"state":"working"}})).unwrap();
+            sim.api(UID, SessionId(1), update).unwrap();
+            ids.push(id);
+        }
+        assert!(sim.slot_of(&ids[8]).is_none());
+        let launcher = sim.slot_of(&ids[0]);
+        let other = sim.slot_of(&ids[1]);
+        let other_app = sim.slot_of(&ids[2]);
+        sim.api(UID, SessionId(1), Request::AgentFocus { agent: ids[8].clone() }).unwrap();
+        assert!(sim.slot_of(&ids[8]).is_some());
+        assert_eq!(sim.slot_of(&ids[0]), launcher);
+        assert_eq!(sim.slot_of(&ids[1]), other);
+        assert_eq!(sim.slot_of(&ids[2]), other_app);
+        assert!(!sim.effects.iter().any(|e| matches!(e, Effect::Desktop(_))));
+    }
+
+    #[test]
+    fn companion_focus_cannot_displace_another_owners_busy_agents() {
+        let mut sim = Sim::new();
+        for i in 0..8 {
+            let id = sim.register(UID, SessionId(2), &format!("Other {i}"), None);
+            let update = serde_json::from_value(serde_json::json!({"method":"agent.update", "params":{"agent":id,"state":"working"}})).unwrap();
+            sim.api(UID, SessionId(2), update).unwrap();
+        }
+        let mut r = register("Example chat", None);
+        r.kind = crate::Kind::Other;
+        let result = sim.api(UID, SessionId(1), Request::AgentRegister(r)).unwrap();
+        let id: AgentId = serde_json::from_value(result["agent"].clone()).unwrap();
+        sim.api(UID, SessionId(1), Request::CompanionSet(crate::companion::CompanionSet {
+            agent: id.clone(), profile: Some(crate::companion::CompanionProfile {
+                app_id: "example".into(), group_id: "personal".into(), group_label: "Example".into(),
+                role: crate::companion::CompanionRole::Session,
+            }),
+        })).unwrap();
+        sim.api(UID, SessionId(1), Request::AgentFocus { agent: id.clone() }).unwrap();
+        assert!(sim.slot_of(&id).is_none());
+        assert_eq!(sim.store.snapshot().agents.values().filter(|a| a.slot.is_some()).count(), 8);
+    }
+
 }

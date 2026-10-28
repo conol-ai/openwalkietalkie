@@ -231,6 +231,10 @@ pub enum Request {
     },
     #[serde(rename = "agent.update")]
     AgentUpdate(AgentUpdate),
+    #[serde(rename = "agent.companion.set")]
+    CompanionSet(crate::companion::CompanionSet),
+    #[serde(rename = "agent.session.set")]
+    SessionSet(crate::session_controls::SessionSet),
     #[serde(rename = "agent.release")]
     AgentRelease {
         agent: AgentId,

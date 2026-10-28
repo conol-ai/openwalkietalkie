@@ -22,7 +22,7 @@
 use super::{global, notify, Target, TouchAct, UiState, Update};
 use crate::control::{Button, Control, Edge};
 use crate::deck::model::{Effects, MAX_AGENTS};
-use crate::deck::msg::{CardKind, DocKind, Event, HostMsg, PttCtx, Template};
+use crate::deck::msg::{AgentKind, CardKind, DocKind, Event, HostMsg, PttCtx, Template};
 use crate::deck::text::Text;
 use crate::ui::kit::{age_step, list::Viewport};
 use crate::ui::{faces, layout};
@@ -97,6 +97,8 @@ pub struct View {
     pub highlight: u8,
     /// Agent id of the Channel / Card view.
     pub agent: u8,
+    /// Explicit companion focus waiting for the current held input to end.
+    pub(super) deferred_focus: u8,
     /// Highlighted choice of the card; `None` on a Ready card = "open channel".
     pub choice: Option<u8>,
     /// When the on-screen (agent, card) last changed: the confirm guard.
@@ -156,6 +158,7 @@ impl View {
             view: AgentsView::Roster,
             highlight: 0,
             agent: 0,
+            deferred_focus: 0,
             choice: None,
             shown_at_ms: 0,
             top_row: 0,
@@ -349,16 +352,29 @@ pub(super) fn ptt_target(ui: &UiState) -> (u8, PttCtx, u16) {
     }
 }
 
-/// The host focused `agent` (already the active channel): the highlight
-/// follows only when the user is not looking; a Card never changes.
+/// Companion focus completes an explicit chat action (including creation just
+/// after PTT release). It must not be lost to the terminal-follow quiet
+/// period. Held inputs defer it; a new navigation cancels it. Cards stay put.
 pub(super) fn on_focus(ui: &mut UiState, agent: u8, at_ms: u32, out: &mut Update) {
-    let idle = global::quiet_for(ui, at_ms, FOLLOW_QUIET_MS)
-        && !global::anything_held(ui)
-        && !ui.touch.active();
-    if !idle {
+    ui.agents.deferred_focus = 0;
+    if ui.agents.view == AgentsView::Card {
+        return;
+    }
+    let native = ui.deck.agent(agent).is_some_and(|a| matches!(a.kind, AgentKind::Conol | AgentKind::Other));
+    if global::anything_held(ui) || ui.touch.active() || (native && ui.global.shift) {
+        if native {
+            ui.agents.deferred_focus = agent;
+        }
+        return;
+    }
+    if !native && !global::quiet_for(ui, at_ms, FOLLOW_QUIET_MS) {
         return;
     }
     match ui.agents.view {
+        AgentsView::Roster if native => {
+            show_channel(ui, agent, at_ms);
+            out.dirty = true;
+        }
         AgentsView::Roster if ui.agents.highlight != agent => {
             set_highlight(ui, agent);
             out.dirty = true;
@@ -1017,6 +1033,14 @@ fn validate(ui: &mut UiState, fx: Option<&Effects>, at_ms: u32, out: &mut Update
 /// Displayed ages roll over, the unacknowledged-answer timeout, the re-sort.
 pub(super) fn on_tick(ui: &mut UiState, now_ms: u32, out: &mut Update) {
     validate(ui, None, now_ms, out);
+    let deferred = ui.agents.deferred_focus;
+    if deferred != 0 {
+        if deferred != ui.global.active_channel || ui.deck.agent(deferred).is_none() {
+            ui.agents.deferred_focus = 0;
+        } else if !global::anything_held(ui) && !ui.touch.active() && !ui.global.shift {
+            on_focus(ui, deferred, now_ms, out);
+        }
+    }
     crate::ui::image::tick(ui, now_ms, out);
     crate::ui::session::tick(ui, now_ms, out);
     // A dropped or revision-stale mode request must not leave an empty view.
@@ -1549,6 +1573,73 @@ mod tests {
         show_card(&mut ui, 1, 3000);
         host(&mut ui, &HostMsg::Focus { agent: 2, ack: None }, 9000);
         assert_eq!((ui.agents.view, ui.agents.agent, ui.global.active_channel), (AgentsView::Card, 1, 2));
+    }
+
+    #[test]
+    fn conol_creation_focus_immediately_follows_ptt_release() {
+        let mut ui = hosted();
+        ui.deck.agent_mut(3).unwrap().kind = AgentKind::Conol;
+        show_channel(&mut ui, 2, 0);
+        ui.apply(Control::Button(Button::PushToTalk, Edge::Press), 1000, &mut Update::new());
+        ui.apply(Control::Button(Button::PushToTalk, Edge::Release), 1100, &mut Update::new());
+        host(&mut ui, &HostMsg::Focus { agent: 3, ack: None }, 1345);
+        assert_eq!((ui.agents.view, ui.agents.agent, ui.global.active_channel), (AgentsView::Channel, 3, 3));
+        assert_eq!(ptt_target(&ui).0, 3, "the next dictation follows the newly created chat");
+        // Even an explicit Conol focus cannot dismiss an unfinished form.
+        show_card(&mut ui, 1, 1400);
+        host(&mut ui, &HostMsg::Focus { agent: 3, ack: None }, 1500);
+        ui.tick(4000, 0, true, &mut Update::new());
+        assert_eq!((ui.agents.view, ui.agents.agent), (AgentsView::Card, 1));
+    }
+
+    #[test]
+    fn generic_companion_focus_opens_the_session_after_recent_input() {
+        let mut ui = hosted();
+        ui.deck.agent_mut(3).unwrap().kind = AgentKind::Other;
+        wheel(&mut ui, Wheel::Ccw, 1000);
+        host(&mut ui, &HostMsg::Focus { agent: 3, ack: None }, 1100);
+        assert_eq!((ui.agents.view, ui.agents.agent), (AgentsView::Channel, 3));
+        assert_eq!(ptt_target(&ui).0, 3);
+    }
+
+    #[test]
+    fn conol_creation_from_roster_opens_the_new_channel() {
+        let mut ui = hosted();
+        ui.deck.agent_mut(3).unwrap().kind = AgentKind::Conol;
+        wheel(&mut ui, Wheel::Ccw, 1000);
+        host(&mut ui, &HostMsg::Focus { agent: 3, ack: None }, 1100);
+        assert_eq!((ui.agents.view, ui.agents.agent, ui.agents.highlight), (AgentsView::Channel, 3, 3));
+    }
+
+    #[test]
+    fn conol_focus_waits_for_held_input_but_not_another_host_event() {
+        let mut ui = hosted();
+        ui.deck.agent_mut(3).unwrap().kind = AgentKind::Conol;
+        show_channel(&mut ui, 2, 0);
+        ui.apply(Control::Button(Button::Shift, Edge::Press), 1000, &mut Update::new());
+        host(&mut ui, &HostMsg::Focus { agent: 3, ack: None }, 1100);
+        ui.tick(4000, 0, true, &mut Update::new());
+        assert_eq!((ui.agents.agent, ui.agents.deferred_focus), (2, 3));
+        ui.apply(Control::Button(Button::Shift, Edge::Release), 4100, &mut Update::new());
+        ui.tick(4101, 0, true, &mut Update::new());
+        assert_eq!((ui.agents.agent, ui.agents.deferred_focus), (3, 0));
+    }
+
+    #[test]
+    fn conol_deferred_focus_yields_to_new_navigation_and_newer_focus() {
+        let mut ui = hosted();
+        ui.deck.agent_mut(3).unwrap().kind = AgentKind::Conol;
+        show_channel(&mut ui, 2, 0);
+        ui.apply(Control::Button(Button::Shift, Edge::Press), 1000, &mut Update::new());
+        host(&mut ui, &HostMsg::Focus { agent: 3, ack: None }, 1100);
+        wheel(&mut ui, Wheel::Ccw, 1200);
+        assert_eq!(ui.agents.deferred_focus, 0);
+        host(&mut ui, &HostMsg::Focus { agent: 3, ack: None }, 1300);
+        host(&mut ui, &HostMsg::Focus { agent: 4, ack: None }, 1400);
+        assert_eq!(ui.agents.deferred_focus, 0);
+        ui.apply(Control::Button(Button::Shift, Edge::Release), 4100, &mut Update::new());
+        ui.tick(4101, 0, true, &mut Update::new());
+        assert_ne!(ui.agents.agent, 3);
     }
 
     #[test]

@@ -299,6 +299,8 @@ impl Store {
             Request::AgentRegister(r) => self.register(principal, session, r),
             Request::AgentHeartbeat { agents } => self.heartbeat(session, &agents),
             Request::AgentUpdate(u) => self.update_agent(session, u),
+            Request::CompanionSet(r) => self.set_companion(session, r),
+            Request::SessionSet(r) => self.set_session_controls(session, r),
             Request::AgentRelease { agent, reason } => {
                 self.owned(&agent, session)?;
                 self.remove_agent(&agent, reason.as_deref().unwrap_or("released"));

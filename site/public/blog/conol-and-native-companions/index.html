@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie v0.11.0: Conol and native companions · OpenWalkieTalkie</title>
+<meta name="description" content="Conol conversations, new-chat dictation and multi-step questions on the deck, with an open companion API for other apps." />
+<link rel="canonical" href="https://openwalkietalkie.org/blog/conol-and-native-companions/" />
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.11.0: Conol and native companions · OpenWalkieTalkie" />
+<meta property="og:description" content="Conol conversations, new-chat dictation and multi-step questions on the deck, with an open companion API for other apps." />
+<meta property="og:url" content="https://openwalkietalkie.org/blog/conol-and-native-companions/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie Blog" href="/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">Skip to content</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/" aria-label="OpenWalkieTalkie — home">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="Sections">
+      <a href="/#pile">The Pile</a>
+      <a href="/#features">Features</a>
+      <a href="/#demo">Try It</a>
+      <a href="/#faces">Faces</a>
+      <a href="/#blueprint">Blueprint</a>
+      <a href="/docs/">Docs</a>
+      <a href="/blog/" aria-current="true">Blog</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle day and night theme" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">DAY</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="Open menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">THE BLOG · RELEASE NOTES</p>
+  <h1>OpenWalkieTalkie v0.11.0: Conol and native companions</h1>
+  <p class="post-meta"><span>October 28, 2026</span><span>App and firmware update</span></p>
+</header>
+<article class="post-body">
+  <p>Version 0.11.0 connects the deck to conversations in the Conol desktop app. Open a chat, read recent messages, dictate a follow-up or answer a question from the handheld. The same local companion interface is available to other applications.</p>
+  <h2>Your Conol conversations, together</h2>
+  <p>With a compatible Conol desktop app running and signed in, chats appear under <strong>Conol</strong>, with its robot mosaic and a <strong>+ New chat</strong> launcher. Choose a conversation to see recent public user and assistant messages. Hold PTT to dictate a follow-up, or dictate into the launcher to create a new chat.</p>
+  <p>Creating a chat opens it on the deck, ready for the next message. Conol discovers the local OpenWalkieTalkie service automatically; there is no terminal hook or separate model API key to configure. This connection requires the Conol desktop app with its OpenWalkieTalkie bridge; the browser version does not connect to the local service.</p>
+  <h2>Answer a whole form from the handheld</h2>
+  <p>Conol can present AskUser forms and workflow approvals one question at a time. Page through single choices, toggle multiple selections, dictate a free-text answer, then review and edit before explicitly submitting the complete form. Draft answers survive a companion socket reconnect. Forms that cannot fit this interaction open in Conol.</p>
+  <p>The session panel shows the conversation's actual model and thinking effort. These are currently read-only for Conol; change them in Conol itself. The transcript mirrors public user and assistant text. Images, tool output and private reasoning remain in the owning app.</p>
+  <h2>Open to other apps</h2>
+  <p>The integration uses a public JSON-RPC interface. An app can supply its own grouping and new-chat launcher through <code>agent.companion.set</code>, publish messages and questions, and report its actual model and effort through <code>agent.session.set</code>. Apps that support editable settings confirm each requested change against its exact revision.</p>
+  <p>The new <a href="/docs/native-companions/">native companion guide</a> explains discovery, registration, transcripts, forms, settings and reconnects. Try the <a href="/examples/native_companion.py">standalone Python example</a>: it uses scripted responses, needs no model API key, and works without Conol installed. The <a href="/docs/deckd-api.md">generated API reference</a> documents the request schemas and permissions.</p>
+  <h2>Keep the new chat in focus</h2>
+  <p>The service now announces a replaced slot's new occupant before focusing it. The deck follows an explicit companion selection immediately after PTT release, waits while an input is held, and gives way if you navigate elsewhere. An unfinished question stays open.</p>
+  <p>The shared eight-slot limit remains. Opening an overflow companion chat can replace an unpinned sibling belonging to the same connection, app and account, while preserving launchers and other accounts' busy chats.</p>
+  <h2>Update to 0.11.0</h2>
+  <p>Install the signed, notarized Mac app for Apple Silicon or Intel, or choose <strong>Check for Updates</strong>. macOS 13 or later is required. Connect the deck over USB-C and choose <strong>Service → Updates → Check firmware</strong>. Both the Mac service and firmware need 0.11.0 for native companion support. If an older service is still running, choose <strong>Service → Restart</strong>. Also update Conol to a build with its OpenWalkieTalkie bridge.</p>
+  <p>Normal updates preserve settings and Bluetooth pairing. Recovery protocol 2 and the flash layout are unchanged. The separate factory ZIPs are for manufacturing and overwrite settings and pairing.</p>
+  <p>Automated coverage checks ownership, grouping, slot promotion, settings confirmation, focus ordering, held inputs, protocol parsing, rendering, and the example's forms and reconnects. Physical Conol conversation and board tests were not repeated for this release.</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.11.0" rel="noopener">Get OpenWalkieTalkie v0.11.0, firmware, factory images and checksums on GitHub →</a></p>
+  <p class="post-back"><a href="/blog/">← Back to the blog</a></p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · A COHDL project · MIT software · CERN-OHL-P hardware</span>
+    <nav aria-label="Footer">
+      <a href="/#waitlist">Join the waitlist</a>
+      <a href="/privacy/">Privacy Policy</a>
+      <a href="/cookies/">Cookie information</a>
+      <a href="/cookies/" data-privacy-open>Privacy notice</a>
+      <a href="/">Home</a>
+      <a href="/#demo">Try It</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Join the CoHDL and OpenWalkieTalkie community on Discord">Discord</a>
+      <a href="/blog/feed.xml">Feed</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

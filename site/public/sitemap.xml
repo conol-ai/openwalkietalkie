@@ -2,13 +2,13 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://openwalkietalkie.org/</loc>
-    <lastmod>2026-10-26</lastmod>
+    <lastmod>2026-10-28</lastmod>
     <changefreq>monthly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
     <loc>https://openwalkietalkie.org/blog/</loc>
-    <lastmod>2026-10-26</lastmod>
+    <lastmod>2026-10-28</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -31,4 +31,7 @@
   <url><loc>https://openwalkietalkie.org/blog/speaker-eq-and-less-hiss/</loc><lastmod>2026-10-20</lastmod></url>
   <url><loc>https://openwalkietalkie.org/blog/usb-audio-and-reset-reminders/</loc><lastmod>2026-10-22</lastmod></url>
   <url><loc>https://openwalkietalkie.org/blog/computer-resources-on-the-deck/</loc><lastmod>2026-10-26</lastmod></url>
+  <url><loc>https://openwalkietalkie.org/docs/</loc><lastmod>2026-10-28</lastmod></url>
+  <url><loc>https://openwalkietalkie.org/docs/native-companions/</loc><lastmod>2026-10-28</lastmod></url>
+  <url><loc>https://openwalkietalkie.org/blog/conol-and-native-companions/</loc><lastmod>2026-10-28</lastmod></url>
 </urlset>

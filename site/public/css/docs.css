@@ -1,0 +1,9 @@
+/* Documentation uses the site's existing page, theme and code components. */
+.docs-main .post-body { overflow-wrap: anywhere; }
+.docs-main .post-body pre { overflow-wrap: normal; }
+.docs-main .post-body pre code { font-size: 14px; }
+.docs-main .post-body .post-card { box-shadow: 0 0 0 var(--px) var(--panel-edge); }
+.docs-main .post-card h2 { margin-top: 0; }
+.docs-main .toc ul { columns: 2; column-gap: 28px; }
+.docs-main .toc li { break-inside: avoid; }
+@media (max-width: 560px) { .docs-main .toc ul { columns: 1; } }

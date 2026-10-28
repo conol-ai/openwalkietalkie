@@ -43,6 +43,8 @@ answers out of band. `params` links the type the request carries.
 | `agent.register` | `agent` | store | [`AgentRegister`](#agentregister) |
 | `agent.heartbeat` | `agent` | store | {agents: [`AgentId`](#agentid)[]} |
 | `agent.update` | `agent` | store | [`AgentUpdate`](#agentupdate) |
+| `agent.companion.set` | `agent` | store | [`CompanionSet`](#companionset) |
+| `agent.session.set` | `agent` | store | [`SessionSet`](#sessionset) |
 | `agent.release` | `agent` | store | {agent: [`AgentId`](#agentid), reason?: string?} |
 | `agent.claim` | `agent` | store | {key: string} |
 | `agent.focus` | `agent` | store | {agent: [`AgentId`](#agentid)} |
@@ -159,7 +161,7 @@ From the hid thread (§6.2, §6.3): what happened to the link.
 
 ## Types
 
-The 78 named types the schemas above refer to.
+The 84 named types the schemas above refer to.
 
 ### `ActivityStatus`
 
@@ -173,6 +175,7 @@ One of: `running`, `completed`, `failed`, `stopped`.
 | `caps` | [`Caps`](#caps) | yes |  |  |
 | `card` | [`Card`](#card)? | no |  |  |
 | `chat_rev` | uint16 | no | `0` | Stable while messages grow; changes when retained history is pruned. |
+| `companion` | [`CompanionProfile`](#companionprofile)? | no |  | Optional native companion grouping and launcher/session identity. |
 | `id` | [`AgentId`](#agentid) | yes |  |  |
 | `kind` | [`Kind`](#kind) | yes |  |  |
 | `messages` | [`ChatMessage`](#chatmessage)[] | no | `[]` | Recent conversation, bounded to 64 messages / 512 KiB per agent. |
@@ -342,6 +345,29 @@ One of: `user`, `assistant`, `tool`.
 | `detail` | string? | no |  |  |
 | `label` | string | yes |  |  |
 
+### `CompanionProfile`
+
+A client-owned group. Identifiers partition slot promotion; labels are public.
+
+| field | type | required | default | description |
+|---|---|---|---|---|
+| `app_id` | string | yes |  | Stable application identifier, 1–64 ASCII letters, digits, dots, dashes or underscores. |
+| `group_id` | string | yes |  | Stable account/workspace identifier within this app, 1–128 bytes. Do not put secrets here. |
+| `group_label` | string | yes |  | Roster heading, 1–24 UTF-8 bytes; use distinct headings for distinct device pages. |
+| `role` | [`CompanionRole`](#companionrole) | yes |  |  |
+
+### `CompanionRole`
+
+One of: `session`, `launcher`.
+
+
+### `CompanionSet`
+
+| field | type | required | default | description |
+|---|---|---|---|---|
+| `agent` | [`AgentId`](#agentid) | yes |  |  |
+| `profile` | [`CompanionProfile`](#companionprofile)? | no |  | Null removes native presentation. Existing registrations remain valid. |
+
 ### `Deliver`
 
 - string
@@ -431,7 +457,7 @@ One of: `device`, `desktop`, `api`.
 
 ### `Kind`
 
-One of: `claude`, `codex`, `gemini`, `other`.
+One of: `claude`, `codex`, `gemini`, `other`, `conol`.
 
 
 ### `Link`
@@ -467,6 +493,15 @@ Who holds the TCP port when the daemon could not take it (§4.1's `lsof -nP -iTC
 | `role` | [`ChatRole`](#chatrole) | yes |  |  |
 | `runs` | array? | no |  | Public background workflow counters, independent of the parent turn. |
 | `streaming` | boolean | no | `false` |  |
+
+### `ModelOption`
+
+| field | type | required | default | description |
+|---|---|---|---|---|
+| `default_effort` | string | no | `""` |  |
+| `efforts` | string[] | no | `[]` |  |
+| `id` | string | yes |  |  |
+| `label` | string | yes |  |  |
 
 ### `OpAnswer`
 
@@ -642,6 +677,16 @@ A provider-reported background run. Counts are workers, not guessed plan steps.
 | `port` | uint16 | yes |  |  |
 | `version` | string | yes |  |  |
 
+### `SessionControls`
+
+| field | type | required | default | description |
+|---|---|---|---|---|
+| `editable` | boolean | no | `false` |  |
+| `effort` | string | yes |  |  |
+| `model` | string | yes |  |  |
+| `models` | [`ModelOption`](#modeloption)[] | no | `[]` |  |
+| `note` | string | no | `""` |  |
+
 ### `SessionId`
 
 Type: string.
@@ -658,6 +703,16 @@ Where the agent runs (content, except `key`).
 | `pid` | uint32? | no |  |  |
 | `pid_kind` | [`PidKind`](#pidkind)? | no |  |  |
 | `terminal` | [`Terminal`](#terminal)? | no |  |  |
+
+### `SessionSet`
+
+Owner-authenticated settings report. Omit `request_rev` for ordinary refreshes.
+
+| field | type | required | default | description |
+|---|---|---|---|---|
+| `agent` | [`AgentId`](#agentid) | yes |  |  |
+| `controls` | [`SessionControls`](#sessioncontrols) | yes |  |  |
+| `request_rev` | uint16? | no | `null` | Confirm the exact `session.settings_requested` revision after applying it. Report the actual settings and a nonempty note if the change failed. |
 
 ### `SessionState`
 

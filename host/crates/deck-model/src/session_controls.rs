@@ -1,16 +1,22 @@
-//! Per-session model/effort selection. Only the owning built-in adapter can
-//! report controls; device choices refer to a displayed page revision.
+//! Public per-session model/effort display and selection. The owner confirms
+//! settings requests; built-in adapters use the same model. Device choices
+//! and API confirmations are pinned to a displayed page revision.
 use crate::{
     AdapterKind, AgentId, Control, DeviceOp, EventKind, Kind, Principal, SessionId, Slot, Store,
 };
 use deck_proto::SessionMenu;
 use std::time::Duration;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ModelOption {
     pub id: String,
     pub label: String,
+    #[serde(default)]
     pub efforts: Vec<String>,
+    #[serde(default)]
     pub default_effort: String,
 }
 
@@ -198,6 +204,68 @@ mod tests {
     }
 
     #[test]
+    fn public_settings_work_for_every_agent_kind_and_only_the_owner_can_report_them() {
+        for kind in [Kind::Other, Kind::Claude, Kind::Codex, Kind::Gemini, Kind::Conol] {
+            let mut sim = Sim::new();
+            let mut reg = testkit::register("Native chat", Some("example:session"));
+            reg.kind = kind;
+            let result = sim.api(Principal::Uid(501), SessionId(1), Request::AgentRegister(reg)).unwrap();
+            let agent = AgentId(result["agent"].as_str().unwrap().into());
+            let slot = sim.store.snapshot().agents[&agent].slot.unwrap().0;
+            let report = SessionSet { agent: agent.clone(), request_rev: None, controls: SessionControls {
+                model: "Example Model".into(), effort: "High".into(), note: "Change settings in the app.".into(),
+                ..SessionControls::default()
+            }};
+            assert!(sim.api(Principal::Uid(501), SessionId(2), Request::SessionSet(report.clone())).is_err());
+            sim.api(Principal::Uid(501), SessionId(1), Request::SessionSet(report)).unwrap();
+            request(&mut sim, slot, 0, 0, 0, 255);
+            let m = menu(&sim);
+            assert_eq!((&*m.model, &*m.effort, m.status), ("Example Model", "High", 0));
+            assert_eq!(m.note, "Change settings in the app.");
+            request(&mut sim, slot, 1, 0, m.rev, 0);
+            assert!(sim.events.is_empty(), "read-only reports cannot enable choices");
+        }
+    }
+
+    #[test]
+    fn public_settings_confirmation_is_bound_to_the_requested_revision() {
+        let (mut sim, agent, slot, mut controls) = fixture();
+        request(&mut sim, slot, 1, 0, 0, 255);
+        let rev = menu(&sim).rev;
+        request(&mut sim, slot, 1, 0, rev, 1);
+        let event = sim.events.iter().find(|e| e.kind == EventKind::SessionSettingsRequested).unwrap();
+        assert_eq!(event.data["request_rev"], rev);
+        controls.model = "m1".into(); controls.effort = "low".into();
+        let report = SessionSet { agent, controls, request_rev: Some(rev.wrapping_add(1)) };
+        assert!(sim.api(Principal::Uid(501), SessionId(1), Request::SessionSet(report.clone())).is_err());
+        let refresh = SessionSet { request_rev: None, ..report.clone() };
+        sim.api(Principal::Uid(501), SessionId(1), Request::SessionSet(refresh)).unwrap();
+        request(&mut sim, slot, 1, 0, 0, 255);
+        assert_eq!(menu(&sim).status, 2, "an ordinary report cannot confirm a request");
+        let confirm = SessionSet { request_rev: Some(rev), ..report };
+        sim.api(Principal::Uid(501), SessionId(1), Request::SessionSet(confirm.clone())).unwrap();
+        assert_eq!((menu(&sim).status, menu(&sim).selected), (1, Some(1)));
+        assert!(sim.api(Principal::Uid(501), SessionId(1), Request::SessionSet(confirm)).is_err());
+    }
+
+    #[test]
+    fn public_catalog_validation_rejects_ambiguous_or_oversized_options() {
+        let (mut sim, agent, _, controls) = fixture();
+        for mutate in [0, 1, 2, 3] {
+            let mut bad = controls.clone();
+            match mutate {
+                0 => bad.models.push(bad.models[0].clone()),
+                1 => bad.model = "missing".into(),
+                2 => bad.models[0].efforts.push("low".into()),
+                _ => bad.note = "x".repeat(257),
+            }
+            assert!(sim.api(Principal::Uid(501), SessionId(1), Request::SessionSet(SessionSet {
+                agent: agent.clone(), controls: bad, request_rev: None,
+            })).is_err());
+        }
+    }
+
+    #[test]
     fn models_without_effort_support_explain_why_the_effort_picker_is_empty() {
         let (mut sim, agent, slot, mut controls) = fixture();
         controls.models[0].efforts.clear();
@@ -220,13 +288,54 @@ mod tests {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct SessionControls {
     pub model: String,
     pub effort: String,
+    #[serde(default)]
     pub models: Vec<ModelOption>,
+    #[serde(default)]
     pub editable: bool,
+    #[serde(default)]
     pub note: String,
+}
+
+/// Owner-authenticated settings report. Omit `request_rev` for ordinary refreshes.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SessionSet {
+    pub agent: AgentId,
+    pub controls: SessionControls,
+    /// Confirm the exact `session.settings_requested` revision after applying it.
+    /// Report the actual settings and a nonempty note if the change failed.
+    #[serde(default)]
+    pub request_rev: Option<u16>,
+}
+
+impl SessionControls {
+    fn validate(&self) -> Result<(), crate::ApiError> {
+        let bounded = |value: &str, max| value.len() <= max && !value.chars().any(char::is_control);
+        if !bounded(&self.model, 128) || !bounded(&self.effort, 32) || !bounded(&self.note, 256)
+            || self.models.len() > 64 {
+            return Err(crate::ApiError::invalid("controls", "model/effort/note/catalog exceeds bounds"));
+        }
+        let mut ids = std::collections::HashSet::new();
+        for model in &self.models {
+            if model.id.is_empty() || !bounded(&model.id, 128) || model.label.trim().is_empty()
+                || !bounded(&model.label, 128) || !ids.insert(&model.id) || model.efforts.len() > 16
+                || model.efforts.iter().any(|e| e.is_empty() || !bounded(e, 32))
+                || model.efforts.iter().collect::<std::collections::HashSet<_>>().len() != model.efforts.len()
+                || (!model.default_effort.is_empty() && !model.efforts.contains(&model.default_effort)) {
+                return Err(crate::ApiError::invalid("controls.models", "invalid or duplicate model/effort option"));
+            }
+        }
+        if self.editable && !self.models.iter().any(|m| m.id == self.model
+            && (self.effort.is_empty() || m.efforts.contains(&self.effort))) {
+            return Err(crate::ApiError::invalid("controls.model", "current selection must belong to the catalog"));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -239,6 +348,22 @@ pub(crate) struct Panel {
 }
 
 impl Store {
+    pub(crate) fn set_session_controls(&mut self, session: SessionId, request: SessionSet) -> crate::ApiResult {
+        self.owned(&request.agent, session)?;
+        request.controls.validate()?;
+        let aux = self.aux.entry(request.agent).or_default();
+        if let Some(rev) = request.request_rev {
+            if aux.settings_pending.is_none() || aux.settings_request_rev != Some(rev) {
+                return Err(crate::ApiError::invalid("request_rev", "stale settings confirmation"));
+            }
+            aux.settings_pending = None;
+            aux.settings_request_rev = None;
+        }
+        aux.controls = Some(request.controls);
+        self.render_session_panel(false);
+        Ok(self.rev())
+    }
+
     pub(crate) fn on_session_controls(
         &mut self,
         agent: AgentId,
@@ -267,6 +392,7 @@ impl Store {
         aux.controls = Some(controls);
         if settled {
             aux.settings_pending = None;
+            aux.settings_request_rev = None;
         }
         self.render_session_panel(false);
     }
@@ -342,11 +468,12 @@ impl Store {
                 _ => return,
             };
             aux.settings_pending = Some(self.now);
+            aux.settings_request_rev = Some(rev);
             controls.note.clear();
             self.emit(
                 EventKind::SessionSettingsRequested,
                 Principal::Device,
-                serde_json::json!({"agent": agent, "model": model, "effort": effort}),
+                serde_json::json!({"agent": agent, "model": model, "effort": effort, "request_rev": rev}),
             );
         } else {
             self.session_panel = Some(Panel {
@@ -367,6 +494,7 @@ impl Store {
                 .is_some_and(|at| self.now.saturating_duration_since(at) > Duration::from_secs(45))
             {
                 aux.settings_pending = None;
+                aux.settings_request_rev = None;
                 if let Some(c) = &mut aux.controls {
                     c.note = "Change not confirmed. Refresh and try again.".into();
                 }
@@ -418,6 +546,8 @@ impl Store {
                 "Changes apply to the next turn.".into()
             } else if owner.is_none() {
                 "This session has ended.".into()
+            } else if owner.is_some_and(|a| a.native_companion() || a.kind == Kind::Other) {
+                "Settings are managed by this agent's app.".into()
             } else if owner.is_some_and(|a| a.kind == Kind::Claude) {
                 "Use /model or /effort in Claude Code. Channels does not enable these controls."
                     .into()

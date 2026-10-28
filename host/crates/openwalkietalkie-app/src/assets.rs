@@ -61,6 +61,7 @@ pub const ICONS: &[(&str, &str)] = embed![
     "close",
     "copy",
     "cohdl-mark",
+    "conol-mark",
     "danger-triangle",
     "dial",
     "document",

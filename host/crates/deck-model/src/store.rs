@@ -148,6 +148,7 @@ pub const USAGE_REFRESH_GRACE: Duration = Duration::from_millis(1500);
 pub(crate) struct AgentAux {
     pub(crate) controls: Option<crate::session_controls::SessionControls>,
     pub(crate) settings_pending: Option<Instant>,
+    pub(crate) settings_request_rev: Option<u16>,
     /// Last requested reading window; updates must not pull the reader away.
     pub(crate) reply_first: Option<u16>,
     /// Opt-in: older firmware continues to receive only chat documents.
@@ -546,9 +547,11 @@ impl Store {
             source: Some(FocusSource::Device),
         };
         if let Some(agent) = &agent {
-            self.effects.push(Effect::Desktop(crate::DesktopCmd::Focus {
-                agent: agent.clone(),
-            }));
+            if !self.snapshot.agents[agent].native_companion() {
+                self.effects.push(Effect::Desktop(crate::DesktopCmd::Focus {
+                    agent: agent.clone(),
+                }));
+            }
             self.aux.entry(agent.clone()).or_default().reply_first = None;
             self.put_reply(agent);
         }
@@ -1148,7 +1151,7 @@ fn project_with(snapshot: &Snapshot, now: Ts, aux: Option<&BTreeMap<AgentId, Age
 pub(crate) fn agent_state_line(slot: Slot, agent: &Agent, now: Ts) -> HostLine {
     HostLine::Agent {
         slot: slot.0,
-        kind: Some(agent.kind),
+        kind: Some(agent.device_kind()),
         name: Some(agent.name.clone()),
         // Always sent, empty for "no project": the state line is the whole
         // record, so a session that lost its cwd on a re-register leaves

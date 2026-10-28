@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Native companion API · OpenWalkieTalkie</title>
+<meta name="description" content="Connect any agent to OpenWalkieTalkie: grouped chats, new sessions, voice messages, complex questions and model settings." />
+<link rel="canonical" href="https://openwalkietalkie.org/docs/native-companions/" />
+
+<meta property="og:type" content="website" />
+<meta name="owt-api-version" content="0.11.0" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="Native companion API · OpenWalkieTalkie" />
+<meta property="og:description" content="Connect any agent to OpenWalkieTalkie: grouped chats, new sessions, voice messages, complex questions and model settings." />
+<meta property="og:url" content="https://openwalkietalkie.org/docs/native-companions/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie Blog" href="/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<link rel="stylesheet" href="/css/docs.css" />
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">Skip to content</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/" aria-label="OpenWalkieTalkie — home">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="Sections">
+      <a href="/#pile">The Pile</a>
+      <a href="/#features">Features</a>
+      <a href="/#demo">Try It</a>
+      <a href="/#faces">Faces</a>
+      <a href="/#blueprint">Blueprint</a>
+      <a href="/docs/" aria-current="true">Docs</a>
+      <a href="/blog/">Blog</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle day and night theme" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">DAY</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="Open menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main docs-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">DEVELOPER DOCUMENTATION · 0.11.0+</p>
+  <h1>Native companion API</h1>
+  <p class="post-meta">Native integrations for any agent</p>
+</header>
+<article class="post-body">
+<p>Build a native companion for any agent. Your application owns its conversations and model connections; OpenWalkieTalkie supplies a grouped deck roster, voice input, conversation display, questions and session settings. Conol uses this same public interface.</p>
+<p><strong>Requires OpenWalkieTalkie app, service and firmware 0.11.0 or newer.</strong> This is a local desktop integration over JSON-RPC, with no Conol dependency. Existing CLI hooks remain supported.</p>
+<p><a href="/examples/native_companion.py">Download the Python example</a> · <a href="/docs/deckd-api.md">Complete API reference (Markdown)</a> · <a href="/docs/">Documentation home</a></p>
+<nav class="toc" aria-label="On this page"><p class="toc-title">ON THIS PAGE</p><ul><li><a href="#try-the-example">Try the example</a></li><li><a href="#connect-and-discover">Connect and discover</a></li><li><a href="#register-sessions-and-group-them">Register sessions and group them</a></li><li><a href="#start-and-activate-a-new-chat">Start and activate a new chat</a></li><li><a href="#keep-both-transcripts-current">Keep both transcripts current</a></li><li><a href="#handle-complex-questions-on-the-deck">Handle complex questions on the deck</a></li><li><a href="#display-and-change-model-thinking-effort">Display and change model / thinking effort</a></li><li><a href="#integration-checklist">Integration checklist</a></li></ul></nav>
+<h2 id="try-the-example">Try the example</h2>
+<p>Start OpenWalkieTalkie, connect your deck, download the example, then run:</p>
+<pre><code class="language-sh">python3 native_companion.py
+</code></pre>
+<p>Python 3.10+ is sufficient; no packages or credentials are required. Select <strong>Example → + New chat</strong> and dictate a first message. The new conversation opens on the deck. Say “form” to try a paged single-choice question, multiple selections, dictated text and a final review. Open the session settings to switch between two scripted demo models and their effort options. The example makes no model API calls. Ctrl-C releases its registrations.</p>
+<p>The example's <code>Companion.order</code>, <code>Companion.apply_settings</code> and form submission branch are the places to connect your backend. It keeps a small transcript and form drafts in memory; a production app should restore them from its own conversation store. Run one demo at a time, since both copies use the “Example” device heading.</p>
+<h2 id="connect-and-discover">Connect and discover</h2>
+<p>Connect from your desktop process to the same-user Unix domain socket. Send one UTF-8 JSON-RPC 2.0 object per newline, using a distinct request <code>id</code>. Correlate replies by <code>id</code>; notifications can arrive between replies. Keep heartbeats running while backend work is in progress.</p>
+<ul>
+<li>Override: <code>$DECKD_DATA_DIR/deckd.sock</code>, when the variable is set.</li>
+<li>macOS: <code>~/Library/Application Support/OpenWalkieTalkie/deckd.sock</code>.</li>
+<li>Linux socket convention: <code>${XDG_RUNTIME_DIR}/openwalkietalkie/deckd.sock</code>, falling back to <code>~/.local/state/openwalkietalkie/deckd.sock</code>. The distributed desktop app currently targets macOS.</li>
+</ul>
+<p>Begin every connection with:</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;session.hello&quot;,&quot;params&quot;:{
+  &quot;client&quot;:{&quot;name&quot;:&quot;Example companion&quot;,&quot;version&quot;:&quot;1&quot;},
+  &quot;scopes&quot;:[&quot;agent&quot;,&quot;observe&quot;],
+  &quot;subscribe&quot;:[&quot;agent.order&quot;,&quot;agent.answer&quot;,&quot;focus.changed&quot;,&quot;session.settings_requested&quot;],
+  &quot;snapshot&quot;:false
+}}
+</code></pre>
+<p>The socket authenticates the local OS user. Request only <code>agent</code> and <code>observe</code> for this integration. Owned events include the content needed to handle your conversations; these scopes do not grant another app's private transcript. No remote API key needs to be sent to the daemon. Keep the socket in your trusted desktop process rather than exposing a raw RPC bridge to web content.</p>
+<p>A missing socket means the service is unavailable: show a disconnected status and retry with backoff. A <code>-32601</code> response to either new method means the daemon lacks native companion support; offer an update instead of silently reporting that the integration connected. The service's <code>/v1/schema</code> lists methods and request schemas for clients already using its authenticated HTTP API.</p>
+<h2 id="register-sessions-and-group-them">Register sessions and group them</h2>
+<p>Register one agent per conversation, plus an optional launcher. Keep a stable, namespaced <code>key</code> for each app/account/conversation. Registration is idempotent for that key on the owning connection.</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:2,&quot;method&quot;:&quot;agent.register&quot;,&quot;params&quot;:{
+  &quot;kind&quot;:&quot;other&quot;,&quot;name&quot;:&quot;Plan the release&quot;,&quot;key&quot;:&quot;example:personal:chat-42&quot;,
+  &quot;caps&quot;:{&quot;answer&quot;:&quot;push&quot;,&quot;order&quot;:&quot;push&quot;,&quot;focus&quot;:true},&quot;lease_ttl_s&quot;:30
+}}
+</code></pre>
+<p>Save the returned <code>agent</code> ID; use it in subsequent requests. The examples below use <code>ag_example</code> as a placeholder.</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:3,&quot;method&quot;:&quot;agent.companion.set&quot;,&quot;params&quot;:{
+  &quot;agent&quot;:&quot;ag_example&quot;,&quot;profile&quot;:{
+    &quot;app_id&quot;:&quot;org.example.companion&quot;,&quot;group_id&quot;:&quot;personal&quot;,
+    &quot;group_label&quot;:&quot;Example&quot;,&quot;role&quot;:&quot;session&quot;
+  }
+}}
+</code></pre>
+<p><code>app_id</code> is a stable application identifier (1–64 ASCII letters, digits, dots, dashes or underscores). <code>group_id</code> identifies an account or workspace within the app (1–128 UTF-8 bytes). <code>group_label</code> is its visible heading (1–24 UTF-8 bytes). Labels and IDs must be nonempty and contain no control characters. These are public presentation fields: use opaque account IDs, not credentials or private account names. Use distinct labels, such as “Example · Work”, for groups that should have separate device pages: the firmware groups by visible label; desktop grouping and overflow promotion use app/account IDs.</p>
+<p><code>role</code> is <code>session</code> or <code>launcher</code>. <code>profile: null</code> removes the native presentation. <code>kind</code> remains the provider identity in the API; use <code>other</code> for a custom agent. Existing provider kinds also accept a companion profile. Conol's optional robot artwork comes from its kind; neither the artwork nor a new firmware enum is required for another app to integrate.</p>
+<p>Native focus is routed to your app through events instead of terminal injection. There are eight shared physical slots. Check the returned <code>slot</code> (<code>null</code> means overflow). Focusing an overflow companion first uses normal slot allocation; if all slots are busy, it can replace an unpinned session from the same owning connection, app and group. That fallback preserves launchers, other accounts and other apps. It does not guarantee a slot when all candidates are protected. Do not register an unbounded history: publish a useful active window and retain the full list in your own app.</p>
+<p>Send <code>agent.heartbeat</code> with your owned agent IDs every 10 seconds for a 30-second lease. On sign-out or shutdown, use <code>agent.release</code>. After a socket loss, reconnect and register again. If registration returns ownership conflict <code>-32004</code>, <code>agent.claim {&quot;key&quot;:&quot;…&quot;}</code> can reclaim an orphaned or expired registration; it cannot take over an active connection. Republish profile, settings, transcript and the current question after reconnect. Neither leases nor the daemon are your persistent chat database.</p>
+<h2 id="start-and-activate-a-new-chat">Start and activate a new chat</h2>
+<p>Register a launcher named <strong>+ New chat</strong> with <code>role: &quot;launcher&quot;</code> and the same group as its conversations. Its order capability must be <code>push</code>. The role controls presentation and slot protection; it does not create backend sessions for you.</p>
+<p>Handle notifications in this envelope:</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{
+  &quot;type&quot;:&quot;agent.order&quot;,&quot;rev&quot;:123,
+  &quot;data&quot;:{&quot;agent&quot;:&quot;ag_launcher&quot;,&quot;text&quot;:&quot;Help me plan the release&quot;}
+}}
+</code></pre>
+<ol>
+<li>Resolve <code>data.agent</code> to an owned account and launcher. Deduplicate the notification within this connection, using its <code>rev</code> and <code>type</code>.</li>
+<li>Create the conversation and first user message through your authenticated backend. Keep its durable ID; serialize concurrent starts for the same launcher.</li>
+<li>Register the new conversation with its own stable key and <code>role: &quot;session&quot;</code>. Publish actual settings and recent messages.</li>
+<li>Select the new conversation in your app, then call <code>agent.focus {&quot;agent&quot;:&quot;ag_new&quot;}</code>. The daemon sends slot replacement updates before focus, and the firmware opens the conversation after PTT release. An already open question card stays put.</li>
+</ol>
+<p>Handle <code>focus.changed</code> with <code>data.source: &quot;device&quot;</code> by selecting the matching conversation in your app, or opening a blank composer for the launcher. Do not respond with another focus request and create a feedback loop. Events for unknown agent IDs must be ignored.</p>
+<p>Never retry an uncertain backend create blindly. Use your backend's idempotency key or reconcile the durable result first. A socket reconnect is not proof that a previous create failed. The sample's local in-memory creation is illustrative; production backends must supply this guarantee.</p>
+<h2 id="keep-both-transcripts-current">Keep both transcripts current</h2>
+<p>For an existing session, <code>agent.order</code> means deliver a follow-up message to that conversation. Use a stable client message ID in your backend, update your app's visible transcript, and resume its response stream. Mirroring only to the deck leaves your desktop UI stale.</p>
+<p>Publish public user and assistant messages with stable IDs:</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:4,&quot;method&quot;:&quot;agent.reply&quot;,&quot;params&quot;:{
+  &quot;agent&quot;:&quot;ag_example&quot;,&quot;text&quot;:&quot;I can help with the release.&quot;,&quot;speak&quot;:false,
+  &quot;message&quot;:{&quot;id&quot;:&quot;message-42&quot;,&quot;role&quot;:&quot;assistant&quot;,&quot;streaming&quot;:true}
+}}
+</code></pre>
+<p>Send the same message ID to replace the text during streaming; finish with <code>streaming: false</code>. Send user messages with <code>role: &quot;user&quot;</code> too. The daemon retains at most 64 messages and 512 KiB per agent; publish a bounded recent window. Keep private reasoning, credentials and internal tool arguments out of the mirrored transcript. Speech is opt-in through <code>speak</code>.</p>
+<p>Use <code>agent.update</code> for the conversation name, short title and <code>state</code> (<code>working</code>, <code>question</code>, <code>ready</code>, <code>error</code> or <code>idle</code>). Preserve the actual backend state and surface delivery failures without claiming a message was accepted.</p>
+<h2 id="handle-complex-questions-on-the-deck">Handle complex questions on the deck</h2>
+<p>The public question primitive is <code>agent.card.set</code>. A card can have up to four choices and optional free text. Build a multi-step form in your application; every rendered step gets a new card ID.</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:5,&quot;method&quot;:&quot;agent.card.set&quot;,&quot;params&quot;:{
+  &quot;agent&quot;:&quot;ag_example&quot;,&quot;type&quot;:&quot;q&quot;,&quot;text&quot;:&quot;1/3 Choose a language&quot;,
+  &quot;choices&quot;:[{&quot;label&quot;:&quot;Python&quot;},{&quot;label&quot;:&quot;Rust&quot;},{&quot;label&quot;:&quot;More&quot;},{&quot;label&quot;:&quot;Cancel&quot;}],
+  &quot;free_text&quot;:false,&quot;deliver&quot;:&quot;push&quot;,&quot;origin&quot;:{&quot;kind&quot;:&quot;custom&quot;}
+}}
+</code></pre>
+<p>Save <code>result.card.id</code>. Accept <code>agent.answer</code> only when both <code>data.agent</code> and <code>data.card</code> match the active question. <code>data.choice</code> is a zero-based choice index; <code>data.text</code> carries dictated free text. Never apply a late answer to a replacement question. Clear the previous card with <code>agent.card.clear {&quot;agent&quot;:&quot;…&quot;,&quot;card&quot;:17,&quot;delivered&quot;:false}</code> before publishing the next step.</p>
+<ul>
+<li>Page long choice lists instead of truncating them. Reserve buttons for navigation.</li>
+<li>Implement multiple selection as toggles, keeping selections across pages until <strong>Next</strong>.</li>
+<li>Use a dedicated <code>free_text: true</code> step for typed/dictated answers or an Other option.</li>
+<li>Keep drafts locally. Review the full answers with <strong>Submit</strong>, <strong>Edit</strong> and <strong>Cancel</strong>.</li>
+<li>Only <strong>Submit</strong> sends the answer envelope to the exact pending tool call or approval in your backend. Navigation, edits and cancellation must not approve anything.</li>
+<li>Confirm delivery only after the backend accepts submission. On failure, retain the draft and reuse a stable submission ID for an explicit retry. Recheck that the backend question is still pending after reconnect.</li>
+</ul>
+<p>If a form cannot be represented within the device limits, offer an explicit “Open in app” choice. The app should focus the relevant question, without pretending the form was completed. The example demonstrates the wizard using a scripted local form; Conol connects the same pattern to AskUser and workflow approvals.</p>
+<h2 id="display-and-change-model-thinking-effort">Display and change model / thinking effort</h2>
+<p>Report settings with <code>agent.session.set</code> for any owned agent. Display-only settings need no catalog:</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:6,&quot;method&quot;:&quot;agent.session.set&quot;,&quot;params&quot;:{
+  &quot;agent&quot;:&quot;ag_example&quot;,&quot;controls&quot;:{
+    &quot;model&quot;:&quot;My model&quot;,&quot;effort&quot;:&quot;High&quot;,&quot;editable&quot;:false,
+    &quot;note&quot;:&quot;Change these settings in Example.&quot;
+  }
+}}
+</code></pre>
+<p>For deck-editable settings, supply stable model IDs, readable labels and each model's supported effort values. Send the backend's actual selection, not a guessed default.</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:7,&quot;method&quot;:&quot;agent.session.set&quot;,&quot;params&quot;:{
+  &quot;agent&quot;:&quot;ag_example&quot;,&quot;controls&quot;:{
+    &quot;model&quot;:&quot;fast&quot;,&quot;effort&quot;:&quot;low&quot;,&quot;editable&quot;:true,&quot;note&quot;:&quot;&quot;,
+    &quot;models&quot;:[
+      {&quot;id&quot;:&quot;fast&quot;,&quot;label&quot;:&quot;Fast model&quot;,&quot;efforts&quot;:[&quot;low&quot;,&quot;high&quot;],&quot;default_effort&quot;:&quot;low&quot;},
+      {&quot;id&quot;:&quot;simple&quot;,&quot;label&quot;:&quot;Simple model&quot;,&quot;efforts&quot;:[],&quot;default_effort&quot;:&quot;&quot;}
+    ]
+  }
+}}
+</code></pre>
+<p><code>model</code> and each model ID/label are limited to 128 UTF-8 bytes; effort strings to 32; <code>note</code> to 256. There may be at most 64 models and 16 efforts per model, with unique model IDs and unique effort values. Control characters are rejected. Editable selections must belong to their catalog; empty effort represents the backend default or no effort setting. A nonempty <code>default_effort</code> must be listed in that model's efforts.</p>
+<p>A device selection emits <strong><code>session.settings_requested</code></strong> (underscore before <code>requested</code>):</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{
+  &quot;type&quot;:&quot;session.settings_requested&quot;,&quot;rev&quot;:124,
+  &quot;data&quot;:{&quot;agent&quot;:&quot;ag_example&quot;,&quot;model&quot;:&quot;fast&quot;,&quot;effort&quot;:&quot;high&quot;,&quot;request_rev&quot;:19}
+}}
+</code></pre>
+<p>Apply the requested setting in your backend, then call <code>agent.session.set</code> with the <strong>actual resulting controls</strong> and <code>request_rev: 19</code>. Use <code>data.request_rev</code>, not the envelope's event <code>rev</code>. The device keeps its existing selection pending until confirmation. On failure, confirm the unchanged actual settings with a short explanatory <code>note</code>.</p>
+<p>Ordinary refreshes omit <code>request_rev</code> and do not settle pending requests. A mismatched, duplicate or expired confirmation is rejected. Pending changes time out after 45 seconds. Preserve request/agent correlation across asynchronous work, and reconcile the backend if a response is lost. The daemon validates transport and ownership; your application remains responsible for authorizing and applying model changes.</p>
+<h2 id="integration-checklist">Integration checklist</h2>
+<p>Before shipping, test a first chat and follow-up on both screens; overflow with another app present; sign-out and reconnect; streamed message replacement; stale question presses; multi-select paging; cancel versus submit; backend submission failure; readonly settings; model changes with different effort catalogs; and an expired settings confirmation.</p>
+<p>The runnable example is also checked with a fake backend in <code>tools/tests/test_native_companion.py</code>. The public request schemas and method permissions come from <code>deckd api-doc</code>. Keep these interfaces separate from provider-specific hooks so a custom agent does not need a firmware fork or a Conol account.</p>
+
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · A COHDL project · MIT software · CERN-OHL-P hardware</span>
+    <nav aria-label="Footer">
+      <a href="/#waitlist">Join the waitlist</a>
+      <a href="/privacy/">Privacy Policy</a>
+      <a href="/cookies/">Cookie information</a>
+      <a href="/cookies/" data-privacy-open>Privacy notice</a>
+      <a href="/">Home</a>
+      <a href="/#demo">Try It</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Join the CoHDL and OpenWalkieTalkie community on Discord">Discord</a>
+      <a href="/blog/feed.xml">Feed</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

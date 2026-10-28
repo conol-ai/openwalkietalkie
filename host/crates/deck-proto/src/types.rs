@@ -13,6 +13,7 @@ pub enum Kind {
     Codex,
     Gemini,
     Other,
+    Conol,
 }
 
 #[derive(
@@ -595,6 +596,7 @@ pub(crate) const KINDS: &[(&str, Kind)] = &[
     ("codex", Kind::Codex),
     ("gemini", Kind::Gemini),
     ("other", Kind::Other),
+    ("conol", Kind::Conol),
 ];
 pub(crate) const STATES: &[(&str, AgentState)] = &[
     ("working", AgentState::Working),

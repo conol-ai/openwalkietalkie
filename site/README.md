@@ -97,6 +97,8 @@ before enabling them. Bump the notice version when it should be shown again.
 - `src/worker.ts` and `migrations/`: waitlist API and retention task.
 - `public/js/waitlist.js`: progressive enhancement for the signup form.
 - `public/js/privacy.js`: dismissible privacy notice on all pages.
+- `public/docs/`: native companion guide and generated JSON-RPC reference.
+  `public/examples/native_companion.py` must match `host/examples/native_companion.py`.
 - `public/blog/`: posts and Atom feed. Update `sitemap.xml` when adding a post.
 - `public/assets/screens/`: firmware renders from `tools/preview-all.py`.
 - `public/assets/photos/` and `public/assets/renders/`: product photos (hero
@@ -124,10 +126,20 @@ workflow does not generate blog posts or deploy this Worker. For each release:
 4. Include those changes in the release commit before tagging. The existing
    `python3 tools/release.py validate v<version>` release check now rejects
    a missing post, feed entry, index link, sitemap entry, or Mac download.
-5. After the GitHub release and its downloads are public, run the deployment
+5. For 0.11.0 and later, include the native companion guide, docs navigation,
+   sitemap entries, downloadable Python example and generated API reference.
+   Release validation checks these too. Regenerate the reference with
+   `deckd api-doc > docs/deckd-api.md` and copy it to
+   `site/public/docs/deckd-api.md`; copy the canonical example from
+   `host/examples/native_companion.py` after changes. Preview the guide and test
+   the example before tagging. These prepared pages are published with 0.11.0,
+   not as a separate early deployment.
+6. After the GitHub release and its downloads are public, run the deployment
    checks above and deploy the site. Verify the live blog, feed, both post
    links, and the home page downloads. Passing release validation does not
-   publish the website.
+   publish the website. For 0.11.0, also verify `/docs/`,
+   `/docs/native-companions/`, the example download and the API reference on the
+   live site.
 
 The film player is dormant until film markup and a YouTube ID are added.
 No analytics property is configured.

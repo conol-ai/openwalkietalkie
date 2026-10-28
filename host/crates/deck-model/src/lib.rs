@@ -20,6 +20,7 @@ mod redact;
 mod roster;
 pub mod sanitize;
 pub mod schema;
+pub mod companion;
 pub mod session_controls;
 mod snapshot;
 mod store;

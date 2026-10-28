@@ -296,7 +296,7 @@ impl Shell {
             source: deck_model::Source::Api,
             owner: deck_model::Owner { principal: Principal::Uid(0), session: deck_model::SessionId(1), lease_expires: None },
             session: deck_model::SessionInfo { key: None, cwd: Some("/demo/openwalkietalkie".into()), pid: None, pid_kind: None, terminal: None },
-            caps: deck_model::Caps::default(), card: None, reply: None, messages: Vec::new(), workflow_runs: Vec::new(), workflow: None,
+            caps: deck_model::Caps::default(), companion: None, card: None, reply: None, messages: Vec::new(), workflow_runs: Vec::new(), workflow: None,
             chat_rev: 1, reply_rev: 0, voice: None, pinned: false, meta: serde_json::Value::Null, redacted: false,
         };
         let complete = scene == Scene::WorkflowComplete;

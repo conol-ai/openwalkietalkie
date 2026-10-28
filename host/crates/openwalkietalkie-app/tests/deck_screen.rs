@@ -52,6 +52,7 @@ fn agent(id: &str, slot: Option<u8>) -> Agent {
             order: OrderCap::Inject,
             focus: true,
         },
+        companion: None,
         card: None,
         reply: None,
         messages: Vec::new(),

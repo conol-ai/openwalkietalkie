@@ -987,3 +987,25 @@ fn cjk_reply_overhang_is_erased_when_the_reply_changes() {
         ("another channel", &|ui| channel(ui, 1)),
     ]);
 }
+
+#[test]
+fn conol_mosaic_header_redraws_when_a_native_chat_joins_the_project() {
+    let mut state = scene(|ui| {
+        ui.agents.view = AgentsView::Roster;
+        ui.agents.project.set("Conol");
+        for agent in &mut ui.deck.agents {
+            agent.project.set("Conol");
+            agent.kind = AgentKind::Other;
+        }
+    });
+    let mut screens = Screens::new(&state);
+    let before = state.clone();
+    for agent in &mut state.deck.agents { agent.kind = AgentKind::Conol; }
+    update(&mut screens, &before, &state);
+    let frame = full(&state);
+    assert_ne!(full(&before), frame);
+    assert!(lit_outside_safe_area(&frame).is_none());
+    if let Ok(path) = std::env::var("CONOL_DECK_PREVIEW") {
+        std::fs::write(path, frame).unwrap();
+    }
+}

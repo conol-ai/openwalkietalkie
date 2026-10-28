@@ -96,6 +96,7 @@ const KINDS: &[(&str, AgentKind)] = &[
     ("codex", AgentKind::Codex),
     ("gemini", AgentKind::Gemini),
     ("other", AgentKind::Other),
+    ("conol", AgentKind::Conol),
 ];
 const STATES: &[(&str, AgentState)] = &[
     ("working", AgentState::Working),

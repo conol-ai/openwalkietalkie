@@ -50,6 +50,8 @@ pub const METHODS: &[MethodSpec] = &[
     m("agent.register", Some(Scope::Agent), true),
     m("agent.heartbeat", Some(Scope::Agent), true),
     m("agent.update", Some(Scope::Agent), true),
+    m("agent.companion.set", Some(Scope::Agent), true),
+    m("agent.session.set", Some(Scope::Agent), true),
     m("agent.release", Some(Scope::Agent), true),
     m("agent.claim", Some(Scope::Agent), true),
     m("agent.focus", Some(Scope::Agent), true),

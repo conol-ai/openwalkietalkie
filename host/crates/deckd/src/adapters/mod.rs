@@ -79,6 +79,8 @@ pub fn is_pending(id: &AgentId) -> bool {
 pub fn address(req: &mut Request, agent: &AgentId) {
     match req {
         Request::AgentUpdate(u) => replace(&mut u.agent, agent),
+        Request::CompanionSet(c) => replace(&mut c.agent, agent),
+        Request::SessionSet(c) => replace(&mut c.agent, agent),
         Request::AgentRelease { agent: a, .. }
         | Request::AgentFocus { agent: a }
         | Request::OpFocus { agent: a }
@@ -133,6 +135,8 @@ fn replace(slot: &mut AgentId, agent: &AgentId) {
 pub fn agent_of(req: &Request) -> Option<&AgentId> {
     match req {
         Request::AgentUpdate(u) => Some(&u.agent),
+        Request::CompanionSet(c) => Some(&c.agent),
+        Request::SessionSet(c) => Some(&c.agent),
         Request::AgentRelease { agent, .. }
         | Request::AgentFocus { agent }
         | Request::OpFocus { agent }

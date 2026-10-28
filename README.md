@@ -167,6 +167,15 @@ reference host: it runs the mockup session against a device, `--dry-run` prints
 the framed reports without hardware, and `tools/host-test.sh` diffs `deckd`'s
 framing against it.
 
+Version 0.11.0 adds native companions: Conol desktop conversations, a new-chat
+launcher, multi-step questions, and actual model/effort reporting on the Mac and
+deck. Both apps and the firmware need compatible builds. See the
+[Conol integration notes](docs/conol-integration.md) and the public
+[native companion guide](https://openwalkietalkie.org/docs/native-companions/).
+Other apps can use the same API; the
+[standalone Python example](host/examples/native_companion.py) runs scripted
+conversations and forms without Conol or a model API key.
+
 The deck's spoken replies are bring-your-own-key: give `deckd` an OpenAI or
 ElevenLabs API key (on the app's Voice screen under *Spoken replies*, or
 `deckd tts key set --provider openai`, typed without echo or piped in) and

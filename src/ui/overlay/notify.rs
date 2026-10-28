@@ -31,6 +31,7 @@ pub const fn kind_label(kind: AgentKind) -> &'static str {
         AgentKind::Codex => "Codex",
         AgentKind::Gemini => "Gemini",
         AgentKind::Other => "Agent",
+        AgentKind::Conol => "Conol",
     }
 }
 

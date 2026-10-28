@@ -180,6 +180,7 @@ pub const fn kind(kind: AgentKind) -> &'static str {
         AgentKind::Codex => "Codex",
         AgentKind::Gemini => "Gemini",
         AgentKind::Other => "Agent",
+        AgentKind::Conol => "Conol",
     }
 }
 
@@ -196,6 +197,7 @@ pub fn kind_name(agent: &Agent) -> Text<40> {
 /// is the project's own — a hook-registered session is named after its
 /// directory, and the page header already says that.
 pub fn row_name(agent: &Agent) -> Text<40> {
+    if agent.kind == AgentKind::Conol { return Text::from_str(agent.name.as_str()); }
     if !agent.project.is_empty() && agent.name == agent.project {
         Text::from_str(kind(agent.kind))
     } else {
@@ -429,10 +431,52 @@ pub fn signature(ui: &UiState, instance: u8, sig: &mut SigBuilder) {
 
 // ---- roster -------------------------------------------------------------------
 
+
+/// Conol's robot mosaic, the same 16×16 mark as the desktop asset.
+const CONOL_MARK: [u16; 16] = [
+    0b0000000000000000,
+    0b0000000110000000,
+    0b0001100110011000,
+    0b0001100110011000,
+    0b0000100110010000,
+    0b0000011111100000,
+    0b0001111111111000,
+    0b0011100000011100,
+    0b0011000000001100,
+    0b0011001101101100,
+    0b0011001101101100,
+    0b0011000000001100,
+    0b0011001001001100,
+    0b0011100110011100,
+    0b0001111111111000,
+    0b0000000000000000
+];
+fn conol_mark(band: &mut Band, x: i32, y: i32) {
+    for (row, bits) in CONOL_MARK.iter().enumerate() {
+        for col in 0..16 {
+            if bits & (1 << (15 - col)) != 0 {
+                kit::fill(band, Rect::new(x + col * 2, y + row as i32 * 2, 2, 2), 0xFFE238);
+            }
+        }
+    }
+}
+
+fn conol_project(ui: &UiState) -> bool {
+    ui.deck.agents.iter().any(|a| a.kind == AgentKind::Conol && a.project.as_str() == ui.agents.project.as_str())
+}
+
 fn draw_roster(band: &mut Band, ui: &UiState) {
     let mut label = Text::<40>::new();
     roster_header(ui, &mut label);
-    kit::header(band, label.as_str(), kit::header_right(ui, kit::status_tag(ui)));
+    let is_conol = conol_project(ui);
+    if is_conol {
+        conol_mark(band, theme::TEXT_X, 21);
+        font::draw(band, Font::Label, theme::TEXT_X + 40, theme::HEADER_BASELINE,
+            label.as_str(), theme::TEXT_LABEL, Some(theme::CANVAS), 220, Align::Left);
+        kit::header_tag(band, kit::header_right(ui, kit::status_tag(ui)));
+    } else {
+        kit::header(band, label.as_str(), kit::header_right(ui, kit::status_tag(ui)));
+    }
     let viewport = roster_viewport(ui);
     for slot in 0..layout::ROSTER_VISIBLE {
         if let Some(agent) = roster_agent(ui, &viewport, slot) {
@@ -479,7 +523,7 @@ fn roster_signature(ui: &UiState, sig: &mut SigBuilder) {
     sig.region_with(HEADER_LANE, |h| {
         let mut label = Text::<40>::new();
         roster_header(ui, &mut label);
-        h.text(&label).header_right(kit::header_right(ui, kit::status_tag(ui)));
+        h.text(&label).u8(conol_project(ui) as u8).header_right(kit::header_right(ui, kit::status_tag(ui)));
     });
     let viewport = roster_viewport(ui);
     for slot in 0..layout::ROSTER_VISIBLE {

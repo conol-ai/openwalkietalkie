@@ -83,6 +83,7 @@ fn fw_kind(k: Kind) -> msg::AgentKind {
         Kind::Codex => msg::AgentKind::Codex,
         Kind::Gemini => msg::AgentKind::Gemini,
         Kind::Other => msg::AgentKind::Other,
+        Kind::Conol => msg::AgentKind::Conol,
     }
 }
 

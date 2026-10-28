@@ -57,6 +57,37 @@ def validate_site(tag, public=None):
         download = f"https://github.com/{REPOSITORY}/releases/download/{tag}/OpenWalkieTalkie-{tag[1:]}-macos-{arch}.dmg"
         if f'href="{download}"' not in home:
             raise ValueError(f"website {arch} download must point to {tag}")
+    if tuple(map(int, tag.removeprefix("v").split("."))) >= (0, 11, 0):
+        validate_companion_docs(public)
+
+
+def validate_companion_docs(public):
+    """The 0.11.0 contract must ship with discoverable, matching documentation."""
+    guide_path = "/docs/native-companions/"
+    required = ["docs/index.html", "docs/native-companions/index.html",
+                "docs/deckd-api.md", "examples/native_companion.py"]
+    for name in required:
+        if not (public / name).is_file():
+            raise ValueError(f"website native companion documentation missing: {name}")
+    guide = (public / "docs/native-companions/index.html").read_text()
+    for marker in ['name="owt-api-version" content="0.11.0"',
+                   "agent.companion.set", "agent.session.set", "session.settings_requested",
+                   'href="/examples/native_companion.py"', 'href="/docs/deckd-api.md"']:
+        if marker not in guide:
+            raise ValueError(f"website native companion guide must contain {marker}")
+    if 'href="/docs/"' not in (public / "index.html").read_text():
+        raise ValueError("website home must link to /docs/")
+    if f'href="{guide_path}"' not in (public / "docs/index.html").read_text():
+        raise ValueError("website docs index must link to native companion guide")
+    sitemap = ET.parse(public / "sitemap.xml")
+    urls = [loc.text for loc in sitemap.findall(".//{http://www.sitemaps.org/schemas/sitemap/0.9}loc")]
+    for path in ["/docs/", guide_path]:
+        if "https://openwalkietalkie.org" + path not in urls:
+            raise ValueError(f"website sitemap must include {path}")
+    for source, target in [("host/examples/native_companion.py", "examples/native_companion.py"),
+                           ("docs/deckd-api.md", "docs/deckd-api.md")]:
+        if (ROOT / source).read_bytes() != (public / target).read_bytes():
+            raise ValueError(f"website download must match {source}: {target}")
 
 
 def image_from_elf(data, board, bootstrap=False):

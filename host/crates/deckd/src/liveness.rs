@@ -904,6 +904,7 @@ mod tests {
                 terminal: None,
             },
             caps: Caps::default(),
+            companion: None,
             card: None,
             reply: None,
             messages: Vec::new(),

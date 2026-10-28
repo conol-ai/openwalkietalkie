@@ -49,6 +49,7 @@ fn agent(id: &str, state: AgentState) -> Agent {
             order: OrderCap::Inject,
             focus: true,
         },
+        companion: None,
         card: None,
         reply: None,
         messages: Vec::new(),

@@ -5,8 +5,16 @@
   <id>https://openwalkietalkie.org/blog/</id>
   <link href="https://openwalkietalkie.org/blog/" />
   <link rel="self" type="application/atom+xml" href="https://openwalkietalkie.org/blog/feed.xml" />
-  <updated>2026-10-26T06:52:06Z</updated>
+  <updated>2026-10-28T03:07:14Z</updated>
   <author><name>Tony Huang</name></author>
+  <entry>
+    <title>OpenWalkieTalkie v0.11.0: Conol and native companions</title>
+    <id>https://openwalkietalkie.org/blog/conol-and-native-companions/</id>
+    <link href="https://openwalkietalkie.org/blog/conol-and-native-companions/" />
+    <published>2026-10-28T03:07:14Z</published>
+    <updated>2026-10-28T03:07:14Z</updated>
+    <summary>Conol conversations, new-chat dictation and multi-step questions on the deck, with an open companion API for other apps.</summary>
+  </entry>
   <entry>
     <title>OpenWalkieTalkie v0.10.0: Computer resources on the deck</title>
     <id>https://openwalkietalkie.org/blog/computer-resources-on-the-deck/</id>

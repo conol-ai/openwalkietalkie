@@ -54,6 +54,7 @@ pub mod ic {
     pub const BELL: &str = "icons/bell.svg";
     pub const BLUETOOTH: &str = "icons/bluetooth.svg";
     pub const BOT: &str = "icons/bot.svg";
+    pub const CONOL: &str = "icons/conol-mark.svg";
     pub const CHAT: &str = "icons/chat-round-line.svg";
     pub const CHECK: &str = "icons/check.svg";
     pub const CHECK_CIRCLE: &str = "icons/check-circle.svg";
@@ -555,6 +556,7 @@ pub fn kind_mark(kind: Kind, p: &Palette) -> (&'static str, Hsla) {
         Kind::Codex => (ic::OPENAI, p.text),
         Kind::Gemini => (ic::GEMINI, p.gemini),
         Kind::Other => (ic::BOT, p.muted),
+        Kind::Conol => (ic::CONOL, if p.dark { gpui::rgb(0xFFE238).into() } else { p.text }),
     }
 }
 

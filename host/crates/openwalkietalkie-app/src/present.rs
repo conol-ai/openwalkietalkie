@@ -101,6 +101,7 @@ pub const fn kind_icon(kind: Kind) -> &'static str {
         Kind::Codex => "\u{25ce}",
         Kind::Gemini => "\u{2726}",
         Kind::Other => "\u{25aa}",
+        Kind::Conol => "\u{25a6}",
     }
 }
 
@@ -110,6 +111,7 @@ pub const fn kind_label(kind: Kind) -> &'static str {
         Kind::Codex => "Codex",
         Kind::Gemini => "Gemini",
         Kind::Other => "Agent",
+        Kind::Conol => "Conol",
     }
 }
 
@@ -517,11 +519,19 @@ pub fn projects(snapshot: &Snapshot) -> Vec<Project<'_>> {
             .map(|cwd| cwd.trim_end_matches('/'))
             .filter(|cwd| !cwd.is_empty())
             .map(str::to_string);
-        let (label, cwd) = match cwd.as_deref().and_then(deck_model::project_label) {
+        let (label, cwd) = if let Some(profile) = &agent.companion {
+            (profile.group_label.clone(), None)
+        } else if agent.kind == Kind::Conol { ("Conol".to_string(), None) } else { match cwd.as_deref().and_then(deck_model::project_label) {
             Some(label) => (label, cwd),
             None => (NO_PROJECT.to_string(), None),
-        };
-        match groups.iter_mut().find(|g| g.cwd == cwd) {
+        }};
+        match groups.iter_mut().find(|g| g.cwd == cwd && g.agents.first().is_some_and(|a| {
+            match (&a.companion, &agent.companion) {
+                (Some(left), Some(right)) => left.app_id == right.app_id && left.group_id == right.group_id,
+                (None, None) => (a.kind == Kind::Conol) == (agent.kind == Kind::Conol),
+                _ => false,
+            }
+        })) {
             Some(group) => group.agents.push(agent),
             None => groups.push(Project {
                 label,
@@ -1859,6 +1869,7 @@ mod tests {
             },
             session: SessionInfo::default(),
             caps: Caps::default(),
+            companion: None,
             card: None,
             reply: None,
             messages: Vec::new(),
@@ -2239,6 +2250,43 @@ mod tests {
         agent.title = None;
         agent.redacted = true;
         assert_eq!(live_title(&agent), REDACTED);
+    }
+
+    #[test]
+    fn conol_is_its_own_group_even_beside_a_directory_named_conol() {
+        let mut snapshot = Snapshot::default();
+        for (id, kind, cwd) in [("ag_native", Kind::Conol, None), ("ag_native2", Kind::Conol, Some("/ignored")),
+            ("ag_terminal", Kind::Claude, Some("/projects/Conol")), ("ag_other", Kind::Other, None)] {
+            let mut a = agent(); a.id = deck_model::AgentId(id.into()); a.kind = kind;
+            a.session.cwd = cwd.map(String::from); snapshot.agents.insert(a.id.clone(), a);
+        }
+        let groups = projects(&snapshot);
+        assert_eq!(groups.len(), 3);
+        let native = groups.iter().find(|g| g.agents[0].kind == Kind::Conol).unwrap();
+        assert_eq!(native.label, "Conol"); assert_eq!(native.agents.len(), 2);
+        assert!(native.cwd.is_none());
+    }
+
+    #[test]
+    fn companion_groups_use_app_and_account_identity_independently_of_provider() {
+        use deck_model::companion::{CompanionProfile, CompanionRole};
+        let mut snapshot = Snapshot::default();
+        for (id, app, account, kind) in [
+            ("ag_1", "example", "personal", Kind::Other),
+            ("ag_2", "example", "personal", Kind::Codex),
+            ("ag_3", "example", "work", Kind::Other),
+            ("ag_4", "different", "personal", Kind::Other),
+        ] {
+            let mut a = agent();
+            a.id = deck_model::AgentId(id.into()); a.kind = kind;
+            a.companion = Some(CompanionProfile { app_id: app.into(), group_id: account.into(),
+                group_label: "Example".into(), role: CompanionRole::Session });
+            snapshot.agents.insert(a.id.clone(), a);
+        }
+        let groups = projects(&snapshot);
+        assert_eq!(groups.len(), 3);
+        assert!(groups.iter().any(|g| g.agents.len() == 2));
+        assert!(groups.iter().all(|g| g.label == "Example" && g.cwd.is_none()));
     }
 
     #[test]

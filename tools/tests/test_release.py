@@ -46,6 +46,14 @@ class ReleaseSiteTests(unittest.TestCase):
                 f'<a href="{release_url}/download/v1.2.3/OpenWalkieTalkie-1.2.3-macos-{arch}.dmg">Mac</a>'
                 for arch in ("aarch64", "x86_64")),
         }
+        # Reuse the published assets so the release fixture checks their contract too.
+        for name in ["docs/index.html", "docs/native-companions/index.html",
+                     "docs/deckd-api.md", "examples/native_companion.py"]:
+            files[name] = (release.ROOT / "site/public" / name).read_text()
+        files["index.html"] += '<a href="/docs/">Docs</a>'
+        files["sitemap.xml"] = files["sitemap.xml"].replace("</urlset>",
+            '<url><loc>https://openwalkietalkie.org/docs/</loc></url>'
+            '<url><loc>https://openwalkietalkie.org/docs/native-companions/</loc></url></urlset>')
         with tempfile.TemporaryDirectory() as directory:
             public = Path(directory)
             for name, content in files.items():
@@ -63,6 +71,15 @@ class ReleaseSiteTests(unittest.TestCase):
                 ("blog/index.html", "<p>No posts yet</p>", "index"),
                 ("sitemap.xml", files["sitemap.xml"].replace(url, "https://openwalkietalkie.org/"), "sitemap"),
             ]
+            cases.extend([
+                ("docs/native-companions/index.html", None, "documentation missing"),
+                ("docs/native-companions/index.html", files["docs/native-companions/index.html"].replace("session.settings_requested", "wrong.event"), "guide must contain"),
+                ("docs/index.html", "<p>No guide</p>", "docs index"),
+                ("index.html", files["index.html"].replace('href="/docs/"', 'href="/"'), "home must link"),
+                ("sitemap.xml", files["sitemap.xml"].replace("https://openwalkietalkie.org/docs/native-companions/", "https://example.com/"), "sitemap"),
+                ("examples/native_companion.py", "# stale example", "download must match"),
+                ("docs/deckd-api.md", "# stale reference", "download must match"),
+            ])
             for arch in ("aarch64", "x86_64"):
                 cases.append(("index.html", files["index.html"].replace(f"1.2.3-macos-{arch}", f"1.2.2-macos-{arch}"), arch))
             for name, content, message in cases:
@@ -77,6 +94,14 @@ class ReleaseSiteTests(unittest.TestCase):
                             release.validate_site("v1.2.3", public)
                     finally:
                         path.write_text(files[name])
+
+            # Earlier releases do not retroactively require the companion pages.
+            for name, content in files.items():
+                if name.startswith(("docs/", "examples/")):
+                    (public / name).unlink()
+                else:
+                    (public / name).write_text(content.replace("1.2.3", "0.10.0"))
+            release.validate_site("v0.10.0", public)
 
 
 class ReleaseTests(unittest.TestCase):

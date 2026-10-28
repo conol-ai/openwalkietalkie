@@ -46,7 +46,8 @@ pub struct Shadow {
 
 impl Shadow {
     fn forget_slot(&mut self, slot: Slot) {
-        self.written.retain(|k, _| k.slot() != Some(slot));
+        self.written.retain(|k, line| k.slot() != Some(slot)
+            && !matches!(line, HostLine::Focus { slot: focused, .. } if *focused == slot.0));
     }
 }
 
@@ -702,6 +703,18 @@ impl Outbox {
                 // The slot's `gone` goes first: its new lines must not land
                 // on the old agent as a diff, nor be deleted with it (§6.5).
                 continue;
+            }
+            if let (Key::Focus, Some(HostLine::Focus { slot, .. })) = (key, view.get(key)) {
+                let slot = Slot(*slot);
+                // Focus is P0, but it depends on its target's P1 lifecycle.
+                // Sending it before `gone` + `agent` focuses the predecessor
+                // (then returns to the roster) or an unknown slot (ignored).
+                if gone.contains(&slot)
+                    || (self.entries.contains_key(&Key::AgentState(slot))
+                        && self.agent_diff(view, Key::AgentState(slot)).is_some())
+                {
+                    continue;
+                }
             }
             let lane = effective_lane(*key, entry, now);
             let candidate = match key {
@@ -1845,6 +1858,57 @@ mod tests {
         assert_eq!(lines[0], "{\"m\":\"agent\",\"id\":2,\"gone\":1}");
         assert!(lines[1].contains("\"kind\":\"claude\""));
         assert_eq!(lines.last().unwrap(), "{\"m\":\"synced\"}");
+    }
+
+    #[test]
+    fn conol_creation_focus_follows_slot_replacement_even_when_reusing_the_focused_slot() {
+        for already_focused in [false, true] {
+            let t0 = Instant::now();
+            let mut o = Outbox::new(PACE_FLOOR, 1);
+            let mut view = DeviceView::new();
+            let old = HostLine::Agent {
+                slot: 2, kind: Some(Kind::Conol), name: Some("old chat".into()),
+                project: Some("Conol".into()), state: Some(AgentState::Working), title: None, since_s: None,
+            };
+            put(&mut o, &mut view, Key::AgentState(Slot(2)), old, t0);
+            drain(&mut o, &view, t0);
+            if already_focused {
+                put(&mut o, &mut view, Key::Focus, HostLine::Focus { slot: 2, ack: None }, t0);
+                drain(&mut o, &view, t0 + Duration::from_secs(1));
+            }
+            let t1 = t0 + Duration::from_secs(2);
+            let new = HostLine::Agent {
+                slot: 2, kind: Some(Kind::Conol), name: Some("new chat".into()),
+                project: Some("Conol".into()), state: Some(AgentState::Working), title: None, since_s: None,
+            };
+            for op in [
+                DeviceOp::Put(Key::AgentGone(Slot(2)), HostLine::AgentGone { slot: 2 }),
+                DeviceOp::Remove(Key::AgentState(Slot(2))),
+                DeviceOp::Put(Key::AgentState(Slot(2)), new),
+                DeviceOp::Put(Key::Focus, HostLine::Focus { slot: 2, ack: None }),
+            ] {
+                view.apply(&op);
+                o.enqueue(&view, op, t1);
+            }
+            let lines = drain(&mut o, &view, t1);
+            assert_eq!(lines.len(), 3, "focus must be sent for the new occupant: {lines:?}");
+            assert!(lines[0].contains("\"gone\":1"), "old occupant must leave first: {lines:?}");
+            assert!(lines[1].contains("new chat"), "the new chat must exist before focus: {lines:?}");
+            assert_eq!(lines[2], "{\"m\":\"focus\",\"agent\":2}");
+        }
+    }
+
+    #[test]
+    fn a_new_slot_is_announced_before_its_focus() {
+        let t0 = Instant::now();
+        let mut o = Outbox::new(PACE_FLOOR, 1);
+        let mut view = DeviceView::new();
+        put(&mut o, &mut view, Key::AgentState(Slot(2)), agent(2, AgentState::Working, None), t0);
+        put(&mut o, &mut view, Key::Focus, HostLine::Focus { slot: 2, ack: None }, t0);
+        let lines = drain(&mut o, &view, t0);
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].contains("\"kind\""), "the device ignores focus for unknown slots: {lines:?}");
+        assert_eq!(lines[1], "{\"m\":\"focus\",\"agent\":2}");
     }
 
     /// A device `channel` withdraws the PC focus (`Remove(Focus)` after the

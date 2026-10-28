@@ -524,6 +524,7 @@ mod tests {
                 order,
                 focus: true,
             },
+            companion: None,
             card: Some(Card {
                 id: CardId(17),
                 kind: CardKind::Q,

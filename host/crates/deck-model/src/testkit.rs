@@ -40,6 +40,7 @@ pub fn fixture_agent(id: &str, slot: u8, state: AgentState) -> Agent {
             pid_kind: None,
             terminal: None,
         },
+        companion: None,
         caps: Caps {
             answer: AnswerCap::Hold,
             order: OrderCap::Inject,

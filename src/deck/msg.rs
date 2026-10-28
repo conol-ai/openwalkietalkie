@@ -13,6 +13,7 @@ pub enum AgentKind {
     Codex,
     Gemini,
     Other,
+    Conol,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
