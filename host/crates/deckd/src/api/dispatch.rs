@@ -321,7 +321,9 @@ pub async fn dispatch(ctx: &ConnCtx, method: &str, params: serde_json::Value) ->
         let mut result = crate::integrations::api_dispatch(verb, params).await;
         if verb == "status" {
             if let Ok(value) = &mut result {
-                value["claude_channels"] = ctx.core.adapters().claude_channels.status();
+                let hub = &ctx.core.adapters().claude_channels;
+                value["claude_channels"] = hub.status();
+                value["claude_channels_stale"] = hub.stale_count().into();
             }
         }
         return Reply {

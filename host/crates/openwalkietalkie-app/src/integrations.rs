@@ -102,6 +102,8 @@ pub struct Pending {
 pub struct IntegrationsPane {
     reports: Vec<Report>,
     claude_channels: Vec<(String, bool)>,
+    /// Helpers from a previous install that the daemon keeps refusing.
+    claude_channels_stale: usize,
     warnings: Vec<String>,
     /// `perm.status`'s `automation.ghostty`: `granted`, `denied`, `unknown`.
     ghostty: Option<String>,
@@ -133,6 +135,7 @@ impl IntegrationsPane {
         IntegrationsPane {
             reports: Vec::new(),
             claude_channels: Vec::new(),
+            claude_channels_stale: 0,
             warnings: Vec::new(),
             ghostty: None,
             tokens: Vec::new(),
@@ -226,6 +229,8 @@ impl Shell {
                             .into_iter().flatten().filter_map(|row| Some((
                                 row["session"].as_str()?.to_owned(), row["state"] == "ready"
                             ))).collect();
+                        this.integrations.claude_channels_stale =
+                            value["claude_channels_stale"].as_u64().unwrap_or(0) as usize;
                         this.integrations.reports = reports;
                         this.integrations.warnings = warnings;
                         // Only an answer counts as having asked, so opening
@@ -401,6 +406,12 @@ impl Shell {
             .child(div().text_color(p.muted).child(
                 "Until connected, messages use the existing inbox and Claude may label them as coming from another session. To turn Channels off, restart Claude without the flag."
             ));
+        if self.integrations.claude_channels_stale > 0 {
+            body = body.child(div().text_color(p.muted).child(format!(
+                "{} Claude session(s) are running a channel helper from an older OpenWalkieTalkie install and cannot connect. Restart those sessions to reconnect.",
+                self.integrations.claude_channels_stale
+            )));
+        }
         for (session, ready) in &self.integrations.claude_channels {
             body = body.child(
                 Row::new()

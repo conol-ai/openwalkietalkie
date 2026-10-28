@@ -139,6 +139,10 @@ fn current_identity(config: &Path, pid: u32) -> Option<Identity> {
         .flatten()
 }
 
+/// Consecutive 2 s ticks a live daemon may refuse this binary before it
+/// retires: a helper left over from an older install can never be accepted.
+const RETIRE_AFTER_REFUSALS: u32 = 15;
+
 pub(super) fn run(data: &Path) -> Result<i32, String> {
     let pid = crate::hook::walk::from_process()
         .cli_pid
@@ -180,6 +184,7 @@ pub(super) fn run(data: &Path) -> Result<i32, String> {
     let result = rt.block_on(async {
         let mut protocol = Protocol::default();
         let mut tick = tokio::time::interval(Duration::from_secs(2));
+        let mut refused = 0u32;
         let mut link: Option<(Reader<tokio::net::unix::OwnedReadHalf>, tokio::net::unix::OwnedWriteHalf)> = None;
         loop {
             tokio::select! {
@@ -195,9 +200,16 @@ pub(super) fn run(data: &Path) -> Result<i32, String> {
                     protocol.identify(current_identity(&config, pid));
                     if link.is_none() {
                         if let Ok(Ok(mut stream)) = tokio::time::timeout(Duration::from_millis(250), UnixStream::connect(socket(data))).await {
-                            if peer(&stream).is_ok() && write(&mut stream, &json!({"config_dir": config})).await.is_ok() {
+                            if peer(&stream).is_err() {
+                                refused += 1;
+                            } else if write(&mut stream, &json!({"config_dir": config})).await.is_ok() {
+                                refused = 0;
                                 let (input, output) = stream.into_split();
                                 link = Some((Reader::new(input), output));
+                            }
+                            if refused >= RETIRE_AFTER_REFUSALS {
+                                eprintln!("openwalkietalkie: this channel helper belongs to an older OpenWalkieTalkie install; restart the Claude session to reconnect");
+                                return Ok(0);
                             }
                         }
                     }

@@ -170,9 +170,26 @@ pub fn mcp_json_path(env: &Env) -> PathBuf {
     plugin_dir(env).join(".mcp.json")
 }
 
+/// The path the long-lived MCP helper is launched from. A copy running from a
+/// temporary location (a Sparkle staging directory, `/var/folders`) is gone
+/// after the update, and every later Claude session would name a dead path, so
+/// prefer the installed bundle's executable when it exists.
+fn channel_exe(exe: &Path) -> PathBuf {
+    let text = exe.to_string_lossy();
+    let transient = ["/var/folders/", "/private/var/", "/Sparkle", "/AppTranslocation/"]
+        .iter()
+        .any(|marker| text.contains(marker));
+    let installed = Path::new("/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd");
+    if transient && installed.is_file() {
+        installed.to_path_buf()
+    } else {
+        exe.to_path_buf()
+    }
+}
+
 pub fn mcp_json(env: &Env) -> serde_json::Value {
     serde_json::json!({"mcpServers": {"openwalkietalkie": {
-        "command": env.exe,
+        "command": channel_exe(&env.exe),
         "args": ["--data-dir", env.data.to_string_lossy(), "claude-channel"]
     }}})
 }
@@ -630,6 +647,19 @@ mod tests {
     }
 
     #[test]
+    fn channel_exe_replaces_only_transient_paths() {
+        let stable = Path::new("/Users/x/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd");
+        assert_eq!(channel_exe(stable), stable);
+        let staged = Path::new("/private/var/folders/x/T/Sparkle/OpenWalkieTalkie.app/Contents/MacOS/deckd");
+        let installed =
+            Path::new("/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd");
+        assert_eq!(
+            channel_exe(staged),
+            if installed.is_file() { installed } else { staged }
+        );
+    }
+
+    #[test]
     fn channel_bridge_is_managed_without_enabling_channels_for_the_user() {
         let dir = TestDir::new("plugin-channel");
         let env = test_env(&dir);
@@ -637,7 +667,7 @@ mod tests {
         let mcp = json_at(&mcp_json_path(&env));
         assert_eq!(
             mcp["mcpServers"]["openwalkietalkie"]["command"],
-            env.exe.to_string_lossy().as_ref()
+            channel_exe(&env.exe).to_string_lossy().as_ref()
         );
         assert_eq!(
             mcp["mcpServers"]["openwalkietalkie"]["args"],

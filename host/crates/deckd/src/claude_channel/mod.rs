@@ -87,7 +87,12 @@ struct Entry {
 #[derive(Debug, Default)]
 pub struct Hub {
     entries: Mutex<BTreeMap<Identity, Entry>>,
+    /// Helpers from another install of deckd, last refused at. They retry
+    /// every 2 s, so a short window is a live count.
+    stale: Mutex<BTreeMap<u32, Instant>>,
 }
+
+const STALE_WINDOW: Duration = Duration::from_secs(10);
 
 impl Hub {
     #[cfg(test)]
@@ -139,6 +144,18 @@ impl Hub {
             .get(&id)
             .filter(|e| e.ready && !e.sender.is_closed())
             .map(|e| e.sender.clone())
+    }
+
+    fn note_stale(&self, pid: u32) {
+        self.stale.lock().expect("channel hub").insert(pid, Instant::now());
+    }
+
+    /// Channel helpers refused because they run a different deckd executable,
+    /// e.g. left over from before an update. Restarting their sessions fixes it.
+    pub fn stale_count(&self) -> usize {
+        let mut stale = self.stale.lock().expect("channel hub");
+        stale.retain(|_, seen| seen.elapsed() < STALE_WINDOW);
+        stale.len()
     }
 
     pub fn ready(&self, agent: &Agent) -> bool { self.sender(agent).is_some() }
@@ -230,6 +247,16 @@ fn socket(data: &Path) -> PathBuf {
     data.join("claude-channel.sock")
 }
 
+/// The pid of a same-user process running a different copy of `deckd`.
+fn stale_helper(stream: &UnixStream) -> Option<u32> {
+    let (uid, pid) = crate::api::uds::peer_of(stream).ok()?;
+    let pid = pid?;
+    let own = std::env::current_exe().ok()?;
+    let theirs = crate::trust::exe_path(pid)?;
+    (uid == unsafe { libc::geteuid() } && theirs != own && theirs.file_name() == own.file_name())
+        .then_some(pid)
+}
+
 fn peer(stream: &UnixStream) -> io::Result<u32> {
     let (uid, pid) = crate::api::uds::peer_of(stream)?;
     let pid = pid.ok_or_else(|| io::Error::other("missing peer pid"))?;
@@ -312,7 +339,10 @@ pub async fn serve(data: PathBuf, hub: Arc<Hub>, mut stop: watch::Receiver<bool>
             accepted = listener.accept() => {
                 let Ok((stream, _)) = accepted else { break };
                 if connections.len() >= 64 { continue; }
-                let Ok(pid) = peer(&stream) else { continue };
+                let Ok(pid) = peer(&stream) else {
+                    if let Some(pid) = stale_helper(&stream) { hub.note_stale(pid); }
+                    continue;
+                };
                 let cli_pid = crate::hook::walk::resolve(pid, &crate::hook::walk::MacProcs,
                     crate::hook::walk::MAX_HOPS).cli_pid;
                 let Some(cli_pid) = cli_pid else { continue };
