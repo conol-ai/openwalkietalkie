@@ -54,6 +54,9 @@ pub enum ToastKind {
     NotDelivered,
     TranscriptionFailed,
     TranscriptionUnavailable,
+    /// The countdown ran out; `agent` is the Timer face's id, `card` 0.
+    /// Lasts as long as a card toast, wakes, and jumps to that face on a tap.
+    TimerDone,
 }
 
 impl ToastKind {
@@ -65,6 +68,7 @@ impl ToastKind {
             ToastKind::NotDelivered => Some("Not delivered"),
             ToastKind::TranscriptionFailed => Some("Transcription failed. Nothing sent."),
             ToastKind::TranscriptionUnavailable => Some("Transcription unavailable"),
+            ToastKind::TimerDone => Some("Timer done"),
         }
     }
 }
@@ -335,7 +339,7 @@ pub(super) fn animating(ui: &UiState) -> bool {
 /// its 4 s start there.
 pub(super) fn on_frame_shown(ui: &mut UiState, now_ms: u32) {
     if let Some(toast) = &mut ui.notify.toast {
-        let life = if toast.notice().is_some() { TOAST_MS } else { MESSAGE_MS };
+        let life = if toast.notice().is_some() || toast.kind == ToastKind::TimerDone { TOAST_MS } else { MESSAGE_MS };
         toast.shown_ms = now_ms;
         toast.until_ms = now_ms.wrapping_add(life);
     }
@@ -475,6 +479,18 @@ pub(super) fn raise_message(
     out.dirty = true;
 }
 
+/// The timer on face `face` ran out: a toast that lights the screen like a
+/// new notice, on every face but under an opaque overlay. No drawer entry.
+pub(super) fn raise_timer(ui: &mut UiState, face: u8, at_ms: u32, out: &mut Update) {
+    out.wake = true;
+    if crate::ui::overlay::opaque(ui) {
+        return;
+    }
+    displace(ui);
+    ui.notify.toast = Some(Toast::new(face, 0, ToastKind::TimerDone, at_ms, at_ms.wrapping_add(TOAST_MS)));
+    out.dirty = true;
+}
+
 /// The card was answered, acknowledged, cleared, replaced or its agent left.
 pub(super) fn remove(ui: &mut UiState, agent: u8, card: u16, out: &mut Update) {
     for notice in &mut ui.deck.notices {
@@ -550,6 +566,13 @@ pub(super) fn toast_tapped(ui: &mut UiState, at_ms: u32, out: &mut Update) {
     out.dirty = true;
     if let Some((agent, card)) = toast.notice() {
         jump(ui, agent, card, at_ms, out);
+    } else if toast.kind == ToastKind::TimerDone {
+        if ui.global.overlay == global::Overlay::Drawer {
+            global::set_overlay(ui, global::Overlay::None, at_ms, out);
+        }
+        if let Some(index) = ui.index_of_face(toast.agent) {
+            global::jump_to(ui, index, at_ms, out);
+        }
     }
 }
 

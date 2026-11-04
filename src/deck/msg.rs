@@ -160,9 +160,11 @@ pub enum Template {
     Settings,
     Arcade,
     System,
+    /// Stopwatch and countdown timer, run on the device alone.
+    Timer,
 }
 impl Template {
-    pub const ALL: [Template; 7] = [
+    pub const ALL: [Template; 8] = [
         Template::Agents,
         Template::Omarchy,
         Template::Macropad,
@@ -170,6 +172,7 @@ impl Template {
         Template::Settings,
         Template::Arcade,
         Template::System,
+        Template::Timer,
     ];
     /// Append enum variants to keep existing face IDs stable as the strip grows.
     pub const fn default_id(self) -> u8 { self as u8 + 1 }
@@ -183,6 +186,7 @@ impl Template {
             Template::Settings => "Settings",
             Template::Arcade => "Arcade",
             Template::System => "System",
+            Template::Timer => "Timer",
         }
     }
 }

@@ -16,7 +16,7 @@
 //! - Gallery -> Naming (host `name` applies only there; ENTER accepts the
 //!   text, or the template's label; CANCEL goes back). A new face gets the
 //!   lowest free id and goes in before Settings. At most `MAX_MACRO_SETS`
-//!   Macropads.
+//!   Macropads and one Timer (its clocks are one per deck).
 //! - Every strip rewrite keeps `current` (and the origin) on the same face by
 //!   id; a removed current face falls back to its left neighbour. One `faces`
 //!   event per completed change (drop, remove, add); a reverted grab is no
@@ -35,12 +35,13 @@ use crate::ui::kit::list::Viewport;
 use crate::ui::layout;
 
 /// Templates the gallery offers, in row order.
-pub const GALLERY: [Template; 5] = [
+pub const GALLERY: [Template; 6] = [
     Template::Omarchy,
     Template::Macropad,
     Template::Usage,
     Template::Arcade,
     Template::System,
+    Template::Timer,
 ];
 
 /// Touch target ids: gallery rows are 0..GALLERY.len(), confirm buttons `CONFIRM_ID + n`.
@@ -257,13 +258,19 @@ fn open_gallery(ui: &mut UiState, at_ms: u32, out: &mut Update) {
     }
 }
 
+/// The strip already has a Timer face: the gallery offers no second one.
+pub(crate) fn has_timer(ui: &UiState) -> bool {
+    (0..ui.global.strip_len).any(|index| ui.face_at(index).is_some_and(|face| face.template == Template::Timer))
+}
+
 /// Gallery row chosen: on to naming, unless the template is used up.
 fn pick(ui: &mut UiState, row: u8, at_ms: u32, out: &mut Update) {
     let Some(&template) = GALLERY.get(row as usize) else {
         return;
     };
     let full = (strip_len(ui) as usize) >= MAX_FACES
-        || (template == Template::Macropad && macropads(ui) >= MAX_MACRO_SETS);
+        || (template == Template::Macropad && macropads(ui) >= MAX_MACRO_SETS)
+        || (template == Template::Timer && has_timer(ui));
     if full {
         return;
     }

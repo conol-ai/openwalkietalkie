@@ -179,6 +179,7 @@ pub enum Template {
     Settings,
     Arcade,
     System,
+    Timer,
 }
 
 /// Live computer metrics; zero capacity and absent percentages mean unavailable.
@@ -620,6 +621,7 @@ pub(crate) const TEMPLATES: &[(&str, Template)] = &[
     ("settings", Template::Settings),
     ("arcade", Template::Arcade),
     ("system", Template::System),
+    ("timer", Template::Timer),
 ];
 pub(crate) const BINDINGS: &[(&str, Binding)] = &[
     ("left", Binding::Left),

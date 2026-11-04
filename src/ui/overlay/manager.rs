@@ -97,6 +97,14 @@ fn sketch(band: &mut Band, card: Rect, template: Template, bar: u32) {
                 pill(band, card, ox, y + 9, 64 * percent / 100, 6, color);
             }
         }
+        Template::Timer => {
+            // A dial with a hand, and the start button under it.
+            let ring = Rect::new(card.left() + ox + 11, card.top() + oy + 2, 53, 53);
+            kit::outline(band, ring, 26, bar, 4);
+            pill(band, card, ox + 35, oy + 12, 5, 19, theme::TEXT_SECONDARY);
+            pill(band, card, ox + 35, oy + 26, 15, 5, theme::TEXT_SECONDARY);
+            pill(band, card, ox + 12, oy + 68, 51, 14, theme::GREEN);
+        }
         Template::Settings => {
             for (row, knob) in [40, 18, 52].into_iter().enumerate() {
                 let y = oy + 6 + row as i32 * 20;
@@ -214,9 +222,22 @@ fn macropads(ui: &UiState) -> usize {
         .count()
 }
 
-/// A gallery row that the grammar will refuse: the third Macropad exists.
+/// A gallery row that the grammar will refuse: the third Macropad, or a
+/// second Timer.
 fn gallery_refused(ui: &UiState, template: Template) -> bool {
-    template == Template::Macropad && macropads(ui) >= MAX_MACROPADS
+    match template {
+        Template::Macropad => macropads(ui) >= MAX_MACROPADS,
+        Template::Timer => crate::ui::state::manager::has_timer(ui),
+        _ => false,
+    }
+}
+
+/// What a refused row says instead of its blurb.
+const fn refused_blurb(template: Template) -> &'static str {
+    match template {
+        Template::Timer => "one already",
+        _ => "three already",
+    }
 }
 
 const fn gallery_blurb(template: Template) -> &'static str {
@@ -226,6 +247,7 @@ const fn gallery_blurb(template: Template) -> &'static str {
         Template::Usage => "subscription limits",
         Template::Arcade => "three pocket games",
         Template::System => "computer resources",
+        Template::Timer => "stopwatch and countdown",
         Template::Agents | Template::Settings => "",
     }
 }
@@ -249,9 +271,9 @@ fn draw_gallery(band: &mut Band, ui: &UiState) {
             if selected { theme::CARD_FILL } else { theme::CANVAS }
         };
         let label = if refused { theme::TEXT_FAINT } else if selected || pressed { theme::TEXT_PRIMARY } else { theme::TEXT_ROW };
-        let baseline = rect.top() + layout::SETTING_BASELINE;
+        let baseline = rect.top() + layout::GALLERY_BASELINE;
         font::draw(band, Font::Row, rect.left() + layout::SETTING_LABEL_X, baseline, template.label(), label, Some(fill), 160, Align::Left);
-        let blurb = if refused { "three already" } else { gallery_blurb(*template) };
+        let blurb = if refused { refused_blurb(*template) } else { gallery_blurb(*template) };
         font::draw(band, Font::Small, rect.left() + layout::SETTING_VALUE_RIGHT, baseline, blurb, theme::TEXT_LABEL, Some(fill), 220, Align::Right);
     }
     kit::hint_bar(band, &[

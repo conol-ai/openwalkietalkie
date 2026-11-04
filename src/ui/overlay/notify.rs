@@ -116,6 +116,7 @@ pub fn draw(band: &mut Band, ui: &UiState) {
     let color = match toast.kind {
         ToastKind::Card(kind) => card_color(kind),
         ToastKind::NoChannel | ToastKind::NotDelivered | ToastKind::TranscriptionFailed | ToastKind::TranscriptionUnavailable => theme::AMBER,
+        ToastKind::TimerDone => theme::RED,
     };
     kit::dot(band, rect.left() + dx, rect.top() + dy, r, color);
     let mut line = Text::<40>::new();
@@ -126,6 +127,7 @@ pub fn draw(band: &mut Band, ui: &UiState) {
         ToastKind::NotDelivered => ("Not delivered", line.as_str()),
         ToastKind::TranscriptionFailed => ("Transcription failed", "Nothing was sent. Try again."),
         ToastKind::TranscriptionUnavailable => ("Transcription unavailable", "Check the host and try again."),
+        ToastKind::TimerDone => ("Timer done", "tap to see the timer"),
     };
     let x = rect.left() + layout::TOAST_TEXT_X;
     let max_w = rect.right() - 12 - x;
@@ -215,6 +217,7 @@ pub fn signature(ui: &UiState, sig: &mut SigBuilder) {
             ToastKind::NotDelivered => 3,
             ToastKind::TranscriptionFailed => 4,
             ToastKind::TranscriptionUnavailable => 5,
+            ToastKind::TimerDone => 6,
         };
         h.bool(true)
             .i32(slide(&toast, ui.now_ms))

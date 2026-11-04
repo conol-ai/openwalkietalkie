@@ -833,7 +833,11 @@ fn plus_opens_the_gallery_which_leads_to_naming_and_enter_accepts_the_default_na
     assert!(out.dirty && ui.manager.gallery_sel == 4);
     assert_eq!(GALLERY[4], Template::System);
     let out = wheel(&mut ui, Wheel::Ccw, 66);
-    assert!(!out.dirty && ui.manager.gallery_sel == 4);
+    assert!(out.dirty && ui.manager.gallery_sel == 5);
+    assert_eq!(GALLERY[5], Template::Timer);
+    let out = wheel(&mut ui, Wheel::Ccw, 66);
+    assert!(!out.dirty && ui.manager.gallery_sel == 5);
+    wheel(&mut ui, Wheel::Cw, 67);
     wheel(&mut ui, Wheel::Cw, 67);
     wheel(&mut ui, Wheel::Cw, 68);
     wheel(&mut ui, Wheel::Cw, 70);

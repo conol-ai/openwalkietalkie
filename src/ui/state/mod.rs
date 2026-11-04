@@ -19,11 +19,11 @@
 //! `host(msg, at_ms, out)`: `Deck::apply` validates and applies the message
 //!   into `Effects`; a rejected message only reaches `global::on_reject`.
 //!   Otherwise `on_host` of global, notify, agents, omarchy, macropad, usage,
-//!   settings, manager run in that order, each seeing `msg` and the effects.
+//!   settings, timer, manager run in that order, each seeing `msg` and the effects.
 //! `tick(now_ms, idle_ms, screen_on, out)`: `Deck::tick` (clock, heartbeat),
 //!   then `on_tick` of global (slide, PTT cap, idle-home, host-lost teardown),
 //!   touch (long-press), notify, agents, omarchy, macropad, usage, settings,
-//!   manager; then the demo script while `deck.demo_active()`.
+//!   timer, manager; then the demo script while `deck.demo_active()`.
 //! Every entry point ends in `finish`: a dirty update bumps `revision`, which is
 //! what the fallback signature regions hash, and `out.wake` is dropped while
 //! `deck.demo_active()` ("demo notices never wake"): `notify::raise` sets
@@ -73,6 +73,7 @@ pub mod manager;
 pub mod notify;
 pub mod omarchy;
 pub mod settings;
+pub mod timer;
 pub mod touch;
 pub mod tutorial;
 pub mod usage;
@@ -284,6 +285,7 @@ pub struct UiState {
     pub usage: usage::View,
     pub arcade: arcade::View,
     pub settings: settings::View,
+    pub timer: timer::View,
     pub manager: manager::View,
     pub tutorial: tutorial::View,
     pub demo: demo::Script,
@@ -310,6 +312,7 @@ impl UiState {
             usage: usage::View::new(),
             arcade: arcade::View::new(),
             settings: settings::View::new(),
+            timer: timer::View::new(),
             manager: manager::View::new(),
             tutorial: tutorial::View::new(),
             demo: demo::Script::new(),
@@ -336,6 +339,7 @@ impl UiState {
         self.usage = usage::View::new();
         self.arcade = arcade::View::new();
         self.settings = settings::View::new();
+        self.timer = timer::View::new();
         self.manager = manager::View::new();
         self.tutorial = tutorial::View::new();
         self.demo = demo::Script::new();
@@ -422,6 +426,7 @@ impl UiState {
             macropad::on_host(self, msg, &fx, at_ms, out);
             usage::on_host(self, msg, &fx, at_ms, out);
             settings::on_host(self, msg, &fx, at_ms, out);
+            timer::on_host(self, msg, &fx, at_ms, out);
             manager::on_host(self, msg, &fx, at_ms, out);
         }
         self.finish(out);
@@ -455,6 +460,7 @@ impl UiState {
         }
         arcade::on_tick(self, now_ms, screen_on, out);
         settings::on_tick(self, now_ms, out);
+        timer::on_tick(self, now_ms, out);
         manager::on_tick(self, now_ms, out);
         tutorial::on_tick(self, now_ms, out);
         if self.deck.demo_active() {
@@ -476,6 +482,7 @@ impl UiState {
             || usage::animating(self)
             || arcade::playing(self)
             || settings::animating(self)
+            || timer::animating(self)
             || manager::animating(self)
             || tutorial::animating(self)
     }
@@ -670,6 +677,7 @@ pub(super) fn dispatch(ui: &mut UiState, control: Control, at_ms: u32, out: &mut
                 Template::Usage => usage::on_control(ui, face.id, control, at_ms, out),
                 Template::Arcade => arcade::on_control(ui, control, at_ms, out),
                 Template::Settings => settings::on_control(ui, face.id, control, at_ms, out),
+                Template::Timer => timer::on_control(ui, face.id, control, at_ms, out),
             }
         }
     }
@@ -711,6 +719,7 @@ pub(super) fn touch_hit(ui: &UiState, x: i32, y: i32) -> Option<(Layer, Target)>
                 Template::Usage => usage::hit(ui, face.id, x, y),
                 Template::Arcade => arcade::hit(ui, x, y),
                 Template::Settings => settings::hit(ui, face.id, x, y),
+                Template::Timer => timer::hit(ui, face.id, x, y),
             }
             .map(|target| (Layer::Face(face.template, face.id), target))
         }
@@ -738,6 +747,7 @@ pub(super) fn touch_deliver(
             Template::Usage => usage::on_touch(ui, id, target, act, at_ms, out),
             Template::Arcade => arcade::on_touch(ui, target, act, at_ms, out),
             Template::Settings => settings::on_touch(ui, id, target, act, at_ms, out),
+            Template::Timer => timer::on_touch(ui, id, target, act, at_ms, out),
         },
     }
 }

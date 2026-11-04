@@ -207,7 +207,7 @@ fn host_msg(rng: &mut Rng, out: &mut HostMsg) {
                 let mut macropads = 0;
                 for slot in 1..=middle {
                     let mut template =
-                        rng.pick(&[Template::Omarchy, Template::Macropad, Template::Usage]);
+                        rng.pick(&[Template::Omarchy, Template::Macropad, Template::Usage, Template::Timer]);
                     if template == Template::Macropad {
                         macropads += 1;
                         if macropads > 3 {

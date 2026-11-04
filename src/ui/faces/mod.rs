@@ -13,5 +13,6 @@ pub mod arcade;
 pub mod macropad;
 pub mod omarchy;
 pub mod settings;
+pub mod timer;
 pub mod usage;
 pub mod system;

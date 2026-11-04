@@ -900,8 +900,10 @@ fn idle_home(ui: &mut UiState, now_ms: u32, idle_ms: u32, out: &mut Update) {
     if ui.global.idle_homed {
         return;
     }
-    // Dictation, a name being spoken and the tutorial go on.
-    if session_blocks(ui) || matches!(ui.global.overlay, Overlay::Naming | Overlay::Tutorial) {
+    // Dictation, a name being spoken and the tutorial go on. So does a clock
+    // running on the Timer face being watched.
+    let timing = ui.global.overlay == Overlay::None && super::timer::keeps_face(ui);
+    if session_blocks(ui) || matches!(ui.global.overlay, Overlay::Naming | Overlay::Tutorial) || timing {
         return;
     }
     ui.global.idle_homed = true;

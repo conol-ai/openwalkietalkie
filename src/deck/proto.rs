@@ -138,6 +138,7 @@ const TEMPLATES: &[(&str, Template)] = &[
     ("settings", Template::Settings),
     ("arcade", Template::Arcade),
     ("system", Template::System),
+    ("timer", Template::Timer),
 ];
 const SETTINGS: &[(&str, SettingKey)] = &[
     ("arcadesound", SettingKey::ArcadeSound),

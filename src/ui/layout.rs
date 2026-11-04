@@ -409,6 +409,37 @@ pub const SETTING_BASELINE: i32 = 36;
 pub const SETTING_VALUE_RIGHT: i32 = 400;
 pub const SETTING_BAR: Rect = Rect::new(214, 24, 132, 10);
 
+// ---- timer (no mockup) -----------------------------------------------------------------------
+/// Mode tab 0..2 (Stopwatch, Timer): two wide tabs under the header.
+pub const fn timer_tab(index: u8) -> Rect {
+    Rect::new(32 + index as i32 * 210, 68, 206, 34)
+}
+pub fn timer_tab_at(x: i32, y: i32) -> Option<u8> {
+    index_at(2, timer_tab, x, y)
+}
+/// The big readout; its digits are `TIMER_DIGIT_H` tall, centred in it.
+pub const TIMER_READOUT: Rect = Rect::new(32, 116, 416, 116);
+pub const TIMER_DIGIT_H: i32 = 96;
+/// Timer: the progress bar under the readout.
+pub const TIMER_BAR: Rect = Rect::new(38, 244, 404, 10);
+/// Timer: the length presets (idle), or the status line in their place.
+pub const TIMER_PRESETS: u8 = 5;
+pub const fn timer_preset(index: u8) -> Rect {
+    Rect::new(32 + index as i32 * 84, 278, 80, 44)
+}
+pub fn timer_preset_at(x: i32, y: i32) -> Option<u8> {
+    index_at(TIMER_PRESETS, timer_preset, x, y)
+}
+pub const TIMER_STATUS: Rect = row(278, 44);
+/// Stopwatch: the newest laps, one line each.
+pub const TIMER_LAPS: u8 = 3;
+pub const fn timer_lap(index: u8) -> Rect {
+    row(242 + index as i32 * 32, 30)
+}
+/// Left (Lap / Reset) and right (Start / Pause / Resume / Restart) buttons.
+pub const TIMER_SECONDARY: Rect = Rect::new(32, 348, 202, 62);
+pub const TIMER_PRIMARY: Rect = Rect::new(246, 348, 202, 62);
+
 // ---- face manager (mockup 2), gallery, naming, confirm ---------------------------------------
 pub const MANAGER_VISIBLE: u8 = 4;
 /// The selected card is drawn this much higher.
@@ -437,10 +468,13 @@ pub const THUMB_LABEL: (i32, i32) = (11, 24);
 pub const THUMB_SKETCH: Rect = Rect::new(11, 34, 75, 96);
 /// "Add a face" and the template rows under it.
 pub const GALLERY_TITLE: Rect = Rect::new(37, 70, 406, 40);
-pub const GALLERY_ROWS: u8 = 5;
+pub const GALLERY_ROWS: u8 = 6;
+/// Template row 0..6: 48 px tall, pitch 52.
 pub const fn gallery_row(row_index: u8) -> Rect {
-    row(120 + row_index as i32 * 58, 52)
+    row(112 + row_index as i32 * 52, 48)
 }
+/// Inside a gallery row: the label and blurb baseline.
+pub const GALLERY_BASELINE: i32 = 32;
 pub fn gallery_row_at(x: i32, y: i32) -> Option<u8> {
     index_at(GALLERY_ROWS, gallery_row, x, y)
 }
@@ -564,6 +598,27 @@ mod tests {
                 )
             ),
             (
+                "stopwatch",
+                with_chrome(
+                    [TIMER_READOUT, TIMER_SECONDARY, TIMER_PRIMARY]
+                        .into_iter()
+                        .chain(indexed(2, timer_tab))
+                        .chain(indexed(TIMER_LAPS, timer_lap))
+                        .collect()
+                )
+            ),
+            (
+                "timer",
+                with_chrome(
+                    [TIMER_READOUT, TIMER_BAR, TIMER_SECONDARY, TIMER_PRIMARY]
+                        .into_iter()
+                        .chain(indexed(2, timer_tab))
+                        .chain(indexed(TIMER_PRESETS, timer_preset))
+                        .collect()
+                )
+            ),
+            ("timer-status", with_chrome(std::vec![TIMER_BAR, TIMER_STATUS])),
+            (
                 "manager",
                 with_chrome(
                     [MANAGER_MORE]
@@ -650,6 +705,8 @@ mod tests {
         check(SETTINGS_ROWS, settings_row, settings_row_at);
         check(MANAGER_VISIBLE, manager_slot, manager_card_at);
         check(GALLERY_ROWS, gallery_row, gallery_row_at);
+        check(2, timer_tab, timer_tab_at);
+        check(TIMER_PRESETS, timer_preset, timer_preset_at);
         check(2, confirm_button, confirm_button_at);
         check(DRAWER_VISIBLE, drawer_row, drawer_row_at);
         check(2, channel_choice_button, |x, y| channel_button_at(x, y, true));

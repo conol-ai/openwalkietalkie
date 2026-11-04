@@ -123,6 +123,7 @@ fn fw_template(t: Template) -> msg::Template {
         Template::Settings => msg::Template::Settings,
         Template::Arcade => msg::Template::Arcade,
         Template::System => msg::Template::System,
+        Template::Timer => msg::Template::Timer,
     }
 }
 
@@ -451,7 +452,7 @@ fn assert_same(mine: &HostLine, fw: &HostMsg) {
 // ---- corpora -----------------------------------------------------------------
 
 const ALL_TONES: [Tone; 5] = [Tone::Blue, Tone::Amber, Tone::Green, Tone::Red, Tone::Gray];
-const ALL_TEMPLATES: [Template; 7] = [
+const ALL_TEMPLATES: [Template; 8] = [
     Template::Agents,
     Template::Omarchy,
     Template::Macropad,
@@ -459,6 +460,7 @@ const ALL_TEMPLATES: [Template; 7] = [
     Template::Settings,
     Template::Arcade,
     Template::System,
+    Template::Timer,
 ];
 const ALL_BINDINGS: [Binding; 8] = [
     Binding::Left,

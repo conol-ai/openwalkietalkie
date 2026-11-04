@@ -30,6 +30,7 @@ mod omarchy;
 mod overlay;
 mod settings;
 mod system;
+mod timer;
 mod slide;
 mod usage;
 
