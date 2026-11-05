@@ -1,0 +1,56 @@
+// SPDX-License-Identifier: CERN-OHL-P-2.0
+// Six independent switches: simultaneous Shift/PTT/macros require no matrix.
+// GPIO allocation in main.cohdl puts all eight control signals on AON wake pins.
+subdesign Controls {
+    ports {
+        required VIO: Pin
+        required GND: Pin
+        required PTT: Pin
+        required ENTER: Pin
+        required ESC: Pin
+        required SHIFT: Pin
+        required MACRO_LEFT: Pin
+        required MACRO_RIGHT: Pin
+        required ENC_A: Pin
+        required ENC_B: Pin
+    }
+    inst encoder_fpc: CONN_HIROSE_FH34SRJ_4S_0P5SH_99
+    inst ptt: SW_ALPS_SKTDLDE010
+    inst enter: SW_ALPS_SKTDLDE010
+    inst esc: SW_ALPS_SKTDLDE010
+    inst shift: SW_ALPS_SKTDLDE010
+    // Registry exact part; placements follow BodyV6.13's front buttons.
+    inst macro_left: switches::SW_CK_PTS636SM25SMTRLFS
+    inst macro_right: switches::SW_CK_PTS636SM25SMTRLFS
+
+    // 33uA/contact at 3.3V; above SKTD's 10uA minimum. Encoder contact current
+    // also remains below 0.55mA. Qualify noise immunity with the chosen wheel.
+    inst pull: [passive::R_100K_F_0402; 8]
+    inst series: [passive::R_1K_F_0402; 8]
+    inst filter: [passive::C_1n_50V_C0G_0402; 8]
+    net _: VIO, pull[0..=7].A
+    // The four SKTD parts are non-polar SPST switches.  Their logical A/B use
+    // is intentionally reversed after moving them from B.Cu to F.Cu so the
+    // contact and ground copper endpoints stay at the same board coordinates.
+    net PTT_CONTACT: ptt.B, pull[0].B, series[0].A
+    net ENTER_CONTACT: enter.B, pull[1].B, series[1].A
+    net ESC_CONTACT: esc.B, pull[2].B, series[2].A
+    net SHIFT_CONTACT: shift.B, pull[3].B, series[3].A
+    net MACRO_LEFT_CONTACT: macro_left.P1, pull[4].B, series[4].A
+    net MACRO_RIGHT_CONTACT: macro_right.P1, pull[5].B, series[5].A
+    net ENC_A_CONTACT: encoder_fpc.P2, pull[6].B, series[6].A
+    net ENC_B_CONTACT: encoder_fpc.P3, pull[7].B, series[7].A
+    net _: PTT, series[0].B, filter[0].A
+    net _: ENTER, series[1].B, filter[1].A
+    net _: ESC, series[2].B, filter[2].A
+    net _: SHIFT, series[3].B, filter[3].A
+    net _: MACRO_LEFT, series[4].B, filter[4].A
+    net _: MACRO_RIGHT, series[5].B, filter[5].A
+    net _: ENC_A, series[6].B, filter[6].A
+    net _: ENC_B, series[7].B, filter[7].A
+    net _: GND, ptt.A, enter.A, esc.A, shift.A, macro_left.P2, macro_right.P2, encoder_fpc.P1,
+           encoder_fpc.P4, filter[0..=7].B
+    nc: encoder_fpc.MP
+    nc: ptt.MP_LEFT, ptt.MP_CENTER, ptt.MP_RIGHT, enter.MP_LEFT, enter.MP_CENTER, enter.MP_RIGHT,
+        esc.MP_LEFT, esc.MP_CENTER, esc.MP_RIGHT, shift.MP_LEFT, shift.MP_CENTER, shift.MP_RIGHT
+}

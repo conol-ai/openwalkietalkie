@@ -1,0 +1,42 @@
+// SPDX-License-Identifier: CERN-OHL-P-2.0
+// Provisional, purchasable 1.25 mm connector. Matching the pitch does not
+// qualify a generic MX1.25 harness: mate and cable polarity must be checked.
+pub device PicoBlade2Pin {
+    pins {
+        required P1: 1 [passive]
+        required P2: 2 [passive]
+        optional MP_LEFT: ML [passive]
+        optional MP_RIGHT: MR [passive]
+    }
+}
+impl Connector for PicoBlade2Pin {}
+pub part CONN_PICOBLADE_53261_0271: PicoBlade2Pin {
+    primary { mfr: "Molex", mpn: "53261-0271", footprint: FP_MOLEX_53261_0271 }
+}
+
+pub pad P_PICOBLADE_125_CONTACT {
+    shape: rect
+    size: (0.8mm, 1.6mm)
+    layer: top_copper
+    plating: smd
+}
+pub pad P_PICOBLADE_125_ANCHOR {
+    shape: rect
+    size: (2.1mm, 3mm)
+    layer: top_copper
+    plating: smd
+}
+
+// Pad geometry follows KiCad's Molex_PicoBlade_53261-0271_1x02-1MP_
+// P1.25mm_Horizontal, citing Molex 532610271_sd.pdf. Rectangular lands
+// preserve its copper envelope; two independent metal anchors remain NC.
+// Component-side +y points toward mating cable.
+pub footprint FP_MOLEX_53261_0271 {
+    pad 1: P_PICOBLADE_125_CONTACT at (-0.625mm, -2.4mm)
+    pad 2: P_PICOBLADE_125_CONTACT at (0.625mm, -2.4mm)
+    pad ML: P_PICOBLADE_125_ANCHOR at (-3.175mm, 0.5mm)
+    pad MR: P_PICOBLADE_125_ANCHOR at (3.175mm, 0.5mm)
+    // Conservative rectangular enclosure of the KiCad stepped courtyard.
+    courtyard { shape: rect, at: (0mm, -0.3mm), size: (9.46mm, 6.8mm) }
+    silkscreen_ref { at: (0mm, -4.4mm) }
+}

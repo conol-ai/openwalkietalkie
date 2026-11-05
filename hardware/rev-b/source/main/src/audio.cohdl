@@ -1,0 +1,74 @@
+// SPDX-License-Identifier: CERN-OHL-P-2.0
+// ST MP34DT05TR-A PDM input and NS4150B speaker output.
+// SYS follows the battery when unplugged: a 3W-rated speaker does not imply
+// 3W clean output at 3.7V. No speaker boost is added to this board.
+subdesign Audio {
+    ports {
+        required SYS: Pin
+        required GND: Pin
+        required VIO: Pin
+        required MIC_EN: Pin
+        required PDM_CLK: Pin
+        required PDM_DATA: Pin
+        required DACP: Pin
+        required DACN: Pin
+        required AMP_ENABLE: Pin
+    }
+    #[placement_hint("top acoustic port; isolate from speaker vibration and keep port unobstructed")]
+    inst mic: MIC_ST_MP34DT05TR_A
+    inst mic_power: load_switch::LOADSW_TPS22918DBVR
+    inst r_mic_enable_pd: passive::R_1M_F_0402
+    inst c_mic_input: passive::C_1u_10V_X5R_0603
+    inst c_mic_slew: passive::C_1n_50V_C0G_0402
+    inst r_mic_discharge: passive::R_1K_F_0402
+    // Retain the released C0G microphone bypass.
+    #[placement_hint("at microphone VDD/GND; C0G bypass")]
+    inst c_mic_supply: passive::C_100n_25V_C0G_1206
+    #[placement_hint("PDM clock source termination, close to MCU PA22")]
+    inst r_mic_clk: passive::R_22R_F_0402
+    inst r_mic_data_pd: passive::R_100K_F_0402
+    inst amp: contrib_audio_amp::AMP_NS4150B
+    inst r_enable_pd: passive::R_100K_F_0402
+    inst c_bypass: passive::C_1u_10V_X5R_0603
+    inst c_supply: passive::C_1u_10V_X5R_0603
+    inst c_supply_bulk: passive::C_10u_25V_X5R_0805
+    inst r_dac: [passive::R_1K_F_0402; 2]
+    inst c_dac_diff: passive::C_1n5_50V_C0G_0603
+    inst c_input: [passive::C_1u_10V_X5R_0603; 2]
+    inst r_input: [passive::R_22K_F_0402; 2]
+    inst fb: [FERRITE_MURATA_BLM31PG601SN1L; 2]
+    inst c_output: [passive::C_330p_50V_C0G_0402; 3]
+    // Provisional harness selection: confirm the existing speaker plug and
+    // polarity against the Molex mating housing before ordering.
+    #[placement_hint("Molex 53261-0271 provisional, F face (battery side) at the bottom-left corner, mouth toward +u; 4ohm 3W mono BTL speaker, neither pin is ground")]
+    inst speaker: CONN_PICOBLADE_53261_0271
+
+    net _: VIO, mic_power.VIN, c_mic_input.A
+    net _: MIC_EN, mic_power.ON, r_mic_enable_pd.A
+    net MIC_SLEW: mic_power.CT, c_mic_slew.A
+    net MIC_DISCHARGE: mic_power.QOD, r_mic_discharge.A
+    net MIC_SUPPLY [3.3V]: mic_power.VOUT, mic.VDD, c_mic_supply.A, r_mic_discharge.B
+    net _: PDM_CLK, r_mic_clk.A
+    net MIC_CLOCK: r_mic_clk.B, mic.CLK
+    // SELECT=0: microphone drives on falling clock, receiver samples rising.
+    net _: PDM_DATA, mic.DATA, r_mic_data_pd.A
+    net _: SYS, amp.VCC, c_supply.A, c_supply_bulk.A
+    net _: AMP_ENABLE, amp.CTRL, r_enable_pd.A
+    net AMP_BYPASS: amp.BYPASS, c_bypass.A
+    net _: DACP, r_dac[0].A
+    net _: DACN, r_dac[1].A
+    net DAC_FILTER_P: r_dac[0].B, c_dac_diff.A, c_input[0].A
+    net DAC_FILTER_N: r_dac[1].B, c_dac_diff.B, c_input[1].A
+    net AC_P: c_input[0].B, r_input[0].A
+    net AC_N: c_input[1].B, r_input[1].A
+    net AMP_INP: r_input[0].B, amp.INP
+    net AMP_INN: r_input[1].B, amp.INN
+    net AMP_VOP: amp.VOP, fb[0].A
+    net AMP_VON: amp.VON, fb[1].A
+    net SPEAKER_PLUS: fb[0].B, speaker.P1, c_output[0].A, c_output[2].A
+    net SPEAKER_MINUS: fb[1].B, speaker.P2, c_output[1].A, c_output[2].B
+    nc: speaker.MP_LEFT, speaker.MP_RIGHT
+    net _: GND, mic.GND, mic.SELECT, mic_power.GND, c_mic_supply.B, c_mic_input.B, c_mic_slew.B,
+           r_mic_enable_pd.B, r_mic_data_pd.B, amp.GND, r_enable_pd.B, c_bypass.B, c_supply.B,
+           c_supply_bulk.B, c_output[0..=1].B
+}

@@ -1,0 +1,53 @@
+{
+  "passed": true,
+  "released_pcb_sha256": "f9e8375c8ab7c64007a48d8d68c403fa7f1b0f661020226ed5e83dabe346aa7e",
+  "released_bom_sha256": "577edb2d8a6f79f47807590526c6d5064c420cdd398a1df9192bd087b8cf380e",
+  "source_sha256": {
+    "source/main/cohdl.toml": "d837861a1455c50649676736deba9c07295590001e4059bb8271f5d9ec45202c",
+    "source/main/cohdl.lock": "4dfb5d87aa5a2bf61ec7625221bdfa79f6a3aaaa8f8645b4e21f538fd5bf729a",
+    "source/main/design.lock": "16e7c169be65165f5c10b3aa4c69d9e299da3e7620188af10c1498b65a7d2fa3",
+    "source/main/assembly.json": "601c9316a2bda62116b973ca86af96dd3c872ba0fc2bf1f21b306fd8951bc813",
+    "source/main/src/audio.cohdl": "6421cc7a7f6a4f1a11febe2af77df5970111495a3ffcd0933f2a6643c1f576a9",
+    "source/main/src/audio_bindings.cohdl": "03df763177f9b48455299d6f42acd1da5d603b4da500a55305dac28e3509dfd7",
+    "source/main/src/button_parts.cohdl": "d569644da046cd3a32c5b09a040360c7b2fdcaa6625941adc62663c2fdf38cc9",
+    "source/main/src/controls.cohdl": "f626976fd0943820ff47f2436fc301ae68faee2fdc50b83e565badb74cf17092",
+    "source/main/src/display_parts.cohdl": "6f66e9842a8d4c0948a99f103de336050100c4fd9305ac07d00e28edbabd9cb4",
+    "source/main/src/encoder_fpc.cohdl": "5e979b49a8ed1abe05846664814866884d3ff1cfda755cf1cb156466226f6552",
+    "source/main/src/main.cohdl": "9523f0f6b1fa7a87ae1ef7119814a262c0ae2c5afe510cb52729b2fdd586da4c",
+    "source/main/src/mcu.cohdl": "ab6f895aa3e334179c2f424c314064afdf4d520e31286750244d049f6f732b9c",
+    "source/main/src/mcu_backside_bypass.cohdl": "3a29f32724824025bdc64e15c5d77078dce63634ef0060fe39f341ab271b77dc",
+    "source/main/src/parts.cohdl": "81f93ef2afffae0172493e4a83cf538f2785c43063864efd23d45c1dee60a2d6",
+    "source/main/src/power.cohdl": "9b57c4d901c5ff0fd0ce3cd3f6ce5237eddd00e1550439235ea6917e6ce62864",
+    "source/main/src/power_bindings.cohdl": "6aa67247253a6416444ed1f83c70c65ff9443500333b000c32902e7d188d4e4f",
+    "source/main/src/revb_bindings.cohdl": "1b067d85cb64d68c0058633fd558073cb25da41a88de0c1531ac4380293c2c68",
+    "source/main/src/revb_parts.cohdl": "66408ccab37a3f6c5a8683c1a4aa4cde533c9e479e68ea6fb5a14620102697bf",
+    "source/main/src/rf.cohdl": "6b9cf0691de57f0fa0b03c9a5d0bad9b15c445b86ca5e50c6e9ba6044461c62b",
+    "source/main/mechanical/main-outline.dxf": "059a7b615fd57dcbb9c3d6fca27a65883dd607ab37d3945cacd8272f6b8011b1"
+  },
+  "footprints": 142,
+  "numbered_pads_checked": 459,
+  "primary_pad_centers_and_sizes_checked": 454,
+  "fitted_parts": 125,
+  "dnp_parts": [
+    "C52",
+    "C53",
+    "C58",
+    "L6",
+    "R44"
+  ],
+  "outline_edges": 88,
+  "normalizations": [
+    "CHG_STATUS = power::CHG_STATUS",
+    "Unconnected SKTD ML/MR frame lands have no number in the released PCB",
+    "Project-local footprint namespace changed from rev_a to rev_b",
+    "MountingHole_2mm_NPTH = MountingHole_2.0mm_NPTH"
+  ],
+  "not_checked": [
+    "routing",
+    "copper zones and stackup",
+    "DRC",
+    "silkscreen and 3D models",
+    "full pad shapes and stencil geometry"
+  ],
+  "errors": []
+}

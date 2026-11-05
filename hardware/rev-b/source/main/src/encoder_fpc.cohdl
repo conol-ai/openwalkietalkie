@@ -1,0 +1,46 @@
+// SPDX-License-Identifier: CERN-OHL-P-2.0
+// Shared 4-pin socket. Exact land/stencil dimensions: Hirose drawing
+// EDC3-159714-05, pages 1, 2 and 4; CL0580-1238-7-99.
+// FH34SRJ-4S-0.5SH(99): 0.5mm pitch, top/bottom contact, 0.30mm FPC ends.
+// Origin is the nominal 4.0 x 3.8mm body center. Cable mouth is local +y;
+// pin 1 is at +x, matching the manufacturer's recommended PCB pattern.
+// Both sockets face the same way; untwisted U-return cable maps pin n to n.
+pub device FH34SRJ_4S_0P5SH_99 {
+    pins {
+        required P1: 1 [passive]
+        required P2: 2 [passive]
+        required P3: 3 [passive]
+        required P4: 4 [passive]
+        optional MP: MP [passive]
+    }
+}
+impl Connector for FH34SRJ_4S_0P5SH_99 {}
+
+pub part CONN_HIROSE_FH34SRJ_4S_0P5SH_99: FH34SRJ_4S_0P5SH_99 {
+    primary { mfr: "Hirose", mpn: "FH34SRJ-4S-0.5SH(99)", footprint: FP_HIROSE_FH34SRJ_4S }
+}
+
+pub pad P_FH34SRJ_4S_CONTACT {
+    shape: rect
+    size: (0.3mm, 0.8mm)
+    layer: top_copper
+    plating: smd
+    paste: (0.25mm, 0.65mm)
+}
+pub pad P_FH34SRJ_4S_HOLD_DOWN {
+    shape: rect
+    size: (0.4mm, 0.8mm)
+    layer: top_copper
+    plating: smd
+}
+
+pub footprint FP_HIROSE_FH34SRJ_4S {
+    pad 1: P_FH34SRJ_4S_CONTACT at (0.75mm, -1.15mm)
+    pad 2: P_FH34SRJ_4S_CONTACT at (0.25mm, -1.15mm)
+    pad 3: P_FH34SRJ_4S_CONTACT at (-0.25mm, -1.15mm)
+    pad 4: P_FH34SRJ_4S_CONTACT at (-0.75mm, -1.15mm)
+    pad MP: P_FH34SRJ_4S_HOLD_DOWN at (-1.75mm, 1.35mm)
+    pad MP: P_FH34SRJ_4S_HOLD_DOWN at (1.75mm, 1.35mm)
+    courtyard { shape: rect, at: (0mm, 0mm), size: (4.65mm, 4.4mm) }
+    silkscreen_ref { at: (0mm, -2.7mm) }
+}

@@ -1,0 +1,22 @@
+// SPDX-License-Identifier: CERN-OHL-P-2.0
+// 600 ohm +/-25% at 100 MHz, 1.5 A through 85 C, derates to 1 A at
+// 125 C. Initial DCR <=0.08 ohm. This is not the 120-ohm BLM15 bead.
+pub part FERRITE_MURATA_BLM31PG601SN1L: SpeakerFerrite600R {
+    primary { mfr: "Murata", mpn: "BLM31PG601SN1L", footprint: FP_MURATA_BLM31PG_1P5A_REFLOW }
+}
+
+pub pad P_BLM31PG_REFLOW {
+    shape: rect
+    size: (1.15mm, 1.8mm)
+    layer: top_copper
+    plating: smd
+}
+
+// Murata JENF243A_0006AC-01 p7: reflow a=2.0, b=4.3, c=d=1.8 mm
+// for the 1.5 A device and 18/35/70 um copper. Body is centered, no polarity.
+pub footprint FP_MURATA_BLM31PG_1P5A_REFLOW {
+    pad 1: P_BLM31PG_REFLOW at (-1.575mm, 0mm)
+    pad 2: P_BLM31PG_REFLOW at (1.575mm, 0mm)
+    courtyard { shape: rect, at: (0mm, 0mm), size: (4.8mm, 2.3mm) }
+    silkscreen_ref { at: (0mm, -1.7mm) }
+}

@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "dnp": {
+    "C52": {
+      "value": "NF",
+      "reason": "MCU RF shunt, tune on hardware"
+    },
+    "C53": {
+      "value": "NF",
+      "reason": "Feed RF shunt, tune on hardware"
+    },
+    "C58": {
+      "value": "NF",
+      "reason": "Antenna shunt, tune on hardware"
+    },
+    "L6": {
+      "value": "NF",
+      "reason": "Antenna shunt, no fitted inductance selected"
+    },
+    "R44": {
+      "value": "10kohm",
+      "reason": "Bench NTC substitute; battery includes its own NTC"
+    }
+  },
+  "exclude_from_bom": [
+    "TP1",
+    "TP2",
+    "TP3",
+    "TP4",
+    "TP5",
+    "TP6",
+    "TP7",
+    "TP8",
+    "TP9",
+    "TP10",
+    "MH2",
+    "MH4"
+  ],
+  "value_labels": {
+    "J3": "53261-0371",
+    "MK1": "MP34DT05TR-A",
+    "U6": "BQ24073RGTR",
+    "MH2": "Mounting hole",
+    "MH4": "Mounting hole"
+  }
+}

@@ -1,0 +1,32 @@
+// SPDX-License-Identifier: CERN-OHL-P-2.0
+// Project-local switch and speaker devices inherited from Rev A.
+pub device SKTDLDE010 {
+    pins {
+        required A: 1 [passive]
+        required B: 2 [passive]
+        // Local names for the three unnumbered metal-frame solder lands.
+        // Keep them independent and NC; the supplier specifies no ground tie.
+        optional MP_LEFT: ML [passive]
+        optional MP_CENTER: MC [passive]
+        optional MP_RIGHT: MR [passive]
+    }
+}
+impl switches::Switch for SKTDLDE010 {}
+
+pub device SpeakerMX125 {
+    pins {
+        required MINUS: 1 [passive]
+        required PLUS: 2 [passive]
+    }
+}
+impl Connector for SpeakerMX125 {}
+
+// 600 ohm at 100MHz, >=1.3A RMS provisional speaker-output bead requirement.
+// No exact component is claimed until its DC resistance/current are verified.
+pub device SpeakerFerrite600R {
+    pins {
+        required A: 1 [passive]
+        required B: 2 [passive]
+    }
+}
+impl passive::FerriteBead for SpeakerFerrite600R {}

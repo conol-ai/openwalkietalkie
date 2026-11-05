@@ -1,5 +1,12 @@
 # How the Rev B board was built
 
+The maintained CoHDL project is now in [`../source/main/`](../source/README.md).
+`../check.sh` runs `build_source.py` and `check_source.py` to compile it,
+apply population metadata, and compare the result against the released PCB
+and BOM. These commands write only generated files under `source/main/out/`.
+
+The remaining scripts below document the original layout process.
+
 These are the scripts that produced `../main/main-revb.kicad_pcb` from the r6
 release. They record exactly how the design was made. They are not a
 push-button rebuild:

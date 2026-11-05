@@ -1,0 +1,28 @@
+[package]
+name = "openmicrodial-rev-b"
+version = "0.1.0"
+license = "CERN-OHL-P-2.0"
+description = "OpenWalkieTalkie Rev B main board, reconciled to the released PCB"
+repository = "https://github.com/conol-ai/openmicrodial"
+
+[design]
+top = "OpenMicroDialRevB"
+
+[dependencies]
+"@contrib/audio-amp" = "0.1.0"
+"@contrib/display" = "0.1.0"
+"@richtek/dcdc" = "0.1.2"
+"@sifli/sf32" = "0.1.2"
+antenna = "0.1.0"
+esd = "0.1.1"
+flash = "0.1.4"
+load-switch = "0.1.1"
+mic = "0.1.1"
+misc = "0.1.1"
+osc = "0.1.1"
+passive = "0.2.2"
+qfn = "0.2.0"
+soic = "0.2.0"
+std = "0.3.0"
+switches = "0.1.2"
+usb = "0.1.1"

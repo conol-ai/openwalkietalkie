@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: CERN-OHL-P-2.0
+// Rev B: MCU pi network, 50-ohm board feed, then antenna S1/P1/S2/P2.
+// All shunt sites are DNP pending tuning; assembly.json records population.
+subdesign RF {
+    ports {
+        required FEED: Pin
+        required GND: Pin
+    }
+    inst ant: antenna::ANT_2450AT18B100E
+    inst rf_series: passive::R_0R_J_0402
+    inst rf_shunt: [passive::C_3p9_100V_C0G_0402; 2]
+    inst dc_block: REVB_C_15P
+    inst ant_series: passive::R_0R_J_0402
+    inst ant_shunt_l: RF_SHUNT_UNFITTED
+    inst ant_shunt_c: passive::C_3p9_100V_C0G_0402
+
+    #[impedance(50ohm, frequency: 2.4GHz)]
+    net _: FEED, rf_shunt[0].A, dc_block.A
+    #[impedance(50ohm, frequency: 2.4GHz)]
+    net BT_RF_LINE: dc_block.B, rf_shunt[1].A, rf_series.A
+    net ANT_MATCH: rf_series.B, ant_shunt_l.A, ant_series.A
+    net BT_ANT: ant_series.B, ant_shunt_c.A, ant.FEED
+    net _: GND, rf_shunt[0..=1].B, ant_shunt_l.B, ant_shunt_c.B
+}
