@@ -2114,6 +2114,7 @@ mod tests {
                 answer: deck_model::AnswerCap::Hold,
                 order: deck_model::OrderCap::Inject,
                 focus: true,
+                transcribe: Default::default(),
             }),
             "answer hold \u{b7} order inject \u{b7} focus"
         );

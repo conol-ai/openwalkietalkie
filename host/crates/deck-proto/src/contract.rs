@@ -330,7 +330,7 @@ fn assert_same(mine: &HostLine, fw: &HostMsg) {
             assert_eq!(fw_text.as_str(), laundered(text));
         }
         (
-            HostLine::Transcript { slot, text, last, press, failed, channel_tip },
+            HostLine::Transcript { slot, text, last, press, failed, channel_tip, rec },
             HostMsg::Transcript {
                 agent,
                 text: fw_text,
@@ -338,6 +338,7 @@ fn assert_same(mine: &HostLine, fw: &HostMsg) {
                 press: fw_press,
                 failed: fw_failed,
                 channel_tip: fw_channel_tip,
+                rec: fw_rec,
             },
         ) => {
             assert_eq!(agent, slot);
@@ -346,6 +347,7 @@ fn assert_same(mine: &HostLine, fw: &HostMsg) {
             assert_eq!(fw_press, press);
             assert_eq!(fw_failed, failed);
             assert_eq!(fw_channel_tip, channel_tip);
+            assert_eq!(fw_rec, rec);
         }
         (HostLine::Focus { slot, ack }, HostMsg::Focus { agent, ack: fw_ack }) => {
             assert_eq!(agent, slot);
@@ -562,12 +564,18 @@ fn corpus() -> Vec<HostLine> {
         HostLine::Transcript {
             slot: 4,
             text: long.clone(),
-            last: false, press: None, failed: false, channel_tip: false,
+            last: false, press: None, failed: false, channel_tip: false, rec: false,
         },
         HostLine::Transcript {
             slot: 4,
             text: "Refactor the auth module".into(),
-            last: true, press: None, failed: false, channel_tip: false,
+            last: true, press: None, failed: false, channel_tip: false, rec: false,
+        },
+        // A companion's press: the recording marker, no words.
+        HostLine::Transcript {
+            slot: 4,
+            text: String::new(),
+            last: false, press: Some(3), failed: false, channel_tip: false, rec: true,
         },
         HostLine::Focus {
             slot: 2,
@@ -869,7 +877,7 @@ fn a_tagged_press_round_trips_through_both_sides_and_matches_its_result() {
             assert!(matches!(parse_device_line(&json), Ok(DeviceLine::Ptt { press: Some(p), .. }) if p == press));
         }
         for failed in [false, true] {
-            let result = HostLine::Transcript { slot: 8, text: "complete".into(), last: true, press: Some(press), failed, channel_tip: true };
+            let result = HostLine::Transcript { slot: 8, text: "complete".into(), last: true, press: Some(press), failed, channel_tip: true, rec: false };
             let bytes = encode(&result).unwrap();
             assert_same(&result, &fw_parse(&stripped(&bytes)).unwrap());
             assert_eq!(parse_host_line(&stripped(&bytes)).unwrap(), result);

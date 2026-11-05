@@ -31,7 +31,7 @@ const BASE_SCENES: [&str; 2] = ["default", "splash"];
 
 /// Deck scenes; the first eight are the mockups (`tools/preview-all.py` knows
 /// which `mock/*.png` each one reproduces).
-const DECK_SCENES: [&str; 102] = [
+const DECK_SCENES: [&str; 113] = [
     "screen-locked",
     "screen-unlocking",
     "question-answer",
@@ -74,6 +74,8 @@ const DECK_SCENES: [&str; 102] = [
     "card-none",
     "ptt-roster",
     "ptt-transcribing",
+    "ptt-recording",
+    "ptt-recording-long",
     "ptt-channel-tip",
     "ptt-channel-tip-pending",
     "ptt-omarchy",
@@ -93,6 +95,15 @@ const DECK_SCENES: [&str; 102] = [
     "arcade-snake",
     "arcade-raiden",
     "arcade-paused",
+    "timer-stopwatch",
+    "timer-countdown",
+    "pomodoro",
+    "pomodoro-running",
+    "pomodoro-paused",
+    "pomodoro-break",
+    "pomodoro-long-break",
+    "pomodoro-done",
+    "pomodoro-cycle-done",
     "system",
     "system-stale",
     "system-unavailable",
@@ -258,6 +269,33 @@ fn deck_scene(ui: &mut UiState, scene: &str) {
             listening(ui);
             ui.global.ptt_pending = ui.global.ptt.take();
             ui.now_ms = 600;
+        }
+        "ptt-recording" | "ptt-recording-long" => {
+            // A companion's press: speech-like levels from the deck mic, 20 ms
+            // frames, words and pauses, then the timeline at 6.3 s / 14.2 s.
+            listening(ui);
+            ui.deck.transcript.clear();
+            ui.deck.transcript_rec = true;
+            let secs = if scene == "ptt-recording" { 6_300 } else { 14_200 };
+            let start = 10_000u32;
+            let mut session = ui.global.ptt.unwrap();
+            session.started_ms = start;
+            session.meter_base = ui::meter::count();
+            ui.global.ptt = Some(session);
+            let mut seed = 0x2545_f491u32;
+            let mut loud = 1.0f32;
+            for t in (0..secs).step_by(20) {
+                seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5;
+                // Syllables of 180-260 ms with their own loudness, short gaps
+                // between words, a breath every couple of seconds.
+                if t % 220 == 0 { loud = 0.15 + (seed % 100) as f32 / 115.0; }
+                let word = (t / 660) % 4 != 3 && (t / 2_300) % 3 != 2;
+                let syllable = ((t % 220) as f32 / 220.0 * core::f32::consts::PI).sin().max(0.0);
+                let noise = 40 + (seed % 50) as u16;
+                let peak = if word { noise + (syllable * loud * 14_000.0) as u16 } else { noise };
+                ui::meter::push(peak, start + t);
+            }
+            ui.now_ms = start + secs;
         }
         "ptt-channel-tip" | "ptt-channel-tip-pending" => {
             listening(ui);
@@ -573,6 +611,38 @@ fn deck_scene(ui: &mut UiState, scene: &str) {
                     ui.tick(now,0,true,&mut ui::Update::new());
                 }
                 if scene == "arcade-paused" { ui.apply(Control::Button(Button::Enter,Edge::Press),end_ms,&mut ui::Update::new()); }
+            }
+        }
+        "timer-stopwatch" | "timer-countdown" | "pomodoro" | "pomodoro-running"
+        | "pomodoro-paused" | "pomodoro-break" | "pomodoro-long-break"
+        | "pomodoro-done" | "pomodoro-cycle-done" => {
+            use ui::state::timer::{Mode, Phase, Run};
+            let len = ui.global.strip_len as usize;
+            ui.global.strip[len] = ui.global.strip[len - 1];
+            ui.global.strip[len - 1] = deck::msg::FaceEntry::new(Template::Timer.default_id(), Template::Timer, "Timer");
+            ui.global.strip_len += 1;
+            ui.deck.settings.demo = false;
+            ui.on_face(Template::Timer);
+            ui.now_ms = 1000;
+            ui.timer.mode = Mode::Pomodoro;
+            match scene {
+                "timer-stopwatch" => ui.timer.mode = Mode::Stopwatch,
+                "timer-countdown" => ui.timer.mode = Mode::Countdown,
+                "pomodoro" => {},
+                "pomodoro-running" | "pomodoro-paused" => {
+                    ui.timer.pomodoro.completed = 1;
+                    ui.timer.pomodoro.run = Run { banked_ms: 312_000, since_ms: (scene == "pomodoro-running").then_some(1000) };
+                }
+                "pomodoro-break" | "pomodoro-long-break" => {
+                    ui.timer.pomodoro.phase = if scene == "pomodoro-break" { Phase::ShortBreak } else { Phase::LongBreak };
+                    ui.timer.pomodoro.completed = if scene == "pomodoro-break" { 1 } else { 4 };
+                    ui.timer.pomodoro.run = Run { banked_ms: 42_000, since_ms: Some(1000) };
+                }
+                _ => {
+                    ui.timer.pomodoro.completed = if scene == "pomodoro-cycle-done" { 4 } else { 1 };
+                    ui.timer.pomodoro.run = Run { banked_ms: Phase::Focus.duration_ms(), since_ms: None };
+                    ui.timer.pomodoro.done = true;
+                }
             }
         }
         "system" | "system-stale" | "system-unavailable" => {

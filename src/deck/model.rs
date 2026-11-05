@@ -479,6 +479,9 @@ pub struct Deck {
     pub transcript: Text<200>,
     pub transcript_final: bool,
     pub transcript_channel_tip: bool,
+    /// The host's `rec` marker: this press is recorded for a companion's
+    /// recogniser, so the overlay shows a waveform instead of words.
+    pub transcript_rec: bool,
     /// The whole live transcript, laid out by the host. Its window sits at the
     /// **end** of the body: what the operator wants is the newest speech.
     pub transcript_doc: Doc,
@@ -519,6 +522,7 @@ impl Deck {
             transcript: Text::new(),
             transcript_final: false,
             transcript_channel_tip: false,
+            transcript_rec: false,
             transcript_doc: Doc::new(DocFont::Row),
             transcript_rev: 0,
             clock_anchor_ms: 0,
@@ -569,6 +573,7 @@ impl Deck {
         self.transcript.clear();
         self.transcript_final = false;
         self.transcript_channel_tip = false;
+        self.transcript_rec = false;
         self.transcript_doc.forget();
         self.offline_data = false;
     }
@@ -983,7 +988,7 @@ impl Deck {
                 }
                 owner.last_reply = *text;
             }
-            HostMsg::Transcript { text, last, channel_tip, .. } => {
+            HostMsg::Transcript { text, last, channel_tip, rec, .. } => {
                 if self.transcript != *text {
                     self.transcript_doc.forget();
                     self.transcript_rev = self.transcript_rev.wrapping_add(1);
@@ -991,6 +996,9 @@ impl Deck {
                 self.transcript = *text;
                 self.transcript_final = *last;
                 self.transcript_channel_tip = *channel_tip;
+                // Sticky for the press: the final line (no `rec`) still ends
+                // a recording, and a new press clears it.
+                self.transcript_rec |= *rec;
             }
             HostMsg::Workspaces {
                 active,

@@ -50,6 +50,14 @@ struct Frames {
     valid: bool,
 }
 
+/// Bench `panel-debug`: a host request for the panel wakes the loop.
+async fn panel_diag_wake() {
+    #[cfg(feature = "panel-debug")]
+    crate::display::diag::WAKE.wait().await;
+    #[cfg(not(feature = "panel-debug"))]
+    core::future::pending::<()>().await;
+}
+
 pub async fn run(mut display: Option<Co5300>, band: &'static mut Band) -> ! {
     // Several kilobytes: const-initialised in its static (a `StaticCell` would
     // build it on this task's stack first and copy) and only filled in place.
@@ -97,7 +105,10 @@ pub async fn run(mut display: Option<Co5300>, band: &'static mut Band) -> ! {
             select3(
                 crate::link::UI_STATUS.wait(),
                 crate::link::UI_BLUETOOTH.wait(),
-                embassy_time::Timer::after_millis(timeout as u64),
+                embassy_futures::select::select(
+                    embassy_time::Timer::after_millis(timeout as u64),
+                    panel_diag_wake(),
+                ),
             ),
             // A parsed `HostMsg` is over half a kilobyte (one `cardtext`
             // window). The select waits for one to be there and it is taken
@@ -120,9 +131,15 @@ pub async fn run(mut display: Option<Co5300>, band: &'static mut Band) -> ! {
                 emit(state, &mut power, scratch, &mut update)
             }
             Either4::Third(Either3::Second(bluetooth)) => state.update_bluetooth(bluetooth),
-            Either4::Third(Either3::Third(())) => false,
+            Either4::Third(Either3::Third(_)) => false,
             Either4::Fourth(()) => host(state, &mut power, scratch),
         };
+        #[cfg(feature = "panel-debug")]
+        if let Some(op) = crate::display::diag::REQUEST.try_take() {
+            let reply = crate::display::diag::run(display.as_mut(), op).await;
+            crate::display::diag::REPLY.signal(reply);
+            dirty = true;
+        }
         dirty |= tick(state, &mut power, scratch);
         while let Ok(stamped) = CONTROLS.try_receive() {
             dirty |= apply(state, &mut power, scratch, stamped);

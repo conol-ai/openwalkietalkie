@@ -1,13 +1,13 @@
-//! Grammar of the Timer face: a stopwatch and a countdown timer that run on
-//! the device alone. No host, no events: both keep running off-screen, under
+//! Grammar of the Timer face: a stopwatch, countdown and Pomodoro that run on
+//! the device alone. No host, no events: all keep running off-screen, under
 //! overlays and with the panel dark, because they are only ever a start stamp
 //! and what was banked before it.
 //!
 //! Rules (docs/agent-command-deck.md, "Timer"):
-//! - LEFT/RIGHT or a tab switch between Stopwatch and Timer; the other one
-//!   keeps running.
+//! - LEFT/RIGHT or a tab switch between Stopwatch, Timer and Pomodoro; the
+//!   others keep running.
 //! - ENTER (or the right button) is the primary action: Start, Pause, Resume;
-//!   on a finished timer, Restart.
+//!   on a finished timer, Restart; on a finished Pomodoro phase, Next.
 //! - CANCEL (or the left button) is the secondary action: Lap while the
 //!   stopwatch runs, else Reset; with nothing to reset it goes home.
 //! - SCROLL sets the timer's length while it is idle: 10 s steps up to 1 min,
@@ -16,6 +16,8 @@
 //! - A timer reaching zero stops at zero, raises a "Timer done" toast that
 //!   wakes the screen and jumps here when tapped, and shows "time's up" until
 //!   it is restarted or reset.
+//! - Pomodoro alternates 25 min of focus and 5 min breaks, with a 15 min
+//!   break after four focus sessions. Each completed phase waits for Next.
 //! - Idle-home leaves a running clock on this face alone (`keeps_face`).
 use super::{global, notify, Target, TouchAct, UiState, Update};
 use crate::control::{Button, Control, Edge, Wheel};
@@ -43,14 +45,41 @@ pub const PRESET_ID: u16 = 8; // + preset index
 pub enum Mode {
     Stopwatch,
     Countdown,
+    Pomodoro,
 }
 
 impl Mode {
-    pub const ALL: [Mode; 2] = [Mode::Stopwatch, Mode::Countdown];
+    pub const ALL: [Mode; 3] = [Mode::Stopwatch, Mode::Countdown, Mode::Pomodoro];
     pub const fn label(self) -> &'static str {
         match self {
             Mode::Stopwatch => "Stopwatch",
             Mode::Countdown => "Timer",
+            Mode::Pomodoro => "Pomodoro",
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Phase {
+    Focus,
+    ShortBreak,
+    LongBreak,
+}
+
+impl Phase {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Focus => "Focus",
+            Self::ShortBreak => "Short break",
+            Self::LongBreak => "Long break",
+        }
+    }
+
+    pub const fn duration_ms(self) -> u32 {
+        match self {
+            Self::Focus => 25 * 60_000,
+            Self::ShortBreak => 5 * 60_000,
+            Self::LongBreak => 15 * 60_000,
         }
     }
 }
@@ -89,6 +118,54 @@ impl Run {
     }
 }
 
+/// A four-focus Pomodoro cycle. A finished phase stays at zero until Next,
+/// so time away from the device never silently consumes the next session.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Pomodoro {
+    pub phase: Phase,
+    pub run: Run,
+    /// Focus sessions completed in this cycle, from zero through four.
+    pub completed: u8,
+    pub done: bool,
+}
+
+impl Pomodoro {
+    pub const fn new() -> Self {
+        Self { phase: Phase::Focus, run: Run::new(), completed: 0, done: false }
+    }
+
+    pub fn remaining_ms(&self, now_ms: u32) -> u32 {
+        self.phase.duration_ms().saturating_sub(self.run.elapsed(now_ms))
+    }
+
+    /// A fresh cycle with nothing to reset.
+    pub fn idle(&self) -> bool {
+        *self == Self::new()
+    }
+
+    /// The phase that Next starts after this one finishes.
+    pub const fn next_phase(&self) -> Phase {
+        match self.phase {
+            Phase::Focus if self.completed + !self.done as u8 >= 4 => Phase::LongBreak,
+            Phase::Focus => Phase::ShortBreak,
+            Phase::ShortBreak | Phase::LongBreak => Phase::Focus,
+        }
+    }
+
+    fn next(&mut self, now_ms: u32) {
+        if !self.done {
+            return;
+        }
+        if self.phase == Phase::LongBreak {
+            self.completed = 0;
+        }
+        self.phase = self.next_phase();
+        self.done = false;
+        self.run = Run::new();
+        self.run.start(now_ms);
+    }
+}
+
 /// What the two buttons do right now; `None` = shown disabled.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Action {
@@ -98,6 +175,7 @@ pub enum Action {
     Restart,
     Lap,
     Reset,
+    Next,
 }
 
 impl Action {
@@ -109,6 +187,7 @@ impl Action {
             Action::Restart => "Restart",
             Action::Lap => "Lap",
             Action::Reset => "Reset",
+            Action::Next => "Next",
         }
     }
 }
@@ -127,6 +206,7 @@ pub struct View {
     pub countdown: Run,
     /// The timer ran out and nobody has restarted or reset it.
     pub done: bool,
+    pub pomodoro: Pomodoro,
     /// What a latched touch shows pressed, = the latched `Target::id`.
     pub pressed: Option<u8>,
     /// `shown_step` when the face was last marked dirty.
@@ -144,6 +224,7 @@ impl View {
             length_ms: DEFAULT_S * 1000,
             countdown: Run::new(),
             done: false,
+            pomodoro: Pomodoro::new(),
             pressed: None,
             shown: 0,
         }
@@ -163,9 +244,9 @@ impl View {
         !self.countdown.running() && self.countdown.banked_ms == 0 && !self.done
     }
 
-    /// Either clock is running.
+    /// Any clock is running.
     pub fn running(&self) -> bool {
-        self.stopwatch.running() || self.countdown.running()
+        self.stopwatch.running() || self.countdown.running() || self.pomodoro.run.running()
     }
 
     /// ENTER / the right button.
@@ -178,6 +259,10 @@ impl View {
             Mode::Countdown if self.countdown.running() => Action::Pause,
             Mode::Countdown if self.countdown.banked_ms > 0 => Action::Resume,
             Mode::Countdown => Action::Start,
+            Mode::Pomodoro if self.pomodoro.done => Action::Next,
+            Mode::Pomodoro if self.pomodoro.run.running() => Action::Pause,
+            Mode::Pomodoro if self.pomodoro.run.banked_ms > 0 => Action::Resume,
+            Mode::Pomodoro => Action::Start,
         }
     }
 
@@ -187,6 +272,7 @@ impl View {
             Mode::Stopwatch if self.stopwatch.running() => Some(Action::Lap),
             Mode::Stopwatch => (self.stopwatch.banked_ms > 0).then_some(Action::Reset),
             Mode::Countdown => (!self.countdown_idle()).then_some(Action::Reset),
+            Mode::Pomodoro => (!self.pomodoro.idle()).then_some(Action::Reset),
         }
     }
 
@@ -195,7 +281,7 @@ impl View {
         match (self.secondary(), self.mode) {
             (Some(action), _) => action.label(),
             (None, Mode::Stopwatch) => Action::Lap.label(),
-            (None, Mode::Countdown) => Action::Reset.label(),
+            (None, Mode::Countdown | Mode::Pomodoro) => Action::Reset.label(),
         }
     }
 
@@ -205,6 +291,7 @@ impl View {
         match self.mode {
             Mode::Stopwatch => self.stopwatch_ms(now_ms) / 100,
             Mode::Countdown => self.remaining_ms(now_ms).div_ceil(1000),
+            Mode::Pomodoro => self.pomodoro.remaining_ms(now_ms).div_ceil(1000),
         }
     }
 }
@@ -240,6 +327,11 @@ pub(super) fn keeps_face(ui: &UiState) -> bool {
 }
 
 fn act(ui: &mut UiState, action: Action, at_ms: u32, out: &mut Update) {
+    // An input can reach us before the tick at the same deadline. Finalize
+    // before pausing, otherwise a stopped run at zero could never finish.
+    if ui.timer.mode == Mode::Pomodoro && action == Action::Pause && finish_pomodoro(ui, at_ms, out) {
+        return;
+    }
     let view = &mut ui.timer;
     match (view.mode, action) {
         (Mode::Stopwatch, Action::Start | Action::Resume) => view.stopwatch.start(at_ms),
@@ -268,7 +360,11 @@ fn act(ui: &mut UiState, action: Action, at_ms: u32, out: &mut Update) {
             view.done = false;
             view.countdown = Run::new();
         }
-        (Mode::Countdown, Action::Lap) | (Mode::Stopwatch, Action::Restart) => return,
+        (Mode::Pomodoro, Action::Start | Action::Resume) => view.pomodoro.run.start(at_ms),
+        (Mode::Pomodoro, Action::Pause) => view.pomodoro.run.pause(at_ms),
+        (Mode::Pomodoro, Action::Next) => view.pomodoro.next(at_ms),
+        (Mode::Pomodoro, Action::Reset) => view.pomodoro = Pomodoro::new(),
+        _ => return,
     }
     out.dirty = true;
 }
@@ -313,8 +409,14 @@ pub(super) fn on_control(
             Some(action) => act(ui, action, at_ms, out),
             None => global::go_home(ui, at_ms, out),
         },
-        Control::Button(Button::Left, Edge::Press) => select_mode(ui, Mode::Stopwatch, out),
-        Control::Button(Button::Right, Edge::Press) => select_mode(ui, Mode::Countdown, out),
+        Control::Button(Button::Left, Edge::Press) => {
+            let index = (ui.timer.mode as usize).saturating_sub(1);
+            select_mode(ui, Mode::ALL[index], out);
+        }
+        Control::Button(Button::Right, Edge::Press) => {
+            let index = (ui.timer.mode as usize + 1).min(Mode::ALL.len() - 1);
+            select_mode(ui, Mode::ALL[index], out);
+        }
         _ => {}
     }
     true
@@ -402,11 +504,33 @@ pub(super) fn on_tick(ui: &mut UiState, now_ms: u32, out: &mut Update) {
             .map_or(0, |face| face.id);
         notify::raise_timer(ui, face, now_ms, out);
     }
+    finish_pomodoro(ui, now_ms, out);
     let step = ui.timer.shown_step(now_ms);
     if step != ui.timer.shown {
         ui.timer.shown = step;
         out.dirty |= visible(ui);
     }
+}
+
+/// Finish only once, including when a pause arrives before the next tick.
+fn finish_pomodoro(ui: &mut UiState, now_ms: u32, out: &mut Update) -> bool {
+    let pomodoro = &mut ui.timer.pomodoro;
+    if pomodoro.run.running() && pomodoro.run.elapsed(now_ms) >= pomodoro.phase.duration_ms() {
+        pomodoro.run = Run { banked_ms: pomodoro.phase.duration_ms(), since_ms: None };
+        pomodoro.done = true;
+        let focus = pomodoro.phase == Phase::Focus;
+        if focus {
+            pomodoro.completed = (pomodoro.completed + 1).min(4);
+        }
+        out.dirty = true;
+        let face = (0..ui.global.strip_len)
+            .filter_map(|index| ui.face_at(index))
+            .find(|face| face.template == Template::Timer)
+            .map_or(0, |face| face.id);
+        notify::raise_pomodoro(ui, face, focus, now_ms, out);
+        return true;
+    }
+    false
 }
 
 /// A running clock on the panel repaints at the animation rate.
@@ -544,6 +668,164 @@ mod tests {
         let target = hit(&ui, 7, x, y).unwrap();
         on_touch(&mut ui, 7, target, TouchAct::Activate, 0, &mut Update::new());
         assert_eq!(ui.timer.mode, Mode::Stopwatch);
+    }
+
+    #[test]
+    fn pomodoro_completes_four_focus_sessions_then_a_long_break() {
+        let mut ui = on_timer();
+        ui.timer.mode = Mode::Pomodoro;
+        let mut now = 1000u32;
+        assert_eq!(ui.timer.primary(), Action::Start);
+        assert_eq!(ui.timer.secondary(), None);
+        press(&mut ui, Button::Enter, now);
+        for completed in 1..=4 {
+            assert_eq!(ui.timer.pomodoro.phase, Phase::Focus);
+            assert_eq!(ui.timer.pomodoro.next_phase(), if completed == 4 { Phase::LongBreak } else { Phase::ShortBreak });
+            now += Phase::Focus.duration_ms();
+            assert!(tick(&mut ui, now).wake);
+            assert!(ui.timer.pomodoro.done && !ui.timer.pomodoro.run.running());
+            assert_eq!(ui.timer.pomodoro.remaining_ms(now), 0);
+            assert_eq!(ui.timer.pomodoro.completed, completed);
+            assert_eq!(ui.timer.primary(), Action::Next);
+            assert_eq!(ui.notify.toast.unwrap().kind, notify::ToastKind::PomodoroFocusDone);
+            // A delayed response does not consume the break or count another focus.
+            now += 10 * 60_000;
+            tick(&mut ui, now);
+            assert_eq!(ui.timer.pomodoro.completed, completed);
+            assert_eq!(ui.timer.pomodoro.phase, Phase::Focus);
+            now += 1;
+            press(&mut ui, Button::Enter, now);
+            let phase = if completed == 4 { Phase::LongBreak } else { Phase::ShortBreak };
+            assert_eq!(ui.timer.pomodoro.phase, phase);
+            assert_eq!(ui.timer.pomodoro.completed, completed);
+            assert!(ui.timer.pomodoro.run.running() && !ui.timer.pomodoro.done);
+            now += phase.duration_ms();
+            assert!(tick(&mut ui, now).wake);
+            assert_eq!(ui.notify.toast.unwrap().kind, notify::ToastKind::PomodoroBreakDone);
+            now += 1;
+            press(&mut ui, Button::Enter, now);
+        }
+        assert_eq!(ui.timer.pomodoro.phase, Phase::Focus);
+        assert_eq!(ui.timer.pomodoro.completed, 0);
+        assert_eq!(ui.timer.pomodoro.remaining_ms(now), Phase::Focus.duration_ms());
+        assert!(ui.timer.pomodoro.run.running());
+    }
+
+    #[test]
+    fn pomodoro_pauses_resumes_and_resets_without_changing_other_timers() {
+        let mut ui = on_timer();
+        press(&mut ui, Button::Enter, 1000);
+        press(&mut ui, Button::Right, 1010);
+        press(&mut ui, Button::Enter, 1020);
+        press(&mut ui, Button::Right, 1030);
+        assert_eq!(ui.timer.mode, Mode::Pomodoro);
+        press(&mut ui, Button::Enter, 2000);
+        press(&mut ui, Button::Enter, 4000);
+        assert_eq!(ui.timer.primary(), Action::Resume);
+        assert_eq!(ui.timer.pomodoro.remaining_ms(100_000), Phase::Focus.duration_ms() - 2000);
+        assert_eq!(ui.timer.secondary(), Some(Action::Reset));
+        press(&mut ui, Button::Enter, 100_000);
+        assert_eq!(ui.timer.pomodoro.remaining_ms(101_000), Phase::Focus.duration_ms() - 3000);
+        press(&mut ui, Button::Cancel, 101_000);
+        assert_eq!(ui.timer.pomodoro, Pomodoro::new());
+        assert_eq!(ui.timer.stopwatch_ms(101_000), 100_000);
+        assert_eq!(ui.timer.remaining_ms(101_000), DEFAULT_S * 1000 - 99_980);
+        assert!(ui.timer.stopwatch.running() && ui.timer.countdown.running());
+    }
+
+    #[test]
+    fn pomodoro_finishes_offscreen_in_the_dark_and_its_toast_opens_the_right_tab() {
+        let mut ui = on_timer();
+        ui.timer.mode = Mode::Pomodoro;
+        press(&mut ui, Button::Enter, 1000);
+        ui.timer.mode = Mode::Stopwatch;
+        ui.on_face(Template::Usage);
+        let mut out = Update::new();
+        let done = 1000 + Phase::Focus.duration_ms();
+        ui.tick(done, 0, false, &mut out);
+        assert!(out.wake && ui.timer.pomodoro.done);
+        assert!(!ui.timer.running());
+        assert_eq!(ui.notify.toast.unwrap().kind, notify::ToastKind::PomodoroFocusDone);
+        // The full toast duration starts when the waking frame reaches the glass.
+        notify::on_frame_shown(&mut ui, done + 500);
+        let toast = ui.notify.toast.unwrap();
+        assert_eq!(toast.until_ms.wrapping_sub(toast.shown_ms), notify::TOAST_MS);
+        notify::toast_tapped(&mut ui, done + 600, &mut Update::new());
+        assert_eq!(ui.current_face().template, Template::Timer);
+        assert_eq!(ui.timer.mode, Mode::Pomodoro);
+        assert_eq!(ui.timer.primary(), Action::Next);
+        assert!(!ui.timer.pomodoro.run.running(), "opening the toast waits for an explicit Next");
+    }
+
+    #[test]
+    fn countdown_toast_returns_to_countdown_when_pomodoro_is_selected() {
+        let mut ui = on_timer();
+        ui.timer.mode = Mode::Countdown;
+        ui.timer.length_ms = MIN_S * 1000;
+        press(&mut ui, Button::Enter, 1000);
+        ui.timer.mode = Mode::Pomodoro;
+        tick(&mut ui, 11_000);
+        notify::toast_tapped(&mut ui, 11_100, &mut Update::new());
+        assert_eq!(ui.timer.mode, Mode::Countdown);
+        assert!(ui.timer.done);
+    }
+
+    #[test]
+    fn pomodoro_survives_the_millisecond_clock_wrap() {
+        let mut ui = on_timer();
+        ui.timer.mode = Mode::Pomodoro;
+        let start = u32::MAX - 600_000;
+        press(&mut ui, Button::Enter, start);
+        let halfway = start.wrapping_add(Phase::Focus.duration_ms() / 2);
+        tick(&mut ui, halfway);
+        assert_eq!(ui.timer.pomodoro.remaining_ms(halfway), Phase::Focus.duration_ms() / 2);
+        let done = start.wrapping_add(Phase::Focus.duration_ms());
+        assert!(tick(&mut ui, done).wake);
+        assert_eq!(ui.timer.pomodoro.completed, 1);
+        assert_eq!(ui.timer.primary(), Action::Next);
+        press(&mut ui, Button::Enter, done + 1);
+        assert_eq!(ui.timer.pomodoro.phase, Phase::ShortBreak);
+        assert_eq!(ui.timer.pomodoro.remaining_ms(done + 1), Phase::ShortBreak.duration_ms());
+    }
+
+    #[test]
+    fn pausing_at_or_after_expiry_finishes_before_the_tick() {
+        for delay in [0, 1000] {
+            let mut ui = on_timer();
+            ui.timer.mode = Mode::Pomodoro;
+            press(&mut ui, Button::Enter, 1000);
+            let deadline = 1000 + Phase::Focus.duration_ms();
+            let out = press(&mut ui, Button::Enter, deadline + delay);
+            assert!(out.wake && ui.timer.pomodoro.done);
+            assert_eq!(ui.timer.pomodoro.completed, 1);
+            assert_eq!(ui.timer.primary(), Action::Next);
+            assert!(!ui.timer.pomodoro.run.running());
+            tick(&mut ui, deadline + delay + 10);
+            assert_eq!(ui.timer.pomodoro.completed, 1, "the following tick does not count twice");
+        }
+    }
+
+    #[test]
+    fn all_three_tabs_work_with_buttons_and_touch() {
+        let mut ui = on_timer();
+        for mode in [Mode::Countdown, Mode::Pomodoro, Mode::Pomodoro] {
+            press(&mut ui, Button::Right, 0);
+            assert_eq!(ui.timer.mode, mode);
+        }
+        for mode in [Mode::Countdown, Mode::Stopwatch, Mode::Stopwatch] {
+            press(&mut ui, Button::Left, 0);
+            assert_eq!(ui.timer.mode, mode);
+        }
+        let (x, y) = layout::timer_tab(2).center();
+        let target = hit(&ui, 7, x, y).unwrap();
+        on_touch(&mut ui, 7, target, TouchAct::Activate, 0, &mut Update::new());
+        assert_eq!(ui.timer.mode, Mode::Pomodoro);
+        let (x, y) = layout::TIMER_PRIMARY.center();
+        let target = hit(&ui, 7, x, y).unwrap();
+        on_touch(&mut ui, 7, target, TouchAct::Activate, 1000, &mut Update::new());
+        assert!(ui.timer.pomodoro.run.running());
+        let (x, y) = layout::timer_preset(0).center();
+        assert_eq!(hit(&ui, 7, x, y), None, "Pomodoro phases use fixed lengths");
     }
 
     #[test]

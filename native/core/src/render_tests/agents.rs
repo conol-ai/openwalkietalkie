@@ -493,10 +493,10 @@ fn channel_tip_appears_and_clears_with_correct_partial_damage() {
     let start = scene(|ui| listening(ui, 1, PttCtx::Talk));
     walk(&start, &[
         ("inbox hint", &|ui| host(ui, HostMsg::Transcript { agent: 1,
-            text: Text::new(), last: false, press: None, failed: false, channel_tip: true })),
+            text: Text::new(), last: false, press: None, failed: false, channel_tip: true, rec: false })),
         ("transcribing with hint", &|ui| ui.global.ptt_pending = ui.global.ptt.take()),
         ("channel connected", &|ui| host(ui, HostMsg::Transcript { agent: 1,
-            text: Text::from_str("Please continue"), last: false, press: None, failed: false, channel_tip: false })),
+            text: Text::from_str("Please continue"), last: false, press: None, failed: false, channel_tip: false, rec: false })),
     ]);
 }
 
@@ -508,10 +508,10 @@ fn listening_overlay_partial_refresh_matches_full_and_only_the_waveform_ticks() 
         ("phase again", &|ui| ui.now_ms += ptt::WAVE_STEP_MS),
         ("sub-phase", &|ui| ui.now_ms += 1),
         ("transcript grows", &|ui| {
-            host(ui, HostMsg::Transcript { agent: 2, text: Text::from_str(LONG_REPLY), last: false, press: None, failed: false, channel_tip: false, })
+            host(ui, HostMsg::Transcript { agent: 2, text: Text::from_str(LONG_REPLY), last: false, press: None, failed: false, channel_tip: false, rec: false })
         }),
-        ("final", &|ui| host(ui, HostMsg::Transcript { agent: 2, text: Text::from_str(LONG_REPLY), last: true, press: None, failed: false, channel_tip: false, })),
-        ("empty", &|ui| host(ui, HostMsg::Transcript { agent: 2, text: Text::new(), last: false, press: None, failed: false, channel_tip: false, })),
+        ("final", &|ui| host(ui, HostMsg::Transcript { agent: 2, text: Text::from_str(LONG_REPLY), last: true, press: None, failed: false, channel_tip: false, rec: false })),
+        ("empty", &|ui| host(ui, HostMsg::Transcript { agent: 2, text: Text::new(), last: false, press: None, failed: false, channel_tip: false, rec: false })),
         ("reply changes the context line", &|ui| host(ui, HostMsg::Reply { agent: 2, text: Text::from_str("Done.") , rev: 1 })),
         ("answering", &|ui| listening(ui, 1, PttCtx::Answer)),
         ("naming", &|ui| {

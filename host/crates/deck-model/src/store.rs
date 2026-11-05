@@ -87,6 +87,10 @@ pub struct StoreConfig {
     /// **characters**, for every announcement the daemon composes. Hot
     /// (B14): read at the next announcement.
     pub announce_max_chars: usize,
+    /// `[voice.stt] companion`: a press addressed to an agent registered
+    /// with `caps.transcribe: "push"` is transcribed by that agent's owner,
+    /// with the local recogniser as the fallback. Hot: read at the press.
+    pub companion_stt: bool,
     pub pins: BTreeMap<String, PinConfig>,
     pub persisted: Persisted,
 }
@@ -110,6 +114,7 @@ impl StoreConfig {
                 .map(String::from)
                 .to_vec(),
             announce_max_chars: 120,
+            companion_stt: true,
             pins: BTreeMap::new(),
             persisted: Persisted::default(),
         }
@@ -346,6 +351,7 @@ impl Store {
         self.cfg.announce_questions = cfg.announce_questions;
         self.cfg.voice_pool.clone_from(&cfg.voice_pool);
         self.cfg.announce_max_chars = cfg.announce_max_chars;
+        self.cfg.companion_stt = cfg.companion_stt;
         self.cfg.pins.clone_from(&cfg.pins);
     }
 
@@ -1301,15 +1307,21 @@ pub(crate) fn chat_lines(agent: &crate::Agent, size: u8, expanded: Option<&std::
             let end = agent.messages[i..].iter().position(|m| m.message.role != crate::ChatRole::Tool).map_or(agent.messages.len(), |n| i + n);
             let group = &agent.messages[i..end];
             let open = expanded.is_some_and(|set| set.contains(&entry.message.id));
-            let summaries: Vec<_> = group.iter().map(|m| crate::workflow::tool_summary(&m.text)).collect();
+            let summaries: Vec<_> = group.iter().map(crate::workflow::message_summary).collect();
             let exploring = summaries.iter().all(|(verb, _)| matches!(verb.as_str(), "Read" | "Search" | "List"));
-            let running = group.iter().any(|m| m.message.streaming);
+            let running = matches!(agent.state, crate::AgentState::Working | crate::AgentState::Question)
+                && group.iter().any(|m| m.message.streaming);
             let failed = group.iter().any(|m| m.text.lines().next().is_some_and(|s| s.contains("failed") || s.contains("error")));
             let title = if failed { "Activity · failed" } else if exploring { if running { "Exploring…" } else { "Explored" } } else if running { "Working…" } else { "Activity" };
             if !lines.is_empty() { lines.push("b0".into()); }
             lines.extend(deck_wrap::wrap_rich_reply(&format!("## {title}"), size).1);
             let mut seen = std::collections::BTreeSet::new();
-            let unique: Vec<_> = summaries.iter().filter(|item| seen.insert((*item).clone())).collect();
+            // A long run of tools must not hide the currently running call
+            // behind the three collapsed rows reserved for older activity.
+            let mut order: Vec<_> = (0..group.len()).collect();
+            order.sort_by_key(|&index| !(running && group[index].message.streaming));
+            let unique: Vec<_> = order.into_iter().map(|index| &summaries[index])
+                .filter(|item| seen.insert((*item).clone())).collect();
             for (verb, target) in unique.iter().take(3) { lines.push(deck_wrap::activity_row(verb, target, size)); }
             if unique.len() > 3 { lines.push(deck_wrap::activity_row("+", &format!("{} more", unique.len() - 3), size)); }
             lines.push(deck_wrap::tool_disclosure(size, i as u8, open, group.len()));

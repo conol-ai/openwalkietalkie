@@ -866,10 +866,10 @@ impl Outbox {
             },
             Control::CardClear(slot, id) => HostLine::CardClear { slot: slot.0, id },
             Control::Focus { slot, ack } => HostLine::Focus { slot: slot.0, ack },
-            Control::Transcript { slot, text, last, press, failed, channel_tip } => HostLine::Transcript {
+            Control::Transcript { slot, text, last, press, failed, channel_tip, rec } => HostLine::Transcript {
                 slot: slot.0,
                 text,
-                last, press, failed, channel_tip,
+                last, press, failed, channel_tip, rec,
             },
             Control::Image(line) => line,
             Control::SessionMenu(menu) => HostLine::SessionMenu(menu),
@@ -1237,7 +1237,7 @@ mod tests {
         let partial = |n: usize| Control::Transcript {
             slot: Slot(1),
             text: format!("word {n}"),
-            last: false, press: None, failed: false, channel_tip: false,
+            last: false, press: None, failed: false, channel_tip: false, rec: false,
         };
         // Keep-latest: ten partials in one apply are one line, the newest.
         for n in 0..10 {
@@ -1292,7 +1292,7 @@ mod tests {
         o.control(Control::Transcript {
             slot: Slot(1),
             text: "done".into(),
-            last: true, press: None, failed: false, channel_tip: false,
+            last: true, press: None, failed: false, channel_tip: false, rec: false,
         });
         let r = o
             .next_report(&view, t0 + Duration::from_millis(288))
@@ -1314,7 +1314,7 @@ mod tests {
         let mut outbox = Outbox::new(Duration::from_millis(8), 1);
         let view = DeviceView::new();
         for (press, last, text) in [(1, true, "first final"), (2, false, "preview"), (2, false, "new preview"), (2, true, "second final")] {
-            outbox.control(Control::Transcript { slot: Slot(1), text: text.into(), last, press: Some(press), failed: false, channel_tip: false });
+            outbox.control(Control::Transcript { slot: Slot(1), text: text.into(), last, press: Some(press), failed: false, channel_tip: false , rec: false});
         }
         let lines = drain(&mut outbox, &view, Instant::now());
         assert_eq!(lines.len(), 2);
@@ -1766,7 +1766,7 @@ mod tests {
         o.control(Control::Transcript {
             slot: Slot(1),
             text: "t".repeat(80),
-            last: true, press: None, failed: false, channel_tip: false,
+            last: true, press: None, failed: false, channel_tip: false, rec: false,
         });
         assert!(o.next_report(&view, t0 + Duration::from_secs(1)).is_some());
         o.report_written();

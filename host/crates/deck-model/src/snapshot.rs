@@ -264,6 +264,11 @@ pub struct PttInfo {
     #[serde(default)]
     pub live: bool,
     pub since: Ts,
+    /// The agent's owner transcribes this press (`caps.transcribe`); the
+    /// local recogniser is only the fallback, so its partials are not
+    /// shown on the deck.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub companion: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

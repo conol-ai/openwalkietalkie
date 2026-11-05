@@ -5,8 +5,16 @@
   <id>https://openwalkietalkie.org/blog/</id>
   <link href="https://openwalkietalkie.org/blog/" />
   <link rel="self" type="application/atom+xml" href="https://openwalkietalkie.org/blog/feed.xml" />
-  <updated>2026-10-28T06:26:49Z</updated>
+  <updated>2026-11-05T03:40:00Z</updated>
   <author><name>Tony Huang</name></author>
+  <entry>
+    <title>OpenWalkieTalkie v0.12.0: Conol hears you, plus Pomodoro</title>
+    <id>https://openwalkietalkie.org/blog/conol-speech-and-pomodoro/</id>
+    <link href="https://openwalkietalkie.org/blog/conol-speech-and-pomodoro/" />
+    <published>2026-11-05T03:40:00Z</published>
+    <updated>2026-11-05T03:40:00Z</updated>
+    <summary>Conol transcribes what you say to its chats with its own speech model, the deck shows a live recording timeline, and a new Timer face adds a stopwatch, countdown and Pomodoro.</summary>
+  </entry>
   <entry>
     <title>OpenWalkieTalkie v0.11.1: Keep your words across pauses</title>
     <id>https://openwalkietalkie.org/blog/ptt-pauses-keep-your-words/</id>

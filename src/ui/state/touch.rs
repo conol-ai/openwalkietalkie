@@ -500,7 +500,7 @@ mod tests {
         // A finger already down when the session starts is orphaned, and
         // its Up during the session still ends the gesture.
         ui.apply(Control::Button(Button::PushToTalk, Edge::Release), 30, &mut out);
-        ui.host(&crate::deck::msg::HostMsg::Transcript { agent: 1, text: crate::deck::text::Text::from_str("done"), last: true, press: Some(1), failed: false, channel_tip: false }, 31, &mut out);
+        ui.host(&crate::deck::msg::HostMsg::Transcript { agent: 1, text: crate::deck::text::Text::from_str("done"), last: true, press: Some(1), failed: false, channel_tip: false , rec: false}, 31, &mut out);
         touch(&mut ui, TouchPhase::Down, x, y, 40);
         assert_eq!(ui.agents.pressed, Some(2));
         ui.apply(Control::Button(Button::PushToTalk, Edge::Press), 50, &mut out);

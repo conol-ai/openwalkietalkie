@@ -453,6 +453,7 @@ fn seeded(session_id: &str, row: &Row) -> AgentRegister {
             answer: AnswerCap::Hold,
             order: OrderCap::Inject,
             focus: true,
+            transcribe: Default::default(),
         },
         slot_hint: None,
         voice: None,

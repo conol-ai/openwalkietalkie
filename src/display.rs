@@ -27,6 +27,8 @@ use crate::ui::damage::Region;
 use embedded_graphics::prelude::Dimensions;
 
 mod framebuffer;
+#[cfg(feature = "panel-debug")]
+pub mod diag;
 // Glob: shared `ui`/`deck` code sees the whole framebuffer API as
 // `crate::display`, exactly as the consumers that mount framebuffer.rs directly.
 pub use framebuffer::*;
@@ -112,6 +114,24 @@ impl Co5300 {
             rails,
         };
 
+        panel.init_sequence().await?;
+
+        logln!(
+            "display: CO5300 initialised ({}x{}, rotation={}deg)",
+            WIDTH,
+            HEIGHT,
+            if crate::orientation::ROTATE_180 {
+                180
+            } else {
+                0
+            }
+        );
+        Ok(panel)
+    }
+
+    /// LilyGo's register sequence, from the page unlock to sleep-out.
+    async fn init_sequence(&mut self) -> Result<(), Error> {
+        let panel = self;
         // Unlock the command page. LilyGo passes 0x00 here; the SiFli reference
         // panel wants 0x20, and sending the wrong one leaves every command
         // after it writing into the wrong register page.
@@ -129,17 +149,7 @@ impl Co5300 {
         Timer::after_millis(60).await;
         // The caller loads the complete splash before making GRAM visible.
 
-        logln!(
-            "display: CO5300 initialised ({}x{}, rotation={}deg)",
-            WIDTH,
-            HEIGHT,
-            if crate::orientation::ROTATE_180 {
-                180
-            } else {
-                0
-            }
-        );
-        Ok(panel)
+        Ok(())
     }
 
     pub async fn show(&mut self) -> Result<(), Error> {

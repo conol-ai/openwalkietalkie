@@ -44,6 +44,7 @@ fn agent(id: &str) -> Agent {
             answer: AnswerCap::Hold,
             order: OrderCap::Inject,
             focus: true,
+            transcribe: Default::default(),
         },
         companion: None,
         card: None,

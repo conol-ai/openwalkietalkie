@@ -523,6 +523,7 @@ mod tests {
                 answer: AnswerCap::Hold,
                 order,
                 focus: true,
+                transcribe: Default::default(),
             },
             companion: None,
             card: Some(Card {

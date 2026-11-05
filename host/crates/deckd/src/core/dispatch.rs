@@ -43,6 +43,9 @@ pub const CAPABILITIES: &[&str] = &[
     "hooks.claude",
     "hooks.codex",
     "inject.ghostty",
+    // `caps.transcribe: "push"`: `agent.transcribe` offers, the
+    // `agent.transcribe.audio` / `agent.transcribe.result` methods.
+    "transcribe.companion",
     "virtual_agents",
 ];
 /// The version this daemon reports (`/v1/info.daemon`, `service.info`).
@@ -139,6 +142,9 @@ pub const MANAGED: &[&str] = &[
     "voice.mic_warm",
     "voice.slow_sco_ms",
     "voice.speak_over_sco",
+    // Whether a companion's own recogniser hears the presses addressed to
+    // its agents: the switch that sends that audio off the machine.
+    "voice.stt.companion",
     "voice.stt.engine",
     "voice.stt.language",
     "voice.stt.locale",
@@ -219,6 +225,41 @@ impl Core {
                         Reply::ok(serde_json::json!({"mime":"image/png", "offset":offset, "total":p.png.len(), "data":base64::engine::general_purpose::STANDARD.encode(&p.png[offset..end])}))
                     },
                     None => Reply::err(ApiError::not_found("image preview expired")),
+                }
+            }
+            "agent.transcribe.audio" => {
+                use base64::Engine;
+                use crate::audio::companion::{parse_offer_id, PAGE};
+                let Some(id) = params["transcription"].as_str().and_then(parse_offer_id) else {
+                    return Reply::err(ApiError::invalid_params("transcription: a tr_ id"));
+                };
+                // Another connection's offer is as absent as an expired one.
+                let Ok(wav) = self.transcribe.audio(id, ctx.session) else {
+                    return Reply::err(ApiError::not_found("transcription"));
+                };
+                let offset = params.get("offset").and_then(serde_json::Value::as_u64).unwrap_or(0) as usize;
+                if offset >= wav.len() || !offset.is_multiple_of(PAGE) {
+                    return Reply::err(ApiError::invalid_params("invalid transcription offset"));
+                }
+                let end = (offset + PAGE).min(wav.len());
+                Reply::ok(serde_json::json!({
+                    "mime": "audio/wav", "offset": offset, "total": wav.len(),
+                    "data": base64::engine::general_purpose::STANDARD.encode(&wav[offset..end]),
+                }))
+            }
+            "agent.transcribe.result" => {
+                use crate::audio::companion::parse_offer_id;
+                let Some(id) = params["transcription"].as_str().and_then(parse_offer_id) else {
+                    return Reply::err(ApiError::invalid_params("transcription: a tr_ id"));
+                };
+                let result = match (params["text"].as_str(), params["error"].as_str()) {
+                    (Some(text), None) if text.len() <= 100_000 => Ok(text.to_string()),
+                    (None, Some(error)) => Err(error.chars().take(200).collect()),
+                    _ => return Reply::err(ApiError::invalid_params("exactly one of text (≤100000 bytes) or error")),
+                };
+                match self.transcribe.resolve(id, ctx.session, result) {
+                    Ok(()) => Reply::ok(serde_json::json!({})),
+                    Err(_) => Reply::err(ApiError::not_found("transcription")),
                 }
             }
             "session.ping" => Reply::ok(serde_json::json!({"ts": wall_now()})),
@@ -1541,6 +1582,7 @@ pub fn config_json(c: &Config) -> serde_json::Value {
             "stt.language": c.voice.stt.language,
             "stt.threads": c.voice.stt.threads,
             "stt.prompted": c.voice.stt.prompted,
+            "stt.companion": c.voice.stt.companion,
             "tts.engine": c.voice.tts.engine,
             "tts.announce_max_chars": c.voice.tts.announce_max_chars,
             "tts.provider": c.voice.tts.provider,
@@ -1602,7 +1644,7 @@ mod tests {
         assert!(c.call(ctx(2,&[Scope::ObserveContent]), "image.get", params.clone(), now).result.is_err());
         c.api_call(Principal::Uid(501), SessionId(2), false, Request::Reply(deck_model::ReplySet {
             agent:agent.clone(), text:String::new(), speak:false, announce:None, lane:None,
-            message:Some(deck_model::MessageMeta { images: images.clone(), id:"image".into(), role:deck_model::ChatRole::User, streaming:false, plan:None, runs:None, activity:None }),
+            message:Some(deck_model::MessageMeta { summary: None, images: images.clone(), id:"image".into(), role:deck_model::ChatRole::User, streaming:false, plan:None, runs:None, activity:None }),
         }), now).unwrap();
         let result = c.call(ctx(2,&[Scope::ObserveContent]), "image.get", params, now).result.unwrap();
         let bytes = base64::engine::general_purpose::STANDARD.decode(result["data"].as_str().unwrap()).unwrap();
@@ -1626,7 +1668,7 @@ mod tests {
         for n in 0..65 {
             c.api_call(Principal::Uid(501), SessionId(2), false, Request::Reply(deck_model::ReplySet {
                 agent:agent.clone(), text:format!("New message {n}"), speak:false, announce:None, lane:None,
-                message:Some(deck_model::MessageMeta { images:Vec::new(), id:format!("message-{n}"), role:deck_model::ChatRole::Assistant, streaming:false, plan:None, runs:None, activity:None }),
+                message:Some(deck_model::MessageMeta { summary: None, images:Vec::new(), id:format!("message-{n}"), role:deck_model::ChatRole::Assistant, streaming:false, plan:None, runs:None, activity:None }),
             }), now).unwrap();
         }
         let owner = &c.store.snapshot().agents[&agent];
@@ -1652,7 +1694,7 @@ mod tests {
 
         c.api_call(Principal::Uid(501), SessionId(2), false, Request::Reply(deck_model::ReplySet {
             agent:agent.clone(), text:String::new(), speak:false, announce:None, lane:None,
-            message:Some(deck_model::MessageMeta { images, id:"another-image".into(), role:deck_model::ChatRole::User, streaming:false, plan:None, runs:None, activity:None }),
+            message:Some(deck_model::MessageMeta { summary: None, images, id:"another-image".into(), role:deck_model::ChatRole::User, streaming:false, plan:None, runs:None, activity:None }),
         }), later).unwrap();
         let rev = c.store.snapshot().agents[&agent].chat_rev;
         c.on_device_line(deck_proto::DeviceLine::Image { slot, rev, index:0, offset:0 }, later);

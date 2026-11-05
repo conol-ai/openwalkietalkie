@@ -7,7 +7,7 @@ use crate::{
     deck::msg::FaceEntry,
     ui::{
         faces,
-        state::timer::{Mode, Run},
+        state::timer::{Mode, Phase, Pomodoro, Run},
         Update,
     },
 };
@@ -58,6 +58,26 @@ fn states() -> Vec<Box<UiState>> {
     pressed.timer.mode = Mode::Countdown;
     pressed.timer.pressed = Some(9);
     states.push(pressed);
+    for (phase, completed) in [(Phase::Focus, 0), (Phase::ShortBreak, 1), (Phase::LongBreak, 4)] {
+        for (banked, since, done) in [
+            (0, None, false),
+            (32_000, Some(800_000), false),
+            (32_000, None, false),
+            (phase.duration_ms() - 5_000, Some(800_000), false),
+            (phase.duration_ms(), None, true),
+        ] {
+            let mut pomodoro = timer();
+            pomodoro.now_ms = 800_000;
+            pomodoro.timer.mode = Mode::Pomodoro;
+            pomodoro.timer.pomodoro = Pomodoro {
+                phase,
+                completed: if done && phase == Phase::Focus { completed + 1 } else { completed },
+                run: Run { banked_ms: banked, since_ms: since },
+                done,
+            };
+            states.push(pomodoro);
+        }
+    }
     states
 }
 
@@ -66,6 +86,17 @@ fn every_state_is_clean_inside_the_corners() {
     for (index, ui) in states().iter().enumerate() {
         let frame = full(ui);
         assert_eq!(lit_outside_safe_area(&frame), None, "state {index}");
+    }
+}
+
+#[test]
+fn tab_labels_fit_beside_a_background_clock_indicator() {
+    for (index, mode) in Mode::ALL.into_iter().enumerate() {
+        let rect = layout::timer_tab(index as u8);
+        let text_width = crate::ui::font::measure(crate::ui::font::Font::Small, mode.label());
+        let text_right = rect.center().0 + (text_width + 1) / 2;
+        let indicator_left = rect.right() - 10 - 3;
+        assert!(text_right + 4 <= indicator_left, "{} overlaps its running dot", mode.label());
     }
 }
 
@@ -126,10 +157,16 @@ impl Session {
     fn tick(&mut self) {
         self.step(|ui, at| ui.tick(at, 0, true, &mut Update::new()));
     }
+    fn advance(&mut self, millis: u32) {
+        self.now += millis;
+        self.tick();
+    }
     fn tap(&mut self, rect: layout::Rect) {
         self.step(|ui, at| {
             let (x, y) = rect.center();
-            let (x, y) = orientation::point(x as u16, y as u16).unwrap();
+            // Control::Touch already uses logical coordinates; the input
+            // contact tracker applies the panel mounting before this layer.
+            let (x, y) = (x as u16, y as u16);
             let mut out = Update::new();
             ui.apply(Control::Touch(Touch { phase: TouchPhase::Down, x, y }), at, &mut out);
             ui.apply(Control::Touch(Touch { phase: TouchPhase::Up, x, y }), at + 1, &mut out);
@@ -168,6 +205,60 @@ fn partial_refresh_matches_full_through_a_scripted_session() {
     session.tick();
     session.tap(layout::timer_tab(0));
     session.tick();
+}
+
+#[test]
+fn pomodoro_partial_refresh_matches_full_through_focus_and_breaks() {
+    let mut session = Session::new(timer());
+    session.tap(layout::timer_tab(2));
+    assert_eq!(session.next.timer.mode, Mode::Pomodoro);
+    session.tap(layout::TIMER_PRIMARY);
+    session.advance(5_000);
+    session.tap(layout::TIMER_PRIMARY);
+    assert!(!session.next.timer.pomodoro.run.running());
+    session.advance(5_000);
+    session.tap(layout::TIMER_PRIMARY);
+    assert!(session.next.timer.pomodoro.run.running());
+
+    for completed in 1..=4 {
+        session.advance(Phase::Focus.duration_ms());
+        assert!(session.next.timer.pomodoro.done);
+        assert_eq!(session.next.timer.pomodoro.completed, completed);
+        // The completion toast has left before interacting with the face.
+        session.advance(5_000);
+        session.tap(layout::TIMER_PRIMARY);
+        let phase = if completed == 4 { Phase::LongBreak } else { Phase::ShortBreak };
+        assert_eq!(session.next.timer.pomodoro.phase, phase);
+        assert!(session.next.timer.pomodoro.run.running());
+        session.advance(phase.duration_ms());
+        assert!(session.next.timer.pomodoro.done);
+        session.advance(5_000);
+        session.tap(layout::TIMER_PRIMARY);
+        assert_eq!(session.next.timer.pomodoro.phase, Phase::Focus);
+        assert_eq!(session.next.timer.pomodoro.completed, if completed == 4 { 0 } else { completed });
+    }
+    session.tap(layout::TIMER_SECONDARY);
+    assert_eq!(session.next.timer.pomodoro.run, Run::new());
+    assert_eq!(session.next.timer.pomodoro.completed, 0);
+    session.press(Button::Left);
+    assert_eq!(session.next.timer.mode, Mode::Countdown);
+    session.press(Button::Right);
+    assert_eq!(session.next.timer.mode, Mode::Pomodoro);
+}
+
+#[test]
+fn switching_away_from_a_running_pomodoro_refreshes_its_tab_indicator() {
+    let mut session = Session::new(timer());
+    session.tap(layout::timer_tab(2));
+    session.press(Button::Enter);
+    session.tick();
+    session.tap(layout::timer_tab(0));
+    assert_eq!(session.next.timer.mode, Mode::Stopwatch);
+    session.advance(Phase::Focus.duration_ms());
+    assert!(session.next.timer.pomodoro.done);
+    session.advance(5_000);
+    session.tap(layout::timer_tab(2));
+    assert_eq!(session.next.timer.mode, Mode::Pomodoro);
 }
 
 #[test]

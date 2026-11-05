@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie v0.12.0: Conol hears you, plus Pomodoro · OpenWalkieTalkie</title>
+<meta name="description" content="Conol transcribes what you say to its chats with its own speech model, the deck shows a live recording timeline, and a new Timer face adds a stopwatch, countdown and Pomodoro." />
+<link rel="canonical" href="https://openwalkietalkie.org/blog/conol-speech-and-pomodoro/" />
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.12.0: Conol hears you, plus Pomodoro · OpenWalkieTalkie" />
+<meta property="og:description" content="Conol transcribes what you say to its chats with its own speech model, the deck shows a live recording timeline, and a new Timer face adds a stopwatch, countdown and Pomodoro." />
+<meta property="og:url" content="https://openwalkietalkie.org/blog/conol-speech-and-pomodoro/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie Blog" href="/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">Skip to content</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/" aria-label="OpenWalkieTalkie — home">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="Sections">
+      <a href="/#pile">The Pile</a>
+      <a href="/#features">Features</a>
+      <a href="/#demo">Try It</a>
+      <a href="/#faces">Faces</a>
+      <a href="/#blueprint">Blueprint</a>
+      <a href="/docs/">Docs</a>
+      <a href="/blog/" aria-current="true">Blog</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle day and night theme" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">DAY</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="Open menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">THE BLOG · RELEASE NOTES</p>
+  <h1>OpenWalkieTalkie v0.12.0: Conol hears you, plus Pomodoro</h1>
+  <p class="post-meta"><span>November 5, 2026</span><span>Mac app, service and firmware</span></p>
+</header>
+<article class="post-body">
+  <p>When you talk to a Conol chat from the deck, the words should be the ones Conol would have heard if you had typed into it. Version 0.12.0 hands those presses to Conol's own speech model, shows you a recording timeline while you talk, mirrors what Conol is doing right now, and adds a Timer face with Pomodoro.</p>
+  <h2>Conol transcribes its own chats</h2>
+  <p>Hold PTT on a Conol chat or <strong>+ New chat</strong> and the Mac service records the press and passes it to the Conol desktop app. Conol transcribes it with the cloud speech model behind its composer's microphone, and that text is what the deck shows after release and what is sent, including dictated answers to Conol's questions.</p>
+  <p>The Mac's own recognizer keeps running during the press. If Conol can't answer, fails, or takes longer than 20 seconds, the Mac's transcript is used, so a press is never lost. Other agents and naming the deck stay on your Mac. Only presses addressed to Conol chats leave the Mac, and only to the Conol app you are signed in to; set <code>[voice.stt] companion = false</code> to keep every press local. This needs the updated Conol desktop and web versions; with an older Conol app, nothing changes.</p>
+  <h2>A timeline while you talk</h2>
+  <p>The Mac's live words are not what Conol will hear, so the deck no longer shows them for these presses. Instead it shows <strong>RECORDING</strong>, a large elapsed time and a timeline: a red playhead walks left to right while the waveform of your voice, measured by the deck's own microphone, fills in behind it. Long presses scroll. After release the deck shows <strong>TRANSCRIBING</strong>, then Conol's transcript.</p>
+  <h2>See what Conol is doing</h2>
+  <p>A running Conol chat now shows its current public step on the deck, such as "Running a command" with a short preview, both in the roster and in the conversation. It updates in place and clears when the step ends. Full tool inputs and results stay in Conol.</p>
+  <h2>Timer and Pomodoro</h2>
+  <p>Add <strong>Timer</strong> from the face manager's <strong>+</strong> gallery for a stopwatch with laps, a countdown with presets, and Pomodoro: 25 minutes of focus and 5-minute breaks, with a 15-minute break after four focus sessions. Each phase waits for <strong>Next / Enter</strong>. The timers run on the deck itself, keep going on other pages and while the screen sleeps, and wake the screen with a toast when they finish.</p>
+  <h2>For companion developers</h2>
+  <p>Any native companion with its own recognizer can register <code>caps.transcribe: "push"</code>, receive <code>agent.transcribe</code> offers, page the 16 kHz WAV with <code>agent.transcribe.audio</code> and answer with <code>agent.transcribe.result</code>. Activity rows use <code>message.summary</code> on <code>agent.reply</code>. The <a href="/docs/native-companions/">native companion guide</a> and the <a href="/docs/deckd-api.md">API reference</a> describe both.</p>
+  <h2>Update</h2>
+  <p>Choose <strong>Check for Updates</strong>, or install the signed, notarized 0.12.0 Mac app for Apple Silicon or Intel. macOS 13 or later is required. Firmware <strong>0.12.0</strong> is needed for the recording timeline and the Timer face: with the deck on USB, open <strong>Service → Updates → Check firmware</strong>. Settings and Bluetooth pairing are preserved.</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.12.0" rel="noopener">Get OpenWalkieTalkie v0.12.0 and checksums on GitHub →</a></p>
+  <p class="post-back"><a href="/blog/">← Back to the blog</a></p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · A COHDL project · MIT software · CERN-OHL-P hardware</span>
+    <nav aria-label="Footer">
+      <a href="/#waitlist">Join the waitlist</a>
+      <a href="/privacy/">Privacy Policy</a>
+      <a href="/cookies/">Cookie information</a>
+      <a href="/cookies/" data-privacy-open>Privacy notice</a>
+      <a href="/">Home</a>
+      <a href="/#demo">Try It</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Join the CoHDL and OpenWalkieTalkie community on Discord">Discord</a>
+      <a href="/blog/feed.xml">Feed</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

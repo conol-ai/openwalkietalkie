@@ -350,6 +350,7 @@ fn the_release_plays_the_announcement_at_pitch_into_the_sco_tail() {
             input: VoiceInput::Deck,
             locale: "en-US".into(),
             contextual: Vec::new(),
+            companion: None,
         },
         t0,
     );
@@ -637,6 +638,7 @@ fn a_press_cuts_the_mixer_and_the_release_gives_the_queued_audio_back() {
             input: VoiceInput::Deck,
             locale: "en-US".into(),
             contextual: Vec::new(),
+            companion: None,
         },
         t0,
     );

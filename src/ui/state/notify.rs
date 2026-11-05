@@ -57,6 +57,9 @@ pub enum ToastKind {
     /// The countdown ran out; `agent` is the Timer face's id, `card` 0.
     /// Lasts as long as a card toast, wakes, and jumps to that face on a tap.
     TimerDone,
+    /// A Pomodoro focus / break phase finished; `agent` is its Timer face.
+    PomodoroFocusDone,
+    PomodoroBreakDone,
 }
 
 impl ToastKind {
@@ -69,6 +72,16 @@ impl ToastKind {
             ToastKind::TranscriptionFailed => Some("Transcription failed. Nothing sent."),
             ToastKind::TranscriptionUnavailable => Some("Transcription unavailable"),
             ToastKind::TimerDone => Some("Timer done"),
+            ToastKind::PomodoroFocusDone => Some("Focus complete"),
+            ToastKind::PomodoroBreakDone => Some("Break complete"),
+        }
+    }
+
+    const fn timer_mode(self) -> Option<super::timer::Mode> {
+        match self {
+            Self::TimerDone => Some(super::timer::Mode::Countdown),
+            Self::PomodoroFocusDone | Self::PomodoroBreakDone => Some(super::timer::Mode::Pomodoro),
+            _ => None,
         }
     }
 }
@@ -339,7 +352,7 @@ pub(super) fn animating(ui: &UiState) -> bool {
 /// its 4 s start there.
 pub(super) fn on_frame_shown(ui: &mut UiState, now_ms: u32) {
     if let Some(toast) = &mut ui.notify.toast {
-        let life = if toast.notice().is_some() || toast.kind == ToastKind::TimerDone { TOAST_MS } else { MESSAGE_MS };
+        let life = if toast.notice().is_some() || toast.kind.timer_mode().is_some() { TOAST_MS } else { MESSAGE_MS };
         toast.shown_ms = now_ms;
         toast.until_ms = now_ms.wrapping_add(life);
     }
@@ -482,12 +495,21 @@ pub(super) fn raise_message(
 /// The timer on face `face` ran out: a toast that lights the screen like a
 /// new notice, on every face but under an opaque overlay. No drawer entry.
 pub(super) fn raise_timer(ui: &mut UiState, face: u8, at_ms: u32, out: &mut Update) {
+    raise_clock(ui, face, ToastKind::TimerDone, at_ms, out);
+}
+
+pub(super) fn raise_pomodoro(ui: &mut UiState, face: u8, focus: bool, at_ms: u32, out: &mut Update) {
+    let kind = if focus { ToastKind::PomodoroFocusDone } else { ToastKind::PomodoroBreakDone };
+    raise_clock(ui, face, kind, at_ms, out);
+}
+
+fn raise_clock(ui: &mut UiState, face: u8, kind: ToastKind, at_ms: u32, out: &mut Update) {
     out.wake = true;
     if crate::ui::overlay::opaque(ui) {
         return;
     }
     displace(ui);
-    ui.notify.toast = Some(Toast::new(face, 0, ToastKind::TimerDone, at_ms, at_ms.wrapping_add(TOAST_MS)));
+    ui.notify.toast = Some(Toast::new(face, 0, kind, at_ms, at_ms.wrapping_add(TOAST_MS)));
     out.dirty = true;
 }
 
@@ -566,11 +588,14 @@ pub(super) fn toast_tapped(ui: &mut UiState, at_ms: u32, out: &mut Update) {
     out.dirty = true;
     if let Some((agent, card)) = toast.notice() {
         jump(ui, agent, card, at_ms, out);
-    } else if toast.kind == ToastKind::TimerDone {
+    } else if let Some(mode) = toast.kind.timer_mode() {
         if ui.global.overlay == global::Overlay::Drawer {
             global::set_overlay(ui, global::Overlay::None, at_ms, out);
         }
-        if let Some(index) = ui.index_of_face(toast.agent) {
+        if let Some(index) = ui.index_of_face(toast.agent)
+            .filter(|&index| ui.face_at(index).is_some_and(|face| face.template == Template::Timer))
+        {
+            ui.timer.mode = mode;
             global::jump_to(ui, index, at_ms, out);
         }
     }

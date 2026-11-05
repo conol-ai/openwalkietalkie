@@ -8,6 +8,32 @@ use serde_json::Value;
 pub const MAX_STEPS: usize = 64;
 pub const MAX_RUNS: usize = 16;
 
+/// Display text only, not raw tool arguments or results.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ActivitySummary {
+    pub label: String,
+    #[serde(default)]
+    pub detail: String,
+}
+
+impl ActivitySummary {
+    pub fn bounded(self) -> Self {
+        Self {
+            label: sanitize::cut(&sanitize::collapse(&self.label), 160),
+            detail: sanitize::cut(&sanitize::collapse(&self.detail), 320),
+        }
+    }
+}
+
+pub fn message_summary(message: &ChatMessage) -> (String, String) {
+    if let Some(summary) = &message.message.summary {
+        if !summary.label.trim().is_empty() {
+            return (summary.label.clone(), summary.detail.clone());
+        }
+    }
+    tool_summary(&message.text)
+}
+
 /// A provider-reported background run. Counts are workers, not guessed plan steps.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Run {
@@ -255,7 +281,7 @@ pub fn activity(agent: &Agent) -> Vec<Activity<'_>> {
             {
                 status = ActivityStatus::Stopped;
             }
-            let (verb, target) = tool_summary(&message.text);
+            let (verb, target) = message_summary(message);
             Activity {
                 message,
                 title: format!("{verb} {target}").trim().to_owned(),
@@ -565,7 +591,7 @@ mod tests {
         let mut agent = crate::testkit::fixture_agent("ag_workflow", 1, AgentState::Working);
         agent.state = AgentState::Working;
         let message = |id: &str, role, activity| ChatMessage {
-            message: MessageMeta { images: Vec::new(),
+            message: MessageMeta { summary: None, images: Vec::new(),
                 id: id.into(),
                 role,
                 streaming: activity == Some(ActivityStatus::Running),

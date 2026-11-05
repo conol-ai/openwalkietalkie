@@ -31,6 +31,8 @@ mod boot_info;
 mod boot_update;
 #[cfg(feature = "audio-debug")]
 pub mod debug;
+#[cfg(feature = "panel-debug")]
+mod panel_debug;
 #[cfg(feature = "hw-a")]
 pub mod usb;
 #[allow(dead_code)]
@@ -742,6 +744,13 @@ async fn dispatch_frame(link: Link, inbound: &mut Inbound, frame: &[u8]) {
                 .then(|| boot_update::handle(inbound.rx.data(n), &mut message.bytes))
                 .flatten()
             {
+                inbound.rx.clear();
+                message.len = len;
+                REPLIES[link.index()].send(message).await;
+                return;
+            }
+            #[cfg(feature = "panel-debug")]
+            if let Some(len) = panel_debug::handle(inbound.rx.data(n), &mut message.bytes).await {
                 inbound.rx.clear();
                 message.len = len;
                 REPLIES[link.index()].send(message).await;

@@ -43,7 +43,7 @@ pub use agent::{
     ChatImage, ChatMessage, ChatRole, MessageMeta,
     Agent, Answer, AnswerCap, AnswerSource, Caps, Card, CardStatus, Choice, Deliver, Group, Order,
     OrderCap, OrderSource, Origin, OriginKind, Owner, Page, PidKind, Reply, SessionInfo, Source,
-    Terminal, TitleSource,
+    Terminal, TitleSource, TranscribeCap,
 };
 pub use command::{
     AgentRegister, AgentUpdate, CardClear, CardSet, Command, DeviceSet, FocusReport, LinkEvent,

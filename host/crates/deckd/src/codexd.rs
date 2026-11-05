@@ -314,7 +314,7 @@ impl Model {
                     return;
                 }
                 let text = plan.text();
-                self.record_message(thread, deck_model::MessageMeta { images: Vec::new(),
+                self.record_message(thread, deck_model::MessageMeta { summary: None, images: Vec::new(),
                     activity: None,
                     id: format!("plan:{turn}"),
                     role: deck_model::ChatRole::Tool,
@@ -330,7 +330,7 @@ impl Model {
             let Some(id) = params["itemId"].as_str() else { return; };
             let Some(delta) = params["delta"].as_str() else { return; };
             let previous = self.threads.get(thread).and_then(|t| t.messages.iter().find(|(m, _)| m.id == id)).cloned();
-            let (meta, mut text) = previous.unwrap_or_else(|| (deck_model::MessageMeta { images: Vec::new(),
+            let (meta, mut text) = previous.unwrap_or_else(|| (deck_model::MessageMeta { summary: None, images: Vec::new(),
                 activity: None,
                 runs: None, plan: None,
                 id: id.into(), role: if method == "item/agentMessage/delta" { deck_model::ChatRole::Assistant } else { deck_model::ChatRole::Tool }, streaming: true,
@@ -956,7 +956,7 @@ fn chat_item(item: &Value, streaming: bool) -> Option<(deck_model::MessageMeta, 
         _ => return None,
     };
     let activity = (role == ChatRole::Tool).then(|| deck_model::workflow::ActivityStatus::provider(item["status"].as_str(), streaming));
-    Some((deck_model::MessageMeta { images, activity, runs: None, plan: None, id, role, streaming: streaming && role != ChatRole::User }, sanitize::cut(&text, 64 * 1024)))
+    Some((deck_model::MessageMeta { summary: None, images, activity, runs: None, plan: None, id, role, streaming: streaming && role != ChatRole::User }, sanitize::cut(&text, 64 * 1024)))
 }
 
 /// One row of the daemon's loaded-thread list, as [`Model::loaded`] takes it.
@@ -1899,6 +1899,7 @@ async fn apply(
                         answer: AnswerCap::Poll,
                         order: OrderCap::Poll,
                         focus: false,
+                        transcribe: Default::default(),
                     },
                     slot_hint: None,
                     voice: None,

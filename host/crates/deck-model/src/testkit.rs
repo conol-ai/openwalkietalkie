@@ -45,6 +45,7 @@ pub fn fixture_agent(id: &str, slot: u8, state: AgentState) -> Agent {
             answer: AnswerCap::Hold,
             order: OrderCap::Inject,
             focus: true,
+            transcribe: Default::default(),
         },
         card: Some(Card {
             id: CardId(17),
@@ -109,6 +110,7 @@ pub fn register(name: &str, key: Option<&str>) -> AgentRegister {
             answer: AnswerCap::Poll,
             order: OrderCap::Poll,
             focus: false,
+            transcribe: Default::default(),
         },
         slot_hint: None,
         voice: None,

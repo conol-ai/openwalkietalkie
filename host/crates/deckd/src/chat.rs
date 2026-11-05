@@ -73,7 +73,7 @@ fn transcript_messages(bytes: &[u8], session: &str) -> Vec<(MessageMeta, String)
             let streaming = role == ChatRole::Assistant && v["message"]["stop_reason"].is_null();
             upsert(
                 &mut messages,
-                MessageMeta { images,
+                MessageMeta { summary: None, images,
                     activity: None,
                     runs: None,
                     plan: None,
@@ -94,7 +94,7 @@ fn transcript_messages(bytes: &[u8], session: &str) -> Vec<(MessageMeta, String)
                     let input = deck_model::sanitize::cut(&block["input"].to_string(), 2048);
                     upsert(
                         &mut messages,
-                        MessageMeta { images: Vec::new(),
+                        MessageMeta { summary: None, images: Vec::new(),
                             activity: Some(deck_model::workflow::ActivityStatus::Running),
                             runs: None,
                             plan: (name == "TodoWrite")
@@ -138,7 +138,7 @@ fn transcript_messages(bytes: &[u8], session: &str) -> Vec<(MessageMeta, String)
                     );
                     upsert(
                         &mut messages,
-                        MessageMeta { images,
+                        MessageMeta { summary: None, images,
                             activity: Some(deck_model::workflow::ActivityStatus::provider(
                                 Some(status),
                                 false,
@@ -260,7 +260,7 @@ pub(crate) async fn observe(
             let req = ReplySet {
                 agent: agent.clone(),
                 text: format!("**{name} · {status}**\n\n```json\n{details}"),
-                message: Some(MessageMeta { images,
+                message: Some(MessageMeta { summary: None, images,
                     activity: Some(deck_model::workflow::ActivityStatus::provider(
                         Some(status),
                         live,
@@ -419,7 +419,7 @@ fn start_watch(
                             .join("\n")
                     };
                     updates.push((
-                        MessageMeta { images: Vec::new(),
+                        MessageMeta { summary: None, images: Vec::new(),
                             id: "workflow:runs".into(),
                             role: ChatRole::Tool,
                             streaming: false,

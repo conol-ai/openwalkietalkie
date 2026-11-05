@@ -117,6 +117,7 @@ pub fn draw(band: &mut Band, ui: &UiState) {
         ToastKind::Card(kind) => card_color(kind),
         ToastKind::NoChannel | ToastKind::NotDelivered | ToastKind::TranscriptionFailed | ToastKind::TranscriptionUnavailable => theme::AMBER,
         ToastKind::TimerDone => theme::RED,
+        ToastKind::PomodoroFocusDone | ToastKind::PomodoroBreakDone => theme::GREEN,
     };
     kit::dot(band, rect.left() + dx, rect.top() + dy, r, color);
     let mut line = Text::<40>::new();
@@ -128,6 +129,8 @@ pub fn draw(band: &mut Band, ui: &UiState) {
         ToastKind::TranscriptionFailed => ("Transcription failed", "Nothing was sent. Try again."),
         ToastKind::TranscriptionUnavailable => ("Transcription unavailable", "Check the host and try again."),
         ToastKind::TimerDone => ("Timer done", "tap to see the timer"),
+        ToastKind::PomodoroFocusDone => ("Focus complete", "time for a break; tap to open"),
+        ToastKind::PomodoroBreakDone => ("Break complete", "tap to return to Pomodoro"),
     };
     let x = rect.left() + layout::TOAST_TEXT_X;
     let max_w = rect.right() - 12 - x;
@@ -218,6 +221,8 @@ pub fn signature(ui: &UiState, sig: &mut SigBuilder) {
             ToastKind::TranscriptionFailed => 4,
             ToastKind::TranscriptionUnavailable => 5,
             ToastKind::TimerDone => 6,
+            ToastKind::PomodoroFocusDone => 7,
+            ToastKind::PomodoroBreakDone => 8,
         };
         h.bool(true)
             .i32(slide(&toast, ui.now_ms))

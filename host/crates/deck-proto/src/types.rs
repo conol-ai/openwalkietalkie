@@ -408,6 +408,8 @@ pub enum HostLine {
         failed: bool,
         /// Show the Claude Channels setup hint during this device PTT session.
         channel_tip: bool,
+        /// Recording for a companion's recogniser: no live words (`rec:1`).
+        rec: bool,
     },
     Focus {
         slot: u8,

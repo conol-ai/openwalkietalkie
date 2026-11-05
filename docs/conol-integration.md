@@ -35,8 +35,30 @@ metadata fields. Other agents use the same methods with their own app identity;
 see the [public native companion guide](../site/public/docs/native-companions/index.html)
 and [runnable example](../host/examples/native_companion.py).
 
+PTT speech addressed to a Conol chat or the launcher is transcribed by Conol's
+cloud speech model, the same one behind its web composer's microphone. The
+bridge registers `caps.transcribe: "push"`. On release, deckd offers the press
+as 16 kHz WAV (`agent.transcribe`). The desktop pages it out
+(`agent.transcribe.audio`) and hands it to the account's page, which posts it
+to `/api/transcribe` with the window's own session. The text comes back through
+`agent.transcribe.result`. The local recogniser (Apple or Whisper) still runs
+during the press and supplies the final transcript if Conol fails, is
+unsupported by an older page, or takes more than 20 s. Its words are not shown
+on the deck, because they are not what Conol hears. The press shows a RECORDING
+pill and a waveform that follows the deck microphone's level. deckd sends
+transcript `rec:1` and no partials; the transcript appears after release. Older
+deckd builds ignore the cap. `[voice.stt] companion = false` keeps all
+recognition on the Mac.
+
 Both desktop apps and firmware must include 0.11.0 native companion support.
 Conol's normal browser version does not probe local ports. Transcript refresh
 is two seconds for the selected chat and pending questions; roster refresh is
 five seconds. Only public user/assistant text is mirrored, up to sixteen recent
-messages, eight thousand characters each. Images and tool output stay in Conol.
+messages, eight thousand characters each. The companion also sends the current
+public activity label and preview, using Conol's timeline formatter (for example,
+“Running a command” with a short command preview). This appears in the roster
+while running and as an activity row in the conversation/workflow. Stable call
+IDs update in place; completion, cancellation and replacement end the running
+indicator. Activity is never spoken. Full tool inputs, output, images and private
+reasoning stay in Conol. This requires updated Conol web/desktop components and
+deckd with `message.summary` support; the existing 0.11.0 firmware can render it.

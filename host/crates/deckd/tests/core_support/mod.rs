@@ -205,6 +205,7 @@ pub fn poll_register(name: &str) -> AgentRegister {
             answer: AnswerCap::Poll,
             order: OrderCap::Poll,
             focus: false,
+            transcribe: Default::default(),
         },
         slot_hint: None,
         voice: None,
@@ -219,6 +220,7 @@ pub fn hold_register(name: &str) -> AgentRegister {
             answer: AnswerCap::Hold,
             order: OrderCap::Inject,
             focus: false,
+            transcribe: Default::default(),
         },
         kind: Kind::Claude,
         ..poll_register(name)

@@ -52,6 +52,8 @@ answers out of band. `params` links the type the request carries.
 | `agent.card.clear` | `agent` | store | [`CardClear`](#cardclear) |
 | `agent.reply` | `agent` | store | [`ReplySet`](#replyset) |
 | `agent.wait` | `agent` | core | — (not in the `Request` enum) |
+| `agent.transcribe.audio` | `agent` | core | — (not in the `Request` enum) |
+| `agent.transcribe.result` | `agent` | core | — (not in the `Request` enum) |
 | `op.answer` | `operate` | store | [`OpAnswer`](#opanswer) |
 | `op.order` | `operate` | store | [`OpOrder`](#oporder) |
 | `op.focus` | `operate` | store | {agent: [`AgentId`](#agentid)} |
@@ -161,12 +163,21 @@ From the hid thread (§6.2, §6.3): what happened to the link.
 
 ## Types
 
-The 84 named types the schemas above refer to.
+The 86 named types the schemas above refer to.
 
 ### `ActivityStatus`
 
 One of: `running`, `completed`, `failed`, `stopped`.
 
+
+### `ActivitySummary`
+
+Display text only, not raw tool arguments or results.
+
+| field | type | required | default | description |
+|---|---|---|---|---|
+| `detail` | string | no | `""` |  |
+| `label` | string | yes |  |  |
 
 ### `Agent`
 
@@ -256,6 +267,7 @@ One of: `left`, `right`, `enter`, `cw`, `ccw`, `shift+left`, `shift+right`, `shi
 | `answer` | [`AnswerCap`](#answercap) | yes |  |  |
 | `focus` | boolean | no | `false` | §4.15 registers with `caps:{answer,order}` alone: an agent that does not say it can be focused cannot be. |
 | `order` | [`OrderCap`](#ordercap) | yes |  |  |
+| `transcribe` | [`TranscribeCap`](#transcribecap) | no |  | The agent's owner can transcribe what is said to it: with `push`, a press addressed to this agent is recorded as WAV and offered to the owning connection (`agent.transcribe`), whose text becomes the final transcript; the daemon's own recogniser runs alongside and is the answer whenever the owner fails, refuses or is late. Older daemons ignore the field, so a companion may always send it. |
 
 ### `Card`
 
@@ -331,6 +343,7 @@ Small references only. Image bytes never enter snapshots or the event ring.
 | `role` | [`ChatRole`](#chatrole) | yes |  |  |
 | `runs` | array? | no |  | Public background workflow counters, independent of the parent turn. |
 | `streaming` | boolean | no | `false` |  |
+| `summary` | [`ActivitySummary`](#activitysummary)? | no |  | Public activity label/preview supplied by a native companion. |
 | `text` | string | yes |  |  |
 
 ### `ChatRole`
@@ -493,6 +506,7 @@ Who holds the TCP port when the daemon could not take it (§4.1's `lsof -nP -iTC
 | `role` | [`ChatRole`](#chatrole) | yes |  |  |
 | `runs` | array? | no |  | Public background workflow counters, independent of the parent turn. |
 | `streaming` | boolean | no | `false` |  |
+| `summary` | [`ActivitySummary`](#activitysummary)? | no |  | Public activity label/preview supplied by a native companion. |
 
 ### `ModelOption`
 
@@ -612,6 +626,7 @@ One of: `talk`, `answer`, `name`.
 |---|---|---|---|---|
 | `agent` | [`AgentId`](#agentid)? | no |  |  |
 | `card` | [`CardId`](#cardid)? | no |  |  |
+| `companion` | boolean | no |  | The agent's owner transcribes this press (`caps.transcribe`); the local recogniser is only the fallback, so its partials are not shown on the deck. |
 | `ctx` | [`PttCtx`](#pttctx) | yes |  |  |
 | `live` | boolean | no | `false` | Whether the capture has produced a **non-zero sample** yet — §7.4's `Arming` (false) vs `Listening` (true).  The distinction is a second of the operator's life, not a detail: SCO bring-up on this hardware is 1031 ms median (V1, measured 2026-09-21), during which callbacks arrive, `AudioUnitRender` returns `noErr` and every sample is an exact digital zero. A GUI that shows "listening" for that second is lying to the operator, and a liveness check that believes the callbacks never fires on a dead mic at all (V2). |
 | `principal` | [`Principal`](#principal) | yes |  | Who started this session: `device` for a deck `ptt` edge, else the caller of `voice.listen` (§7.4). |
@@ -779,7 +794,7 @@ One of: `pending`, `in_progress`, `completed`.
 
 ### `Template`
 
-One of: `agents`, `omarchy`, `macropad`, `usage`, `settings`, `arcade`, `system`.
+One of: `agents`, `omarchy`, `macropad`, `usage`, `settings`, `arcade`, `system`, `timer`.
 
 
 ### `Terminal`
@@ -806,6 +821,14 @@ One of: `agents`, `omarchy`, `macropad`, `usage`, `settings`, `arcade`, `system`
 ### `Tone`
 
 One of: `blue`, `amber`, `green`, `red`, `gray`.
+
+
+### `TranscribeCap`
+
+Who may turn a press's audio into text (`caps.transcribe`).
+
+- string — The owner receives `agent.transcribe` for every utterance addressed to the agent and answers `agent.transcribe.result`.
+- string — The daemon's own recogniser only.
 
 
 ### `Ts`

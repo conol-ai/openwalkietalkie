@@ -918,7 +918,7 @@ fn ptt(
             *out = HostMsg::Transcript {
                 agent,
                 text: Text::from_str(transcript_of(ctx)),
-                last: true, press: None, failed: false, channel_tip: false,
+                last: true, press: None, failed: false, channel_tip: false, rec: false,
             };
             match ctx {
                 PttCtx::Talk => {
@@ -1013,7 +1013,7 @@ fn type_transcript(ui: &mut UiState, now_ms: u32, out: &mut Update) -> bool {
         text: Text::from_str(&text[..end]),
         last: false,
         press: None,
-        failed: false, channel_tip: false,
+        failed: false, channel_tip: false, rec: false,
     };
     ui.demo.typing = Some(Typing {
         shown: target,

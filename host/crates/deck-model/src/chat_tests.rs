@@ -10,7 +10,7 @@ fn send(sim: &mut Sim, agent: &AgentId, id: &str, role: ChatRole, streaming: boo
         Request::Reply(ReplySet {
             agent: agent.clone(),
             text: text.into(),
-            message: Some(MessageMeta { images: Vec::new(),
+            message: Some(MessageMeta { summary: None, images: Vec::new(),
                 activity: None,
                 runs: None, plan: None,
                 id: id.into(),
@@ -26,11 +26,68 @@ fn send(sim: &mut Sim, agent: &AgentId, id: &str, role: ChatRole, streaming: boo
 }
 
 #[test]
+fn native_activity_uses_public_labels_and_settles_without_speaking() {
+    let mut sim = Sim::new();
+    let agent = sim.register(UID, SessionId(1), "Conol", None);
+    let state = |value: &str| serde_json::from_value(serde_json::json!({
+        "method":"agent.update", "params":{"agent":agent, "state":value}
+    })).unwrap();
+    sim.api(UID, SessionId(1), state("working")).unwrap();
+    send(&mut sim, &agent, "u1", ChatRole::User, false, "Find the chip");
+    for n in 0..5 {
+        send(&mut sim, &agent, &format!("old-{n}"), ChatRole::Tool, false, &format!("**Finished tool {n}**"));
+    }
+    let reply = |running| serde_json::from_value(serde_json::json!({
+        "method":"agent.reply", "params":{
+            "agent":agent, "text":"**Command**\n\nPublic command preview", "speak":false,
+            "message":{"id":"activity:call-1", "role":"tool", "streaming":running,
+                "activity":if running {"running"} else {"completed"},
+                "summary":{"label":if running {"Running a command"} else {"Ran a command"}, "detail":"mkdir -p ~/workspace/plaud"}}
+        }
+    })).unwrap();
+    sim.api(UID, SessionId(1), reply(true)).unwrap();
+    let a = &sim.store.snapshot().agents[&agent];
+    let (_, lines) = crate::store::chat_lines(a, 0, None);
+    assert!(lines.join(" ").contains("Running a command"));
+    assert!(workflow::activity(a).last().unwrap().title.contains("mkdir -p ~/workspace/plaud"));
+    sim.api(UID, SessionId(1), reply(false)).unwrap();
+    let a = &sim.store.snapshot().agents[&agent];
+    assert_eq!(a.messages.len(), 7, "stable call id updates in place");
+    assert_eq!(workflow::activity(a).last().unwrap().status, workflow::ActivityStatus::Completed);
+    assert!(!crate::store::chat_lines(a, 0, None).1.join(" ").contains("Working…"));
+    sim.api(UID, SessionId(1), reply(true)).unwrap();
+    sim.api(UID, SessionId(1), state("ready")).unwrap();
+    let a = &sim.store.snapshot().agents[&agent];
+    assert!(!crate::store::chat_lines(a, 0, None).1.join(" ").contains("Working…"));
+    assert_eq!(workflow::activity(a).last().unwrap().status, workflow::ActivityStatus::Stopped);
+    assert!(!sim.effects.iter().any(|e| matches!(e, Effect::Audio(AudioCmd::Say { .. }))));
+    assert!(redact(sim.store.snapshot(), &[Scope::Observe]).agents[&agent].messages.is_empty());
+}
+
+#[test]
+fn public_activity_summaries_are_bounded_and_only_apply_to_tools() {
+    let mut sim = Sim::new();
+    let agent = sim.register(UID, SessionId(1), "native", None);
+    for role in ["tool", "assistant"] {
+        let request = serde_json::from_value(serde_json::json!({"method":"agent.reply", "params":{
+            "agent":agent, "text":"Public text", "message":{"id":role,"role":role,
+                "summary":{"label":"界".repeat(1000),"detail":"preview\n".repeat(1000)}}
+        }})).unwrap();
+        sim.api(UID, SessionId(1), request).unwrap();
+    }
+    let messages = &sim.store.snapshot().agents[&agent].messages;
+    let summary = messages[0].message.summary.as_ref().unwrap();
+    assert!(summary.label.len() <= 160 && summary.detail.len() <= 320);
+    assert!(!summary.detail.contains('\n'));
+    assert!(messages[1].message.summary.is_none());
+}
+
+#[test]
 fn images_are_visible_with_collapsed_tools_and_invalidate_changed_indices() {
     let mut sim = Sim::new();
     let agent = sim.register(UID, SessionId(1), "bot", None);
     let image = ChatImage { id: "a".repeat(64), label:"Screenshot".into(), width:640, height:480 };
-    let mut meta = MessageMeta { images:vec![image], id:"tool-1".into(), role:ChatRole::Tool, streaming:false, activity:None, runs:None, plan:None };
+    let mut meta = MessageMeta { summary: None, images:vec![image], id:"tool-1".into(), role:ChatRole::Tool, streaming:false, activity:None, runs:None, plan:None };
     let mut submit = |meta: MessageMeta| { sim.api(UID, SessionId(1), Request::Reply(ReplySet { agent:agent.clone(), text:"**Read image**".into(), message:Some(meta), speak:false, announce:None, lane:None })).unwrap(); };
     submit(meta.clone());
     let before = sim.store.snapshot().agents[&agent].chat_rev;
@@ -223,7 +280,7 @@ fn plan_message(sim: &mut Sim, agent: &AgentId, id: &str, status: &str) {
     let plan = workflow::Plan::codex(&serde_json::json!({"plan":[{"step":"Inspect the input", "status":status}]})).unwrap();
     sim.api(UID, SessionId(1), Request::Reply(ReplySet {
         agent: agent.clone(), text: plan.text(),
-        message: Some(MessageMeta { images: Vec::new(), id: id.into(), role: ChatRole::Tool, streaming: false, runs: None, plan: Some(plan), activity: None }),
+        message: Some(MessageMeta { summary: None, images: Vec::new(), id: id.into(), role: ChatRole::Tool, streaming: false, runs: None, plan: Some(plan), activity: None }),
         speak: false, announce: None, lane: None,
     })).unwrap();
 }
@@ -295,7 +352,7 @@ fn device_workflow_disclosures_keep_outputs_collapsed_and_reject_stale_taps() {
     let plan = workflow::Plan::codex(&serde_json::json!({"plan":(0..8).map(|i|
         serde_json::json!({"step":format!("Step {i}"), "status":if i < 5 {"completed"} else if i == 5 {"inProgress"} else {"pending"}})).collect::<Vec<_>>()})).unwrap();
     sim.api(UID, SessionId(1), Request::Reply(ReplySet { agent: agent.clone(), text: plan.text(),
-        message: Some(MessageMeta { images: Vec::new(), id: "p".into(), role: ChatRole::Tool, streaming: false, runs: None, plan: Some(plan), activity: None }),
+        message: Some(MessageMeta { summary: None, images: Vec::new(), id: "p".into(), role: ChatRole::Tool, streaming: false, runs: None, plan: Some(plan), activity: None }),
         speak: false, announce: None, lane: None })).unwrap();
     send(&mut sim, &agent, "t1", ChatRole::Tool, false, "**Bash · failed**\n\n```\ncargo test\n```\n\nprivate output");
     let rev = sim.store.snapshot().agents[&agent].chat_rev;
@@ -328,7 +385,7 @@ fn background_workflow_runs_survive_new_turns_update_the_device_and_are_redacted
     let runs = vec![workflow::Run { id: "wf_test".into(), name: "Parallel design checks".into(),
         status: workflow::ActivityStatus::Running, completed: 0, total: 9,
         elapsed_ms: 76_000, tokens: 488_100 }];
-    let meta = MessageMeta { images: Vec::new(), id: "workflow:runs".into(), role: ChatRole::Tool, streaming: false,
+    let meta = MessageMeta { summary: None, images: Vec::new(), id: "workflow:runs".into(), role: ChatRole::Tool, streaming: false,
         plan: None, activity: None, runs: Some(runs.clone()) };
     sim.api(UID, SessionId(1), Request::Reply(ReplySet {
         agent: agent.clone(), text: "Workflow runs".into(), message: Some(meta.clone()),

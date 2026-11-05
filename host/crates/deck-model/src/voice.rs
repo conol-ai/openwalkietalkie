@@ -173,6 +173,11 @@ impl Store {
                 PTT_CAP.as_secs() as u32,
             );
             if let Some(ptt) = &mut self.snapshot.voice.ptt { ptt.device_press = press; }
+            // A companion's press shows a recording waveform from the start:
+            // the local recogniser's live words are not what will be sent.
+            if let Some(p) = self.snapshot.voice.ptt.clone().filter(|p| p.companion) {
+                self.recording_line(&p);
+            }
         } else {
             if press.is_some() && self.snapshot.voice.ptt.as_ref().is_none_or(|p| p.device_press != press) { return; }
             self.finish_listen(abort);
@@ -255,6 +260,7 @@ impl Store {
             // sample (V2), ~1 s later on this hardware.
             live: false,
             since: ts, device_press: None,
+            companion: false,
         });
         let at = self.now + std::time::Duration::from_secs(u64::from(max_s));
         self.ptt_cap_at = Some(at);
@@ -265,6 +271,8 @@ impl Store {
         let contextual = self.contextual_strings(agent.as_ref(), card);
         // A deck edge is the one caller with `(Device, None)` (B2).
         let from_deck = matches!(principal, Principal::Device) && session.is_none();
+        let companion = self.companion_transcriber(agent.as_ref(), ctx);
+        if let Some(ptt) = &mut self.snapshot.voice.ptt { ptt.companion = companion.is_some(); }
         self.effects.push(Effect::Audio(AudioCmd::Listen {
             agent: agent.clone(),
             ctx,
@@ -274,16 +282,36 @@ impl Store {
             input,
             locale: self.cfg.locale.clone(),
             contextual,
+            companion,
         }));
+        let by_companion = self.snapshot.voice.ptt.as_ref().is_some_and(|p| p.companion);
         self.emit(
             EventKind::VoiceState,
             principal.clone(),
             serde_json::json!({
                 "state": "arming", "agent": agent, "ctx": ctx, "card": card,
                 "principal": principal, "session": session, "utterance": utterance,
+                "companion": by_companion,
             }),
         );
         self.rev()
+    }
+
+    /// The agent whose owner transcribes this press, if any: a talk or an
+    /// answer addressed to an agent registered with `caps.transcribe:
+    /// "push"`, while `[voice.stt] companion` is on. Naming the deck stays
+    /// local — its words are for the daemon, not for any agent.
+    pub(crate) fn companion_transcriber(
+        &self,
+        agent: Option<&crate::AgentId>,
+        ctx: PttCtx,
+    ) -> Option<crate::AgentId> {
+        if !self.cfg.companion_stt || matches!(ctx, PttCtx::Name) {
+            return None;
+        }
+        let agent = agent?;
+        let caps = self.caps_of(agent);
+        (caps.transcribe == crate::TranscribeCap::Push).then(|| agent.clone())
     }
 
     /// The release (§7.4's `Finalizing`/`Aborting`).
@@ -673,7 +701,11 @@ impl Store {
             return;
         };
         let text = crate::sanitize::collapse(text);
-        self.transcript_line(&p, &text, false);
+        // A companion transcribes this press; the local partial is only the
+        // fallback's progress, so the deck keeps its recording waveform.
+        if !p.companion {
+            self.transcript_line(&p, &text, false);
+        }
         self.emit(
             EventKind::TranscriptPartial,
             p.principal.clone(),
@@ -687,6 +719,16 @@ impl Store {
     /// is the wire encoder's; the **pacing** is the outbox's token bucket
     /// (B16), because a bucket in the reducer would make the reducer
     /// depend on real time.
+    /// The deck's `rec` marker for a companion's press: no words, a waveform.
+    fn recording_line(&mut self, p: &PttInfo) {
+        let slot = p.agent.as_ref().and_then(|id| self.snapshot.agents.get(id)).and_then(|a| a.slot);
+        self.device_op(crate::DeviceOp::Control(crate::Control::Transcript {
+            slot: slot.unwrap_or(crate::Slot(0)),
+            text: String::new(),
+            last: false, press: p.device_press, failed: false, channel_tip: false, rec: true,
+        }));
+    }
+
     fn transcript_line(&mut self, p: &PttInfo, text: &str, last: bool) {
         let slot = p
             .agent
@@ -699,7 +741,7 @@ impl Store {
         self.device_op(crate::DeviceOp::Control(crate::Control::Transcript {
             slot: slot.unwrap_or(crate::Slot(0)),
             text: text.to_string(),
-            last, press: p.device_press, failed: false, channel_tip: false,
+            last, press: p.device_press, failed: false, channel_tip: false, rec: false,
         }));
         if let Some(slot) = slot {
             // Only the **final** transcript gets a window. A partial is
@@ -1050,7 +1092,7 @@ impl Store {
             text: "Transcription failed. Nothing was sent.".into(),
             last: true,
             press: p.device_press,
-            failed: true, channel_tip: false,
+            failed: true, channel_tip: false, rec: false,
         }));
     }
 
@@ -1329,7 +1371,7 @@ mod tests {
                 crate::Control::Transcript {
                     slot: Slot(1),
                     text: "run the tests".into(),
-                    last: false, press: None, failed: false, channel_tip: false,
+                    last: false, press: None, failed: false, channel_tip: false, rec: false,
                 }
             ))]
         );
@@ -1783,7 +1825,7 @@ mod tests {
                 crate::Control::Transcript {
                     slot: crate::Slot(1),
                     text: "deploy staging now".into(),
-                    last: true, press: None, failed: false, channel_tip: false,
+                    last: true, press: None, failed: false, channel_tip: false, rec: false,
                 }
             ))));
 
@@ -2024,7 +2066,7 @@ mod tests {
             Effect::Device(crate::DeviceOp::Control(crate::Control::Transcript {
                 slot: crate::Slot(0),
                 text: text.into(),
-                last, press: None, failed: false, channel_tip: false,
+                last, press: None, failed: false, channel_tip: false, rec: false,
             }))
         };
         assert!(sim.effects.contains(&transcript("copy", false)), "{:?}", sim.effects);
@@ -2068,11 +2110,11 @@ mod tests {
         assert!(sim.store.snapshot().voice.ptt.is_some(), "a stale release cannot end the new press");
         sim.drain();
         sim.apply(final_("first complete message"));
-        assert!(sim.effects.iter().any(|e| matches!(e, Effect::Device(crate::DeviceOp::Control(crate::Control::Transcript { press: Some(41), last: true, failed: false, channel_tip: false, .. })))));
+        assert!(sim.effects.iter().any(|e| matches!(e, Effect::Device(crate::DeviceOp::Control(crate::Control::Transcript { press: Some(41), last: true, failed: false, channel_tip: false, rec: false, .. })))));
         sim.apply(edge(0, 42));
         sim.drain();
         sim.apply(voice(VoiceIn::FinalFailed { code: "engine".into(), message: "failed".into() }));
-        assert!(sim.effects.iter().any(|e| matches!(e, Effect::Device(crate::DeviceOp::Control(crate::Control::Transcript { press: Some(42), last: true, failed: true, channel_tip: false, .. })))));
+        assert!(sim.effects.iter().any(|e| matches!(e, Effect::Device(crate::DeviceOp::Control(crate::Control::Transcript { press: Some(42), last: true, failed: true, channel_tip: false, rec: false, .. })))));
     }
 
     /// B2: a PTT session records **who** started it, including the session
@@ -2248,6 +2290,84 @@ mod tests {
     }
 
     #[test]
+    fn a_press_to_a_transcribing_companion_names_it_and_nothing_else_does() {
+        let listen_companion = |sim: &Sim| {
+            sim.effects.iter().find_map(|e| match e {
+                Effect::Audio(AudioCmd::Listen { companion, .. }) => Some(companion.clone()),
+                _ => None,
+            })
+        };
+        let register = |sim: &mut Sim, transcribe: crate::TranscribeCap| {
+            let mut req = crate::testkit::register("conol chat", None);
+            req.caps.transcribe = transcribe;
+            let res = sim
+                .api(UID, SessionId(1), crate::Request::AgentRegister(req))
+                .expect("register");
+            crate::AgentId(res["agent"].as_str().unwrap().to_string())
+        };
+        let mut sim = Sim::new();
+        let id = register(&mut sim, crate::TranscribeCap::Push);
+        sim.apply(ptt(1, PttCtx::Talk, None, false));
+        assert_eq!(listen_companion(&sim), Some(Some(id.clone())), "a talk press goes to the owner");
+        sim.apply(ptt(0, PttCtx::Talk, None, false));
+        sim.apply(ptt(1, PttCtx::Name, None, false));
+        assert_eq!(listen_companion(&sim), Some(None), "naming the deck is the daemon's own");
+        sim.apply(ptt(0, PttCtx::Name, None, false));
+
+        let mut off = Sim::with(|cfg| cfg.companion_stt = false);
+        register(&mut off, crate::TranscribeCap::Push);
+        off.apply(ptt(1, PttCtx::Talk, None, false));
+        assert_eq!(listen_companion(&off), Some(None), "[voice.stt] companion = false keeps it local");
+
+        let mut plain = Sim::new();
+        register(&mut plain, crate::TranscribeCap::None);
+        plain.apply(ptt(1, PttCtx::Talk, None, false));
+        assert_eq!(listen_companion(&plain), Some(None), "no cap, no offer");
+    }
+
+    #[test]
+    fn a_companion_press_shows_a_recording_and_never_the_local_partials() {
+        let transcripts = |sim: &Sim| -> Vec<crate::Control> {
+            sim.effects.iter().filter_map(|e| match e {
+                Effect::Device(crate::DeviceOp::Control(c @ crate::Control::Transcript { .. })) => Some(c.clone()),
+                _ => None,
+            }).collect()
+        };
+        let press = |act| Command::Device(DeviceLine::Ptt {
+            act, slot: 1, ctx: PttCtx::Talk, card: None, abort: false, press: Some(9),
+        });
+        let mut sim = Sim::new();
+        let mut req = crate::testkit::register("conol chat", None);
+        req.caps.transcribe = crate::TranscribeCap::Push;
+        sim.api(UID, SessionId(1), crate::Request::AgentRegister(req)).unwrap();
+        sim.apply(press(1));
+        assert_eq!(sim.store.snapshot().voice.ptt.as_ref().map(|p| p.companion), Some(true));
+        let arming = sim.events.iter().find(|e| e.kind == EventKind::VoiceState).unwrap();
+        assert_eq!(arming.data["companion"], true);
+        assert!(matches!(
+            transcripts(&sim).as_slice(),
+            [crate::Control::Transcript { rec: true, last: false, press: Some(9), text, .. }] if text.is_empty()
+        ), "the press opens with the recording marker: {:?}", transcripts(&sim));
+        sim.apply(partial("the local guess"));
+        assert!(transcripts(&sim).is_empty(), "the local recogniser's words never reach the deck");
+        assert!(sim.kinds().contains(&EventKind::TranscriptPartial), "API observers still see the partial");
+        sim.apply(press(0));
+        sim.apply(final_("Conol's transcript"));
+        assert!(matches!(
+            transcripts(&sim).as_slice(),
+            [crate::Control::Transcript { rec: false, last: true, text, .. }] if text == "Conol's transcript"
+        ));
+
+        // An ordinary press is unchanged: no marker, live words.
+        let mut plain = Sim::new();
+        plain.register(UID, SessionId(1), "bot", None);
+        plain.apply(press(1));
+        assert!(transcripts(&plain).is_empty());
+        plain.apply(partial("run the"));
+        assert!(matches!(transcripts(&plain).as_slice(), [crate::Control::Transcript { rec: false, last: false, .. }]));
+    }
+
+    #[test]
     fn a_press_cuts_audio_opens_capture_and_the_release_finishes() {
         let mut sim = Sim::new();
         let id = sim.register(UID, SessionId(1), "bot", None);
@@ -2277,6 +2397,7 @@ mod tests {
             input: VoiceInput::Deck,
             locale: "en-US".into(),
             contextual: vec!["bot".into()],
+            companion: None,
         })));
         assert!(sim.effects.contains(&Effect::Timer {
             key: TimerKey::PttCap,

@@ -71,6 +71,9 @@ pub struct PttSession {
     /// 0 = none.
     pub card: u16,
     pub started_ms: u32,
+    /// `ui::meter::count()` at the press: the recording timeline draws the
+    /// bars committed since.
+    pub meter_base: u32,
 }
 
 impl PttSession {
@@ -81,6 +84,7 @@ impl PttSession {
             ctx,
             card,
             started_ms,
+            meter_base: 0,
         }
     }
 }
@@ -850,11 +854,13 @@ fn start_session(ui: &mut UiState, agent: u8, ctx: PttCtx, card: u16, at_ms: u32
     let press = ui.global.ptt_seq;
     let mut session = PttSession::new(agent, ctx, card, at_ms);
     session.press = press;
+    session.meter_base = crate::ui::meter::count();
     ui.global.ptt = Some(session);
     ui.global.ptt_pending = None;
     ui.deck.transcript.clear();
     ui.deck.transcript_final = false;
     ui.deck.transcript_channel_tip = false;
+    ui.deck.transcript_rec = false;
     out.dirty = true;
     out.push_deck(Event::Ptt {
         act: 1,
@@ -1044,7 +1050,7 @@ mod tests {
         assert!(!out.dirty, "no screen, no repaint");
         release(&mut ui, Button::PushToTalk, at + 300);
         assert!(ui.global.ptt_pending.is_some());
-        ui.host(&HostMsg::Transcript { agent: 1, text: crate::deck::text::Text::from_str("done"), last: true, press: Some(1), failed: false, channel_tip: false }, at + 301, &mut Update::new());
+        ui.host(&HostMsg::Transcript { agent: 1, text: crate::deck::text::Text::from_str("done"), last: true, press: Some(1), failed: false, channel_tip: false , rec: false}, at + 301, &mut Update::new());
         ui.tick(at + 300, 0, true, &mut Update::new());
         assert!(!tick(&mut ui, at + 600).dirty, "no overlay, no waveform");
     }
@@ -1453,7 +1459,7 @@ mod tests {
     }
 
     fn transcript(ui: &mut UiState, press: u16, text: &str, last: bool, failed: bool, at: u32) {
-        ui.host(&HostMsg::Transcript { agent: 1, text: crate::deck::text::Text::from_str(text), last, press: Some(press), failed, channel_tip: false }, at, &mut Update::new());
+        ui.host(&HostMsg::Transcript { agent: 1, text: crate::deck::text::Text::from_str(text), last, press: Some(press), failed, channel_tip: false , rec: false}, at, &mut Update::new());
     }
 
     #[test]
@@ -1510,7 +1516,7 @@ mod tests {
         let mut ui = hosted();
         press(&mut ui, Button::PushToTalk, 0);
         let mut out = Update::new();
-        ui.host(&HostMsg::Transcript { agent: 1, text: crate::deck::text::Text::from_str("failed"), last: true, press: Some(1), failed: true, channel_tip: false }, 100, &mut out);
+        ui.host(&HostMsg::Transcript { agent: 1, text: crate::deck::text::Text::from_str("failed"), last: true, press: Some(1), failed: true, channel_tip: false , rec: false}, 100, &mut out);
         assert_eq!(deck_events(&out), [Event::Ptt { act: 0, agent: 1, ctx: PttCtx::Talk, card: 0, abort: true, press: 1 }]);
         assert!(ui.global.ptt.is_none());
         assert_eq!(release(&mut ui, Button::PushToTalk, 200).deck_events().count(), 0);
@@ -1821,7 +1827,7 @@ mod tests {
         assert!(ui.global.ptt.is_none(), "the 60 s cap released it");
         assert!(ui.global.ptt_pending.is_some(), "recognition still owns the screen");
         assert_eq!(ui.current_face().template, Template::Usage);
-        ui.host(&HostMsg::Transcript { agent: 2, text: crate::deck::text::Text::from_str("done"), last: true, press: Some(1), failed: false, channel_tip: false }, 60_010, &mut Update::new());
+        ui.host(&HostMsg::Transcript { agent: 2, text: crate::deck::text::Text::from_str("done"), last: true, press: Some(1), failed: false, channel_tip: false , rec: false}, 60_010, &mut Update::new());
         idle(&mut ui, 60_020, 130_000);
         assert_eq!(ui.current_face().template, Template::Agents, "and idle-home was only deferred");
         let mut ui = hosted();

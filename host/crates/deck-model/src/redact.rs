@@ -120,6 +120,7 @@ pub fn redact_event(event: &Event, scopes: &[Scope], own_agent: bool) -> Option<
                 null_field(message, "plan");
                 message.remove("images");
                 null_field(message, "runs");
+                null_field(message, "summary");
             }
         }
         EventKind::OpConfirmRequested => null_field(data, "order"),
@@ -416,6 +417,21 @@ mod tests {
         assert_eq!(r.data["order"], Value::Null);
         assert_eq!(r.data["card"], 17);
         assert_eq!(r.data["need"], "trusted");
+    }
+
+    #[test]
+    fn public_activity_previews_still_require_content_scope() {
+        let e = event(EventKind::ReplySet, serde_json::json!({
+            "agent":"ag_1", "text":"Running a command", "message":{
+                "id":"activity:1", "role":"tool", "activity":"running",
+                "summary":{"label":"Running a command", "detail":"private-project/build.sh"}
+            }
+        }));
+        let r = redact_event(&e, OBSERVER, false).unwrap();
+        assert!(r.data["message"]["summary"].is_null());
+        assert_eq!(r.data["message"]["activity"], "running");
+        assert_eq!(redact_event(&e, OBSERVER, true).unwrap(), e);
+        assert_eq!(redact_event(&e, &[Scope::ObserveContent], false).unwrap(), e);
     }
 
     #[test]

@@ -150,6 +150,12 @@ pub enum AudioCmd {
         /// card's choice labels, so `"cohdl-api"` and `"Allow always"`
         /// survive recognition instead of coming back as English words.
         contextual: Vec<String>,
+        /// The agent whose owner transcribes this press (`caps.transcribe:
+        /// "push"` and `[voice.stt] companion`): the engine records the
+        /// press and offers it to that owner, keeping its own recogniser as
+        /// the fallback. `None` is the daemon's recogniser alone.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        companion: Option<crate::AgentId>,
     },
     /// Finish (or abort) the capture and dispatch the final transcript.
     Finish {

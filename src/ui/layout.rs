@@ -410,12 +410,13 @@ pub const SETTING_VALUE_RIGHT: i32 = 400;
 pub const SETTING_BAR: Rect = Rect::new(214, 24, 132, 10);
 
 // ---- timer (no mockup) -----------------------------------------------------------------------
-/// Mode tab 0..2 (Stopwatch, Timer): two wide tabs under the header.
+/// Mode tabs (Stopwatch, Timer, Pomodoro) under the header.
+pub const TIMER_TABS: u8 = 3;
 pub const fn timer_tab(index: u8) -> Rect {
-    Rect::new(32 + index as i32 * 210, 68, 206, 34)
+    Rect::new(32 + index as i32 * 140, 68, 136, 34)
 }
 pub fn timer_tab_at(x: i32, y: i32) -> Option<u8> {
-    index_at(2, timer_tab, x, y)
+    index_at(TIMER_TABS, timer_tab, x, y)
 }
 /// The big readout; its digits are `TIMER_DIGIT_H` tall, centred in it.
 pub const TIMER_READOUT: Rect = Rect::new(32, 116, 416, 116);
@@ -436,7 +437,7 @@ pub const TIMER_LAPS: u8 = 3;
 pub const fn timer_lap(index: u8) -> Rect {
     row(242 + index as i32 * 32, 30)
 }
-/// Left (Lap / Reset) and right (Start / Pause / Resume / Restart) buttons.
+/// Left (Lap / Reset) and right (Start / Pause / Resume / Restart / Next) buttons.
 pub const TIMER_SECONDARY: Rect = Rect::new(32, 348, 202, 62);
 pub const TIMER_PRIMARY: Rect = Rect::new(246, 348, 202, 62);
 
@@ -602,7 +603,7 @@ mod tests {
                 with_chrome(
                     [TIMER_READOUT, TIMER_SECONDARY, TIMER_PRIMARY]
                         .into_iter()
-                        .chain(indexed(2, timer_tab))
+                        .chain(indexed(TIMER_TABS, timer_tab))
                         .chain(indexed(TIMER_LAPS, timer_lap))
                         .collect()
                 )
@@ -612,7 +613,7 @@ mod tests {
                 with_chrome(
                     [TIMER_READOUT, TIMER_BAR, TIMER_SECONDARY, TIMER_PRIMARY]
                         .into_iter()
-                        .chain(indexed(2, timer_tab))
+                        .chain(indexed(TIMER_TABS, timer_tab))
                         .chain(indexed(TIMER_PRESETS, timer_preset))
                         .collect()
                 )
@@ -705,7 +706,7 @@ mod tests {
         check(SETTINGS_ROWS, settings_row, settings_row_at);
         check(MANAGER_VISIBLE, manager_slot, manager_card_at);
         check(GALLERY_ROWS, gallery_row, gallery_row_at);
-        check(2, timer_tab, timer_tab_at);
+        check(TIMER_TABS, timer_tab, timer_tab_at);
         check(TIMER_PRESETS, timer_preset, timer_preset_at);
         check(2, confirm_button, confirm_button_at);
         check(DRAWER_VISIBLE, drawer_row, drawer_row_at);

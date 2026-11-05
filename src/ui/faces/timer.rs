@@ -1,4 +1,4 @@
-//! Timer face: TIMER header, a two-tab strip (Stopwatch, Timer), a big
+//! Timer face: TIMER header, three tabs (Stopwatch, Timer, Pomodoro), a big
 //! seven-segment readout, then per mode either the stopwatch's newest laps or
 //! the timer's progress bar and its length presets (a status line while it
 //! runs), and the two action buttons over the hint bar.
@@ -15,7 +15,7 @@ use crate::deck::text::Text;
 use crate::display::Band;
 use crate::ui::layout::{self, Rect};
 use crate::ui::signature::{Hasher, SigBuilder};
-use crate::ui::state::timer::{Action, Mode, PRESETS_S, PRESET_ID, PRIMARY_ID, SECONDARY_ID, TAB_ID};
+use crate::ui::state::timer::{Action, Mode, Phase, PRESETS_S, PRESET_ID, PRIMARY_ID, SECONDARY_ID, TAB_ID};
 use crate::ui::state::UiState;
 use crate::ui::{font, font::Align, font::Font, kit, theme};
 
@@ -104,6 +104,7 @@ fn current(ui: &UiState) -> Readout {
             readout(seconds, true, (seconds < 10 * 3600).then_some(ms / 100))
         }
         Mode::Countdown => readout(view.remaining_ms(ui.now_ms).div_ceil(1000), false, None),
+        Mode::Pomodoro => readout(view.pomodoro.remaining_ms(ui.now_ms).div_ceil(1000), false, None),
     }
 }
 
@@ -117,6 +118,17 @@ fn readout_color(ui: &UiState) -> u32 {
         Mode::Countdown if view.countdown.running() && view.remaining_ms(ui.now_ms) <= WARN_MS => theme::AMBER,
         Mode::Countdown if view.countdown.running() || view.countdown_idle() => theme::TEXT_PRIMARY,
         Mode::Countdown => theme::TEXT_SECONDARY,
+        Mode::Pomodoro if view.pomodoro.done => theme::GREEN,
+        Mode::Pomodoro if view.pomodoro.run.running() && view.pomodoro.remaining_ms(ui.now_ms) <= WARN_MS => theme::AMBER,
+        Mode::Pomodoro if view.pomodoro.run.running() || view.pomodoro.idle() => phase_color(view.pomodoro.phase),
+        Mode::Pomodoro => theme::TEXT_SECONDARY,
+    }
+}
+
+fn phase_color(phase: Phase) -> u32 {
+    match phase {
+        Phase::Focus => theme::TEXT_PRIMARY,
+        Phase::ShortBreak | Phase::LongBreak => theme::GREEN,
     }
 }
 
@@ -291,6 +303,8 @@ fn tab_dot(ui: &UiState, mode: Mode) -> Option<u32> {
         Mode::Stopwatch => view.stopwatch.running().then_some(theme::GREEN),
         Mode::Countdown if view.done => Some(theme::RED),
         Mode::Countdown => view.countdown.running().then_some(theme::GREEN),
+        Mode::Pomodoro if view.pomodoro.done => Some(theme::AMBER),
+        Mode::Pomodoro => view.pomodoro.run.running().then_some(theme::GREEN),
     }
 }
 
@@ -304,7 +318,7 @@ fn draw_tabs(band: &mut Band, ui: &UiState) {
         draw_chip(band, rect, mode.label(), selected, ui.timer.pressed == Some((TAB_ID + index as u16) as u8));
         if let Some(color) = tab_dot(ui, mode).filter(|_| !selected) {
             let (_, cy) = rect.center();
-            kit::dot(band, rect.right() - 20, cy, 4, color);
+            kit::dot(band, rect.right() - 10, cy, 3, color);
         }
     }
 }
@@ -369,11 +383,74 @@ fn draw_countdown_detail(band: &mut Band, ui: &UiState) {
     font::draw(band, Font::Row, x + lead_w, baseline, text.as_str(), theme::TEXT_ROW, Some(theme::CANVAS), lane.width() - lead_w, Align::Left);
 }
 
+/// Four completed-focus markers and the next stage of the cycle.
+fn draw_pomodoro_detail(band: &mut Band, ui: &UiState) {
+    let view = &ui.timer.pomodoro;
+    let (percent, color) = pomodoro_bar(ui);
+    kit::bar(band, layout::TIMER_BAR, percent, color);
+    if !kit::visible(band, DETAIL_REST) {
+        return;
+    }
+    let mut text = Text::<48>::new();
+    text.push_str(view.phase.label());
+    if view.phase == Phase::Focus {
+        text.push_char(' ');
+        let session = if view.done { view.completed } else { view.completed + 1 };
+        text.push_char((b'0' + session.min(4)) as char);
+        text.push_str(" of 4");
+    }
+    font::draw(band, Font::Row, 38, 285, text.as_str(), theme::TEXT_ROW, Some(theme::CANVAS), 250, Align::Left);
+    for index in 0..4 {
+        let rect = Rect::new(326 + index * 28, 272, 12, 12);
+        if index < view.completed as i32 {
+            kit::round(band, rect, 6, theme::GREEN);
+        } else {
+            let active = view.phase == Phase::Focus && index == view.completed as i32;
+            kit::outline(band, rect, 6, if active { theme::TEXT_ROW } else { theme::OUTLINE }, 1);
+        }
+    }
+    text.clear();
+    if view.done {
+        text.push_str("Next: ");
+        let next = view.next_phase();
+        text.push_str(next.label());
+        text.push_str(" \u{00B7} ");
+        let mut length = Text::<16>::new();
+        preset_label(next.duration_ms() / 1000, &mut length);
+        text.push_str(length.as_str());
+    } else if view.idle() {
+        text.push_str("25 min focus \u{00B7} 5 min break");
+    } else {
+        if !view.run.running() {
+            text.push_str("Paused \u{00B7} ");
+        }
+        text.push_str("Next: ");
+        text.push_str(view.next_phase().label());
+    }
+    font::draw(band, Font::Small, DETAIL_REST.center().0, 321, text.as_str(), if view.done { theme::GREEN } else { theme::TEXT_LABEL }, Some(theme::CANVAS), DETAIL_REST.width() - 12, Align::Center);
+}
+
+fn pomodoro_bar(ui: &UiState) -> (u8, u32) {
+    let view = &ui.timer.pomodoro;
+    if view.done {
+        return (100, theme::GREEN);
+    }
+    let left = view.remaining_ms(ui.now_ms) as u64 * 100 / view.phase.duration_ms() as u64;
+    let color = if !view.run.running() {
+        theme::GRAY
+    } else if view.phase == Phase::Focus {
+        theme::BLUE
+    } else {
+        theme::GREEN
+    };
+    (left.min(100) as u8, color)
+}
+
 /// (fill, label colour) of the right button.
 fn primary_colors(action: Action) -> (u32, u32) {
     match action {
         Action::Pause => (theme::AMBER, theme::CANVAS),
-        Action::Start | Action::Resume | Action::Restart => (theme::GREEN, theme::CANVAS),
+        Action::Start | Action::Resume | Action::Restart | Action::Next => (theme::GREEN, theme::CANVAS),
         Action::Lap | Action::Reset => (theme::CHIP_FILL, theme::TEXT_PRIMARY),
     }
 }
@@ -435,6 +512,7 @@ const fn action_hint(action: Action) -> &'static str {
         Action::Restart => "restart",
         Action::Lap => "lap",
         Action::Reset => "reset",
+        Action::Next => "next",
     }
 }
 
@@ -448,6 +526,7 @@ pub fn draw(band: &mut Band, ui: &UiState, instance: u8) {
     match ui.timer.mode {
         Mode::Stopwatch => draw_laps(band, ui),
         Mode::Countdown => draw_countdown_detail(band, ui),
+        Mode::Pomodoro => draw_pomodoro_detail(band, ui),
     }
     draw_buttons(band, ui);
     let (hints, len) = hints(ui);
@@ -470,6 +549,12 @@ fn hash_detail(ui: &UiState, h: &mut Hasher) {
             let (percent, color) = bar(ui);
             h.u8(percent).u32(color).bool(view.countdown_idle()).bool(view.done).bool(view.countdown.running());
             h.u32(view.length_ms).opt_u32(view.pressed.map(u32::from));
+        }
+        Mode::Pomodoro => {
+            let (percent, color) = pomodoro_bar(ui);
+            let pomodoro = &view.pomodoro;
+            h.u8(percent).u32(color).u8(pomodoro.phase as u8).u8(pomodoro.completed);
+            h.bool(pomodoro.done).bool(pomodoro.run.running()).bool(pomodoro.idle());
         }
     }
 }

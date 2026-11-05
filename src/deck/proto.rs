@@ -251,7 +251,7 @@ const REPLY: HostMsg = HostMsg::Reply {
 const TRANSCRIPT: HostMsg = HostMsg::Transcript {
     agent: 0,
     text: Text::new(),
-    last: false, press: None, failed: false, channel_tip: false,
+    last: false, press: None, failed: false, channel_tip: false, rec: false,
 };
 const WORKSPACES: HostMsg = HostMsg::Workspaces {
     active: 0,
@@ -485,7 +485,7 @@ fn parse_into(line: &[u8], out: &mut HostMsg) -> Result<(), ErrWhy> {
         }
         b"transcript" => {
             *out = TRANSCRIPT;
-            let HostMsg::Transcript { agent, text, last, press, failed, channel_tip } = out else {
+            let HostMsg::Transcript { agent, text, last, press, failed, channel_tip, rec } = out else {
                 return Err(ErrWhy::Parse);
             };
             // No `agent`: the words of a session with nobody on the strip
@@ -496,6 +496,7 @@ fn parse_into(line: &[u8], out: &mut HostMsg) -> Result<(), ErrWhy> {
             *press = object.get("p")?.map(|v| v.u16()).transpose()?;
             *failed = flag(&object, "failed")?;
             *channel_tip = flag(&object, "channel_tip")?;
+            *rec = flag(&object, "rec")?;
         }
         b"focus" => {
             let agent = agent_id(object.need("agent")?)?;
@@ -1071,7 +1072,7 @@ mod tests {
         ));
         assert!(matches!(
             *parsed(r#"{"m":"transcript","agent":4,"text":"hi","final":true}"#).unwrap(),
-            HostMsg::Transcript { agent: 4, text, last: true, press: None, failed: false, channel_tip: false, } if text == "hi"
+            HostMsg::Transcript { agent: 4, text, last: true, press: None, failed: false, channel_tip: false, rec: false, } if text == "hi"
         ));
         assert!(matches!(
             *parsed(r#"{"m":"transcript","agent":4,"text":"hi"}"#).unwrap(),
@@ -1080,7 +1081,7 @@ mod tests {
         // Nobody's slot: a name or a key label being dictated.
         assert!(matches!(
             *parsed(r#"{"m":"transcript","text":"deploy"}"#).unwrap(),
-            HostMsg::Transcript { agent: 0, text, last: false, press: None, failed: false, channel_tip: false, } if text == "deploy"
+            HostMsg::Transcript { agent: 0, text, last: false, press: None, failed: false, channel_tip: false, rec: false, } if text == "deploy"
         ));
         assert_eq!(parsed(r#"{"m":"transcript","agent":0,"text":"x"}"#).unwrap_err(), ErrWhy::Range);
         assert_eq!(

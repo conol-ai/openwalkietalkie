@@ -53,6 +53,7 @@ pub mod engine;
 pub mod lanes;
 #[cfg(target_os = "macos")]
 pub mod mainloop;
+pub mod companion;
 pub mod route;
 pub mod cloud;
 pub mod sidecar;
@@ -236,6 +237,9 @@ pub struct AudioConfig {
     /// core builds the local voice ([`kokoro`]) over Apple's and keeps a
     /// handle for `tts.status`. `None` is Apple's.
     pub local_tts: Option<std::sync::Arc<dyn traits::TtsEngine>>,
+    /// The offers a transcribing companion answers (`caps.transcribe`),
+    /// shared with the core. `None` keeps every press local.
+    pub companion: Option<std::sync::Arc<companion::CompanionHub>>,
 }
 
 impl std::fmt::Debug for AudioConfig {
@@ -266,6 +270,7 @@ impl Default for AudioConfig {
             cloud: None,
             stt: None,
             local_tts: None,
+            companion: None,
         }
     }
 }
@@ -389,6 +394,9 @@ pub fn spawn(cfg: &AudioConfig) -> AudioHandle {
         VoiceTransport::Coreaudio => coreaudio_engine(cfg, lanes, &events_tx, &routes_tx),
     };
     engine.set_stt(cfg.stt.clone().unwrap_or_else(|| Arc::new(apple::AppleStt::new())));
+    if let Some(hub) = cfg.companion.clone() {
+        engine.set_companion(hub);
+    }
     engine.set_tts(tts);
 
     // §4.9's `voice.engines`, read once and pushed (M5). `apple::engines()`
@@ -549,6 +557,10 @@ pub enum FromAudio {
         stt: traits::EngineInfo,
         tts: traits::EngineInfo,
     },
+    /// A press for a transcribing companion was released and its
+    /// recording is in the [`companion::CompanionHub`] under this id: the
+    /// core offers it to the agent's owner (`agent.transcribe`).
+    Transcribe { id: u64 },
 }
 
 impl FromAudio {
@@ -557,7 +569,7 @@ impl FromAudio {
     pub fn voice(self) -> Option<VoiceIn> {
         match self {
             FromAudio::Voice(v) => Some(v),
-            FromAudio::Engines { .. } => None,
+            FromAudio::Engines { .. } | FromAudio::Transcribe { .. } => None,
         }
     }
 }

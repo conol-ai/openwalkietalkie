@@ -191,6 +191,31 @@ Claude supplies eligible grants in its optional usage response; Codex supplies
 reset-credit details through the app-server. Missing eligibility or expiry
 data produces no tip. Redemption remains in the provider's app.
 
+### Timer
+
+Add Timer through the face manager's gallery. Its three tabs are Stopwatch,
+Timer and Pomodoro; LEFT/RIGHT moves one tab at a time with hard ends, and
+tapping a tab selects it. Each clock keeps running when another tab or face
+is shown, an overlay is open, or the screen is dark. A dot marks a running or
+finished clock on another tab. A running clock keeps idle-home on this face;
+the screen still dims and sleeps normally.
+
+- **Stopwatch:** ENTER starts, pauses or resumes. CANCEL records a lap while
+  running (the newest three are shown), or resets a paused stopwatch.
+- **Timer:** SCROLL changes its length while idle, or tap a preset. ENTER
+  starts, pauses, resumes or restarts a finished countdown; CANCEL resets.
+- **Pomodoro:** a 25-minute focus session is followed by a 5-minute short
+  break. After four completed focus sessions, the break lasts 15 minutes.
+  ENTER starts, pauses or resumes. When a phase finishes it stays at zero;
+  ENTER / Next starts the next focus session or break. CANCEL resets the
+  whole cycle to the first focus session. Focus progress and the next phase
+  appear below the readout.
+
+Finished countdowns and Pomodoro phases wake the screen and raise a toast.
+Tapping it opens the Timer face on the corresponding tab. The timers run
+locally without a host, and reset when the device restarts. CANCEL with
+nothing to reset goes home.
+
 ### Settings
 
 The list grammar of every other face: SCROLL selects, ENTER acts. SCROLL moves

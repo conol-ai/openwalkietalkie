@@ -76,6 +76,7 @@ fn self_declared_register(name: &str) -> AgentRegister {
             // it is refused there. `push` is what it can have.
             order: OrderCap::Push,
             focus: false,
+            transcribe: Default::default(),
         },
         slot_hint: None,
         voice: None,

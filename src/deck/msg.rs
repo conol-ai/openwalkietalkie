@@ -570,6 +570,9 @@ pub enum HostMsg {
         failed: bool,
         /// Show the Claude Channels setup hint during this device PTT session.
         channel_tip: bool,
+        /// A companion app transcribes this press: show a recording
+        /// waveform, never live words (they would be the host's local guess).
+        rec: bool,
     },
     Focus {
         agent: u8,

@@ -138,7 +138,7 @@ fn host_msg(rng: &mut Rng, out: &mut HostMsg) {
         8 => HostMsg::Transcript {
             agent,
             text: rng.text(),
-            last: rng.chance(30), press: None, failed: false, channel_tip: false,
+            last: rng.chance(30), press: None, failed: false, channel_tip: false, rec: false,
         },
         9 => HostMsg::Focus {
             agent,

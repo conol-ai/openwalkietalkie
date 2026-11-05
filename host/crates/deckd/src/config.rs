@@ -715,6 +715,13 @@ pub struct Stt {
     /// answer, so the question is asked once per Mac and not once per
     /// launch.
     pub prompted: bool,
+    /// Let a native companion that registered `caps.transcribe: "push"`
+    /// (Conol) transcribe the presses addressed to its own agents with its
+    /// own recogniser. The audio of such a press goes to that app — and
+    /// from there to its service — instead of staying on this Mac; the
+    /// local recogniser still runs and answers whenever the companion
+    /// cannot. Read at every press.
+    pub companion: bool,
 }
 
 impl Default for Stt {
@@ -727,6 +734,7 @@ impl Default for Stt {
             language: "auto".into(),
             threads: 0,
             prompted: false,
+            companion: true,
         }
     }
 }

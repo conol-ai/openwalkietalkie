@@ -59,6 +59,11 @@ pub const METHODS: &[MethodSpec] = &[
     m("agent.card.clear", Some(Scope::Agent), true),
     m("agent.reply", Some(Scope::Agent), true),
     m("agent.wait", Some(Scope::Agent), false),
+    // `caps.transcribe`: the owner pages a press's recording out and
+    // answers it with text. Core-answered: the recording lives in the
+    // audio engine's hub, not in the reducer.
+    m("agent.transcribe.audio", Some(Scope::Agent), false),
+    m("agent.transcribe.result", Some(Scope::Agent), false),
     m("op.answer", Some(Scope::Operate), true),
     m("op.order", Some(Scope::Operate), true),
     m("op.focus", Some(Scope::Operate), true),

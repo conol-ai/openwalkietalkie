@@ -1893,6 +1893,7 @@ mod tests {
             input: VoiceInput::Deck,
             locale: "en-US".into(),
             contextual: Vec::new(),
+            companion: None,
         }
     }
 

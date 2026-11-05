@@ -320,7 +320,7 @@ impl Shell {
             ("Bash", "{\"command\":\"cargo test workflow\"}", "Running workflow checks…")]
             .into_iter().enumerate().map(|(i, (name, input, output))| {
                 let running = !complete && i == 2;
-                ChatMessage { message: MessageMeta { images: Vec::new(), id: format!("preview-tool-{i}"), role: ChatRole::Tool, streaming: running,
+                ChatMessage { message: MessageMeta { summary: None, images: Vec::new(), id: format!("preview-tool-{i}"), role: ChatRole::Tool, streaming: running,
                     activity: Some(if running { ActivityStatus::Running } else { ActivityStatus::Completed }), runs: None, plan: None },
                     text: format!("**{name}**\n\n```json\n{input}\n```\n\n{output}"), at: crate::present::now() }
             }).collect();
@@ -344,7 +344,7 @@ impl Shell {
         if matches!(scene, Scene::Images | Scene::ImageExpanded) {
             agent.name = "Image preview".into(); agent.title = Some("Review the device screen".into());
             agent.state = AgentState::Ready; agent.workflow = None; agent.workflow_runs.clear();
-            agent.messages = vec![ChatMessage { message:MessageMeta { images:vec![deck_model::ChatImage { id:"preview-image".into(), label:"Device screen.png".into(), width:480, height:480 }], id:"preview-message".into(), role:ChatRole::Assistant, streaming:false, plan:None, runs:None, activity:None }, text:"Here is the device screen.".into(), at:crate::present::now() }];
+            agent.messages = vec![ChatMessage { message:MessageMeta { summary: None, images:vec![deck_model::ChatImage { id:"preview-image".into(), label:"Device screen.png".into(), width:480, height:480 }], id:"preview-message".into(), role:ChatRole::Assistant, streaming:false, plan:None, runs:None, activity:None }, text:"Here is the device screen.".into(), at:crate::present::now() }];
             self.deck.images = crate::images::View::preview(id.clone(), scene == Scene::ImageExpanded);
         }
         snapshot.agents.insert(id, agent);

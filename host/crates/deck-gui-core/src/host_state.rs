@@ -1041,6 +1041,7 @@ impl HostState {
                     utterance: string_of(data, "utterance").unwrap_or_default(),
                     live: state == "listening",
                     since: event.ts, device_press: None,
+                    companion: data.get("companion").and_then(Value::as_bool).unwrap_or(false),
                 });
             }
             "finalizing" | "aborted" | "ended" => {

@@ -525,6 +525,7 @@ pub fn parse_host_line(bytes: &[u8]) -> Result<HostLine, DecodeError> {
             press: o.uint("p", u64::from(u16::MAX))?.map(|n| n as u16),
             failed: o.flag("failed")?,
             channel_tip: o.flag("channel_tip")?,
+            rec: o.flag("rec")?,
         },
         "focus" => HostLine::Focus {
             slot: slot(o.need_u8("agent", 8)?)?,
@@ -1013,12 +1014,12 @@ mod tests {
             HostLine::Transcript {
                 slot: 1,
                 text: "t".into(),
-                last: true, press: None, failed: false, channel_tip: false,
+                last: true, press: None, failed: false, channel_tip: false, rec: false,
             },
             HostLine::Transcript {
                 slot: 1,
                 text: "t".into(),
-                last: false, press: None, failed: false, channel_tip: false,
+                last: false, press: None, failed: false, channel_tip: false, rec: false,
             },
             HostLine::Focus {
                 slot: 1,

@@ -221,6 +221,20 @@ The Mac app has no additional page. System follows Usage in a fresh default stri
 for a saved layout, double-tap Shift → **+** → **System** to add it. Matching
 firmware and `deckd` are required; telemetry is not sent to older decks.
 
+### Timer and Pomodoro
+
+Add **Timer** from the face manager's **+** gallery for a stopwatch, countdown
+and **Pomodoro** timer. Use Left/Right or tap the tabs to choose a mode;
+Enter starts, pauses or resumes. The countdown's wheel and preset buttons
+set its length while idle.
+
+Pomodoro alternates **25 minutes of focus** with **5-minute breaks**, with a
+**15-minute break after four focus sessions**. Each completed phase waits
+for **Next / Enter** before the next begins. Cancel resets the cycle. The
+clocks keep running on other pages and while the screen sleeps; completion
+wakes the screen and shows a toast that opens the right tab when tapped.
+They work without a computer and last until the device restarts.
+
 ### Arcade
 
 Three offline games with original pixel art and synthesized 8-bit music:

@@ -188,6 +188,9 @@ pub struct Core {
     /// loading a package the moment it is on disk.
     #[cfg(target_os = "macos")]
     pub kokoro: Option<Arc<crate::audio::kokoro::KokoroTts>>,
+    /// Recordings offered to `caps.transcribe` companions, shared with the
+    /// audio engine (`audio::companion`).
+    pub transcribe: Arc<crate::audio::companion::CompanionHub>,
     /// The desktop seam (§5.5, week 5). `DesktopHandle::none()` until
     /// something installs a worker, which is what `--no-device` and every
     /// unit test leave in place: `Effect::Desktop` is logged and forgotten
@@ -313,6 +316,7 @@ impl Core {
             tts_install: crate::download::Installer::default(),
             #[cfg(target_os = "macos")]
             kokoro: None,
+            transcribe: crate::audio::companion::CompanionHub::new(),
             desktop: DesktopHandle::none(),
             desktop_dropped: 0,
             automation_denied: None,
@@ -400,6 +404,7 @@ impl Core {
         cfg.announce_questions = config.voice.announce_questions;
         cfg.voice_pool = config.voice_pool();
         cfg.announce_max_chars = config.voice.tts.announce_max_chars;
+        cfg.companion_stt = config.voice.stt.companion;
         self.store.reconfigure(&cfg);
         // The cloud synthesiser's keys are read live from this cell, which
         // is why none of them is a restart key.
@@ -977,6 +982,9 @@ impl Core {
                 tracing::debug!(session = %id, mail = kept, "mail orphaned: session closed");
             }
             tracing::debug!(session = %id, sessions = self.sessions.len(), "session closed");
+            // A companion that was transcribing a press is not going to
+            // answer: the local final is used at once, not at the budget.
+            self.transcribe.fail_session(id);
             self.step(Command::SessionClosed(id), now);
         }
     }
@@ -1786,7 +1794,7 @@ impl Core {
                         self.send_op(DeviceOp::Control(Control::Transcript {
                             slot,
                             text,
-                            last: true, press: None, failed: false, channel_tip: false,
+                            last: true, press: None, failed: false, channel_tip: false, rec: false,
                         }));
                     }
                 }
@@ -1875,7 +1883,7 @@ impl Core {
                 if let Some(slot) = self.store.snapshot().agents.get(id).and_then(|a| a.slot) {
                     self.send_op(DeviceOp::Control(Control::Transcript {
                         slot, text: String::new(), last: false, press: Some(*press),
-                        failed: false, channel_tip: false,
+                        failed: false, channel_tip: false, rec: false,
                     }));
                 }
             }
@@ -2225,7 +2233,53 @@ impl Core {
                 tracing::info!(stt = %stt.name, tts = %tts.name, "audio: engines up");
                 self.engines = Some((stt, tts));
             }
+            FromAudio::Transcribe { id } => self.offer_transcription(id),
         }
+    }
+
+    /// `FromAudio::Transcribe`: hand a released press's recording to the
+    /// connection that owns its agent, as an `agent.transcribe` event sent
+    /// to that connection alone (like `agent.order`, and never on the bus:
+    /// it is about one agent's own audio). Nobody to hand it to fails the
+    /// offer, and the engine uses its local final straight away.
+    pub fn offer_transcription(&mut self, id: u64) {
+        use crate::audio::companion::{offer_id, PAGE, WAV_RATE};
+        let Some(info) = self.transcribe.info(id) else { return };
+        let snapshot = self.store.snapshot();
+        let owner = snapshot.agents.get(&info.agent).and_then(|agent| {
+            (agent.caps.transcribe == deck_model::TranscribeCap::Push).then_some(agent.owner.session)
+        });
+        let live = owner.filter(|session| {
+            matches!(self.sessions.get(*session).map(|e| &e.kind), Some(SessionKind::Live { .. }))
+        });
+        let Some(session) = live else {
+            tracing::debug!(agent = %info.agent.0, "companion transcription: no live owner");
+            self.transcribe.fail(id, "no live owner");
+            return;
+        };
+        if !self.transcribe.bind(id, session) {
+            return;
+        }
+        let line = crate::api::rpc::notification(
+            "event",
+            serde_json::json!({
+                "type": "agent.transcribe",
+                "rev": snapshot.rev,
+                "ts": wall_now(),
+                "data": {
+                    "agent": info.agent,
+                    "transcription": offer_id(id),
+                    "mime": "audio/wav",
+                    "rate": WAV_RATE,
+                    "ms": info.ms,
+                    "bytes": info.bytes,
+                    "page": PAGE,
+                    "locale": snapshot.voice.stt.locale,
+                },
+            }),
+        );
+        tracing::info!(agent = %info.agent.0, ms = info.ms, bytes = info.bytes, "companion transcription: offered");
+        self.notify(session, line);
     }
 
     /// The `(stt, tts)` the audio side last reported (`voice.engines`).
@@ -2498,6 +2552,7 @@ pub fn run(opts: RunOptions) -> Result<i32, CoreError> {
     cfg.announce_questions = opts.config.voice.announce_questions;
     cfg.voice_pool = opts.config.voice_pool();
     cfg.announce_max_chars = opts.config.voice.tts.announce_max_chars;
+    cfg.companion_stt = opts.config.voice.stt.companion;
     cfg.persisted = state.persisted();
     let store = Store::new(cfg);
     // The deck's voice link (§7): one handle, two ports. Its Bluetooth port
@@ -2563,6 +2618,7 @@ pub fn run(opts: RunOptions) -> Result<i32, CoreError> {
             cloud: Some(core.tts_settings.clone()),
             stt: Some(whisper),
             local_tts: Some(kokoro),
+            companion: Some(core.transcribe.clone()),
         }));
     }
     // The desktop side (§5.5). `--no-device` leaves `DesktopHandle::none()`
@@ -2859,6 +2915,7 @@ pub(crate) mod testkit {
                 answer: AnswerCap::Poll,
                 order: OrderCap::Poll,
                 focus: false,
+                transcribe: Default::default(),
             },
             slot_hint: None,
             voice: None,
@@ -2987,7 +3044,7 @@ mod tests {
             ops.try_iter().for_each(drop);
             for (press, failed) in [(5, false), (4, false), (5, true)] {
                 c.send_op(DeviceOp::Control(Control::Transcript { slot: Slot(1), text: "hello".into(),
-                    last: false, press: Some(press), failed, channel_tip: false }));
+                    last: false, press: Some(press), failed, channel_tip: false , rec: false}));
                 assert!(matches!(ops.recv().unwrap(), DeviceOp::Control(Control::Transcript { channel_tip, .. })
                     if channel_tip == (kind == Kind::Claude && !ready && press == 5 && !failed)));
             }
@@ -4452,6 +4509,74 @@ mod tests {
     /// a notification on its connection when it pushes, a mail its
     /// `agent.wait` picks up when it polls — and never reach the bus, where
     /// only `order.dispatched`/`card.snoozed` are visible.
+    #[test]
+    fn a_transcription_offer_reaches_its_owner_alone_and_only_it_may_answer() {
+        use base64::Engine;
+        let dir = temp("transcribe-offer");
+        let (mut c, _ops, _lines, _debug) = detached(&dir);
+        let t0 = Instant::now();
+        let (owner, mut outbound) = live(&mut c, t0);
+        let (other, mut quiet) = live(&mut c, t0);
+        let mut reg = testkit::register("conol chat", Some("conol:chat"));
+        reg.caps.order = deck_model::OrderCap::Push;
+        reg.caps.transcribe = deck_model::TranscribeCap::Push;
+        let agent: AgentId = serde_json::from_value(
+            c.api_call(Principal::Uid(501), owner, false, Request::AgentRegister(reg), t0).unwrap()["agent"].clone(),
+        )
+        .unwrap();
+        let call = |c: &mut Core, session: SessionId, method: &str, params: serde_json::Value| {
+            let ctx = CallCtx {
+                principal: Principal::Uid(501),
+                session,
+                scopes: vec![deck_model::Scope::Agent],
+                trusted: false,
+                own: std::collections::BTreeSet::new(),
+            };
+            c.call(ctx, method, params, t0).result
+        };
+
+        let wav = crate::audio::companion::wav16(&vec![0.1; 120_000], 16_000);
+        let id = c.transcribe.offer(agent.clone(), wav.clone(), 7_500);
+        c.on_from_audio(FromAudio::Transcribe { id }, t0);
+        let Outbound::Line(line) = outbound.try_recv().expect("the owner was offered the press") else {
+            panic!("an offer is a notification");
+        };
+        assert!(quiet.try_recv().is_err(), "nobody else hears of it");
+        let line: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(line["params"]["type"], "agent.transcribe");
+        let data = &line["params"]["data"];
+        assert_eq!((data["agent"].as_str(), data["mime"].as_str(), data["ms"].as_u64()), (Some(agent.0.as_str()), Some("audio/wav"), Some(7_500)));
+        let tr = data["transcription"].clone();
+
+        // Paged out to the owner, refused to anyone else.
+        assert!(call(&mut c, other, "agent.transcribe.audio", serde_json::json!({"transcription": tr})).is_err());
+        let mut got = Vec::new();
+        while got.len() < wav.len() {
+            let page = call(&mut c, owner, "agent.transcribe.audio", serde_json::json!({"transcription": tr, "offset": got.len()})).unwrap();
+            assert!(serde_json::to_vec(&page).unwrap().len() < 256 * 1024, "a page fits the API's line");
+            got.extend(base64::engine::general_purpose::STANDARD.decode(page["data"].as_str().unwrap()).unwrap());
+        }
+        assert_eq!(got, wav);
+        assert!(call(&mut c, other, "agent.transcribe.result", serde_json::json!({"transcription": tr, "text": "hijack"})).is_err());
+        call(&mut c, owner, "agent.transcribe.result", serde_json::json!({"transcription": tr, "text": "ship it"})).unwrap();
+        assert!(
+            call(&mut c, owner, "agent.transcribe.result", serde_json::json!({"transcription": tr, "text": "again"})).is_err(),
+            "the first answer stands"
+        );
+
+        // A disconnected owner fails its offer at once.
+        let second = c.transcribe.offer(agent.clone(), wav, 7_500);
+        c.on_from_audio(FromAudio::Transcribe { id: second }, t0);
+        c.close_session(owner, t0);
+        let tr2 = crate::audio::companion::offer_id(second);
+        assert!(call(&mut c, owner, "agent.transcribe.result", serde_json::json!({"transcription": tr2, "text": "late"})).is_err());
+
+        // No live owner with the cap: nothing is sent, the offer fails.
+        let third = c.transcribe.offer(AgentId("ag_missing".into()), vec![0; 64], 1_000);
+        c.on_from_audio(FromAudio::Transcribe { id: third }, t0);
+        assert!(quiet.try_recv().is_err());
+    }
+
     #[test]
     fn an_order_and_a_snooze_reach_the_owner_alone_by_push_or_poll() {
         let dir = temp("order-snooze");

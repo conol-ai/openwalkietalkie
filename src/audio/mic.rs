@@ -97,7 +97,10 @@ async fn capture(
         };
         match with_timeout(READ_TIMEOUT, session.read(&mut pcm[..samples])).await {
             Ok(Ok(())) => {
-                peak = pcm[..samples].iter().fold(peak, |p, s| p.max(s.saturating_abs()));
+                let frame_peak = pcm[..samples].iter().fold(0i16, |p, s| p.max(s.saturating_abs()));
+                peak = peak.max(frame_peak);
+                // The PTT overlay's recording waveform follows this.
+                crate::ui::meter::push(frame_peak as u16, crate::control::now_ms());
                 #[cfg(feature = "audio-debug")]
                 if local {
                     if voice::bench::record(&pcm[..samples]) {

@@ -170,6 +170,7 @@ impl Adapter for Codex {
                 // thread), and §4.15 says an agent that does not claim it
                 // cannot be focused.
                 focus: ctx.tty.is_some(),
+                transcribe: Default::default(),
             },
             slot_hint: None,
             voice: None,

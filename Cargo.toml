@@ -1,6 +1,6 @@
 [package]
 name = "openwalkietalkie-fw"
-version = "0.11.0"
+version = "0.12.0"
 edition = "2021"
 license = "MIT"
 description = "OpenWalkieTalkie firmware (SiFli SF32LB52x, embassy)"
@@ -98,6 +98,10 @@ audio-open = []
 # reading and writing the audio blocks' registers while a stream plays
 # (src/link/debug.rs). Never ship it.
 audio-debug = []
+# Bench only: `dbg.panel` reads the display's registers back, samples its
+# TE line and sends raw commands (src/display/diag.rs), for a panel that
+# stays dark. Never ship it.
+panel-debug = []
 # Bench: expose read-only USB audio integrity counters (48 kHz is standard).
 audio-usb-rate-test = []
 # Temporary migration app, Rev A/B: USB-only `boot.*` replaces recovery.

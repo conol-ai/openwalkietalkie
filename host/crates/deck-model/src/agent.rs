@@ -70,6 +70,33 @@ pub struct Caps {
     /// not say it can be focused cannot be.
     #[serde(default)]
     pub focus: bool,
+    /// The agent's owner can transcribe what is said to it: with `push`,
+    /// a press addressed to this agent is recorded as WAV and offered to the
+    /// owning connection (`agent.transcribe`), whose text becomes the final
+    /// transcript; the daemon's own recogniser runs alongside and is the
+    /// answer whenever the owner fails, refuses or is late. Older daemons
+    /// ignore the field, so a companion may always send it.
+    #[serde(default, skip_serializing_if = "TranscribeCap::is_none")]
+    pub transcribe: TranscribeCap,
+}
+
+/// Who may turn a press's audio into text (`caps.transcribe`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum TranscribeCap {
+    /// The owner receives `agent.transcribe` for every utterance addressed
+    /// to the agent and answers `agent.transcribe.result`.
+    Push,
+    /// The daemon's own recogniser only.
+    #[default]
+    None,
+}
+
+impl TranscribeCap {
+    #[must_use]
+    pub fn is_none(&self) -> bool {
+        matches!(self, TranscribeCap::None)
+    }
 }
 
 impl Default for Caps {
@@ -78,6 +105,7 @@ impl Default for Caps {
             answer: AnswerCap::None,
             order: OrderCap::None,
             focus: false,
+            transcribe: TranscribeCap::None,
         }
     }
 }
@@ -337,6 +365,9 @@ pub struct ChatImage {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct MessageMeta {
+    /// Public activity label/preview supplied by a native companion.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<crate::workflow::ActivitySummary>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub images: Vec<ChatImage>,
     pub id: String,

@@ -135,6 +135,11 @@ pub enum Control {
         /// Show the Claude Channels setup hint during this device PTT session.
         #[serde(default)]
         channel_tip: bool,
+        /// A companion transcribes this press: the deck shows a recording
+        /// waveform instead of live words, which would be the local
+        /// recogniser's guess and not what the companion will hear.
+        #[serde(default)]
+        rec: bool,
     },
     Name(String),
     Synced,

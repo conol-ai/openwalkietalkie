@@ -635,7 +635,7 @@ impl Store {
         let Some(agent) = self.snapshot.agents.get_mut(&id) else {
             return Err(ApiError::not_found("agent"));
         };
-        let mut meta = r.message.clone().unwrap_or_else(|| crate::MessageMeta { images: Vec::new(),
+        let mut meta = r.message.clone().unwrap_or_else(|| crate::MessageMeta { summary: None, images: Vec::new(),
             activity: None,
             runs: None, plan: None,
             id: format!("reply-{}-{}", ts.0, agent.reply_rev),
@@ -645,6 +645,8 @@ impl Store {
         meta.images.truncate(4);
         for image in &mut meta.images { image.id = crate::sanitize::cut(&image.id, 64); image.label = crate::sanitize::cut(&image.label, 96); }
         meta.plan = meta.plan.map(crate::workflow::Plan::bounded);
+        meta.summary = meta.summary.filter(|_| meta.role == crate::ChatRole::Tool)
+            .map(crate::workflow::ActivitySummary::bounded);
         meta.runs = meta.runs.map(|runs| runs.into_iter().take(crate::workflow::MAX_RUNS).map(crate::workflow::Run::bounded).collect());
         crate::workflow::observe(agent, &meta);
         let duplicate = r.message.is_none() && agent.messages.last().is_some_and(|m|

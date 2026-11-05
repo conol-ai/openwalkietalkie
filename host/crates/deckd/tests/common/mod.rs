@@ -239,6 +239,7 @@ impl Daemon {
                         answer: AnswerCap::Hold,
                         order: OrderCap::Inject,
                         focus: true,
+                        transcribe: Default::default(),
                     },
                     slot_hint: Some(Slot(6)),
                     voice: None,

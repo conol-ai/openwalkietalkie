@@ -294,6 +294,7 @@ mod tests {
                 answer: AnswerCap::Hold,
                 order: OrderCap::Inject,
                 focus: true,
+                transcribe: Default::default(),
             },
             companion: None,
             card: None,

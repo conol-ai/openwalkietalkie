@@ -246,6 +246,8 @@ pub struct Engine {
     capture: Box<dyn CaptureSource>,
     output: Box<dyn OutputSink>,
     stt: Option<Arc<dyn SttEngine>>,
+    /// The offers of `caps.transcribe` companions, shared with the core.
+    companion: Option<Arc<super::companion::CompanionHub>>,
     tts: Option<TtsHandle>,
     faults: Arc<StreamFaults>,
     to_core: Sender<FromAudio>,
@@ -332,6 +334,7 @@ impl Engine {
             capture,
             output,
             stt: None,
+            companion: None,
             tts: None,
             faults: Arc::new(StreamFaults::new()),
             to_core,
@@ -392,6 +395,11 @@ impl Engine {
         self.stt = Some(engine);
     }
 
+    /// Let presses for a `caps.transcribe` agent be offered to its owner.
+    pub fn set_companion(&mut self, hub: Arc<super::companion::CompanionHub>) {
+        self.companion = Some(hub);
+    }
+
     pub fn set_tts(&mut self, tts: TtsHandle) {
         self.tts = Some(tts);
     }
@@ -440,12 +448,13 @@ impl Engine {
                 contextual,
                 max_s,
                 from_deck,
+                companion,
                 ..
             } => {
                 // A press streams by itself; anything else asks the deck,
                 // for the session's own budget.
                 let ask = (!from_deck).then(|| max_s.clamp(1, 60) as u8);
-                self.listen(input, ask, &locale, contextual, now);
+                self.listen(input, ask, &locale, contextual, companion, now);
             }
             AudioCmd::Finish { abort } => self.finish(abort, now),
             AudioCmd::Say { ttl_s, .. } => {
@@ -604,6 +613,7 @@ impl Engine {
         ask_deck: Option<u8>,
         locale: &str,
         contextual: Vec<String>,
+        companion: Option<deck_model::AgentId>,
         now: Instant,
     ) {
         self.poll_finals(Instant::now());
@@ -668,10 +678,43 @@ impl Engine {
         });
 
         // 3. the recogniser, which does not gate any of the above.
-        self.start_stt(locale, contextual, &opened);
+        self.start_stt(locale, contextual, companion, &opened);
     }
 
-    fn start_stt(&mut self, locale: &str, contextual: Vec<String>, opened: &CaptureOpened) {
+    fn start_stt(
+        &mut self,
+        locale: &str,
+        contextual: Vec<String>,
+        companion: Option<deck_model::AgentId>,
+        opened: &CaptureOpened,
+    ) {
+        // A transcribing companion's press: the local recogniser is tee'd,
+        // never replaced — it shows the partials and is the fallback.
+        if let (Some(agent), Some(hub)) = (companion, self.companion.clone()) {
+            let local = self.stt.clone().and_then(|engine| {
+                let req = SttStart {
+                    locale: if locale.is_empty() { self.locale.clone() } else { locale.to_string() },
+                    contextual,
+                    allow_server: self.allow_server,
+                };
+                engine
+                    .start(&req)
+                    .map_err(|e| tracing::warn!(error = %e, "local recogniser unavailable; the companion alone transcribes"))
+                    .ok()
+            });
+            let to_core = self.to_core.clone();
+            let session = super::companion::CompanionSession::new(
+                local,
+                agent,
+                hub,
+                Box::new(move |id| {
+                    let _ = to_core.send(FromAudio::Transcribe { id });
+                }),
+            );
+            self.session_events = Some(session.events());
+            self.session = Some(Box::new(session));
+            return;
+        }
         let Some(engine) = self.stt.clone() else {
             return;
         };
@@ -1246,6 +1289,49 @@ mod tests {
         reports: Receiver<TtsReport>,
     }
 
+    #[test]
+    fn a_companion_press_is_offered_and_its_text_is_the_final() {
+        let hub = crate::audio::companion::CompanionHub::new();
+        let mut rig = rig();
+        rig.engine.set_companion(hub.clone());
+        let t0 = Instant::now();
+        let AudioCmd::Listen { agent, ctx, card, max_s, from_deck, input, locale, contextual, .. } = listen() else {
+            unreachable!()
+        };
+        let conol = deck_model::AgentId("ag_conol".into());
+        rig.engine.on_cmd(
+            AudioCmd::Listen { agent, ctx, card, max_s, from_deck, input, locale, contextual, companion: Some(conol.clone()) },
+            t0,
+        );
+        for i in 0..2 {
+            rig.capture.deliver(&[0.3; 8_000]);
+            rig.engine.tick(t0 + Duration::from_millis(50 * (i + 1)));
+        }
+        let fed: usize = rig.stt.fed().iter().map(|(_, n)| n).sum();
+        assert_eq!(fed, 16_000, "the local recogniser still hears the press");
+        rig.stt.finish_with(Ok("apple's guess".into()));
+        rig.engine.on_cmd(AudioCmd::Finish { abort: false }, t0);
+        let reported: Vec<FromAudio> = rig.from_core.try_iter().collect();
+        let id = reported
+            .iter()
+            .find_map(|m| match m { FromAudio::Transcribe { id } => Some(*id), _ => None })
+            .expect("the release offers the recording");
+        assert!(!reported.iter().any(|m| matches!(m, FromAudio::Voice(VoiceIn::Final { .. }))), "the local final waits");
+        let info = hub.info(id).unwrap();
+        assert_eq!((info.agent, info.ms), (conol, 1000));
+        hub.bind(id, deck_model::SessionId(3));
+        hub.resolve(id, deck_model::SessionId(3), Ok("Conol's transcript".into())).unwrap();
+        rig.engine.tick(t0 + Duration::from_millis(200));
+        let finals: Vec<VoiceIn> = rig
+            .from_core
+            .try_iter()
+            .filter_map(FromAudio::voice)
+            .filter(|v| matches!(v, VoiceIn::Final { .. } | VoiceIn::FinalFailed { .. }))
+            .collect();
+        assert_eq!(finals, vec![VoiceIn::Final { text: "Conol's transcript".into() }]);
+        assert!(hub.is_empty());
+    }
+
     fn rig() -> Rig {
         let lanes = Lanes::new();
         let (capture, capture_handle) = FakeCapture::new();
@@ -1280,6 +1366,7 @@ mod tests {
             input: VoiceInput::Deck,
             locale: "en-US".into(),
             contextual: vec!["cohdl-api".into()],
+            companion: None,
         }
     }
 
