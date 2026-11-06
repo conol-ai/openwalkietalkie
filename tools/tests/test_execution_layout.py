@@ -13,36 +13,21 @@ SPEC.loader.exec_module(layout)
 
 
 class Image:
-    def __init__(self, board="A", psram=True, bootstrap=False):
+    def __init__(self, board="A", psram=False, bootstrap=False):
         self.sections = {}
         self.symbols = {}
         base = layout.APP_BASE
+        # `psram` links code at PSRAM, the layout Rev A used before 0.13.
         text = layout.PSRAM_START if psram else base + 0x100
-        assets = text + 128 if psram else (base + 0x300 if bootstrap else layout.BONDS_END)
+        assets = base + 0x300 if bootstrap else layout.BONDS_END
         self.add(".vector_table", base, base, struct.pack("<16I", 0x2007FC00, base + 0x101, text + 1, *([0] * 13)))
-        if psram:
-            self.add(".boot", base + 0x100, base + 0x100, bytes(64))
-        self.add(".text", text, base + (0x200 if psram else 0x100), bytes(64))
-        self.add(".rodata", text + 64, base + 0x240, f"OpenWalkieTalkie Rev {board} (fixture)".encode().ljust(64, b"\0"))
-        # XIP constants must have equal virtual/physical addresses.
-        if not psram:
-            self.sections[".rodata"]["addr"] = base + 0x240
-        self.add(".flash_assets", assets, base + 0x300 if bootstrap else layout.BONDS_END, bytes(64))
+        self.add(".text", text, base + 0x100, bytes(64))
+        self.add(".rodata", base + 0x240, base + 0x240, f"OpenWalkieTalkie Rev {board} (fixture)".encode().ljust(64, b"\0"))
+        self.add(".flash_assets", assets, assets, bytes(64))
         self.add(".data", layout.SRAM_START, base + 0x400, bytes(16))
+        self.add(".psram_bss", layout.PSRAM_START + (0x1000 if psram else 0), None, bytes(64))
         for i, name in enumerate(("3pmu5enter", "10bond_flash11erase_block", "10bond_flash12program_slot") + (("11boot_update6nor_op",) if bootstrap else ())):
             self.symbols["_ZN" + name] = (layout.SRAM_START + i * 4 + 1, 2, 2)
-        if psram:
-            for section, stem in ((".text", "text"), (".rodata", "rodata"), (".flash_assets", "assets")):
-                s = self.sections[section]
-                self.symbols["__s" + stem] = (s["addr"], 0, 0)
-                self.symbols["__e" + stem] = (s["addr"] + len(s["body"]), 0, 0)
-                self.symbols["__si" + stem] = (s["load"], 0, 0)
-            self.add(".vector_table_ram", layout.SRAM_START + 1024, None, bytes(64), align=1024)
-            for name, value in (("__pre_init", base + 0x121), ("__vector_table", base),
-                                ("__vector_table_ram", layout.SRAM_START + 1024),
-                                ("__vector_table_ram_end", layout.SRAM_START + 1088),
-                                ("_stack_end", layout.SRAM_START + 1088)):
-                self.symbols[name] = (value, 0, 0)
 
     def add(self, name, addr, load, body, align=32):
         self.sections[name] = dict(addr=addr, load=load, body=body, align=align)
@@ -94,37 +79,26 @@ class ExecutionLayoutTests(unittest.TestCase):
 
     def test_normal_and_bootstrap_board_layouts(self):
         for bootstrap in (False, True):
-            for board, psram in (("A", True), ("B", False)):
+            for board in ("A", "B"):
                 with self.subTest(board=board, bootstrap=bootstrap):
-                    self.check(Image(board, psram, bootstrap), bootstrap)
+                    self.check(Image(board, bootstrap=bootstrap), bootstrap)
 
-    def test_board_features_cannot_silently_choose_wrong_layout(self):
-        for board, psram in (("A", False), ("B", True)):
+    def test_code_linked_into_psram_is_refused_on_every_board(self):
+        for board in ("A", "B"):
             with self.subTest(board=board), self.assertRaises(AssertionError):
-                self.check(Image(board, psram))
+                self.check(Image(board, psram=True))
 
-    def test_font_copy_must_fit_and_match_startup_bounds(self):
-        for field, value in (("addr", layout.BONDS_END), ("addr", layout.PSRAM_SCRATCH - 32),
-                             ("load", layout.BONDS_START)):
+    def test_fonts_must_load_from_their_bank(self):
+        for field, value in (("addr", layout.PSRAM_START), ("load", layout.BONDS_START)):
             image = Image()
             image.sections[".flash_assets"][field] = value
             with self.subTest(field=field, value=value), self.assertRaises(AssertionError):
                 self.check(image)
-        image = Image()
-        image.symbols["__eassets"] = (image.symbols["__eassets"][0] - 32, 0, 0)
-        with self.assertRaisesRegex(AssertionError, "copy boundary"):
-            self.check(image)
 
-    def test_vector_copy_must_be_outside_stack_and_handlers_in_ram(self):
+    def test_psram_tables_stay_below_the_scratch_area(self):
         image = Image()
-        image.symbols["_stack_end"] = (layout.SRAM_START + 1024, 0, 0)
-        with self.assertRaisesRegex(AssertionError, "stack overlaps"):
-            self.check(image)
-        image = Image()
-        body = bytearray(image.sections[".vector_table"]["body"])
-        struct.pack_into("<I", body, 8, layout.APP_BASE + 0x121)
-        image.sections[".vector_table"]["body"] = body
-        with self.assertRaisesRegex(AssertionError, "handler still targets NOR"):
+        image.sections[".psram_bss"]["addr"] = layout.PSRAM_SCRATCH - 32
+        with self.assertRaisesRegex(AssertionError, "scratch"):
             self.check(image)
 
     def test_sram_flash_writer_cannot_move_to_psram(self):

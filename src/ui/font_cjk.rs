@@ -4,9 +4,8 @@ use super::font_data::Glyph;
 
 const PX: i32 = 26;
 const RECORD: usize = 12;
-// Named arrays keep the load image in upper NOR; Embassy Rev A copies it
-// into PSRAM at startup to avoid flash reads coupling into the speaker.
-// Desktop previews retain their normal read-only sections.
+// Named arrays keep the image in upper NOR, read in place. Desktop
+// previews retain their normal read-only sections.
 #[cfg_attr(target_os = "none", unsafe(link_section = ".flash_assets.cjk_metrics"))]
 static METRICS: [u8; include_bytes!("../../assets/fonts/gen/cjk-metrics.bin").len()] =
     *include_bytes!("../../assets/fonts/gen/cjk-metrics.bin");

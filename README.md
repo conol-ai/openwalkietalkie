@@ -623,22 +623,19 @@ flashing a good one — no JTAG rescue needed. `memory.x` records the partition
 map, read back off the board itself with
 `sftool read_flash ftab.bin@0x12000000:256`.
 
-**Rev A executes from PSRAM to suppress flash-coupled speaker hiss.**
-`hw-a` without `hw-b` selects `link-psram.x`: Reset and the startup copy
-routine stay in NOR, while `.text`, `.rodata` and `.flash_assets` (including
-the Chinese fonts) run/read from PSRAM. `src/xip.rs` copies and verifies
-these regions and moves the interrupt vector table to SRAM. Three failed
-copies return to USB recovery. Rev B and LilyGo use cortex-m-rt's `link.x`
-and execute directly from NOR. On every board, normal `.data`
-initialization copies mutable data and the small flash-writing/shutdown
-routines into SRAM. PSRAM's final MiB is reserved for bench diagnostics;
-Rev A's copies and runtime buffers must fit in its first 7 MiB.
+**Every board executes in place from NOR** with cortex-m-rt's `link.x`.
+(Rev A, the BodyV6.13 engineering sample, copied its code and fonts to PSRAM
+until 0.13 to keep NOR fetches out of its speaker amplifier; it never
+shipped, and that copy is gone.) Normal `.data` initialization copies
+mutable data and the small flash-writing/shutdown routines into SRAM.
+PSRAM holds only zeroed runtime tables in `.psram_bss` (`psram.x`), such as
+the 255-session table on Rev A/B; its final MiB is reserved for bench
+diagnostics.
 
 The 16 MiB NOR now provides **15.75 MiB for application code and assets**.
 The lower bank (`0x12020000..0x126FFFFF`, 6.875 MiB) holds code, ordinary
 constants and SRAM initialization data. `flash-assets.x` places the Chinese
 atlas and metrics in the upper bank (`0x12720000..0x12FFFFFF`, 8.875 MiB).
-Rev A's `flash-assets-psram.x` keeps their load image at the same address.
 The two intervening 64 KiB Bluetooth stores retain their original addresses;
 the initial 128 KiB retains the flash table and bootloader. New large assets
 can use `.flash_assets.*` sections without taking space from the lower bank.
