@@ -103,6 +103,9 @@ impl Daemon {
         config.api.uds_max_scope = options.uds_max_scope;
         config.api.uds_default_scope = options.uds_default_scope;
         config.codex.daemon_socket = options.codex_socket.map(|p| p.display().to_string());
+        // The hold mechanics are what these daemons are for: a permission
+        // ask goes to the deck at once. `set_settle_s` turns the window on.
+        config.hooks.claude.settle_s = 0;
         let config = Arc::new(config);
         let store = Store::new(StoreConfig::new(Instant::now(), WALL, 7));
         let (hid, ops, lines, debug) = HidHandle::detached();

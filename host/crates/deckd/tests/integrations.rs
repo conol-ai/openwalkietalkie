@@ -976,7 +976,7 @@ fn the_plugin_registers_with_a_real_claude_in_a_throwaway_config_dir() {
             .current_dir(dir.path()),
     ) {
         assert!(
-            details.contains("Hooks (10)") && details.contains("SubagentStart") && details.contains("SubagentStop"),
+            details.contains("Hooks (13)") && details.contains("SubagentStart") && details.contains("SubagentStop"),
             "claude does not see the hooks:\n{details}"
         );
     }

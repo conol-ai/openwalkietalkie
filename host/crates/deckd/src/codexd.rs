@@ -655,8 +655,26 @@ impl Model {
                         }
                         Vec::new()
                     }
+                    // A tool call started: whatever approval it needed was
+                    // given. The `PermissionRequest` hook marked the session
+                    // as waiting even when Codex's own reviewer settled the
+                    // ask, so this is what marks it working again.
+                    "commandExecution" | "fileChange" | "mcpToolCall" | "dynamicToolCall"
+                        if method == "item/started" =>
+                    {
+                        working_unless_asking(thread, t)
+                    }
                     _ => Vec::new(),
                 }
+            }
+            // `approvals_reviewer = "auto_review"`: Codex's reviewer, not the
+            // operator, decided this ask; only an escalation reaches us, as
+            // a `requestApproval` of its own.
+            "item/autoApprovalReview/started" | "item/autoApprovalReview/completed" => {
+                let Some(t) = self.threads.get_mut(&thread) else {
+                    return Vec::new();
+                };
+                working_unless_asking(thread, t)
             }
             "serverRequest/resolved" => {
                 // Answered elsewhere (the TUI, another client): the card is
@@ -1058,6 +1076,19 @@ fn user_message_text(item: &Value) -> Option<String> {
         }
         _ => None,
     }
+}
+
+/// Mark the thread working, unless the deck is showing it an ask of its
+/// own (an approval card, or a visible question): those keep it waiting.
+fn working_unless_asking(thread: String, t: &Thread) -> Vec<Effect> {
+    if !t.pending.is_empty() || t.async_questions.is_visible() {
+        return Vec::new();
+    }
+    vec![Effect::Update {
+        thread,
+        state: Some(AgentState::Working),
+        title: None,
+    }]
 }
 
 /// The question an approval request puts on the deck (§5.6: the command
@@ -2453,6 +2484,36 @@ mod tests {
         );
         assert_eq!(name_of(None, Some("/w/api"), "01a1"), "api");
         assert_eq!(name_of(Some("  "), None, "01a11f33-ba6b"), "codex 01a11f33");
+    }
+
+    /// `approvals_reviewer = "auto_review"`: the reviewer settled the ask,
+    /// so the session is working again — unless the deck shows it an
+    /// approval of its own, which keeps it waiting.
+    #[test]
+    fn an_auto_reviewed_ask_or_a_started_tool_marks_the_thread_working() {
+        let mut model = Model::default();
+        model.loaded(&[loaded("t1", None, false)]);
+        model.registered("t1", AgentId("ag_1".into()));
+        let working = vec![Effect::Update {
+            thread: "t1".into(),
+            state: Some(AgentState::Working),
+            title: None,
+        }];
+        let review = json!({"threadId": "t1", "turnId": "turn-1", "reviewId": "r1",
+            "review": {"status": "approved"}});
+        assert_eq!(model.notification("item/autoApprovalReview/completed", &review), working);
+        let tool = json!({"threadId": "t1", "item": {"type": "commandExecution", "id": "c1"}});
+        assert_eq!(model.notification("item/started", &tool), working);
+        assert!(model.notification("item/completed", &tool).is_empty(), "only the start");
+        // An escalated ask is on the deck: nothing says working over it.
+        let effects = model.server_request(
+            &json!(7),
+            "item/commandExecution/requestApproval",
+            &json!({"threadId": "t1", "command": "rm -rf /tmp/x"}),
+        );
+        assert!(effects.iter().any(|e| matches!(e, Effect::Card { .. })));
+        assert!(model.notification("item/started", &tool).is_empty());
+        assert!(model.notification("item/autoApprovalReview/completed", &review).is_empty());
     }
 
     #[test]

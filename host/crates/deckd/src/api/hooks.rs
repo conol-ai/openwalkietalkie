@@ -206,6 +206,24 @@ pub async fn ingest(
     if !adapters.enabled() {
         return empty();
     }
+    // What a hook is, never what it says (rule 3): the event, the session's
+    // permission mode and a notification's type are labels, not content,
+    // and they are what tells an auto-approved ask from a human one.
+    if cli == "claude" {
+        tracing::debug!(
+            cli,
+            event = %event,
+            mode = payload.str("permission_mode").unwrap_or("-"),
+            kind = payload.str("notification_type").unwrap_or("-"),
+            "a hook"
+        );
+        // Every Claude event may decide an ask that is waiting out its
+        // settle window, so the window hears it before the adapter does.
+        let ended = adapters.settle.observe(&payload);
+        if ended > 0 {
+            tracing::debug!(cli, event = %event, ended, "settled asks");
+        }
+    }
     // The status line is the one call that carries the account's rate
     // limits (`rate_limits`, Pro/Max only): they go to the Usage face from
     // here, and the adapter then reads the rest of the payload for the
@@ -282,8 +300,11 @@ pub async fn ingest(
             group,
         } => {
             tracing::debug!(cli, event = %event, "a held hook");
+            // The CLI itself, when the helper found it: whose children say
+            // that an approved Bash call has started (`procs`).
+            let cli_pid = ctx.cli_pid.filter(|_| ctx.pid_kind == Some(deck_model::PidKind::Cli));
             let (out, after_write) = held(
-                adapters, core, cli, &payload, before, cmd, note, group, inbox,
+                adapters, core, cli, &payload, before, cmd, note, group, inbox, cli_pid,
             )
             .await;
             // §4.9: the card is cleared by the door that wrote the
@@ -558,10 +579,14 @@ async fn held(
     note: serde_json::Value,
     group: Option<GroupPlan>,
     inbox: Option<crate::inbox::Inbox>,
+    cli_pid: Option<u32>,
 ) -> (HookOutput, Option<Delivery>) {
     let Some(adapter) = adapter_of(adapters, cli) else {
         return nothing();
     };
+    if !settle(adapters, cli, payload, &note, group.is_some(), cli_pid).await {
+        return nothing();
+    }
     // The prologue resolves the agent. It takes the same lock as a report
     // plan so a `SessionStart` cannot still be in flight behind it — under
     // the same budget as the round trips it guards, because a plan wedged
@@ -660,6 +685,77 @@ async fn held(
     nothing()
 }
 
+/// The settle window (`adapters::settle`): a permission ask waits, unseen,
+/// until Claude says a human is being asked or `settle_s` passes. `false`
+/// means it was decided elsewhere first — the tool ran, failed or was
+/// refused, or the turn moved on — and the hook answers `{}` with nothing
+/// ever on the deck. A question group never waits: `AskUserQuestion` is
+/// always the operator's to answer and its dialog is held off for the
+/// whole hold (C8).
+async fn settle(
+    adapters: &Arc<Adapters>,
+    cli: &'static str,
+    payload: &HookPayload,
+    note: &serde_json::Value,
+    group: bool,
+    cli_pid: Option<u32>,
+) -> bool {
+    let cfg = adapters.cfg(cli);
+    // The window comes out of the hook's own timeout: Claude kills a hook
+    // at `HELD_TIMEOUT_S`, and the hold budget starts only after the
+    // window, so the two together must end before it with a margin.
+    let room = crate::integrations::claude::HELD_TIMEOUT_S
+        .saturating_sub(u64::from(cfg.hold_s) + 4);
+    let window = u64::from(cfg.settle_s).min(room);
+    if group || window == 0 || note["event"].as_str() != Some("PermissionRequest") {
+        return true;
+    }
+    let (Some(session), Some(tool)) = (payload.str("session_id"), payload.str("tool_name")) else {
+        return true;
+    };
+    let input = payload.get("tool_input").cloned().unwrap_or(serde_json::Value::Null);
+    // A Bash ask is also settled the moment its command starts: a child of
+    // the CLI running it means the call was allowed (`procs`), and that
+    // comes long before a long command's `PostToolUse`.
+    let started = (tool == "Bash")
+        .then(|| input["command"].as_str().map(str::to_string))
+        .flatten()
+        .zip(cli_pid);
+    let (id, mut rx) = adapters.settle.wait(session, tool, &input);
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(window);
+    let outcome = loop {
+        let tick = (tokio::time::Instant::now() + std::time::Duration::from_millis(250)).min(deadline);
+        tokio::select! {
+            heard = &mut rx => break heard.ok(),
+            () = tokio::time::sleep_until(tick) => {
+                if let Some((command, pid)) = &started {
+                    if crate::procs::runs_command(*pid, command) {
+                        tracing::debug!(cli, "an ask whose command started");
+                        break Some(adapters::settle::Outcome::Settled);
+                    }
+                }
+                if tokio::time::Instant::now() >= deadline {
+                    break None;
+                }
+            }
+        }
+    };
+    adapters.settle.cancel(id);
+    match outcome {
+        Some(adapters::settle::Outcome::Settled) => {
+            tracing::debug!(cli, "an ask settled before the deck");
+            false
+        }
+        Some(adapters::settle::Outcome::Ask) => {
+            tracing::debug!(cli, "an ask a human is being asked");
+            true
+        }
+        // The window passed with no sign of a decision, or the window's
+        // lock was poisoned (its sender dropped): the deck shows the ask.
+        None => true,
+    }
+}
+
 /// The CLI's response once every card of a hold is in.
 fn output(
     adapter: &dyn Adapter,
@@ -707,7 +803,15 @@ mod tests {
     use super::*;
     use deck_model::Principal;
 
+    /// A door whose permission asks skip the settle window (the hold
+    /// mechanics are what these tests are about); `settled_ctx` keeps it.
     fn ctx(core: CoreHandle, scopes: &[Scope]) -> ConnCtx {
+        ctx_with(core, scopes, 0)
+    }
+
+    fn ctx_with(core: CoreHandle, scopes: &[Scope], settle_s: u32) -> ConnCtx {
+        let mut config = crate::config::Config::default();
+        config.hooks.claude.settle_s = settle_s;
         ConnCtx {
             core,
             principal: Principal::Uid(501),
@@ -715,7 +819,7 @@ mod tests {
             scopes: scopes.to_vec(),
             trusted: false,
             client: ClientInfo::default(),
-            adapters: Arc::new(Adapters::default()),
+            adapters: Arc::new(Adapters::new(Arc::new(arc_swap::ArcSwap::from_pointee(config)))),
         }
     }
 
@@ -754,6 +858,7 @@ mod tests {
                     serde_json::json!({"command": "date"})
                 };
                 let ask = HookPayload(ask["payload"].take());
+                let (asked_tool, asked_input) = (ask.0["tool_name"].clone(), ask.0["tool_input"].clone());
                 let context = HookCtx::default();
                 let Ingest::Held { mut cmd, .. } = adapters.claude.ingest(&ask, &context) else {
                     panic!("the prompt must be held");
@@ -807,7 +912,11 @@ mod tests {
                     "{question}: {boundary}"
                 );
                 assert!(holds.forget(&agent, card, token));
-                let post = HookPayload(payload("PostToolUse")["payload"].take());
+                // The same call finishing: a tool event names its tool.
+                let mut post = payload("PostToolUse");
+                post["payload"]["tool_name"] = asked_tool.clone();
+                post["payload"]["tool_input"] = asked_input.clone();
+                let post = HookPayload(post["payload"].take());
                 let Ingest::Report(plan) = adapters.claude.ingest(&post, &context) else {
                     panic!("the next turn must clear the card");
                 };
@@ -1044,6 +1153,99 @@ mod tests {
     }
 
     /// A `PermissionRequest` exactly as `deckd hook claude` posts one.
+    /// The settle window (`adapters::settle`): an ask that the call's own
+    /// `PostToolUse` settles never reaches the core at all — no card, no
+    /// agent round trip — and its hook is answered `{}` at once.
+    #[tokio::test]
+    async fn an_ask_decided_elsewhere_inside_the_window_never_reaches_the_deck() {
+        let (core, rx) = CoreHandle::detached();
+        let ctx = Arc::new(ctx_with(core, &[Scope::HooksIngest], 6));
+        let at = std::time::Instant::now();
+        let ask = tokio::spawn({
+            let ctx = ctx.clone();
+            async move { dispatch(&ctx, "hooks.claude", permission()).await }
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert!(rx.try_recv().is_err(), "the window shows nothing and asks the core nothing");
+        let mut ran = permission();
+        ran["payload"]["hook_event_name"] = serde_json::json!("PostToolUse");
+        let _ = dispatch(&ctx, "hooks.claude", ran).await;
+        let reply = tokio::time::timeout(std::time::Duration::from_secs(2), ask)
+            .await
+            .expect("settled long before the window ends")
+            .expect("the hook task");
+        assert_eq!(reply.result.expect("answered"), serde_json::json!({}));
+        assert!(reply.after_write.is_none(), "no card was ever made");
+        assert!(at.elapsed() < std::time::Duration::from_secs(2));
+        while let Ok(message) = rx.try_recv() {
+            assert!(
+                !matches!(message, CoreMsg::SetCardHeld { .. }),
+                "the ask never became a card"
+            );
+        }
+    }
+
+    /// A host approver leaves no hook behind, but an allowed Bash call
+    /// starts at once as a child of the CLI: that settles the ask long
+    /// before a long command's `PostToolUse`.
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn a_bash_ask_settles_when_its_command_starts_under_the_cli() {
+        let (core, rx) = CoreHandle::detached();
+        let ctx = ctx_with(core, &[Scope::HooksIngest], 6);
+        // This test process stands in for the CLI; its child runs the
+        // asked command (compound, as Claude's shells are).
+        let mut ask = permission();
+        ask["cli_pid"] = serde_json::json!(std::process::id());
+        ask["pid_kind"] = serde_json::json!("cli");
+        let mut shell = std::process::Command::new("/bin/sh")
+            .args(["-c", "sleep 3; true # psql -f migrate.sql staging"])
+            .spawn()
+            .expect("the command's shell");
+        let at = std::time::Instant::now();
+        let reply = dispatch(&ctx, "hooks.claude", ask).await;
+        shell.kill().ok();
+        shell.wait().ok();
+        assert_eq!(reply.result.expect("answered"), serde_json::json!({}));
+        assert!(reply.after_write.is_none(), "no card was ever made");
+        assert!(at.elapsed() < std::time::Duration::from_secs(2), "{:?}", at.elapsed());
+        while let Ok(message) = rx.try_recv() {
+            assert!(!matches!(message, CoreMsg::SetCardHeld { .. }));
+        }
+    }
+
+    /// Claude's own "needs your permission" notification means a human is
+    /// being asked: the ask goes to the deck at once, not at the window.
+    #[tokio::test]
+    async fn the_permission_prompt_sends_the_ask_to_the_deck_at_once() {
+        let (core, rx) = CoreHandle::detached();
+        let ctx = Arc::new(ctx_with(core, &[Scope::HooksIngest], 6));
+        let at = std::time::Instant::now();
+        let ask = tokio::spawn({
+            let ctx = ctx.clone();
+            async move { dispatch(&ctx, "hooks.claude", permission()).await }
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let mut prompt = payload("Notification");
+        prompt["payload"]["notification_type"] = serde_json::json!("permission_prompt");
+        prompt["payload"]["message"] = serde_json::json!("Claude needs your permission to use Bash");
+        let _ = dispatch(&ctx, "hooks.claude", prompt).await;
+        // The held path now reaches for the core (the agent's session first).
+        let reached = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            loop {
+                if let Ok(message) = rx.try_recv() {
+                    break message;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("the ask goes on to the core");
+        assert!(matches!(reached, CoreMsg::OpenSession { .. }));
+        assert!(at.elapsed() < std::time::Duration::from_secs(3), "{:?}", at.elapsed());
+        ask.abort();
+    }
+
     fn permission() -> serde_json::Value {
         serde_json::json!({
             "payload": {

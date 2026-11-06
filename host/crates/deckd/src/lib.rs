@@ -32,6 +32,7 @@ pub mod service;
 pub mod state;
 pub mod stt;
 pub mod tokens;
+pub mod procs;
 pub mod trust;
 pub mod uninstall;
 pub mod usage;

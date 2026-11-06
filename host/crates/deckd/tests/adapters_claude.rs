@@ -146,6 +146,13 @@ fn set_hold_s(daemon: &Daemon, hold_s: u32) {
     daemon.api.config.store(Arc::new(config));
 }
 
+/// `[hooks.claude] settle_s`, live like `hold_s`.
+fn set_settle_s(daemon: &Daemon, settle_s: u32) {
+    let mut config = (**daemon.api.config.load()).clone();
+    config.hooks.claude.settle_s = settle_s;
+    daemon.api.config.store(Arc::new(config));
+}
+
 /// The first card on the deck that `f` accepts, with the agent holding it.
 async fn card_where(
     daemon: &Daemon,
@@ -623,7 +630,10 @@ async fn a_released_hold_degrades_to_focus_terminal_under_the_same_id() {
 
     // The degraded card belongs to the turn now, and the turn's end takes
     // it off (§5.6) — it is a pointer at a dialog, and the dialog is gone.
-    let (status, body) = hook(&daemon, &auth, &fixture("post_tool_use")).await;
+    // The call it asked about finished: that call's `PostToolUse`.
+    let mut ran = permission_payload("uname -a");
+    ran["hook_event_name"] = "PostToolUse".into();
+    let (status, body) = hook(&daemon, &auth, &ran).await;
     assert_eq!((status, body), (200, json!({})));
     let deadline = Instant::now() + PATIENCE;
     while current_card(&daemon, &agent).is_some_and(|c| c.id == degraded.id) {
@@ -687,9 +697,17 @@ async fn state_where(
 async fn notify_and_settle(daemon: &Daemon, auth: &str, agent: &str, kind: &str) {
     let (status, body) = hook(daemon, auth, &notification(kind)).await;
     assert_eq!((status, body), (200, json!({})), "{kind}");
-    let (status, body) = hook(daemon, auth, &fixture("user_prompt_submit")).await;
+    // The barrier is a report that lands behind the notification in the
+    // same order and changes something visible: a parallel `Read` failing.
+    // It is not the call the card asked about, so it must leave the card
+    // alone (a new prompt would rightly take it off: its dialog is gone).
+    let mut failed = notification(kind);
+    failed["hook_event_name"] = "PostToolUseFailure".into();
+    failed["tool_name"] = "Read".into();
+    failed["tool_input"] = json!({"file_path": "/w/project/missing.txt"});
+    let (status, body) = hook(daemon, auth, &failed).await;
     assert_eq!((status, body), (200, json!({})), "{kind}");
-    state_where(daemon, agent, "the prompt behind the notification", |s| {
+    state_where(daemon, agent, "the report behind the notification", |s| {
         s == deck_model::AgentState::Working
     })
     .await;
@@ -1379,5 +1397,75 @@ fn every_fixture_replays_to_its_golden_ingest() {
             }
             _ => {}
         }
+    }
+}
+
+/// The settle window, end to end: an ask that an auto-approver settles —
+/// the call's own `PostToolUse` arrives inside the window — is answered
+/// `{}` and never becomes a card; one that nobody settles reaches the deck
+/// when the window ends.
+#[tokio::test]
+async fn only_an_ask_nothing_else_decided_reaches_the_deck() {
+    let daemon = Daemon::start().await;
+    let auth = daemon.bearer("hooks", &[Scope::HooksIngest]);
+    set_settle_s(&daemon, 2);
+
+    let approved = permission_payload("cargo build --release");
+    let posted = post_hook(daemon.port, auth.clone(), "claude", approved.clone());
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let mut ran = approved.clone();
+    ran["hook_event_name"] = "PostToolUse".into();
+    let (status, _) = hook(&daemon, &auth, &ran).await;
+    assert_eq!(status, 200);
+    let (status, body) = tokio::time::timeout(Duration::from_secs(1), posted)
+        .await
+        .expect("settled inside the window")
+        .expect("the hook task lives");
+    assert_eq!((status, body), (200, json!({})), "the CLI's own decision stands");
+    // Past the window: nothing ever reached the deck.
+    tokio::time::sleep(Duration::from_millis(2_300)).await;
+    assert!(
+        daemon.api.bus.snapshot().agents.values().all(|a| a.card.is_none()),
+        "an auto-approved ask never becomes a card"
+    );
+
+    // Nobody decides this one: the deck gets it after the window.
+    let at = Instant::now();
+    let _posted = post_hook(daemon.port, auth.clone(), "claude", permission_payload("psql -f drop.sql"));
+    let (_, card) = card_where(&daemon, "the unsettled ask", |c| parked(c, OriginKind::Permission)).await;
+    assert!(at.elapsed() >= Duration::from_secs(2), "not before the window: {:?}", at.elapsed());
+    assert_eq!(card.origin.tool.as_deref(), Some("Bash"));
+}
+
+/// A card the terminal answered is gone with the call: `PostToolUse` of
+/// **that** call takes it off, a parallel tool's does not, and a new
+/// prompt takes off whatever an interrupted turn left behind.
+#[tokio::test]
+async fn a_card_goes_with_its_own_call_and_with_the_next_prompt() {
+    let daemon = Daemon::start().await;
+    let auth = daemon.bearer("hooks", &[Scope::HooksIngest]);
+    let ask = permission_payload("rm -rf target");
+    let _posted = post_hook(daemon.port, auth.clone(), "claude", ask.clone());
+    let (agent, _) = card_where(&daemon, "the ask", |c| parked(c, OriginKind::Permission)).await;
+    let on_deck = |daemon: &Daemon| {
+        daemon.api.bus.snapshot().agents.values().find(|a| a.id.0 == agent).and_then(|a| a.card.clone())
+    };
+    // A parallel Read finishing leaves it alone.
+    let mut read = ask.clone();
+    read["hook_event_name"] = "PostToolUse".into();
+    read["tool_name"] = "Read".into();
+    read["tool_input"] = json!({"file_path": "/w/project/README.md"});
+    hook(&daemon, &auth, &read).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(on_deck(&daemon).is_some(), "a parallel tool's PostToolUse is not this call");
+    // The operator interrupts in the terminal (no `Stop`) and types again.
+    let mut prompt = ask.clone();
+    prompt["hook_event_name"] = "UserPromptSubmit".into();
+    prompt["prompt"] = "never mind, do it another way".into();
+    hook(&daemon, &auth, &prompt).await;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while on_deck(&daemon).is_some() {
+        assert!(Instant::now() < deadline, "the new prompt takes the stale card off");
+        tokio::time::sleep(Duration::from_millis(20)).await;
     }
 }

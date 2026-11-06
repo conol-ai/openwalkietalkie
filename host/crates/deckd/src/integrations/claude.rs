@@ -75,7 +75,8 @@ struct Managed {
     event: &'static str,
     matcher: Option<&'static str>,
     timeout: u64,
-    /// Installed only with `[hooks.claude] tool_titles = true`.
+    /// Installed only with `[hooks.claude] tool_titles = true` (none is
+    /// today: `PostToolUse` also settles asks, so it is always on).
     optional: bool,
 }
 
@@ -122,11 +123,27 @@ const MANAGED: &[Managed] = &[
         timeout: REPORT_TIMEOUT_S,
         optional: false,
     },
+    // The signs that an ask was decided without the deck — the call ran,
+    // failed, or auto mode refused it — which settle a waiting ask and
+    // take a card off (`adapters::settle`). Always installed: without
+    // them a card outlived its own answer until the turn ended.
     Managed {
         event: "PostToolUse",
         matcher: None,
         timeout: REPORT_TIMEOUT_S,
-        optional: true,
+        optional: false,
+    },
+    Managed {
+        event: "PostToolUseFailure",
+        matcher: None,
+        timeout: REPORT_TIMEOUT_S,
+        optional: false,
+    },
+    Managed {
+        event: "PermissionDenied",
+        matcher: None,
+        timeout: REPORT_TIMEOUT_S,
+        optional: false,
     },
     // The roster's count of running subagents.
     Managed {
@@ -680,7 +697,10 @@ mod tests {
             names,
             [
                 "Notification",
+                "PermissionDenied",
                 "PermissionRequest",
+                "PostToolUse",
+                "PostToolUseFailure",
                 "PreToolUse",
                 "SessionEnd",
                 "SessionStart",
@@ -690,7 +710,6 @@ mod tests {
                 "SubagentStop",
                 "UserPromptSubmit",
             ],
-            "PostToolUse is off without tool_titles"
         );
         for (event, groups) in events {
             let group = &groups[0];
@@ -716,23 +735,23 @@ mod tests {
                 assert!(group.get("matcher").is_none(), "{event}");
             }
         }
-        assert!(env.hold_s + 10 <= HELD_TIMEOUT_S as u32);
+        // A permission ask waits out its settle window before its hold.
+        assert!(env.hold_s + crate::adapters::SETTLE_S + 4 <= HELD_TIMEOUT_S as u32);
     }
 
     #[test]
-    fn post_tool_use_is_installed_only_with_tool_titles() {
+    fn post_tool_use_is_installed_with_or_without_tool_titles() {
         let dir = TestDir::new("plugin-titles");
         let mut env = test_env(&dir);
-        install(&env);
-        assert!(json_at(&hooks_json_path(&env))["hooks"]
-            .get("PostToolUse")
-            .is_none());
-        env.tool_titles = true;
-        install(&env);
-        assert_eq!(
-            json_at(&hooks_json_path(&env))["hooks"]["PostToolUse"][0]["hooks"][0]["timeout"],
-            REPORT_TIMEOUT_S
-        );
+        for titles in [false, true] {
+            env.tool_titles = titles;
+            install(&env);
+            assert_eq!(
+                json_at(&hooks_json_path(&env))["hooks"]["PostToolUse"][0]["hooks"][0]["timeout"],
+                REPORT_TIMEOUT_S,
+                "tool_titles = {titles}"
+            );
+        }
     }
 
     #[test]

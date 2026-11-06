@@ -42,6 +42,7 @@
 pub mod claude;
 pub mod codex;
 pub mod rt;
+pub mod settle;
 
 use crate::config::Config;
 use arc_swap::ArcSwap;
@@ -203,6 +204,10 @@ pub struct HookCfg {
     pub hold_s: u32,
     /// `[hooks.claude] tool_titles`: a `PostToolUse` title per tool call.
     pub tool_titles: bool,
+    /// `[hooks.claude] settle_s`: how long a permission ask waits, unseen,
+    /// for an auto-approver or the terminal to decide it (`settle`). 0
+    /// shows every ask at once.
+    pub settle_s: u32,
 }
 
 impl Default for HookCfg {
@@ -210,9 +215,14 @@ impl Default for HookCfg {
         HookCfg {
             hold_s: 120,
             tool_titles: false,
+            settle_s: SETTLE_S,
         }
     }
 }
+
+/// `[hooks.claude] settle_s`'s default: when Claude itself sends its
+/// "needs your permission" notification for an unanswered dialog.
+pub const SETTLE_S: u32 = 6;
 
 /// What the helper captured around a payload (§4 of the week-3 contract).
 ///
@@ -478,6 +488,8 @@ pub struct Adapters {
     /// agent reading `working` after the turn ended.
     order: tokio::sync::Mutex<()>,
     pub claude: claude::Claude,
+    /// Claude asks waiting out their settle window (`settle`).
+    pub settle: settle::Settle,
 }
 
 impl Default for Adapters {
@@ -500,6 +512,7 @@ impl Adapters {
             config,
             order: tokio::sync::Mutex::new(()),
             claude: claude::Claude::default(),
+            settle: settle::Settle::default(),
         }
     }
 
@@ -532,6 +545,7 @@ impl Adapters {
             "claude" | "claude_statusline" => HookCfg {
                 hold_s: config.hooks.claude.hold_s,
                 tool_titles: config.hooks.claude.tool_titles,
+                settle_s: config.hooks.claude.settle_s,
             },
             // One adapter behind two doors (C17): the notify channel is
             // the same CLI and reads the same table.
@@ -540,6 +554,9 @@ impl Adapters {
                 // `[hooks.codex]` has no `tool_titles`: Codex reports its
                 // tool calls through `Stop`, not per call.
                 tool_titles: false,
+                // Codex's asks reach the deck from its app-server, which
+                // sends only the ones its own reviewer escalated.
+                settle_s: 0,
             },
             _ => HookCfg::default(),
         }
@@ -703,7 +720,8 @@ mod tests {
             adapters.cfg("claude"),
             HookCfg {
                 hold_s: 17,
-                tool_titles: true
+                tool_titles: true,
+                settle_s: crate::adapters::SETTLE_S,
             }
         );
         let mut next = Config::default();

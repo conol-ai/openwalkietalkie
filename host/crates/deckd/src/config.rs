@@ -27,7 +27,7 @@ pub const WATCH_DEBOUNCE: Duration = Duration::from_millis(300);
 const WATCH_POLL: Duration = Duration::from_millis(25);
 /// The keys a reload applies without a restart (`<table>.<key>`, or
 /// `<table>.*`); everything else is logged "restart needed".
-pub const HOT_KEYS: [&str; 17] = [
+pub const HOT_KEYS: [&str; 18] = [
     "api.allowed_origins",
     // `deckd::codexd` reads `[codex]` on every connect attempt.
     "codex.*",
@@ -48,6 +48,8 @@ pub const HOT_KEYS: [&str; 17] = [
     // mirror of B14's failure and just as wrong.
     "hooks.enabled",
     "hooks.claude.hold_s",
+    // Read per hook through `Adapters::cfg`, like `hold_s`.
+    "hooks.claude.settle_s",
     "hooks.codex.hold_s",
     "hooks.gemini.hold_s",
     "liveness.*",
@@ -566,6 +568,11 @@ pub struct HooksClaude {
     /// daemon-wide fallback for a held card that names no budget of its own.
     pub hold_s: u32,
     pub tool_titles: bool,
+    /// How long a permission ask waits, unseen, for an auto-approver (auto
+    /// mode's classifier, the host app's approver) or the terminal to
+    /// decide it before it reaches the deck. Claude's own "needs your
+    /// permission" notification shows it sooner. 0 shows every ask at once.
+    pub settle_s: u32,
     pub report_via: String,
     pub desk_presence: bool,
 }
@@ -575,6 +582,7 @@ impl Default for HooksClaude {
         HooksClaude {
             hold_s: 120,
             tool_titles: false,
+            settle_s: crate::adapters::SETTLE_S,
             report_via: "http".into(),
             desk_presence: false,
         }
@@ -1506,6 +1514,7 @@ mod tests {
         assert!(is_hot("agents.grace_s"));
         assert!(is_hot("agents.claude:cohdl-api.slot"), "pins are hot");
         assert!(is_hot("hooks.claude.hold_s"));
+        assert!(is_hot("hooks.claude.settle_s"));
         assert!(
             is_hot("hooks.enabled"),
             "the tray's Pause hooks is `config.set hooks.enabled=false`, and \

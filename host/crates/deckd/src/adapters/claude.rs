@@ -81,6 +81,27 @@ pub const DENIED: &str = "Denied from the deck";
 /// The one choice of an informational focus card (§5.6).
 pub const FOCUS: &str = "Focus terminal";
 
+/// A session's open card and the tool call it asked about.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Open {
+    card: CardId,
+    /// `tool_name` of the ask.
+    tool: String,
+    /// The ask's `tool_input` digest (`input_digest`) for a permission
+    /// card. `None` for a degraded question card: the `PostToolUse` of an
+    /// `AskUserQuestion` carries the answers in its input, so only the
+    /// tool name can recognise it.
+    digest: Option<String>,
+}
+
+impl Open {
+    /// Whether a tool event (`PostToolUse`, `PostToolUseFailure`,
+    /// `PermissionDenied`) is about this card's ask.
+    fn matches(&self, tool: &str, input: &serde_json::Value) -> bool {
+        self.tool == tool && self.digest.as_ref().is_none_or(|d| *d == input_digest(input))
+    }
+}
+
 /// What the adapter remembers between payloads.
 ///
 /// All of it is a memo — something the store already knows, or a window
@@ -104,7 +125,11 @@ struct Memo {
     /// in parallel — a `PostToolUse` from some other tool would otherwise
     /// clear a card the operator is in the middle of answering, and
     /// clearing it releases the group.
-    open: HashMap<String, CardId>,
+    ///
+    /// Each entry also names the tool call it asked about (`Open`), so a
+    /// `PostToolUse` from a **parallel** tool — a `Read` beside the `Bash`
+    /// that is still waiting on the operator — cannot take it off.
+    open: HashMap<String, Open>,
     /// `session_id` → the card of this session that is **parked on a hold
     /// right now**, whatever its origin: a `PermissionRequest`, or the
     /// question of an `AskUserQuestion` group the operator is part way
@@ -281,8 +306,23 @@ pub fn tool_summary(tool: &str, input: &serde_json::Value) -> String {
 /// input is hashed rather than kept — it is the most sensitive field on
 /// the wire and the memo outlives the request (§11).
 fn dedupe_key(session_id: &str, tool: &str, input: &serde_json::Value) -> String {
-    let digest = blake3::hash(input.to_string().as_bytes());
-    format!("{session_id}\u{0}{tool}\u{0}{}", digest.to_hex())
+    format!("{session_id}\u{0}{tool}\u{0}{}", input_digest(input))
+}
+
+/// Take `card` off the deck: decided elsewhere, never by the deck.
+fn clear(card: CardId, reason: &str) -> Request {
+    Request::CardClear(CardClear {
+        agent: pending(),
+        card,
+        delivered: false,
+        reason: Some(reason.into()),
+    })
+}
+
+/// A tool input, hashed (never kept, §11): what ties a tool event back to
+/// the ask it answers when the payload has no `tool_use_id` (C5).
+fn input_digest(input: &serde_json::Value) -> String {
+    blake3::hash(input.to_string().as_bytes()).to_hex().to_string()
 }
 
 impl Claude {
@@ -650,6 +690,41 @@ impl Claude {
         })
     }
 
+    /// Take this session's open card, whatever it asked about: the turn it
+    /// belonged to is over (`Stop`, `StopFailure`, a new prompt, the idle
+    /// prompt, a restarted session), so whatever dialog it pointed at is
+    /// gone — answered, skipped or interrupted in the terminal.
+    fn take_open(&self, session_id: &str) -> Option<CardId> {
+        self.memo
+            .lock()
+            .ok()
+            .and_then(|mut m| m.open.remove(session_id))
+            .map(|o| o.card)
+    }
+
+    /// Take this session's open card only if this tool event
+    /// (`PostToolUse`, `PostToolUseFailure`, `PermissionDenied`) is about
+    /// the call it asked about. Claude runs tools in parallel: the
+    /// `PostToolUse` of a `Read` beside a `Bash` still waiting on the
+    /// operator must leave the `Bash` card alone.
+    fn take_open_for(&self, session_id: &str, payload: &HookPayload) -> Option<CardId> {
+        let tool = payload.str("tool_name").unwrap_or_default();
+        let input = payload
+            .get("tool_input")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let mut memo = self.memo.lock().ok()?;
+        if memo
+            .open
+            .get(session_id)
+            .is_some_and(|open| open.matches(tool, &input))
+        {
+            memo.open.remove(session_id).map(|o| o.card)
+        } else {
+            None
+        }
+    }
+
     /// Whether this session already has a card of ours on the deck that a
     /// new one would take off it.
     ///
@@ -700,6 +775,10 @@ impl Claude {
         let mut plan = plan;
         match kind {
             "idle_prompt" => {
+                // Waiting at its prompt: no dialog is open any more.
+                if let Some(card) = self.take_open(session_id) {
+                    plan.push(clear(card, "idle"));
+                }
                 plan.push(Self::update(Some(AgentState::Idle), None));
                 Ingest::Report(plan)
             }
@@ -832,6 +911,11 @@ impl Adapter for Claude {
                 if let Ok(mut memo) = self.memo.lock() {
                     memo.subagents.remove(session_id);
                 }
+                // A restarted, resumed or cleared session shows no dialog
+                // from before it.
+                if let Some(card) = self.take_open(session_id) {
+                    plan.push(clear(card, "session_start"));
+                }
                 plan.push(Self::work(0));
                 if payload.str("source") == Some("clear") {
                     if let Request::AgentUpdate(u) = plan.last_mut().expect("pushed") {
@@ -881,6 +965,12 @@ impl Adapter for Claude {
                         delivered: false,
                         reason: Some("prompt".into()),
                     }));
+                }
+                // A new prompt means whatever the last turn asked was
+                // answered, skipped or interrupted in the terminal — an
+                // interrupt sends no `Stop`, so this is where its card goes.
+                if let Some(card) = self.take_open(session_id) {
+                    plan.push(clear(card, "prompt"));
                 }
                 Ingest::Report(plan)
             }
@@ -953,20 +1043,11 @@ impl Adapter for Claude {
             }
             "PostToolUse" => {
                 let mut plan = lead();
-                // C8: the tool ran, so somebody answered — in the terminal
-                // if it was not us. First answer wins: the card goes.
-                if let Some(card) = self
-                    .memo
-                    .lock()
-                    .ok()
-                    .and_then(|mut m| m.open.remove(session_id))
-                {
-                    plan.push(Request::CardClear(CardClear {
-                        agent: pending(),
-                        card,
-                        delivered: false,
-                        reason: Some("tool_ran".into()),
-                    }));
+                // C8: the tool ran, so somebody answered — in the terminal,
+                // an auto-approver or the host, if it was not us. First
+                // answer wins: the card goes, but only this call's card.
+                if let Some(card) = self.take_open_for(session_id, payload) {
+                    plan.push(clear(card, "tool_ran"));
                 }
                 if cfg.tool_titles {
                     let tool = payload.str("tool_name").unwrap_or_default();
@@ -984,18 +1065,8 @@ impl Adapter for Claude {
             "Stop" => {
                 let mut plan = lead();
                 plan.push(Self::update(Some(AgentState::Ready), None));
-                if let Some(card) = self
-                    .memo
-                    .lock()
-                    .ok()
-                    .and_then(|mut m| m.open.remove(session_id))
-                {
-                    plan.push(Request::CardClear(CardClear {
-                        agent: pending(),
-                        card,
-                        delivered: false,
-                        reason: Some("turn_ended".into()),
-                    }));
+                if let Some(card) = self.take_open(session_id) {
+                    plan.push(clear(card, "turn_ended"));
                 }
                 // `last_assistant_message` is the documented source; the
                 // transcript lags the turn and is never read here.
@@ -1045,6 +1116,9 @@ impl Adapter for Claude {
             }
             "StopFailure" => {
                 let mut plan = lead();
+                if let Some(card) = self.take_open(session_id) {
+                    plan.push(clear(card, "turn_ended"));
+                }
                 let error = payload.str("error").unwrap_or("unknown");
                 plan.push(Self::update(
                     Some(AgentState::Error),
@@ -1071,6 +1145,20 @@ impl Adapter for Claude {
                         }));
                     }
                 }
+                Ingest::Report(plan)
+            }
+            // The call did not run (`PermissionDenied`: auto mode refused
+            // it) or ran and failed: either way it was decided without the
+            // deck, and the session carries on working.
+            "PostToolUseFailure" | "PermissionDenied" => {
+                let mut plan = lead();
+                if let Some(card) = self.take_open_for(session_id, payload) {
+                    plan.push(clear(
+                        card,
+                        if event == "PermissionDenied" { "auto_denied" } else { "tool_failed" },
+                    ));
+                }
+                plan.push(Self::update(Some(AgentState::Working), None));
                 Ingest::Report(plan)
             }
             "Notification" => self.notification(payload, session_id, lead()),
@@ -1265,10 +1353,19 @@ impl Adapter for Claude {
                     .or_insert(card);
             }
             (_, OriginKind::Permission) => {
+                let open = Open {
+                    card,
+                    tool: payload.str("tool_name").unwrap_or_default().to_string(),
+                    digest: Some(input_digest(payload.get("tool_input").unwrap_or(&serde_json::Value::Null))),
+                };
                 memo.open
                     .entry(session_id.to_string())
-                    .and_modify(|current| *current = (*current).max(card))
-                    .or_insert(card);
+                    .and_modify(|current| {
+                        if card > current.card {
+                            *current = open.clone();
+                        }
+                    })
+                    .or_insert(open);
             }
             _ => {}
         }
@@ -1280,7 +1377,7 @@ impl Adapter for Claude {
             return;
         };
         if let Ok(mut memo) = self.memo.lock() {
-            if memo.open.get(session_id) == Some(&card) {
+            if memo.open.get(session_id).map(|o| o.card) == Some(card) {
                 memo.open.remove(session_id);
             }
             // The hold is resolved either way; a group's next card parks
@@ -1337,9 +1434,12 @@ impl Adapter for Claude {
             // `open` back for the older id would point the next clear at a
             // card that is already gone while the live one stayed on the
             // deck. Card ids only go up, so "newer" is decidable here.
-            let newer = memo.open.get(session_id).is_some_and(|open| *open > card);
+            let newer = memo.open.get(session_id).is_some_and(|open| open.card > card);
             if reason.degrades_card() && !newer {
-                memo.open.insert(session_id.to_string(), card);
+                let tool = payload.str("tool_name").unwrap_or_default().to_string();
+                let digest = (cmd.origin.kind == OriginKind::Permission)
+                    .then(|| input_digest(payload.get("tool_input").unwrap_or(&serde_json::Value::Null)));
+                memo.open.insert(session_id.to_string(), Open { card, tool, digest });
             }
         }
         if cmd.origin.kind == OriginKind::Question {
@@ -1380,6 +1480,7 @@ mod tests {
             cfg: HookCfg {
                 hold_s: 120,
                 tool_titles: false,
+                settle_s: 0,
             },
             ..HookCtx::default()
         }
@@ -1637,7 +1738,18 @@ mod tests {
     /// otherwise it sits there until something else replaces it.
     #[test]
     fn a_released_card_is_cleared_when_the_turn_moves_on() {
-        for (event, reason) in [("PostToolUse", "tool_ran"), ("Stop", "turn_ended")] {
+        for (event, reason) in [
+            ("PostToolUse", "tool_ran"),
+            ("PostToolUseFailure", "tool_failed"),
+            ("PermissionDenied", "auto_denied"),
+            ("Stop", "turn_ended"),
+            ("StopFailure", "turn_ended"),
+            // An interrupt sends no `Stop`: the next prompt, the idle
+            // prompt or a restart is what says the dialog is gone.
+            ("UserPromptSubmit", "prompt"),
+            ("Notification", "idle"),
+            ("SessionStart", "session_start"),
+        ] {
             let claude = Claude::default();
             let t0 = Instant::now();
             let ask = payload(permission("Bash", serde_json::json!({"command": "date"})));
@@ -1646,10 +1758,14 @@ mod tests {
             };
             claude.carded(&ask, &cmd, CardId(21));
             claude.released(&ask, &cmd, CardId(21), Release::Snooze, t0);
+            // A tool event names the call it is about; `Stop` ignores it.
             let next = payload(serde_json::json!({
                 "session_id": "abc123", "cwd": "/w/project", "hook_event_name": event,
+                "tool_name": "Bash", "tool_input": {"command": "date"},
+                "notification_type": "idle_prompt",
             }));
-            let Ingest::Report(plan) = claude.ingest(&next, &ctx(t0)) else {
+            // `SessionStart` answers with its beacon; the plan is the same.
+            let (Ingest::Report(plan) | Ingest::Beacon(_, plan)) = claude.ingest(&next, &ctx(t0)) else {
                 panic!("{event} is report-only");
             };
             let cleared: Vec<(CardId, Option<&str>)> = plan
@@ -1661,7 +1777,7 @@ mod tests {
                 .collect();
             assert_eq!(cleared, vec![(CardId(21), Some(reason))], "{event}");
             // Once: the next event has nothing left to clear.
-            let Ingest::Report(plan) = claude.ingest(&next, &ctx(t0)) else {
+            let (Ingest::Report(plan) | Ingest::Beacon(_, plan)) = claude.ingest(&next, &ctx(t0)) else {
                 panic!("{event} is report-only");
             };
             assert!(!plan.iter().any(|r| matches!(r, Request::CardClear(_))));
@@ -1969,6 +2085,7 @@ mod tests {
         let ask = payload(permission("Bash", serde_json::json!({"command": "date"})));
         let post = payload(serde_json::json!({
             "session_id": "abc123", "cwd": "/w/project", "hook_event_name": "PostToolUse",
+            "tool_name": "Bash", "tool_input": {"command": "date"},
         }));
         let prompt = payload(serde_json::json!({
             "session_id": "abc123", "cwd": "/w/project", "hook_event_name": "Notification",
@@ -2052,8 +2169,19 @@ mod tests {
             // leave a degraded card behind — it still is not this session's.
             claude.released(&first, &one, CardId(1), Release::Expiry, t0);
 
+            // The displaced ask's own call finishing clears nothing: the
+            // open card is the live one, and it asked about `uname`.
+            let stale = payload(serde_json::json!({
+                "session_id": "abc123", "cwd": "/w/project", "hook_event_name": "PostToolUse",
+                "tool_name": "Bash", "tool_input": {"command": "date"},
+            }));
+            let Ingest::Report(plan) = claude.ingest(&stale, &ctx(t0)) else {
+                panic!("PostToolUse is report-only");
+            };
+            assert!(!plan.iter().any(|r| matches!(r, Request::CardClear(_))));
             let post = payload(serde_json::json!({
                 "session_id": "abc123", "cwd": "/w/project", "hook_event_name": "PostToolUse",
+                "tool_name": "Bash", "tool_input": {"command": "uname"},
             }));
             let Ingest::Report(plan) = claude.ingest(&post, &ctx(t0)) else {
                 panic!("PostToolUse is report-only");
@@ -2539,13 +2667,13 @@ mod tests {
             .lock()
             .expect("the memo")
             .open
-            .insert("abc123".to_string(), CardId(9));
+            .insert("abc123".to_string(), Open { card: CardId(9), tool: "Bash".into(), digest: None });
 
         claude.released(&ask, &cmd, CardId(4), Release::Expiry, t0);
         let memo = claude.memo.lock().expect("the memo");
         assert_eq!(
-            memo.open.get("abc123"),
-            Some(&CardId(9)),
+            memo.open.get("abc123").map(|o| o.card),
+            Some(CardId(9)),
             "the newer card keeps the slot"
         );
         assert!(
