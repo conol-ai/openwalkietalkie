@@ -54,7 +54,7 @@ fn agent(id: &str, state: AgentState) -> Agent {
         card: None,
         reply: None,
         messages: Vec::new(),
-        workflow_runs: Vec::new(), workflow: None,
+        workflow_runs: Vec::new(), task: None, task_source: None, subagents: 0, workflow: None,
         chat_rev: 0,
         reply_rev: 0,
         voice: None,

@@ -604,7 +604,7 @@ mod tests {
             title_source: None,
             since: None,
             name: None,
-            meta: None,
+            meta: None, task: None, subagents: None,
         })
     }
 

@@ -25,7 +25,8 @@ impl fmt::Display for AgentId {
     }
 }
 
-/// Device slot 1..=8.
+/// Device slot 1..=255 (one byte on the wire); a deck holds
+/// `DeviceState::capacity` of them, 8 on a deck that does not say.
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
 )]
@@ -33,10 +34,13 @@ impl fmt::Display for AgentId {
 pub struct Slot(pub u8);
 
 impl Slot {
-    pub const MAX: u8 = 8;
+    pub const MAX: u8 = u8::MAX;
+    /// What a deck that does not report its table holds.
+    pub const DEFAULT: u8 = 8;
 
+    /// 1..=MAX; with MAX = 255, only slot 0 is out of range.
     pub const fn is_valid(self) -> bool {
-        self.0 >= 1 && self.0 <= Self::MAX
+        self.0 >= 1
     }
 }
 
@@ -219,7 +223,7 @@ mod tests {
         assert_eq!(SessionId(31).to_string(), "sess_z");
         assert_ne!(AgentId::from_seed(1), AgentId::from_seed(2));
         assert!(Slot(1).is_valid() && Slot(8).is_valid());
-        assert!(!Slot(0).is_valid() && !Slot(9).is_valid());
+        assert!(!Slot(0).is_valid() && Slot(255).is_valid());
         assert_eq!(serde_json::to_string(&Slot(3)).unwrap(), "3");
         assert_eq!(
             serde_json::to_string(&AgentId("ag_x".into())).unwrap(),

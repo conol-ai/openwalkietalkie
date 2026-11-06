@@ -369,7 +369,7 @@ mod tests {
                 title_source: None,
                 since: None,
                 name: None,
-                meta: None,
+                meta: None, task: None, subagents: None,
             })
         };
         for n in 0..50 {
@@ -462,7 +462,7 @@ mod tests {
                 title_source: None,
                 since: None,
                 name: None,
-                meta: None,
+                meta: None, task: None, subagents: None,
             })
         };
         for _ in 0..10 {
@@ -556,7 +556,7 @@ mod tests {
             }),
             reply: None,
             messages: Vec::new(),
-            workflow_runs: Vec::new(), workflow: None,
+            workflow_runs: Vec::new(), task: None, task_source: None, subagents: 0, workflow: None,
             chat_rev: 0,
             reply_rev: 0,
             voice: None,

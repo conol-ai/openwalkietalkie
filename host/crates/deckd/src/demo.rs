@@ -80,7 +80,7 @@ pub fn permission_update(id: &AgentId) -> AgentUpdate {
         title_source: Some(TitleSource::Prompt),
         since: None,
         name: None,
-        meta: None,
+        meta: None, task: None, subagents: None,
     }
 }
 
@@ -183,6 +183,8 @@ fn agent(
         state: Some(state),
         title: Some(title.into()),
         since_s,
+        task: None,
+        subs: None,
     }
 }
 
@@ -376,6 +378,8 @@ pub fn flood_title(i: usize) -> HostLine {
             SPINNER[i % SPINNER.len()]
         )),
         since_s: None,
+        task: None,
+        subs: None,
     }
 }
 
@@ -437,7 +441,7 @@ impl Script {
             title_source: Some(TitleSource::Api),
             since: Some(Ts::from_millis(now.millis().saturating_sub(age_ms))),
             name: None,
-            meta: None,
+            meta: None, task: None, subagents: None,
         }
     }
 
@@ -498,6 +502,7 @@ pub fn scripts() -> Vec<Script> {
                 state,
                 title,
                 since_s,
+                ..
             } => scripts.push(Script {
                 slot,
                 kind: kind.unwrap_or(Kind::Other),
@@ -582,7 +587,7 @@ fn working(id: &AgentId, title: &str) -> Request {
         title_source: Some(TitleSource::Api),
         since: None,
         name: None,
-        meta: None,
+        meta: None, task: None, subagents: None,
     })
 }
 

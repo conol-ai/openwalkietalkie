@@ -240,6 +240,8 @@ fn assert_same(mine: &HostLine, fw: &HostMsg) {
                 state,
                 title,
                 since_s,
+                task,
+                subs,
             },
             HostMsg::Agent {
                 id,
@@ -250,6 +252,8 @@ fn assert_same(mine: &HostLine, fw: &HostMsg) {
                 project: fw_project,
                 title: fw_title,
                 since_s: fw_since,
+                task: fw_task,
+                subs: fw_subs,
             },
         ) => {
             assert_eq!(id, slot);
@@ -268,6 +272,11 @@ fn assert_same(mine: &HostLine, fw: &HostMsg) {
                 title.as_deref().map(laundered)
             );
             assert_eq!(fw_since, since_s);
+            assert_eq!(
+                fw_task.as_ref().map(|t| t.as_str().to_string()),
+                task.as_deref().map(laundered)
+            );
+            assert_eq!(*fw_subs, subs.map(|n| n.min(99)));
         }
         (HostLine::AgentGone { slot }, HostMsg::Agent { id, gone: true, .. }) => {
             assert_eq!(id, slot);
@@ -507,6 +516,8 @@ fn corpus() -> Vec<HostLine> {
             state: Some(AgentState::Question),
             title: Some("Run migrations on staging?".into()),
             since_s: Some(120),
+            task: None,
+            subs: None,
         },
         HostLine::Agent {
             slot: 8,
@@ -516,6 +527,8 @@ fn corpus() -> Vec<HostLine> {
             state: Some(AgentState::Error),
             title: Some(long.clone()),
             since_s: Some(u32::MAX),
+            task: None,
+            subs: None,
         },
         HostLine::Agent {
             slot: 3,
@@ -525,6 +538,8 @@ fn corpus() -> Vec<HostLine> {
             state: None,
             title: Some("Compiling openmicro ⠋".into()),
             since_s: None,
+            task: None,
+            subs: None,
         },
         HostLine::AgentGone { slot: 2 },
         HostLine::Card {
@@ -841,6 +856,7 @@ fn device_corpus(ui: &UiState) -> Vec<(Vec<u8>, DeviceLine)> {
             sid: ui.deck.held_sid(),
             boot: ui.still_default(),
             rx: LINE_MAX as u16,
+            agents: Some(255),
             faces: faces.clone(),
         },
     ));
@@ -968,6 +984,8 @@ fn every_enum_spelling_matches_the_firmware() {
             state,
             title: None,
             since_s: None,
+            task: None,
+            subs: None,
         }
     }
     let read = |line: &HostLine| *fw_parse(&stripped(&encode(line).unwrap())).unwrap();
@@ -1294,6 +1312,7 @@ fn the_longest_device_hello_parses_at_every_chunk_size() {
             boot,
             rx,
             faces,
+            ..
         })] = got.as_slice()
         else {
             panic!("chunk {chunk}: {got:?}")
@@ -1500,7 +1519,7 @@ proptest! {
         title in prop::option::of("\\PC{0,90}"),
         since in prop::option::of(any::<u32>()),
     ) {
-        let line = HostLine::Agent { slot, kind: Some(Kind::Claude), name, project, state: None, title, since_s: since };
+        let line = HostLine::Agent { slot, kind: Some(Kind::Claude), name, project, state: None, title, since_s: since, task: None, subs: None };
         match encode(&line) {
             Ok(bytes) => {
                 prop_assert!(bytes.len() <= caps().line);

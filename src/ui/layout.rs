@@ -7,8 +7,8 @@
 //!   header      label cap-height 41..50.5, text from x 38..40, tags end 440..442
 //!   hint bar    hairline y 427, fill 428..480, keycaps y 443.5..463.5
 //!   indicator   pill x 223..257, y 10..15
-//!   roster      row 32..448 x 70..144, pitch 77.5; dot centre x 53, d 11;
-//!               name x 72.5 baseline +33, title baseline +53
+//!   roster      (measured for the old list; the carousel replaced it, see
+//!               ROSTER_CARD)
 //!   card        dot 39..50 x 41..52, name x 60.5, question 37.. x 84..132 (2
 //!               lines); choice rows 32..448 x 156..207, pitch 61; number chip
 //!               46.5..68.5 (22x22), choice text x 81.5, "recommended" ends 433
@@ -214,27 +214,47 @@ pub const HINT_CONTENT: Rect = Rect::new(32, 442, 416, 24);
 pub const BODY: Rect = Rect::new(0, 60, SCREEN, HINT_Y - 1 - 60);
 
 // ---- agents: roster -----------------------------------------------------------
-pub const ROSTER_VISIBLE: u8 = 4;
-/// Finger travel that scrolls a list by one row (`Target::pitch`): the
-/// distance between row tops, rounded.
-pub const ROSTER_PITCH: u8 = 78;
-/// Visible row 0..4: 74 px tall, pitch 77.5.
-pub const fn roster_row(row_index: u8) -> Rect {
-    row(70 + row_index as i32 * 155 / 2, 74)
+/// The roster is a carousel: the highlighted session is a large card (place
+/// 1), the sessions before and after it peek above and below (places 0 and 2).
+pub const ROSTER_VISIBLE: u8 = 3;
+/// Finger travel that moves the carousel by one session (`Target::pitch`).
+pub const ROSTER_PITCH: u8 = 60;
+/// The peek above the card. The three are centred in the body.
+pub const ROSTER_PEEK_ABOVE: Rect = Rect::new(MARGIN, 74, SCREEN - 2 * MARGIN, 42);
+/// The highlighted session.
+pub const ROSTER_CARD: Rect = Rect::new(MARGIN, 122, SCREEN - 2 * MARGIN, 236);
+/// The peek below the card.
+pub const ROSTER_PEEK_BELOW: Rect = Rect::new(MARGIN, 364, SCREEN - 2 * MARGIN, 42);
+/// Carousel place 0..3: the peek above, the card, the peek below.
+/// The project pager: one dot per project above the roster header's name
+/// (the level above the sessions the carousel turns through), the shown
+/// project a pill. At most `ROSTER_PAGER_MAX` dots; past that a window
+/// around the shown one, its end dots shrunk where more lie beyond.
+pub const ROSTER_PAGER_Y: i32 = 22;
+pub const ROSTER_PAGER_DOT: i32 = 6;
+pub const ROSTER_PAGER_PILL: i32 = 18;
+pub const ROSTER_PAGER_GAP: i32 = 8;
+pub const ROSTER_PAGER_MAX: u8 = 9;
+/// Every pixel the pager can draw when it starts at `x`.
+pub const fn roster_pager(x: i32) -> Rect {
+    let w = (ROSTER_PAGER_MAX as i32 - 1) * (ROSTER_PAGER_DOT + ROSTER_PAGER_GAP) + ROSTER_PAGER_PILL;
+    Rect::new(x, ROSTER_PAGER_Y, w, ROSTER_PAGER_DOT)
+}
+
+pub const fn roster_row(place: u8) -> Rect {
+    match place {
+        0 => ROSTER_PEEK_ABOVE,
+        1 => ROSTER_CARD,
+        _ => ROSTER_PEEK_BELOW,
+    }
 }
 pub fn roster_row_at(x: i32, y: i32) -> Option<u8> {
     index_at(ROSTER_VISIBLE, roster_row, x, y)
 }
-/// Inside a roster row, relative to its origin: dot centre and radius, text
-/// left edge, name and title baselines, the active-channel bar.
-pub const ROSTER_DOT: (i32, i32, i32) = (21, 37, 5);
-pub const ROSTER_TEXT_X: i32 = 40;
-pub const ROSTER_NAME_BASELINE: i32 = 33;
-pub const ROSTER_TITLE_BASELINE: i32 = 56;
-/// 3 px white bar left of the active channel's row.
-pub const fn roster_active_bar(row_index: u8) -> Rect {
-    let r = roster_row(row_index);
-    Rect::new(r.left() - 8, r.top() + 14, 3, r.height() - 28)
+/// 3 px white bar left of the active channel's card or peek.
+pub const fn roster_active_bar(place: u8) -> Rect {
+    let r = roster_row(place);
+    Rect::new(r.left() - 8, r.top() + 10, 3, r.height() - 20)
 }
 
 // ---- agents: channel ------------------------------------------------------------
@@ -667,6 +687,13 @@ mod tests {
         for slot in 0..ROSTER_VISIBLE {
             assert!(in_safe_area(&roster_active_bar(slot)));
         }
+        // The pager above the header's name: inside the panel, clear of the
+        // notice pill and the Bluetooth bars, and clear above the name's
+        // capitals (Label caps start at y 37).
+        let pager = roster_pager(super::super::theme::TEXT_X);
+        assert!(in_safe_area(&pager), "{pager:?}");
+        assert!(pager.intersection(&INDICATOR).is_empty() && pager.intersection(&BLUETOOTH).is_empty());
+        assert!(pager.bottom() + 8 <= 37, "{pager:?}");
     }
 
     #[test]
@@ -717,8 +744,10 @@ mod tests {
 
     #[test]
     fn measured_geometry_matches_the_mockups() {
-        assert_eq!(roster_row(0), Rect::new(32, 70, 416, 74));
-        assert_eq!(roster_row(3).top(), 302);
+        // The carousel: a peek, the card, a peek, inside the body.
+        assert_eq!((roster_row(0), roster_row(1), roster_row(2)), (ROSTER_PEEK_ABOVE, ROSTER_CARD, ROSTER_PEEK_BELOW));
+        assert!(ROSTER_PEEK_ABOVE.bottom() < ROSTER_CARD.top() && ROSTER_CARD.bottom() < ROSTER_PEEK_BELOW.top());
+        assert!(ROSTER_PEEK_ABOVE.top() >= BODY.top() && ROSTER_PEEK_BELOW.bottom() <= HINT_Y);
         // Lower and tighter than mockup 8 (278, 51 tall): the larger type ramp
         // needs room for three question lines above the choices.
         assert_eq!(card_choice(2), Rect::new(32, 284, 416, 48));

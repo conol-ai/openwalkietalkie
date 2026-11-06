@@ -78,7 +78,7 @@ fn a_slide_shows_the_two_neighbours_side_by_side() {
 }
 
 fn on_index(ui: &UiState, index: u8) -> Box<UiState> {
-    let mut at = Box::new(*ui);
+    let mut at = Box::new((*ui).clone());
     at.global.current = index;
     at.global.strip_x = index as i32 * FACE_W * STRIP_ONE;
     at
@@ -111,7 +111,7 @@ fn a_retargeted_slide_refreshes_like_a_complete_redraw_in_every_frame() {
     let mut screen = Screens::new(&previous);
     let mut now = 0;
     let mut step = |previous: &mut Box<UiState>, control: Option<Control>, dt: u32| {
-        let mut next = Box::new(**previous);
+        let mut next = Box::new((**previous).clone());
         let mut out = Update::new();
         now += dt;
         match control {

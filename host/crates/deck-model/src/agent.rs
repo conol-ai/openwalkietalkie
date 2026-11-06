@@ -421,6 +421,19 @@ pub struct Agent {
     pub workflow: Option<crate::workflow::Plan>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub workflow_runs: Vec<crate::workflow::Run>,
+    /// The session's major task, the roster's title: the CLI's own session
+    /// title when it reports one, else the session's first prompt (not the
+    /// latest one), else what the owner set with `agent.update {task}`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task: Option<String>,
+    /// Where `task` came from; a prompt-derived task is content.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_source: Option<TitleSource>,
+    /// Subagents the session has running (Claude's `SubagentStart` /
+    /// `SubagentStop`, or what the owner reports with `agent.update
+    /// {subagents}`). The roster's count adds the running workflow runs.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub subagents: u16,
     /// Stable while messages grow; changes when retained history is pruned.
     #[serde(default)]
     pub chat_rev: u16,
@@ -437,7 +450,23 @@ pub struct Agent {
     pub redacted: bool,
 }
 
+fn is_zero(n: &u16) -> bool {
+    *n == 0
+}
+
 impl Agent {
+    /// Background work in flight: running subagents plus running workflow
+    /// runs. The roster's count.
+    #[must_use]
+    pub fn active_work(&self) -> u32 {
+        let runs = self
+            .workflow_runs
+            .iter()
+            .filter(|run| run.status == crate::workflow::ActivityStatus::Running)
+            .count() as u32;
+        u32::from(self.subagents) + runs
+    }
+
     pub fn native_companion(&self) -> bool { self.companion.is_some() || self.kind == Kind::Conol }
 
     /// Native clients use the app/session grammar on the deck. Brand-specific

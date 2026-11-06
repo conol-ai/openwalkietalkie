@@ -16,7 +16,14 @@ use super::msg::{
 };
 use super::text::Text;
 
-pub const MAX_AGENTS: usize = 8;
+/// The id space: agent ids are one byte on the wire, 1..=255. A deck holds
+/// [`Agents::len`] of them (its session table, sized by its owner); the
+/// per-id arrays below are only bytes each.
+pub const MAX_AGENTS: usize = 255;
+/// Sessions a deck holds when its owner gives it no larger table: what
+/// every deck held before the table moved to PSRAM, and what a host assumes
+/// of a deck that does not say (`hello` without `agents`).
+pub const DEFAULT_SESSIONS: usize = 8;
 pub const MAX_NOTICES: usize = 8;
 pub const MAX_MACRO_SETS: usize = 3;
 /// The host says hello every 5 s; this much silence means it is gone.
@@ -211,6 +218,11 @@ pub struct Agent {
     /// directory's last component); empty = no project. The roster's pages.
     pub project: Text<24>,
     pub title: Text<64>,
+    /// The session's major task (the roster's title); empty falls back to
+    /// the name.
+    pub task: Text<64>,
+    /// Subagents and workflow runs in flight (the roster's count).
+    pub subs: u8,
     pub last_reply: Text<200>,
     /// The whole reply, laid out by the host and scrolled here. `last_reply`
     /// stays the capped line the `reply` message carries, so a lane with no
@@ -236,6 +248,8 @@ impl Agent {
             name: Text::new(),
             project: Text::new(),
             title: Text::new(),
+            task: Text::new(),
+            subs: 0,
             last_reply: Text::new(),
             reply: Doc::new(DocFont::Row),
             reply_kind: DocKind::Reply,
@@ -452,10 +466,12 @@ impl Effects {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// Not `Copy`: its session table is storage the owner provides
+/// (`UiState::copy_into` copies the contents).
+#[derive(PartialEq, Eq, Debug)]
 pub struct Deck {
-    /// Slot = id - 1.
-    pub agents: [Agent; MAX_AGENTS],
+    /// Slot = id - 1; as many as the owner's table holds.
+    pub agents: Agents,
     /// Displayed roster order (agent ids): by project (name order, no project
     /// last), then Question > Ready > Error > Working > Idle, by id inside a
     /// class, once `sort` has run.
@@ -500,10 +516,132 @@ pub struct Deck {
     order_stale: bool,
 }
 
+/// The deck's session table: `len` agents at `ptr`, storage its owner
+/// provides (the firmware: a table in PSRAM; the host tests: the heap).
+/// Indexed and iterated like the array it replaced; slot = id - 1.
+pub struct Agents {
+    ptr: *mut Agent,
+    len: usize,
+    /// The table was allocated here (host builds) and is freed with it.
+    #[cfg(not(target_os = "none"))]
+    owned: bool,
+}
+
+// SAFETY: the table is reached only through its `Deck`, which the owner
+// keeps on one thread; the pointer is an address, not shared state.
+unsafe impl Send for Agents {}
+unsafe impl Sync for Agents {}
+
+impl Agents {
+    /// No table yet: every lookup misses until the owner attaches one.
+    pub const fn empty() -> Self {
+        Self {
+            ptr: core::ptr::NonNull::dangling().as_ptr(),
+            len: 0,
+            #[cfg(not(target_os = "none"))]
+            owned: false,
+        }
+    }
+
+    /// Use `len` initialised agents at `ptr`.
+    ///
+    /// # Safety
+    /// `ptr` must point to `len` valid `Agent`s that live as long as this
+    /// table and are reached through nothing else.
+    pub unsafe fn attach(&mut self, ptr: *mut Agent, len: usize) {
+        self.release();
+        self.ptr = ptr;
+        self.len = len.min(MAX_AGENTS);
+    }
+
+    /// A table of `len` sessions on the heap (host builds: tests, preview).
+    #[cfg(not(target_os = "none"))]
+    pub fn allocate(&mut self, len: usize) {
+        let table: std::boxed::Box<[Agent]> = (0..len.min(MAX_AGENTS)).map(|_| Agent::new()).collect();
+        let len = table.len();
+        let ptr = std::boxed::Box::into_raw(table) as *mut Agent;
+        // SAFETY: just allocated, `len` agents, owned by this table alone.
+        unsafe { self.attach(ptr, len) };
+        self.owned = true;
+    }
+
+    fn release(&mut self) {
+        #[cfg(not(target_os = "none"))]
+        if core::mem::take(&mut self.owned) {
+            // SAFETY: `allocate` made exactly this boxed slice.
+            drop(unsafe { std::boxed::Box::from_raw(core::ptr::slice_from_raw_parts_mut(self.ptr, self.len)) });
+        }
+        // Field by field: assigning a whole `Agents` would drop this one and
+        // call back in here.
+        self.ptr = core::ptr::NonNull::dangling().as_ptr();
+        self.len = 0;
+    }
+}
+
+#[cfg(not(target_os = "none"))]
+impl Drop for Agents {
+    fn drop(&mut self) {
+        self.release();
+    }
+}
+
+impl core::ops::Deref for Agents {
+    type Target = [Agent];
+    fn deref(&self) -> &[Agent] {
+        // SAFETY: `attach`'s contract; an empty table is a dangling, aligned
+        // pointer with length 0.
+        unsafe { core::slice::from_raw_parts(self.ptr, self.len) }
+    }
+}
+
+impl core::ops::DerefMut for Agents {
+    fn deref_mut(&mut self) -> &mut [Agent] {
+        // SAFETY: as `deref`, and `&mut self` is the only way in.
+        unsafe { core::slice::from_raw_parts_mut(self.ptr, self.len) }
+    }
+}
+
+impl<'a> IntoIterator for &'a Agents {
+    type Item = &'a Agent;
+    type IntoIter = core::slice::Iter<'a, Agent>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a mut Agents {
+    type Item = &'a mut Agent;
+    type IntoIter = core::slice::IterMut<'a, Agent>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter_mut()
+    }
+}
+
+impl PartialEq for Agents {
+    fn eq(&self, other: &Self) -> bool {
+        **self == **other
+    }
+}
+impl Eq for Agents {}
+
+impl core::fmt::Debug for Agents {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_list().entries(self.iter().filter(|a| a.present)).finish()
+    }
+}
+
 impl Deck {
+    /// A deck with a heap table of `sessions` (host builds: tests).
+    #[cfg(not(target_os = "none"))]
+    pub fn boxed(sessions: usize) -> std::boxed::Box<Self> {
+        let mut deck = std::boxed::Box::new(Self::new());
+        deck.agents.allocate(sessions);
+        deck
+    }
+
     pub const fn new() -> Self {
         Self {
-            agents: [Agent::new(); MAX_AGENTS],
+            agents: Agents::empty(),
             order: [0; MAX_AGENTS],
             order_len: 0,
             workspaces: Workspaces::new(),
@@ -645,6 +783,15 @@ impl Deck {
             }
         }
         len
+    }
+
+    /// Which page of the Agents roster project `label` is (0 when it has
+    /// none), and how many pages there are.
+    pub fn project_page(&self, label: &str) -> (u8, u8) {
+        let mut heads = [0; MAX_AGENTS];
+        let len = self.project_heads(&mut heads);
+        let at = heads[..len].iter().position(|&head| self.project_of(head) == label).unwrap_or(0);
+        (at as u8, len as u8)
     }
 
     /// The agents of project `label`, in roster order: one page of the
@@ -826,8 +973,10 @@ impl Deck {
                 project,
                 title,
                 since_s,
+                task,
+                subs,
             } => {
-                let Some(slot) = (*id as usize).checked_sub(1).filter(|&slot| slot < MAX_AGENTS)
+                let Some(slot) = (*id as usize).checked_sub(1).filter(|&slot| slot < self.agents.len())
                 else {
                     fx.reject = Some(ErrWhy::Range);
                     return;
@@ -874,6 +1023,12 @@ impl Deck {
                     }
                     if let Some(title) = title {
                         agent.title = *title;
+                    }
+                    if let Some(task) = task {
+                        agent.task = *task;
+                    }
+                    if let Some(subs) = subs {
+                        agent.subs = *subs;
                     }
                     if let Some(age) = since_s {
                         agent.state_since_ms = now_ms.wrapping_sub(age.saturating_mul(1000));
@@ -1029,7 +1184,8 @@ impl Deck {
                     .iter()
                     .position(|set| set.face == *face)
                     .or_else(|| self.macros.iter().position(|set| set.face == 0));
-                let Some(slot) = slot.filter(|_| (1..=MAX_AGENTS as u8).contains(face)) else {
+                // Face ids are the strip's 1..=8 (`ui::state::MAX_FACES`).
+                let Some(slot) = slot.filter(|_| (1..=8u8).contains(face)) else {
                     fx.reject = Some(ErrWhy::Range);
                     return;
                 };
@@ -1135,7 +1291,7 @@ impl Deck {
     fn end_sync(&mut self) {
         self.syncing = false;
         self.synced_sid = self.sid;
-        for slot in 0..MAX_AGENTS {
+        for slot in 0..self.agents.len() {
             if self.agents[slot].present && self.agents[slot].stale {
                 let id = self.agents[slot].id;
                 self.remove_from_order(id);
@@ -1196,6 +1352,8 @@ fn clear_agent(agent: &mut Agent) {
     agent.name.clear();
     agent.project.clear();
     agent.title.clear();
+    agent.task.clear();
+    agent.subs = 0;
     agent.last_reply.clear();
     agent.reply.forget();
     agent.reply_rev = 0;
@@ -1226,7 +1384,7 @@ mod tests {
             name: None,
             project: None,
             title: None,
-            since_s: None,
+            since_s: None, task: None, subs: None,
         }
     }
 
@@ -1286,7 +1444,7 @@ mod tests {
 
     #[test]
     fn an_absent_macro_source_never_inherits_a_freed_slots() {
-        let mut deck = std::boxed::Box::new(Deck::new());
+        let mut deck = Deck::boxed(DEFAULT_SESSIONS);
         let mut fx = Effects::new();
         let mut source = Text::new();
         source.set("deck.toml");
@@ -1319,7 +1477,7 @@ mod tests {
 
     #[test]
     fn first_hello_clears_the_demo_and_a_new_sid_resyncs_through_stale() {
-        let mut deck = std::boxed::Box::new(Deck::new());
+        let mut deck = Deck::boxed(DEFAULT_SESSIONS);
         deck.settings.demo = true; // off at power-on
         super::super::demo::load(&mut deck);
         assert!(deck.demo_active());
@@ -1351,7 +1509,7 @@ mod tests {
 
     #[test]
     fn the_held_sid_is_zero_until_synced_and_again_after_a_lost_host() {
-        let mut deck = std::boxed::Box::new(Deck::new());
+        let mut deck = Deck::boxed(DEFAULT_SESSIONS);
         assert_eq!(deck.held_sid(), 0);
         apply(&mut deck, &hello(3), 0);
         assert_eq!(deck.held_sid(), 0, "a fresh session holds nothing yet");
@@ -1377,7 +1535,7 @@ mod tests {
 
     #[test]
     fn the_same_sid_resumes_after_a_link_loss_and_heartbeat_silence_marks_the_host_absent() {
-        let mut deck = std::boxed::Box::new(Deck::new());
+        let mut deck = Deck::boxed(DEFAULT_SESSIONS);
         apply(&mut deck, &hello(3), 0);
         apply(&mut deck, &agent(1, AgentState::Working), 1);
         assert!(deck.link_lost());
@@ -1403,7 +1561,7 @@ mod tests {
         assert!(deck.tick(50_000 + SYNC_TIMEOUT_MS));
         assert!(!deck.syncing && deck.agent(1).is_none());
         // Across the clock wrap too.
-        let mut deck = std::boxed::Box::new(Deck::new());
+        let mut deck = Deck::boxed(DEFAULT_SESSIONS);
         apply(&mut deck, &hello(3), u32::MAX - 100);
         assert!(!deck.tick(100));
         assert!(deck.tick(HEARTBEAT_MS));
@@ -1412,7 +1570,7 @@ mod tests {
 
     #[test]
     fn card_repush_updates_content_only_and_a_replacement_clears_the_old_one() {
-        let mut deck = std::boxed::Box::new(Deck::new());
+        let mut deck = Deck::boxed(DEFAULT_SESSIONS);
         apply(&mut deck, &hello(1), 0);
         apply(&mut deck, &agent(1, AgentState::Question), 1);
         let fx = apply(&mut deck, &card(1, 5), 2);
@@ -1473,7 +1631,7 @@ mod tests {
 
     #[test]
     fn a_window_lands_only_on_the_card_it_names_and_an_edited_body_forgets_it() {
-        let mut deck = std::boxed::Box::new(Deck::new());
+        let mut deck = Deck::boxed(DEFAULT_SESSIONS);
         apply(&mut deck, &hello(1), 0);
         apply(&mut deck, &agent(1, AgentState::Question), 1);
         apply(&mut deck, &card(1, 5), 2);
@@ -1510,7 +1668,7 @@ mod tests {
 
     #[test]
     fn roster_order_is_appended_and_compacted_and_sorted_only_on_request() {
-        let mut deck = std::boxed::Box::new(Deck::new());
+        let mut deck = Deck::boxed(DEFAULT_SESSIONS);
         apply(&mut deck, &hello(1), 0);
         apply(&mut deck, &agent(3, AgentState::Idle), 1);
         apply(&mut deck, &agent(1, AgentState::Working), 2);
@@ -1545,7 +1703,7 @@ mod tests {
 
     #[test]
     fn a_sorted_roster_is_grouped_by_project_with_the_unlabelled_last() {
-        let mut deck = std::boxed::Box::new(Deck::new());
+        let mut deck = Deck::boxed(DEFAULT_SESSIONS);
         apply(&mut deck, &hello(1), 0);
         apply(&mut deck, &in_project(1, AgentState::Idle, "zeta"), 1);
         apply(&mut deck, &agent(2, AgentState::Question), 2);
@@ -1590,7 +1748,7 @@ mod tests {
 
     #[test]
     fn workspaces_usage_and_macros_are_range_checked() {
-        let mut deck = std::boxed::Box::new(Deck::new());
+        let mut deck = Deck::boxed(DEFAULT_SESSIONS);
         let ws = |active, count, selected, window_count| HostMsg::Workspaces {
             active,
             count,
@@ -1626,7 +1784,7 @@ mod tests {
 
     #[test]
     fn a_host_set_of_demo_before_hello_loads_or_clears_the_demo_data() {
-        let mut deck = std::boxed::Box::new(Deck::new());
+        let mut deck = Deck::boxed(DEFAULT_SESSIONS);
         deck.settings.demo = true; // off at power-on
         super::super::demo::load(&mut deck);
         apply(&mut deck, &HostMsg::Set { key: SettingKey::Demo, value: 0 }, 0);
@@ -1644,7 +1802,7 @@ mod tests {
 
     #[test]
     fn the_clock_advances_by_whole_minutes_from_the_hello_stamp() {
-        let mut deck = std::boxed::Box::new(Deck::new());
+        let mut deck = Deck::boxed(DEFAULT_SESSIONS);
         assert!(!deck.tick(100_000));
         let noon = HostMsg::Hello { v: 1, sid: 1, minute_of_day: Some(1439) };
         apply(&mut deck, &noon, 1000);

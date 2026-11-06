@@ -18,7 +18,7 @@ fn update(id: &AgentId, state: AgentState) -> Request {
         title_source: None,
         since: None,
         name: None,
-        meta: None,
+        meta: None, task: None, subagents: None,
     })
 }
 

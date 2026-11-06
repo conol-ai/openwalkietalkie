@@ -84,7 +84,7 @@ struct Session {
 impl Session {
     fn new(ui: Box<UiState>) -> Self {
         let screen = Screens::new(&ui);
-        Self { previous: Box::new(*ui), next: ui, screen }
+        Self { previous: Box::new((*ui).clone()), next: ui, screen }
     }
     fn step(&mut self, f: impl FnOnce(&mut UiState)) -> usize {
         f(&mut self.next);
@@ -172,7 +172,7 @@ fn a_flash_changes_one_key_and_repaints_little_more_than_it() {
     let ui = macropad();
     let plain = full(&ui);
     for index in 0..9u8 {
-        let mut pressed = Box::new(*ui);
+        let mut pressed = Box::new((*ui).clone());
         pressed.macropad.face = MACRO_FACE;
         pressed.macropad.down = 1 << index;
         pressed.invalidate();
@@ -196,7 +196,7 @@ fn a_flash_changes_one_key_and_repaints_little_more_than_it() {
         assert_eq!(released, transferred);
     }
     // The mask of another face's keys shows nothing here.
-    let mut other = Box::new(*ui);
+    let mut other = Box::new((*ui).clone());
     other.macropad.face = MACRO_FACE + 1;
     other.macropad.down = 0x1FF;
     other.invalidate();
@@ -220,22 +220,22 @@ fn the_signature_is_one_lane_per_key() {
     assert_eq!(base.regions().len(), 11);
     for index in 0..9u8 {
         assert_eq!(base.regions()[1 + index as usize].0, layout::macro_key(index));
-        let mut pressed = Box::new(*ui);
+        let mut pressed = Box::new((*ui).clone());
         pressed.macropad.face = MACRO_FACE;
         pressed.macropad.down = 1 << index;
         pressed.invalidate();
         assert_eq!(differing(&base, &face_signature(&pressed)), [1 + index as usize]);
     }
-    let mut relabelled = Box::new(*ui);
+    let mut relabelled = Box::new((*ui).clone());
     let mut out = Update::new();
     let mut keys = ui.deck.macro_set(MACRO_FACE).unwrap().keys;
     keys[4].label.set("shot");
     relabelled.host(&macro_msg(MACRO_FACE, None, keys), 0, &mut out);
     assert_eq!(differing(&base, &face_signature(&relabelled)), [5]);
-    let mut renamed = Box::new(*ui);
+    let mut renamed = Box::new((*ui).clone());
     renamed.host(&macro_msg(MACRO_FACE, Some("work.toml"), keys), 0, &mut out);
     assert_eq!(differing(&base, &face_signature(&renamed)), [0, 5]);
-    let mut same = Box::new(*ui);
+    let mut same = Box::new((*ui).clone());
     same.invalidate();
     assert_eq!(face_signature(&same).regions(), base.regions());
 }

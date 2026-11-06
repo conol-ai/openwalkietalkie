@@ -23,6 +23,7 @@ pub mod font_data;
 pub mod icons;
 pub mod kit;
 pub mod layout;
+pub mod marks;
 pub mod meter;
 pub mod overlay;
 pub mod scene;

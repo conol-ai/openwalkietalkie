@@ -222,6 +222,8 @@ const AGENT: HostMsg = HostMsg::Agent {
     project: None,
     title: None,
     since_s: None,
+    task: None,
+    subs: None,
 };
 const CARD: HostMsg = HostMsg::Card {
     agent: 0,
@@ -278,7 +280,8 @@ const NAME: HostMsg = HostMsg::Name { text: Text::new() };
 
 fn agent_id(value: Value) -> Result<u8, ErrWhy> {
     match value.u8()? {
-        id @ 1..=8 if id as usize <= MAX_AGENTS => Ok(id),
+        // One byte on the wire; the model refuses an id above its table.
+        id @ 1..=u8::MAX if id as usize <= MAX_AGENTS => Ok(id),
         _ => Err(ErrWhy::Range),
     }
 }
@@ -348,6 +351,8 @@ fn parse_into(line: &[u8], out: &mut HostMsg) -> Result<(), ErrWhy> {
                 project,
                 title,
                 since_s,
+                task,
+                subs,
             } = out
             else {
                 return Err(ErrWhy::Parse);
@@ -365,6 +370,10 @@ fn parse_into(line: &[u8], out: &mut HostMsg) -> Result<(), ErrWhy> {
             opt_text(&object, "title", title)?;
             if let Some(value) = object.get("since")? {
                 *since_s = Some(value.u32()?);
+            }
+            opt_text(&object, "task", task)?;
+            if let Some(value) = object.get("subs")? {
+                *subs = Some(value.u8()?);
             }
         }
         b"card" => {
@@ -669,6 +678,9 @@ pub fn encode(event: Event, ui: &UiState, out: &mut [u8; TX_MAX]) -> usize {
             json.key("sid").number(held);
             json.key("boot").number(ui.still_default() as u32);
             json.key("rx").number(LINE_MAX as u32);
+            // The sessions this deck holds: a host sends no agent id above it
+            // (one that does not say is the old eight).
+            json.key("agents").number(ui.deck.agents.len() as u32);
             json.key("faces");
             faces(&mut json, ui);
         }
@@ -984,7 +996,7 @@ mod tests {
                 name: Some(name),
                 project: Some(project),
                 title: Some(title),
-                since_s: Some(120),
+                since_s: Some(120), task: None, subs: None,
             } => {
                 assert_eq!(name, "cohdl-api");
                 assert_eq!(project, "cohdl");
@@ -1003,7 +1015,7 @@ mod tests {
                 name: None,
                 project: None,
                 title: Some(Text::from_str("x")),
-                since_s: None
+                since_s: None, task: None, subs: None,
             }
         );
         assert!(matches!(
@@ -1195,7 +1207,7 @@ mod tests {
             (r#"{"m":"hello","v":256,"sid":1}"#, ErrWhy::Range),
             (r#"{"m":"bogus"}"#, ErrWhy::Unknown),
             (r#"{"m":"agent","id":0}"#, ErrWhy::Range),
-            (r#"{"m":"agent","id":9}"#, ErrWhy::Range),
+            (r#"{"m":"agent","id":256}"#, ErrWhy::Range),
             (r#"{"m":"agent","id":1,"kind":"cursor"}"#, ErrWhy::Unknown),
             (r#"{"m":"agent","id":1,"state":"busy"}"#, ErrWhy::Unknown),
             (r#"{"m":"agent","id":1,"name":5}"#, ErrWhy::Parse),
@@ -1217,7 +1229,7 @@ mod tests {
             // more lines than the deck holds.
             (r#"{"m":"doc","agent":1,"d":"c","id":1,"first":2,"total":3,"font":"title","lines":["a","b"]}"#, ErrWhy::Range),
             (r#"{"m":"doc","agent":1,"d":"c","id":1,"first":0,"total":99,"font":"title","lines":["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r"]}"#, ErrWhy::Range),
-            (r#"{"m":"reply","agent":9,"text":"x","rev":1}"#, ErrWhy::Range),
+            (r#"{"m":"reply","agent":256,"text":"x","rev":1}"#, ErrWhy::Range),
             (r#"{"m":"reply","agent":1}"#, ErrWhy::Parse),
             (r#"{"m":"focus","agent":1,"ack":65536}"#, ErrWhy::Range),
             (r#"{"m":"ws","active":5,"count":4,"sel":0}"#, ErrWhy::Range),
@@ -1355,7 +1367,7 @@ mod tests {
         let strip = r#"[{"f":1,"t":"agents","n":"Agents"},{"f":2,"t":"omarchy","n":"Omarchy"},{"f":3,"t":"macropad","n":"Macropad"},{"f":4,"t":"usage","n":"Usage"},{"f":7,"t":"system","n":"System"},{"f":6,"t":"arcade","n":"Arcade"},{"f":5,"t":"settings","n":"Settings"}]"#;
         assert_eq!(
             encoded(Event::Hello, &ui),
-            std::format!(r#"{{"m":"hello","v":1,"fw":"{FW_VERSION}","sid":0,"boot":1,"rx":1024,"faces":{strip}}}"#)
+            std::format!(r#"{{"m":"hello","v":1,"fw":"{FW_VERSION}","sid":0,"boot":1,"rx":1024,"agents":{agents},"faces":{strip}}}"#, agents = ui.deck.agents.len())
         );
         assert_eq!(encoded(Event::Faces, &ui), std::format!(r#"{{"m":"faces","list":{strip}}}"#));
         // A held session is reported once the sync is complete; a renamed face ends `boot`.

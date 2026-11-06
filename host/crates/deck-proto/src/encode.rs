@@ -204,6 +204,8 @@ pub fn encode(line: &HostLine) -> Result<Vec<u8>, EncodeError> {
             state,
             title,
             since_s,
+            task,
+            subs,
         } => {
             w.num("id", u64::from(slot_id(*slot, "id")?));
             if let Some(kind) = kind {
@@ -223,6 +225,12 @@ pub fn encode(line: &HostLine) -> Result<Vec<u8>, EncodeError> {
             }
             if let Some(since) = since_s {
                 w.num("since", u64::from(*since));
+            }
+            if let Some(task) = task {
+                w.cut("task", task, CAPS.title);
+            }
+            if let Some(subs) = subs {
+                w.num("subs", u64::from((*subs).min(99)));
             }
         }
         HostLine::AgentGone { slot } => {
@@ -470,7 +478,9 @@ fn write_faces(w: &mut Writer<'_>, list: &[crate::FaceEntry]) -> Result<(), Enco
 }
 
 fn slot_id(slot: u8, field: &'static str) -> Result<u8, EncodeError> {
-    if (1..=8).contains(&slot) {
+    // One byte on the wire; the store never assigns a slot above the deck's
+    // own table (`hello`'s `agents`).
+    if slot >= 1 {
         Ok(slot)
     } else {
         Err(EncodeError::Range { field })
@@ -612,6 +622,8 @@ mod tests {
                 state: Some(AgentState::Question),
                 title: Some("Run migrations on staging?".into()),
                 since_s: Some(120),
+                task: None,
+                subs: None,
             }),
             "{\"m\":\"agent\",\"id\":1,\"kind\":\"codex\",\"name\":\"cohdl-api\",\"proj\":\"cohdl\",\"state\":\"question\",\"title\":\"Run migrations on staging?\",\"since\":120}\n"
         );
@@ -635,6 +647,8 @@ mod tests {
                 state: None,
                 title: Some("Compiling openmicro ⠋".into()),
                 since_s: None,
+                task: None,
+                subs: None,
             }),
             "{\"m\":\"agent\",\"id\":3,\"title\":\"Compiling openmicro ⠋\"}\n"
         );
@@ -756,6 +770,8 @@ mod tests {
             state: None,
             title: Some(title),
             since_s: None,
+            task: None,
+            subs: None,
         };
         let out = text(&line);
         let cut_title = out
@@ -782,14 +798,6 @@ mod tests {
             }),
             "{\"m\":\"transcript\",\"text\":\"deploy\"}\n"
         );
-        assert!(matches!(
-            encode(&HostLine::Transcript {
-                slot: 9,
-                text: "x".into(),
-                last: true, press: None, failed: false, channel_tip: false, rec: false,
-            }),
-            Err(EncodeError::Range { field: "agent" })
-        ));
     }
 
     #[test]
@@ -863,7 +871,7 @@ mod tests {
         );
         assert_eq!(
             encode(&HostLine::Reply {
-                slot: 9,
+                slot: 0,
                 text: "x".into(),
                 rev: 1,
             }),

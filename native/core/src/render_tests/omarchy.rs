@@ -56,7 +56,7 @@ struct Session {
 impl Session {
     fn new(ui: Box<UiState>) -> Self {
         let screen = Screens::new(&ui);
-        Self { previous: Box::new(*ui), next: ui, screen }
+        Self { previous: Box::new((*ui).clone()), next: ui, screen }
     }
     /// Apply `f`, replay the damage, assert partial == full; pixels moved.
     fn step(&mut self, f: impl FnOnce(&mut UiState)) -> usize {
@@ -152,7 +152,7 @@ fn every_layout_target_is_drawn_where_it_hit_tests() {
 fn pressed_chip_and_row_change_pixels_inside_their_rects_only() {
     let ui = omarchy();
     let plain = full(&ui);
-    let mut pressed = Box::new(*ui);
+    let mut pressed = Box::new((*ui).clone());
     pressed.omarchy.pressed_chip = Some(2);
     pressed.omarchy.pressed_row = Some(1);
     pressed.invalidate();
@@ -326,24 +326,24 @@ fn the_signature_is_fixed_lanes_that_change_one_at_a_time() {
     let base = face_signature(&ui);
     assert_eq!(base.regions().len(), 10);
     assert!(!base.overflowed());
-    let mut moved = Box::new(*ui);
+    let mut moved = Box::new((*ui).clone());
     moved.omarchy.selected_window = 1;
     moved.invalidate();
     assert_eq!(differing(&base, &face_signature(&moved)), [4, 5], "window rows 0 and 1");
-    let mut pressed = Box::new(*ui);
+    let mut pressed = Box::new((*ui).clone());
     pressed.omarchy.pressed_chip = Some(0);
     pressed.invalidate();
     assert_eq!(differing(&base, &face_signature(&pressed)), [2], "the chip row");
-    let mut low = Box::new(*ui);
+    let mut low = Box::new((*ui).clone());
     low.update_battery(BatteryState { estimated_percent: Some(5), charge: ChargeState::Battery, ..BatteryState::UNKNOWN });
     assert_eq!(differing(&base, &face_signature(&low)), [0], "the header");
-    let mut scrolled = Box::new(*ui);
+    let mut scrolled = Box::new((*ui).clone());
     let mut out = Update::new();
     scrolled.host(&windows(6, 2, 4), 0, &mut out);
     scrolled.omarchy.top_row = 2;
     assert_eq!(differing(&base, &face_signature(&scrolled)), [3, 4, 5, 6, 7], "WINDOWS line and rows");
     // A bump of `revision` alone changes nothing: the lanes hash content.
-    let mut same = Box::new(*ui);
+    let mut same = Box::new((*ui).clone());
     same.invalidate();
     assert_eq!(face_signature(&same).regions(), base.regions());
 }

@@ -91,7 +91,7 @@ async fn lagged_subscriber_gets_resync_and_events_replay_with_gap() {
                     title_source: None,
                     since: None,
                     name: None,
-                    meta: None,
+                    meta: None, task: None, subagents: None,
                 }),
             )
             .await

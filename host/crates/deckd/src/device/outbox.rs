@@ -830,6 +830,8 @@ impl Outbox {
                 state: *state,
                 title: None,
                 since_s: *since_s,
+                task: None,
+                subs: None,
             });
         };
         let diff = HostLine::Agent {
@@ -840,6 +842,8 @@ impl Outbox {
             state: state.filter(|s| Some(*s) != *s0),
             title: None,
             since_s: since_s.filter(|a| Some(*a) != *a0),
+            task: None,
+            subs: None,
         };
         match &diff {
             HostLine::Agent {
@@ -1027,6 +1031,8 @@ mod tests {
             state: None,
             title: Some(t.into()),
             since_s: None,
+            task: None,
+            subs: None,
         }
     }
 
@@ -1039,6 +1045,8 @@ mod tests {
             state: Some(state),
             title: None,
             since_s: since,
+            task: None,
+            subs: None,
         }
     }
 
@@ -1810,6 +1818,8 @@ mod tests {
             state: Some(AgentState::Working),
             title: None,
             since_s: None,
+            task: None,
+            subs: None,
         };
         put(&mut o, &mut view, Key::AgentState(Slot(2)), old, t0);
         assert_eq!(drain(&mut o, &view, t0).len(), 1);
@@ -1821,6 +1831,8 @@ mod tests {
             state: Some(AgentState::Question),
             title: None,
             since_s: None,
+            task: None,
+            subs: None,
         };
         let t1 = t0 + Duration::from_secs(1);
         for op in [
@@ -1868,8 +1880,7 @@ mod tests {
             let mut view = DeviceView::new();
             let old = HostLine::Agent {
                 slot: 2, kind: Some(Kind::Conol), name: Some("old chat".into()),
-                project: Some("Conol".into()), state: Some(AgentState::Working), title: None, since_s: None,
-            };
+                project: Some("Conol".into()), state: Some(AgentState::Working), title: None, since_s: None, task: None, subs: None };
             put(&mut o, &mut view, Key::AgentState(Slot(2)), old, t0);
             drain(&mut o, &view, t0);
             if already_focused {
@@ -1879,8 +1890,7 @@ mod tests {
             let t1 = t0 + Duration::from_secs(2);
             let new = HostLine::Agent {
                 slot: 2, kind: Some(Kind::Conol), name: Some("new chat".into()),
-                project: Some("Conol".into()), state: Some(AgentState::Working), title: None, since_s: None,
-            };
+                project: Some("Conol".into()), state: Some(AgentState::Working), title: None, since_s: None, task: None, subs: None };
             for op in [
                 DeviceOp::Put(Key::AgentGone(Slot(2)), HostLine::AgentGone { slot: 2 }),
                 DeviceOp::Remove(Key::AgentState(Slot(2))),

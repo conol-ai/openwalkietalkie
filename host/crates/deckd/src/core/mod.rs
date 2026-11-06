@@ -2346,7 +2346,7 @@ impl Core {
             // every slot and the focus, and the re-projection rebuilds them
             // (`gone` + full record + card per slot, one barrier).
             self.dropped.clear();
-            for slot in 1..=Slot::MAX {
+            for slot in 1..=self.store.snapshot().device.capacity() {
                 self.dropped
                     .push_back(DeviceOp::Remove(Key::AgentState(Slot(slot))));
             }
@@ -3935,7 +3935,7 @@ mod tests {
             .iter()
             .take_while(|op| matches!(op, DeviceOp::Remove(_)))
             .collect();
-        assert_eq!(removes.len(), usize::from(Slot::MAX) + 1, "{removes:?}");
+        assert_eq!(removes.len(), usize::from(Slot::DEFAULT) + 1, "{removes:?}");
         assert_eq!(removes[0], &DeviceOp::Remove(Key::AgentState(Slot(1))));
         assert_eq!(removes[8], &DeviceOp::Remove(Key::Focus));
         assert!(c.dropped.is_empty() && !c.dropped_overflow);
@@ -3993,7 +3993,7 @@ mod tests {
                 title_source: None,
                 since: None,
                 name: None,
-                meta: None,
+                meta: None, task: None, subagents: None,
             }),
             now,
         )

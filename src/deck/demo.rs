@@ -13,7 +13,7 @@
 //! `animating` asks for animation-rate ticks only while a transcript is being
 //! typed or a follow-up is due within a second; while the screen is off nothing
 //! advances and the due times shift by the dark time.
-use super::model::{Agent, Deck, Notice, MAX_AGENTS};
+use super::model::{Agent, Deck, Notice, DEFAULT_SESSIONS};
 use super::msg::{
     AgentKind, AgentState, Binding, CardKind, Event, HostMsg, KeyId, PttCtx, Tone, UsageItem,
     WindowRow,
@@ -64,7 +64,9 @@ const SOON_MS: u32 = 1000;
 
 /// One `Orders` and one `Ready` per agent plus the one fresh question: with
 /// the dedupe below the queue can never lose a consequence.
-const QUEUE_LEN: usize = 2 * MAX_AGENTS + 1;
+// The demo's roster is at most the eight sessions any deck holds.
+const DEMO_AGENTS: usize = DEFAULT_SESSIONS;
+const QUEUE_LEN: usize = 2 * DEMO_AGENTS + 1;
 const WORKSPACE_COUNT: u8 = 4;
 const MAX_WINDOWS: u8 = 6;
 /// Fresh cards count from here; 1 and 2 are the mockup's.
@@ -265,8 +267,8 @@ impl Script {
     /// The next agent round the roster that is present, has no card, has a
     /// canned question and is not `not`.
     fn pick_asker(&mut self, deck: &Deck, not: u8) -> Option<u8> {
-        for step in 1..=MAX_AGENTS as u8 {
-            let id = (self.asker + step - 1) % MAX_AGENTS as u8 + 1;
+        for step in 1..=DEMO_AGENTS as u8 {
+            let id = (self.asker + step - 1) % DEMO_AGENTS as u8 + 1;
             if id != not
                 && deck.agent(id).is_some()
                 && deck.card(id).is_none()
@@ -538,7 +540,7 @@ fn agent_msg(id: u8, state: AgentState, title: Text<64>, out: &mut HostMsg) {
         name: None,
         project: None,
         title: Some(title),
-        since_s: Some(0),
+        since_s: Some(0), task: None, subs: None,
     };
 }
 
@@ -599,7 +601,7 @@ fn agent<'a>(
     title: &str,
     age_s: u32,
 ) -> &'a mut Agent {
-    let slot = &mut deck.agents[(id as usize - 1) % MAX_AGENTS];
+    let slot = &mut deck.agents[(id as usize - 1) % DEMO_AGENTS];
     slot.id = id;
     slot.present = true;
     slot.stale = false;
@@ -608,6 +610,8 @@ fn agent<'a>(
     slot.name.set(name);
     slot.project.set(project);
     slot.title.set(title);
+    slot.task.clear();
+    slot.subs = 0;
     slot.last_reply.clear();
     // Loaded at boot, when the clock reads 0: ages count from "before".
     slot.state_since_ms = 0u32.wrapping_sub(age_s * 1000);
@@ -629,6 +633,7 @@ pub fn load(deck: &mut Deck) {
         "Run migrations on staging?",
         AGE_S,
     );
+    codex.task.set("Migrate the billing schema");
     codex
         .last_reply
         .set("Tests fail on main: 3 pending migrations are not applied on staging.");
@@ -662,6 +667,7 @@ pub fn load(deck: &mut Deck) {
         "Header refactor done \u{b7} 34 files",
         0,
     );
+    claude.task.set("Refactor the site header");
     claude
         .last_reply
         .set("Header refactor done, 34 files changed");
@@ -692,9 +698,11 @@ pub fn load(deck: &mut Deck) {
         AgentState::Working,
         "Compiling openmicro",
         AGE_S,
-    )
-    .last_reply
-    .set("Building the native image for both boards.");
+    );
+    let firmware = &mut deck.agents[2];
+    firmware.task.set("Build both board images");
+    firmware.subs = 3;
+    firmware.last_reply.set("Building the native image for both boards.");
     agent(
         deck,
         4,
@@ -705,6 +713,9 @@ pub fn load(deck: &mut Deck) {
         "Idle",
         0,
     );
+    let research = &mut deck.agents[3];
+    research.task.set("Survey BLE audio codecs");
+    research.last_reply.set("LC3 and Opus are the two candidates; LC3 needs no licence on BLE Audio.");
     agent(
         deck,
         5,
@@ -717,6 +728,7 @@ pub fn load(deck: &mut Deck) {
     )
     .last_reply
     .set("terraform apply exited with status 1.");
+    deck.agents[4].task.set("Deploy the staging stack");
     // The mockup roster is the first project's page (agents 1 to 3); the
     // other two are the second page. Not sorted yet: the first re-sort puts
     // every class in its place.
@@ -1220,7 +1232,7 @@ mod tests {
 
     #[test]
     fn demo_data_reproduces_the_mockup_strings() {
-        let mut deck = std::boxed::Box::new(Deck::new());
+        let mut deck = Deck::boxed(DEFAULT_SESSIONS);
         load(&mut deck);
         let rows: std::vec::Vec<_> = deck.order[..4]
             .iter()
@@ -1297,12 +1309,12 @@ mod tests {
 
     #[test]
     fn loading_twice_is_idempotent_and_keeps_settings() {
-        let mut deck = std::boxed::Box::new(Deck::new());
+        let mut deck = Deck::boxed(DEFAULT_SESSIONS);
         deck.settings.brightness = 2;
         load(&mut deck);
-        let first = *deck;
+        let first = (deck.agents.to_vec(), deck.order, deck.order_len, deck.usage, deck.workspaces);
         load(&mut deck);
-        assert!(first == *deck);
+        assert!(first == (deck.agents.to_vec(), deck.order, deck.order_len, deck.usage, deck.workspaces));
         assert_eq!(deck.settings.brightness, 2);
     }
 
@@ -1337,14 +1349,14 @@ mod tests {
     fn snapshot(
         ui: &UiState,
     ) -> Box<(
-        [Agent; MAX_AGENTS],
+        std::vec::Vec<Agent>,
         crate::deck::Workspaces,
         crate::deck::Usage,
         Text<200>,
         bool,
     )> {
         Box::new((
-            ui.deck.agents,
+            ui.deck.agents.to_vec(),
             ui.deck.workspaces,
             ui.deck.usage,
             ui.deck.transcript,
@@ -2033,7 +2045,7 @@ mod tests {
                 name: None,
                 project: None,
                 title: None,
-                since_s: None,
+                since_s: None, task: None, subs: None,
             };
             ui.host(&gone, 0, &mut out);
         }
@@ -2073,7 +2085,7 @@ mod tests {
             }
         }
         // The loaded mockup cards are what the tables say their agents ask.
-        let mut deck = Box::new(Deck::new());
+        let mut deck = Deck::boxed(DEFAULT_SESSIONS);
         load(&mut deck);
         let question = deck.card(1).unwrap();
         assert_eq!(question.text, CANNED[0].question);

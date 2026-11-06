@@ -6,7 +6,24 @@
 use super::msg::{HostMsg, MacroKey};
 use super::text::Text;
 
-pub const MAX_AGENTS: usize = 8;
+pub const MAX_AGENTS: usize = 255;
+
+/// The stand-in's session table: only its size is read (`hello`'s `agents`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Sessions(pub usize);
+
+impl Sessions {
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.0
+    }
+
+    #[must_use]
+    #[allow(dead_code)] // clippy::len_without_is_empty wants it; nothing reads it
+    pub const fn is_empty(&self) -> bool {
+        self.0 == 0
+    }
+}
 pub const MAX_MACRO_SETS: usize = 3;
 
 /// One Macropad's keys, as the firmware's `MacroSet`: the encoder reads a
@@ -54,6 +71,8 @@ pub struct Deck {
     syncing: bool,
     pub settings: Settings,
     pub macros: [MacroSet; MAX_MACRO_SETS],
+    /// As many as a Rev A or Rev B deck holds.
+    pub agents: Sessions,
 }
 
 impl Default for Deck {
@@ -71,6 +90,7 @@ impl Deck {
             syncing: false,
             settings: Settings::new(),
             macros: [MacroSet::EMPTY; MAX_MACRO_SETS],
+            agents: Sessions(MAX_AGENTS),
         }
     }
 

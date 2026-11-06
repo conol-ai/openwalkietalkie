@@ -53,6 +53,8 @@ impl Store {
         self.emit(EventKind::AgentChanged, self.principal_of(&request.agent),
             serde_json::json!({"agent": request.agent, "fields": {"companion": request.profile}}));
         self.put_agent_state(&request.agent);
+        // Becoming (or ceasing to be) a companion chat changes its rank.
+        self.rebalance_slots();
         Ok(self.rev())
     }
 }

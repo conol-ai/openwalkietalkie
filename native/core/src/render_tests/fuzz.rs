@@ -92,7 +92,7 @@ fn host_msg(rng: &mut Rng, out: &mut HostMsg) {
             minute_of_day: rng.chance(70).then(|| rng.below(1440) as u16),
         },
         1 => HostMsg::Synced,
-        2..=4 => HostMsg::Agent {
+        2..=4 => fuzz_agent(HostMsg::Agent {
             id: agent,
             gone: rng.chance(15),
             kind: rng.chance(60).then(|| {
@@ -111,7 +111,10 @@ fn host_msg(rng: &mut Rng, out: &mut HostMsg) {
             project: rng.chance(40).then(|| rng.pick(&[Text::from_str("cohdl"), Text::from_str("zeta"), Text::new()])),
             title: rng.chance(60).then(|| rng.text()),
             since_s: rng.chance(40).then(|| rng.below(100_000)),
-        },
+            // Derived, not drawn: the seeded sequence stays what it was.
+            task: None,
+            subs: None,
+        }),
         5 | 6 => {
             let choice_count = rng.below(5) as u8;
             let mut choices = [Text::new(); 4];
@@ -319,6 +322,16 @@ fn poke(rng: &mut Rng, ui: &mut UiState) {
         }
     }
     ui.invalidate();
+}
+
+/// The task and the count of a random agent line, from what it already
+/// drew: the title as the task on even ids, the age as the count.
+fn fuzz_agent(mut msg: HostMsg) -> HostMsg {
+    if let HostMsg::Agent { id, title, since_s, task, subs, .. } = &mut msg {
+        *task = title.filter(|_| *id % 2 == 0);
+        *subs = since_s.map(|s| (s % 120) as u8);
+    }
+    msg
 }
 
 #[test]

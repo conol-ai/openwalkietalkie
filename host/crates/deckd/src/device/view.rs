@@ -196,6 +196,8 @@ impl DeviceView {
                 state: *state,
                 title,
                 since_s: *since_s,
+                task: None,
+                subs: None,
             }),
             _ => self.entries.get(&Key::AgentTitle(slot)).cloned(),
         }
@@ -266,6 +268,8 @@ mod tests {
             state: Some(AgentState::Working),
             title: title.map(String::from),
             since_s: Some(1),
+            task: None,
+            subs: None,
         }
     }
 
@@ -278,6 +282,8 @@ mod tests {
             state: None,
             title: Some(t.into()),
             since_s: None,
+            task: None,
+            subs: None,
         }
     }
 

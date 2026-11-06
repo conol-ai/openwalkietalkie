@@ -96,6 +96,9 @@ pub(super) fn selection_step(wheel: Wheel) -> i32 {
     if wheel == Wheel::Ccw { 1 } else { -1 }
 }
 pub const MAX_FACES: usize = 8;
+/// Sessions this board's firmware holds: 255 in PSRAM on Rev A and Rev B,
+/// the old 8 in SRAM elsewhere (the LilyGo dev board, the native image).
+pub const SESSIONS: usize = if cfg!(feature = "hw-a") { crate::deck::model::MAX_AGENTS } else { crate::deck::model::DEFAULT_SESSIONS };
 
 /// Who a held press belongs to; the latched identity its release must repeat.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -261,7 +264,8 @@ pub struct Visible {
     pub origin_x: i32,
 }
 
-#[derive(Clone, Copy)]
+/// Not `Copy`: the deck's session table is storage its owner attaches
+/// (`deck.agents`); [`UiState::copy_into`] copies its contents.
 pub struct UiState {
     pub image: crate::ui::image::View,
     pub battery: BatteryState,
@@ -289,6 +293,16 @@ pub struct UiState {
     pub manager: manager::View,
     pub tutorial: tutorial::View,
     pub demo: demo::Script,
+}
+
+/// Host builds (tests, the preview): a clone has a table of its own.
+#[cfg(not(target_os = "none"))]
+impl Clone for UiState {
+    fn clone(&self) -> Self {
+        let mut out = UiState::new();
+        self.copy_into(&mut out);
+        out
+    }
 }
 
 impl UiState {
@@ -322,6 +336,7 @@ impl UiState {
     /// Power-on state, in place: the default strip on the Agents face, default
     /// settings, and the demo data those defaults ask for.
     pub fn reset(&mut self) {
+        self.ensure_sessions();
         self.image.open = false;
         self.battery = BatteryState::UNKNOWN;
         self.connected = false;
@@ -368,6 +383,7 @@ impl UiState {
     /// Turn the demo on and load it, as Settings > Demo data does without a
     /// host. The demo is off at power-on; the preview and tests start here.
     pub fn load_demo(&mut self) {
+        self.ensure_sessions();
         self.deck.settings.demo = true;
         demo::load(&mut self.deck);
         agents::on_reset(self);
@@ -375,8 +391,26 @@ impl UiState {
 
     /// Snapshot for the renderer, `static` to `static`, without a temporary.
     pub fn copy_into(&self, dst: &mut UiState) {
-        // SAFETY: both are valid, distinct (`&` vs `&mut`) and `Copy`.
+        dst.ensure_sessions();
+        // Everything but the session table is plain data: copy it bitwise,
+        // then give `dst` its own table back and copy the sessions into it.
+        let table = core::mem::replace(&mut dst.deck.agents, crate::deck::model::Agents::empty());
+        // SAFETY: both are valid and distinct (`&` vs `&mut`); the only field
+        // that is not plain data, the table, is taken out of `dst` above and
+        // its bitwise copy of `self`'s is forgotten, never dropped, below.
         unsafe { core::ptr::copy_nonoverlapping(self, dst, 1) };
+        core::mem::forget(core::mem::replace(&mut dst.deck.agents, table));
+        let n = self.deck.agents.len().min(dst.deck.agents.len());
+        dst.deck.agents[..n].copy_from_slice(&self.deck.agents[..n]);
+    }
+
+    /// Host builds (tests, the preview) get a heap table when nobody
+    /// attached one: as many sessions as this board's firmware holds.
+    pub fn ensure_sessions(&mut self) {
+        #[cfg(not(target_os = "none"))]
+        if self.deck.agents.is_empty() {
+            self.deck.agents.allocate(SESSIONS);
+        }
     }
 
     /// Synchronize the lock overlay even when its input was not dispatched.
@@ -862,7 +896,7 @@ mod tests {
             name: None,
             project: None,
             title: None,
-            since_s: None,
+            since_s: None, task: None, subs: None,
         };
         ui.host(&agent, 2001, &mut out);
         assert!(!ui.deck.demo_active() && !out.wake);

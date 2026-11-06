@@ -318,7 +318,7 @@ fn rejected_lines_change_nothing_and_are_reported_once_per_second() {
     let mut ui = ui();
     host(&mut ui, r#"{"m":"hello","v":1,"sid":1}"#, 0).unwrap();
     host(&mut ui, r#"{"m":"agent","id":1,"name":"one","state":"working"}"#, 0).unwrap();
-    let before = ui.deck;
+    let before = ui.deck.agents.to_vec();
     // Unknown agent: the model refuses it and the runtime reports `err`.
     let events = host(&mut ui, r#"{"m":"card","agent":7,"id":1,"type":"q","text":"?"}"#, 100).unwrap();
     assert_eq!(events, [Event::Err { why: ErrWhy::Range }]);
@@ -328,7 +328,7 @@ fn rejected_lines_change_nothing_and_are_reported_once_per_second() {
     assert_eq!(update.deck_events().count(), 0);
     ui.reject(ErrWhy::Size, 1200, &mut update);
     assert_eq!(update.deck_events().collect::<Vec<_>>(), [Event::Err { why: ErrWhy::Size }]);
-    assert_eq!(ui.deck.agents, before.agents);
+    assert_eq!(*ui.deck.agents, before[..]);
     assert_eq!(encoded(Event::Err { why: ErrWhy::Size }, &ui), r#"{"m":"err","why":"size"}"#);
 }
 

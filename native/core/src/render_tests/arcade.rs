@@ -20,7 +20,7 @@ fn flappy_motion_does_not_repaint_the_whole_screen() {
     press(&mut ui, Button::Enter, 0);
     ui.arcade.flappy.pipes[0].x = 360;
     let mut screens = Screens::new(&ui);
-    let old = *ui;
+    let old = (*ui).clone();
     ui.tick(20, 0, true, &mut Update::new());
     let pixels = update(&mut screens, &old, &ui);
     eprintln!("Flappy one-pipe frame: {pixels} / 230400 pixels");
@@ -41,7 +41,7 @@ fn flappy_partial_frames_cover_pipe_recycling_hud_and_phase_changes() {
     // every screen edge, HUD and corner, then recycles offscreen pipes. Also
     // cover skipped simulation steps as happens when a render is late.
     for frame in 0..360 {
-        let old = *ui;
+        let old = (*ui).clone();
         for _ in 0..1 + frame % 3 {
             let before = ui.arcade.flappy.pipes;
             ui.arcade.flappy.step(&mut seed);
@@ -57,19 +57,19 @@ fn flappy_partial_frames_cover_pipe_recycling_hud_and_phase_changes() {
     eprintln!("Flappy pipe traversal: average {} / 230400 pixels", total / 360);
     assert!(total / 360 < 480 * 480 * 2 / 3);
     for score in [9, 10, 9999, 10000, u16::MAX, 0] {
-        let old = *ui;
+        let old = (*ui).clone();
         ui.arcade.flappy.score = score;
         ui.arcade.best[0] = score;
         update(&mut screens, &old, &ui);
     }
     // Subpixel/velocity-only changes do not touch the screen.
-    let old = *ui;
+    let old = (*ui).clone();
     ui.arcade.flappy.y += 1;
     ui.arcade.flappy.velocity += 1;
     ui.arcade.visual += 1;
     assert_eq!(update(&mut screens, &old, &ui), 0);
     for phase in [Phase::Paused, Phase::Playing, Phase::Over, Phase::Ready, Phase::Menu] {
-        let old = *ui;
+        let old = (*ui).clone();
         ui.arcade.phase = phase;
         update(&mut screens, &old, &ui);
     }
@@ -95,28 +95,28 @@ fn gameplay_reaches_all_edges_and_hides_passive_status_chrome() {
         }
         assert_eq!(lit_outside_safe_area(&frame), None);
         let mut screens = Screens::new(&ui);
-        let old = *ui;
+        let old = (*ui).clone();
         ui.update_bluetooth(Status::Signal(Level::Strong));
         assert_eq!(update(&mut screens, &old, &ui), 0);
-        let old = *ui;
+        let old = (*ui).clone();
         ui.global.overlay = Overlay::Drawer;
         update(&mut screens, &old, &ui);
-        let old = *ui;
+        let old = (*ui).clone();
         ui.global.overlay = Overlay::None;
         update(&mut screens, &old, &ui);
         if game == Game::Raiden {
             for x in [games::PLAYER_MIN_X, games::PLAYER_MAX_X] {
-                let old = *ui;
+                let old = (*ui).clone();
                 ui.arcade.raiden.x = x;
                 ui.arcade.visual += 1;
                 update(&mut screens, &old, &ui);
                 assert_eq!(lit_outside_safe_area(&full(&ui)), None);
             }
         }
-        let old = *ui;
+        let old = (*ui).clone();
         press(&mut ui, Button::Cancel, 10);
         update(&mut screens, &old, &ui);
-        let old = *ui;
+        let old = (*ui).clone();
         ui.update_bluetooth(Status::Signal(Level::Weak));
         assert!(
             update(&mut screens, &old, &ui) > 0,
@@ -132,24 +132,24 @@ fn arcade_menu_and_games_fit_and_partial_updates_match_full_frames() {
     let mut screens = Screens::new(&ui);
     for game in Game::ALL {
         ui.arcade.selection = game as u8;
-        let old = *ui;
+        let old = (*ui).clone();
         press(&mut ui, Button::Enter, 10);
         update(&mut screens, &old, &ui);
         assert_eq!(ui.arcade.phase, Phase::Ready);
         assert_eq!(lit_outside_safe_area(&full(&ui)), None);
-        let old = *ui;
+        let old = (*ui).clone();
         press(&mut ui, Button::Enter, 20);
         update(&mut screens, &old, &ui);
         for now in (40..=440).step_by(40) {
-            let old = *ui;
+            let old = (*ui).clone();
             ui.tick(now, 0, true, &mut Update::new());
             update(&mut screens, &old, &ui);
         }
         assert_eq!(lit_outside_safe_area(&full(&ui)), None);
-        let old = *ui;
+        let old = (*ui).clone();
         press(&mut ui, Button::Enter, 460);
         update(&mut screens, &old, &ui);
-        let old = *ui;
+        let old = (*ui).clone();
         press(&mut ui, Button::Cancel, 480);
         update(&mut screens, &old, &ui);
         // Reset preview clock for the next game; production uses monotonic time.

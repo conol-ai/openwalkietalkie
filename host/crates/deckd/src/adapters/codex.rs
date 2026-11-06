@@ -114,7 +114,7 @@ impl Codex {
             title_source: None,
             since: None,
             name: None,
-            meta: None,
+            meta: None, task: None, subagents: None,
         })];
         if let Some(text) = last_message(p) {
             reqs.push(Request::Reply(ReplySet {
@@ -346,7 +346,7 @@ fn working(agent: deck_model::AgentId, raw: Option<&str>, source: TitleSource) -
         title,
         since: None,
         name: None,
-        meta: None,
+        meta: None, task: None, subagents: None,
     })
 }
 
@@ -359,7 +359,7 @@ fn state(agent: deck_model::AgentId, to: AgentState) -> Request {
         title_source: None,
         since: None,
         name: None,
-        meta: None,
+        meta: None, task: None, subagents: None,
     })
 }
 

@@ -692,7 +692,7 @@ mod tests {
             name: None,
             project: None,
             title: None,
-            since_s: None,
+            since_s: None, task: None, subs: None,
         }
     }
 
@@ -894,7 +894,7 @@ mod tests {
             name: None,
             project: None,
             title: None,
-            since_s: None,
+            since_s: None, task: None, subs: None,
         };
         ui.host(&gone, 6300, &mut Update::new());
         assert!(ui.notify.toast.is_none(), "the toast of a gone agent goes too");

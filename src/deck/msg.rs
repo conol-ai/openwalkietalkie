@@ -530,6 +530,10 @@ pub enum HostMsg {
         project: Option<Text<24>>,
         title: Option<Text<64>>,
         since_s: Option<u32>,
+        /// The session's major task, the roster's title (`task`).
+        task: Option<Text<64>>,
+        /// Subagents and workflow runs in flight (`subs`).
+        subs: Option<u8>,
     },
     Card {
         agent: u8,

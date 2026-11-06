@@ -23,7 +23,7 @@ fn live_meters_fit_and_only_changed_readings_repaint() {
     previous.deck.host_present = true;
     previous.host(&HostMsg::System(sample(1)), 100, &mut Update::new());
     assert_eq!(lit_outside_safe_area(&full(&previous)), None);
-    let mut next = Box::new(*previous);
+    let mut next = Box::new((*previous).clone());
     let mut screen = Screens::new(&previous);
     next.host(&HostMsg::System(sample(2)), 2100, &mut Update::new());
     assert_eq!(
@@ -55,7 +55,7 @@ fn waiting_stale_offline_and_unavailable_refresh_completely() {
     let mut previous = on(Template::System);
     previous.deck.settings.demo = false;
     previous.deck.host_present = true;
-    let mut next = Box::new(*previous);
+    let mut next = Box::new((*previous).clone());
     let mut screen = Screens::new(&previous);
     let start = u32::MAX - 4000;
     next.host(&HostMsg::System(sample(1)), start, &mut Update::new());

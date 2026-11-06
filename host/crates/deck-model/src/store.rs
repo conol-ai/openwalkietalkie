@@ -613,6 +613,8 @@ impl Store {
                     state: None,
                     title: Some(title),
                     since_s: None,
+                    task: None,
+                    subs: None,
                 },
             ));
         }
@@ -763,8 +765,10 @@ impl Store {
                 boot,
                 faces,
                 rx,
+                agents,
                 ..
             } => {
+                self.set_capacity(agents.unwrap_or(Slot::DEFAULT).max(1));
                 let dev = &mut self.snapshot.device;
                 dev.fw = Some(fw);
                 dev.boot = Some(boot);
@@ -1074,6 +1078,8 @@ fn project_with(snapshot: &Snapshot, now: Ts, aux: Option<&BTreeMap<AgentId, Age
                     state: None,
                     title: Some(title.clone()),
                     since_s: None,
+                    task: None,
+                    subs: None,
                 },
             ));
         }
@@ -1171,6 +1177,10 @@ pub(crate) fn agent_state_line(slot: Slot, agent: &Agent, now: Ts) -> HostLine {
             }
             _ => None,
         },
+        // Always sent with the state: "" is "no task" (the roster falls back
+        // to the name), 0 is "nothing running in the background".
+        task: Some(agent.task.clone().unwrap_or_default()),
+        subs: Some(agent.active_work().min(99) as u8),
     }
 }
 
@@ -1554,7 +1564,7 @@ mod tests {
             fw: "0.1.0".into(),
             sid: 0,
             boot,
-            rx: 1024,
+            rx: 1024, agents: None,
             faces: faces.clone(),
         };
         let (events, effects) = s.apply(Command::Device(hello(true)), Instant::now());
@@ -1579,7 +1589,7 @@ mod tests {
                 fw: "x".into(),
                 sid: 0,
                 boot: true,
-                rx: 512,
+                rx: 512, agents: None,
                 faces: vec![],
             }),
             Instant::now(),

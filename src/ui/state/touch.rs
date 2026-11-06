@@ -324,9 +324,13 @@ mod tests {
     }
 
     /// Centre of the roster row showing agent `id` (demo order 1..5).
+    /// The centre of `id`'s carousel place: the card when it is highlighted,
+    /// a peek when it is next to the highlighted session.
     fn row_of(ui: &UiState, id: u8) -> (i32, i32) {
-        let row = ui.deck.row_of(id).unwrap() - ui.agents.top_row;
-        layout::roster_row(row).center()
+        let (row, _) = crate::ui::faces::agents::carousel(ui);
+        let place = i32::from(ui.deck.row_of(id).unwrap()) - i32::from(row) + 1;
+        assert!((0..3).contains(&place), "agent {id} is not on the carousel");
+        layout::roster_row(place as u8).center()
     }
 
     #[test]
@@ -375,26 +379,49 @@ mod tests {
     }
 
     #[test]
-    fn vertical_drag_scrolls_a_list_by_row_and_voids_the_tap() {
+    fn vertical_drag_turns_the_carousel_by_a_session_and_voids_the_tap() {
         let mut ui = fresh();
-        // One page of five rows: the demo's second project joins the first.
+        // One project of seven sessions: the demo's second project joins the
+        // first, and two more arrive.
         for slot in 3..5 {
             ui.deck.agents[slot].project.set(crate::deck::demo::PROJECTS[0]);
         }
-        assert_eq!((ui.deck.order_len, layout::ROSTER_VISIBLE), (5, 4));
-        let (x, y) = row_of(&ui, 3);
+        for id in [6, 7] {
+            let msg = crate::deck::msg::HostMsg::Agent {
+                id, gone: false, kind: Some(crate::deck::msg::AgentKind::Claude),
+                state: Some(crate::deck::msg::AgentState::Idle), name: None,
+                project: Some(crate::deck::text::Text::from_str(crate::deck::demo::PROJECTS[0])),
+                title: None, since_s: None, task: None, subs: None,
+            };
+            ui.host(&msg, 0, &mut Update::new());
+        }
+        assert_eq!((ui.deck.order_len, layout::ROSTER_VISIBLE), (7, 3));
+        let at = |ui: &UiState| crate::ui::faces::agents::carousel(ui).0;
+        assert_eq!(at(&ui), 0);
+        let first = ui.agents.highlight;
+        let (x, y) = row_of(&ui, first);
         touch(&mut ui, TouchPhase::Down, x, y, 0);
-        assert_eq!(ui.agents.pressed, Some(3));
+        assert_eq!(ui.agents.pressed, Some(first));
         touch(&mut ui, TouchPhase::Move, x + 3, y - 15, 10);
-        assert_eq!((ui.agents.pressed, ui.agents.top_row), (Some(3), 0));
+        assert_eq!((ui.agents.pressed, at(&ui)), (Some(first), 0), "within the slop");
         touch(&mut ui, TouchPhase::Move, x + 3, y - 16, 20);
-        assert_eq!((ui.agents.pressed, ui.agents.top_row), (None, 1), "16 px up shows later rows");
+        assert_eq!((ui.agents.pressed, at(&ui)), (None, 1), "16 px up brings the next session to the card");
         touch(&mut ui, TouchPhase::Move, x + 3, y - 16 - layout::ROSTER_PITCH as i32, 30);
-        assert_eq!(ui.agents.top_row, 1, "the list has only one row to give");
-        touch(&mut ui, TouchPhase::Move, x + 3, y + 30, 40);
-        assert_eq!(ui.agents.top_row, 0, "back down: earlier rows again");
-        touch(&mut ui, TouchPhase::Up, x + 3, y + 30, 50);
-        assert_eq!((ui.agents.highlight, ui.agents.view), (1, AgentsView::Roster));
+        assert_eq!(at(&ui), 2, "a pitch more, one more");
+        touch(&mut ui, TouchPhase::Move, x + 3, 8, 40);
+        assert_eq!(at(&ui), 4, "to the top of the screen: four sessions on");
+        touch(&mut ui, TouchPhase::Move, x + 3, y + 30, 50);
+        assert_eq!(at(&ui), 0, "back down to the first");
+        touch(&mut ui, TouchPhase::Up, x + 3, y + 30, 60);
+        assert_eq!(ui.agents.view, AgentsView::Roster, "a drag never opens a session");
+        // A second drag from the fifth runs into the last and stops there.
+        let (x, y) = layout::roster_row(1).center();
+        touch(&mut ui, TouchPhase::Down, x, y, 100);
+        touch(&mut ui, TouchPhase::Move, x, 8, 110);
+        touch(&mut ui, TouchPhase::Down, x, y, 200);
+        touch(&mut ui, TouchPhase::Move, x, 8, 210);
+        touch(&mut ui, TouchPhase::Up, x, 8, 220);
+        assert_eq!(at(&ui), 6, "it stops at the last");
     }
 
     #[test]
@@ -596,7 +623,7 @@ mod tests {
         // A finger down on each face's pressable thing.
         for (template, (x, y)) in [
             (Template::Macropad, layout::macro_key(1).center()),
-            (Template::Agents, layout::roster_row(0).center()),
+            (Template::Agents, layout::roster_row(1).center()),
             (Template::Omarchy, layout::omarchy_chip(0).center()),
             (Template::Omarchy, layout::omarchy_window(0).center()),
             (Template::Settings, layout::settings_row(0).center()),

@@ -254,6 +254,7 @@ pub fn parse_device_line(bytes: &[u8]) -> Result<DeviceLine, DecodeError> {
             sid: o.need_uint("sid", u64::from(u32::MAX))? as u32,
             boot: o.flag("boot")?,
             rx: o.need_u16("rx")?,
+            agents: o.u8("agents", u8::MAX)?,
             faces: faces(o.array("faces")?.map_or(&[][..], |a| a.as_slice()))?,
         },
         "key" => DeviceLine::Key {
@@ -264,12 +265,12 @@ pub fn parse_device_line(bytes: &[u8]) -> Result<DeviceLine, DecodeError> {
         },
         "up" => DeviceLine::Up,
         "channel" => DeviceLine::Channel {
-            slot: slot(o.need_u8("agent", 8)?)?,
+            slot: slot(o.need_u8("agent", MAX_SLOT)?)?,
             seq: o.need_u16("seq")?,
         },
         "ptt" => DeviceLine::Ptt {
             act: o.need_u8("act", 1)?,
-            slot: o.need_u8("agent", 8)?,
+            slot: o.need_u8("agent", MAX_SLOT)?,
             ctx: o.need_member("ctx", CTXS)?,
             card: o
                 .uint("card", u64::from(u16::MAX))?
@@ -279,28 +280,28 @@ pub fn parse_device_line(bytes: &[u8]) -> Result<DeviceLine, DecodeError> {
             press: o.uint("p", u64::from(u16::MAX))?.map(|n| n as u16),
         },
         "answer" => DeviceLine::Answer {
-            slot: slot(o.need_u8("agent", 8)?)?,
+            slot: slot(o.need_u8("agent", MAX_SLOT)?)?,
             card: o.need_u16("card")?,
             choice: o.need_u8("choice", 3)?,
         },
         "snooze" => DeviceLine::Snooze {
-            slot: slot(o.need_u8("agent", 8)?)?,
+            slot: slot(o.need_u8("agent", MAX_SLOT)?)?,
             card: o.need_u16("card")?,
         },
         "doclines" => DeviceLine::DocLines {
-            slot: slot(o.need_u8("agent", 8)?)?,
+            slot: slot(o.need_u8("agent", MAX_SLOT)?)?,
             doc: doc_kind(o.need_str("d")?)?,
             id: o.need_u16("id")?,
             first: o.need_u16("first")?,
         },
-        "image" => DeviceLine::Image { slot: slot(o.need_u8("agent", 8)?)?, rev: o.need_u16("r")?, index: o.need_u8("i", 255)?, offset: o.need_u16("o")? },
+        "image" => DeviceLine::Image { slot: slot(o.need_u8("agent", MAX_SLOT)?)?, rev: o.need_u16("r")?, index: o.need_u8("i", 255)?, offset: o.need_u16("o")? },
         "session" => DeviceLine::Session {
-            slot: slot(o.need_u8("agent", 8)?)?,
+            slot: slot(o.need_u8("agent", MAX_SLOT)?)?,
             field: o.need_u8("f", 2)?, page: o.need_u8("p", 63)?,
             rev: o.need_u16("r")?, choice: o.need_u8("i", 255)?,
         },
         "tool" => DeviceLine::Tool {
-            slot: slot(o.need_u8("agent", 8)?)?,
+            slot: slot(o.need_u8("agent", MAX_SLOT)?)?,
             id: o.need_u16("id")?,
             index: o.need_u8("i", 65)?,
         },
@@ -370,6 +371,10 @@ fn doc_kind(name: &str) -> Result<crate::DocKind, DecodeError> {
     }
 }
 
+/// Agent ids are one byte, 1..=255; the deck refuses an id above its own
+/// table (`hello`'s `agents`), the host never sends one.
+const MAX_SLOT: u8 = u8::MAX;
+
 fn slot(n: u8) -> Result<u8, DecodeError> {
     slot_field(n, "agent")
 }
@@ -403,7 +408,7 @@ pub fn parse_host_line(bytes: &[u8]) -> Result<HostLine, DecodeError> {
         }
         "synced" => HostLine::Synced,
         "agent" => {
-            let slot = slot_field(o.need_u8("id", 8)?, "id")?;
+            let slot = slot_field(o.need_u8("id", MAX_SLOT)?, "id")?;
             if o.flag("gone")? {
                 HostLine::AgentGone { slot }
             } else {
@@ -415,11 +420,13 @@ pub fn parse_host_line(bytes: &[u8]) -> Result<HostLine, DecodeError> {
                     state: o.member("state", STATES)?,
                     title: o.str("title")?.map(str::to_string),
                     since_s: o.uint("since", u64::from(u32::MAX))?.map(|n| n as u32),
+                    task: o.str("task")?.map(str::to_string),
+                    subs: o.uint("subs", 255)?.map(|n| n as u8),
                 }
             }
         }
         "card" => {
-            let slot = slot(o.need_u8("agent", 8)?)?;
+            let slot = slot(o.need_u8("agent", MAX_SLOT)?)?;
             let id = o.need_u16("id")?;
             if o.flag("clear")? {
                 HostLine::CardClear { slot, id }
@@ -478,7 +485,7 @@ pub fn parse_host_line(bytes: &[u8]) -> Result<HostLine, DecodeError> {
                 return Err(DecodeError::Range("first"));
             }
             HostLine::DocText {
-                slot: slot(o.need_u8("agent", 8)?)?,
+                slot: slot(o.need_u8("agent", MAX_SLOT)?)?,
                 doc: doc_kind(o.need_str("d")?)?,
                 id: o.need_u16("id")?,
                 first,
@@ -497,15 +504,15 @@ pub fn parse_host_line(bytes: &[u8]) -> Result<HostLine, DecodeError> {
             }
         }
         "reply" => HostLine::Reply {
-            slot: slot(o.need_u8("agent", 8)?)?,
+            slot: slot(o.need_u8("agent", MAX_SLOT)?)?,
             text: o.need_str("text")?.to_string(),
             rev: o.need_u16("rev")?,
         },
-        "image" => HostLine::Image { slot: slot(o.need_u8("agent", 8)?)?, rev: o.need_u16("r")?, index: o.need_u8("i", 255)?, offset: o.need_u16("o")?, total: o.need_u16("n")?, width: o.need_u16("w")?, height: o.need_u16("h")?, data: o.need_str("data")?.to_string() },
+        "image" => HostLine::Image { slot: slot(o.need_u8("agent", MAX_SLOT)?)?, rev: o.need_u16("r")?, index: o.need_u8("i", 255)?, offset: o.need_u16("o")?, total: o.need_u16("n")?, width: o.need_u16("w")?, height: o.need_u16("h")?, data: o.need_str("data")?.to_string() },
         "session" => {
             if o.array("choices")?.is_some_and(|a| a.len() > 4) { return Err(DecodeError::Range("choices")); }
             let menu = crate::SessionMenu {
-            slot: slot(o.need_u8("agent", 8)?)?,
+            slot: slot(o.need_u8("agent", MAX_SLOT)?)?,
             rev: o.need_u16("rev")?, field: o.need_u8("field", 2)?,
             page: o.need_u8("page", 63)?, status: o.need_u8("status", 3)?,
             model: o.need_str("model")?.into(),
@@ -519,7 +526,7 @@ pub fn parse_host_line(bytes: &[u8]) -> Result<HostLine, DecodeError> {
             HostLine::SessionMenu(menu)
         },
         "transcript" => HostLine::Transcript {
-            slot: slot(o.need_u8("agent", 8)?)?,
+            slot: slot(o.need_u8("agent", MAX_SLOT)?)?,
             text: o.need_str("text")?.to_string(),
             last: o.flag("final")?,
             press: o.uint("p", u64::from(u16::MAX))?.map(|n| n as u16),
@@ -528,7 +535,7 @@ pub fn parse_host_line(bytes: &[u8]) -> Result<HostLine, DecodeError> {
             rec: o.flag("rec")?,
         },
         "focus" => HostLine::Focus {
-            slot: slot(o.need_u8("agent", 8)?)?,
+            slot: slot(o.need_u8("agent", MAX_SLOT)?)?,
             ack: o.uint("ack", u64::from(u16::MAX))?.map(|n| n as u16),
         },
         "ws" => {
@@ -674,6 +681,7 @@ mod tests {
                 sid: 0,
                 boot: true,
                 rx: 1024,
+                agents: None,
                 faces: vec![
                     FaceEntry { f: 1, t: Template::Agents, n: "Agents".into() },
                     FaceEntry { f: 6, t: Template::Settings, n: "Settings".into() },
@@ -691,6 +699,7 @@ mod tests {
                 sid: u32::MAX,
                 boot: false,
                 rx: 1024,
+                agents: None,
                 faces: vec![]
             }
         );
@@ -840,7 +849,7 @@ mod tests {
             Err(DecodeError::Range("act"))
         );
         assert_eq!(
-            parsed(r#"{"m":"channel","agent":9,"seq":1}"#),
+            parsed(r#"{"m":"channel","agent":256,"seq":1}"#),
             Err(DecodeError::Range("agent"))
         );
         assert_eq!(
@@ -986,6 +995,8 @@ mod tests {
                 state: Some(crate::AgentState::Idle),
                 title: Some("t".into()),
                 since_s: Some(1),
+                task: None,
+                subs: None,
             },
             HostLine::Agent {
                 slot: 1,
@@ -995,6 +1006,8 @@ mod tests {
                 state: None,
                 title: None,
                 since_s: None,
+                task: None,
+                subs: None,
             },
             HostLine::AgentGone { slot: 2 },
             HostLine::Card {
@@ -1100,7 +1113,7 @@ mod tests {
             Err(DecodeError::Range("sel"))
         );
         assert_eq!(
-            parse_host_line(br#"{"m":"agent","id":9}"#),
+            parse_host_line(br#"{"m":"agent","id":256}"#),
             Err(DecodeError::Range("id"))
         );
     }

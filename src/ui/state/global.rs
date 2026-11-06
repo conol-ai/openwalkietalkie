@@ -1012,7 +1012,7 @@ mod tests {
             name: None,
             project: None,
             title: None,
-            since_s: None,
+            since_s: None, task: None, subs: None,
         };
         ui.host(&agent, 301, &mut Update::new());
         let out = press(&mut ui, Button::PushToTalk, 400);
@@ -1879,7 +1879,7 @@ mod tests {
             name: None,
             project: None,
             title: None,
-            since_s: None,
+            since_s: None, task: None, subs: None,
         }
     }
     fn gone(id: u8) -> HostMsg {

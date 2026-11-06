@@ -167,6 +167,13 @@ static mut BANDS: [display::Band; 2] = [display::Band::new(), display::Band::new
 // several kilobytes and this thread's stack is small: these are only ever
 // filled in place, never built or moved by value.
 static mut FRAME: UiState = UiState::new();
+// The native image keeps the old eight sessions in SRAM, one table for the
+// live state and one for the renderer's snapshot (the Embassy firmware puts
+// 255 in PSRAM instead).
+static mut CORE_AGENTS: [deck::model::Agent; deck::model::DEFAULT_SESSIONS] =
+    [deck::model::Agent::new(); deck::model::DEFAULT_SESSIONS];
+static mut FRAME_AGENTS: [deck::model::Agent; deck::model::DEFAULT_SESSIONS] =
+    [deck::model::Agent::new(); deck::model::DEFAULT_SESSIONS];
 static mut PREV_SIG: Signature = Signature::new();
 static mut NEXT_SIG: Signature = Signature::new();
 static mut FRAME_VALID: bool = false;
@@ -209,6 +216,9 @@ fn keypad_init() -> bool {
 #[no_mangle]
 pub unsafe extern "C" fn owt_core_init() -> u32 {
     let core = &mut *core::ptr::addr_of_mut!(CORE);
+    // SAFETY: the two tables are reached only through these two states.
+    core.ui.deck.agents.attach(core::ptr::addr_of_mut!(CORE_AGENTS).cast(), deck::model::DEFAULT_SESSIONS);
+    (*core::ptr::addr_of_mut!(FRAME)).deck.agents.attach(core::ptr::addr_of_mut!(FRAME_AGENTS).cast(), deck::model::DEFAULT_SESSIONS);
     core.ui.reset();
     if charger::initialize(&mut Bus).is_ok() {
         core.devices |= 1;

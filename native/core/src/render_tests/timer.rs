@@ -108,7 +108,7 @@ fn a_running_stopwatch_repaints_only_its_readout() {
     previous.apply(Control::Button(Button::Enter, Edge::Release), 1001, &mut out);
     previous.tick(1050, 0, true, &mut out);
     let mut screen = Screens::new(&previous);
-    let mut next = Box::new(*previous);
+    let mut next = Box::new((*previous).clone());
     let mut out = Update::new();
     next.tick(1100, 0, true, &mut out);
     assert!(out.dirty);
@@ -131,7 +131,7 @@ struct Session {
 impl Session {
     fn new(ui: Box<UiState>) -> Self {
         let screen = Screens::new(&ui);
-        Self { previous: Box::new(*ui), next: ui, screen, now: 1000 }
+        Self { previous: Box::new((*ui).clone()), next: ui, screen, now: 1000 }
     }
     fn step(&mut self, f: impl FnOnce(&mut UiState, u32)) {
         self.now += 137;

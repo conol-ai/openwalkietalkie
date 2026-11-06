@@ -202,6 +202,9 @@ Display text only, not raw tool arguments or results.
 | `slot` | [`Slot`](#slot)? | no |  | The device slot, a projection; `None` = "not on deck". |
 | `source` | [`Source`](#source) | yes |  |  |
 | `state` | [`AgentState`](#agentstate) | yes |  |  |
+| `subagents` | uint16 | no |  | Subagents the session has running (Claude's `SubagentStart` / `SubagentStop`, or what the owner reports with `agent.update {subagents}`). The roster's count adds the running workflow runs. |
+| `task` | string? | no |  | The session's major task, the roster's title: the CLI's own session title when it reports one, else the session's first prompt (not the latest one), else what the owner set with `agent.update {task}`. |
+| `task_source` | [`TitleSource`](#titlesource)? | no |  | Where `task` came from; a prompt-derived task is content. |
 | `title` | string? | no |  | Content when `title_source` is `prompt`/`tool`. |
 | `title_source` | [`TitleSource`](#titlesource) | yes |  |  |
 | `voice` | string? | no |  |  |
@@ -246,6 +249,8 @@ One of: `working`, `question`, `ready`, `error`, `idle`.
 | `name` | string? | no |  |  |
 | `since` | [`Ts`](#ts)? | no |  |  |
 | `state` | [`AgentState`](#agentstate)? | no |  |  |
+| `subagents` | uint16? | no |  | How many subagents the session has running now. |
+| `task` | string? | no |  | The session's major task (the roster's title); `""` clears it. |
 | `title` | string? | no |  |  |
 | `title_source` | [`TitleSource`](#titlesource)? | no |  |  |
 
@@ -411,6 +416,7 @@ One of: `session`, `launcher`.
 | `outbox_depth` | uint32 | yes |  |  |
 | `pace_ms` | uint16 | yes |  |  |
 | `session` | [`SessionState`](#sessionstate) | yes |  |  |
+| `sessions` | uint8? | no |  | The sessions the deck holds (its `hello`'s `agents`); `None` until a deck has said, and a deck that predates the field holds 8. |
 | `settings` | [`Settings`](#settings) | yes |  | The device's settings as last reported/pushed. |
 | `sid` | uint32 | yes |  | This daemon's session id (0 until `Store::new` is told one). |
 
@@ -761,7 +767,7 @@ The `set` keys the host persists and restores on `boot:1`.
 
 ### `Slot`
 
-Device slot 1..=8.
+Device slot 1..=255 (one byte on the wire); a deck holds `DeviceState::capacity` of them, 8 on a deck that does not say.
 
 Type: uint8.
 

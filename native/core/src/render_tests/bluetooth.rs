@@ -18,7 +18,7 @@ const STATES: [Status; 6] = [
 fn exercise(state: &mut UiState) {
     let mut screens = Screens::new(state);
     for status in STATES {
-        let before = Box::new(*state);
+        let before = Box::new((*state).clone());
         assert!(state.update_bluetooth(status));
         let pixels = update(&mut screens, &before, state);
         assert!(

@@ -61,11 +61,11 @@ fn host(ui: &mut UiState, msg: HostMsg) {
 
 /// An `agent` push that changes only `state`, `title` and/or `since`.
 fn agent_msg(id: u8, state: Option<AgentState>, title: Option<&str>, since_s: Option<u32>) -> HostMsg {
-    HostMsg::Agent { id, gone: false, kind: None, state, name: None, project: None, title: title.map(Text::from_str), since_s }
+    HostMsg::Agent { id, gone: false, kind: None, state, name: None, project: None, title: title.map(Text::from_str), since_s, task: None, subs: None }
 }
 
 fn gone_msg(id: u8) -> HostMsg {
-    HostMsg::Agent { id, gone: true, kind: None, state: None, name: None, project: None, title: None, since_s: None }
+    HostMsg::Agent { id, gone: true, kind: None, state: None, name: None, project: None, title: None, since_s: None , task: None, subs: None,}
 }
 
 fn clear_msg(agent: u8, id: u16, kind: CardKind) -> HostMsg {
@@ -126,8 +126,8 @@ fn host_lost(ui: &mut UiState) {
 /// Apply each step to a copy of `start`, replaying the damage between the
 /// states; returns the pixels each step transferred.
 fn walk(start: &UiState, steps: &[(&str, &dyn Fn(&mut UiState))]) -> Vec<usize> {
-    let mut previous = Box::new(*start);
-    let mut next = Box::new(*start);
+    let mut previous = Box::new((*start).clone());
+    let mut next = Box::new((*start).clone());
     let mut screen = Screens::new(&previous);
     let mut transferred = Vec::new();
     for (name, step) in steps {
@@ -321,6 +321,8 @@ fn roster_partial_refresh_matches_full_and_repaints_by_row() {
                 project: None,
                 title: Some(Text::from_str("Compiling")),
                 since_s: Some(3700),
+                task: None,
+                subs: None,
             })
         }),
         ("low battery", &|ui| {
@@ -338,8 +340,10 @@ fn roster_partial_refresh_matches_full_and_repaints_by_row() {
         ("offline", &|ui| offline(ui)),
         ("demo again", &|ui| ui.deck.settings.demo = true),
     ]);
-    // A highlight move or an active-channel change repaints two rows, not the frame.
-    assert!(moved[0] < FULL / 2, "highlight: {}", moved[0]);
+    // A highlight move turns the carousel: the header's place count, the
+    // card and both peeks repaint, the hint bar and the margins do not. An
+    // active-channel change or a title off the card repaints one place at most.
+    assert!(moved[0] < FULL * 4 / 5, "highlight: {}", moved[0]);
     assert!(moved[1] < FULL / 3, "active bar: {}", moved[1]);
     assert!(moved[4] < FULL / 3, "one title: {}", moved[4]);
 }
@@ -623,27 +627,36 @@ fn the_centre_of_every_row_hits_its_target_where_its_outline_is_drawn() {
         p == raw(theme::OUTLINE) || p == raw(theme::OUTLINE_SELECTED)
     };
     // Roster: the highlighted row's outline and every row's dot sit in
-    // `roster_row(slot)`. One page of five rows, scrolled by one.
+    // `roster_row(place)`: the carousel's peek above, card and peek below,
+    // with the second of five sessions on the card so every place is filled.
     let ui = scene(|ui| {
         for slot in 3..5 {
             ui.deck.agents[slot].project.set(crate::deck::demo::PROJECTS[0]);
         }
-        ui.agents.top_row = 1;
+        ui.agents.highlight = ui.deck.order[1];
     });
     let frame = full(&ui);
-    for slot in 0..layout::ROSTER_VISIBLE {
-        let rect = layout::roster_row(slot);
+    for place in 0..layout::ROSTER_VISIBLE {
+        let rect = layout::roster_row(place);
         let (cx, cy) = rect.center();
-        assert_eq!(layout::roster_row_at(cx, cy), Some(slot));
-        let (dx, dy, _) = layout::ROSTER_DOT;
-        assert_ne!(pixel(&frame, rect.left() + dx, rect.top() + dy), 0, "dot of slot {slot}");
-        assert_eq!(outline(&frame, rect), ui.deck.order[1 + slot as usize] == ui.agents.highlight, "slot {slot}");
+        assert_eq!(layout::roster_row_at(cx, cy), Some(place));
+        assert_eq!(outline(&frame, rect), place == 1, "only the card is outlined: place {place}");
+        // The agent mark is drawn where its place puts it.
+        let (mark, at) = if place == 1 {
+            (40, (rect.left() + crate::ui::faces::agents::CARD_PAD, rect.top() + crate::ui::faces::agents::CARD_STATUS_CY - 20))
+        } else {
+            (24, (rect.left() + crate::ui::faces::agents::PEEK_INSET, rect.center().1 - 12))
+        };
+        assert!(lit_in(&frame, Rect::new(at.0, at.1, mark, mark)) > 20, "mark of place {place}");
     }
+    // The first session has nothing above it.
+    let first = full(&scene(|_| {}));
+    assert_eq!(lit_in(&first, layout::roster_row(0)), 0, "nothing before the first");
     assert_eq!(count_in(&frame, layout::roster_active_bar(0), theme::TEXT_PRIMARY), 0);
-    let ui = scene(|ui| ui.global.active_channel = 3);
+    let ui = scene(|ui| ui.global.active_channel = 2);
     let frame = full(&ui);
     let bar = layout::roster_active_bar(2);
-    assert_eq!(count_in(&frame, bar, theme::TEXT_PRIMARY), (bar.width() * bar.height()) as usize);
+    assert_eq!(count_in(&frame, bar, theme::TEXT_PRIMARY), (bar.width() * bar.height()) as usize, "the active channel's peek");
     // Question choices.
     let ui = scene(|ui| card(ui, 1, Some(1)));
     let frame = full(&ui);
@@ -736,7 +749,7 @@ fn the_listening_overlay_owns_every_pixel_and_registers_five_lanes() {
     assert_eq!(sig.regions().last().unwrap().0, layout::BLUETOOTH);
     assert_eq!(sig.regions()[3].0, layout::PTT_WAVE);
     // The face beneath contributes nothing, so switching it changes no pixel.
-    let mut other = Box::new(*ui);
+    let mut other = Box::new((*ui).clone());
     other.on_face(Template::Usage);
     other.global.ptt = ui.global.ptt;
     assert_frame(&full(&other), &clean, "the overlay looks the same over any face");
@@ -745,7 +758,7 @@ fn the_listening_overlay_owns_every_pixel_and_registers_five_lanes() {
 #[test]
 fn signature_region_counts_are_fixed_per_view() {
     let counts = [
-        ("roster", scene(|_| {}), 7),
+        ("roster", scene(|_| {}), 5),
         ("channel", scene(|ui| channel(ui, 3)), 6),
         ("question", scene(|ui| card(ui, 1, Some(0))), 8),
         ("ready", scene(|ui| card(ui, 2, None)), 7),
@@ -761,36 +774,22 @@ fn signature_region_counts_are_fixed_per_view() {
 }
 
 #[test]
-fn the_age_suffix_yields_before_the_title_is_truncated() {
-    let lane = |ui: &UiState| {
-        let row = layout::roster_row(2);
-        let x = row.left() + layout::ROSTER_TEXT_X;
-        (full(ui), Rect::new(x, row.top() + 40, row.right() - 12 - x, 24))
-    };
-    let working = scene(|_| {});
-    let idle = scene(|ui| ui.deck.agents[2].state = AgentState::Idle);
-    let (a, rect) = lane(&working);
-    let (b, _) = lane(&idle);
-    assert!(lit_in(&a, rect) > lit_in(&b, rect), "the short title carries \u{b7} 2m");
-    // A title that fits alone but not beside " · 2m".
-    let suffix = font::measure(Font::Body, " \u{b7} 2m");
-    let mut long = String::from("Compiling the native image");
-    while font::measure(Font::Body, &long) + suffix <= rect.width() {
-        long.push_str(" and linking");
-    }
-    while font::measure(Font::Body, &long) > rect.width() {
-        long.pop();
-    }
-    assert!(long.len() < 64 && font::measure(Font::Body, &long) + suffix > rect.width());
-    let working = scene(|ui| ui.deck.agents[2].title.set(&long));
-    let idle = scene(|ui| {
-        ui.deck.agents[2].title.set(&long);
-        ui.deck.agents[2].state = AgentState::Idle;
-    });
-    let (a, rect) = lane(&working);
-    let (b, _) = lane(&idle);
-    assert_eq!(lit_in(&a, rect), lit_in(&b, rect), "no room: the age is dropped, the title kept whole");
-    assert!(lit_in(&a, Rect::new(rect.right() - 16, rect.top(), 16, rect.height())) > 0, "the title runs to the edge whole");
+fn the_card_shows_a_badge_only_for_running_work_and_the_question_in_white() {
+    use crate::ui::faces::agents::{CARD_PAD, CARD_STATUS_CY};
+    let card = layout::ROSTER_CARD;
+    let badge_area = Rect::new(card.right() - CARD_PAD - 40, card.top() + CARD_STATUS_CY - 17, 40, 34);
+    let none = scene(|ui| ui.deck.agents[0].subs = 0);
+    let three = scene(|ui| ui.deck.agents[0].subs = 3);
+    assert_eq!(count_in(&full(&none), badge_area, theme::OUTLINE), 0, "nothing running: no badge");
+    assert!(count_in(&full(&three), badge_area, theme::OUTLINE) > 100, "three running: a badge");
+    // The demo's first session waits on a question: its text is the card's
+    // last lines, in white; answered, those lines are its grey reply.
+    let lower = Rect::new(card.left() + CARD_PAD, card.bottom() - 80, card.width() - 2 * CARD_PAD, 64);
+    let asking = full(&scene(|_| {}));
+    assert!(count_in(&asking, lower, theme::TEXT_PRIMARY) > 40, "the question in white");
+    let answered = full(&scene(|ui| ui.deck.agents[0].has_card = false));
+    assert_eq!(count_in(&answered, lower, theme::TEXT_PRIMARY), 0, "a reply is grey");
+    assert!(lit_in(&answered, lower) > 0);
 }
 
 #[test]
@@ -989,23 +988,72 @@ fn cjk_reply_overhang_is_erased_when_the_reply_changes() {
 }
 
 #[test]
-fn conol_mosaic_header_redraws_when_a_native_chat_joins_the_project() {
-    let mut state = scene(|ui| {
+fn a_conol_projects_header_is_drawn_exactly_like_any_other_projects() {
+    // Turning to a Conol page must not move the name or the pager.
+    let page = |kind: AgentKind| {
+        scene(|ui| {
+            ui.agents.view = AgentsView::Roster;
+            ui.agents.project.set("Conol");
+            for agent in ui.deck.agents.iter_mut() {
+                agent.project.set("Conol");
+                agent.kind = kind;
+            }
+            ui.deck.agents[4].project.set("cohdl");
+            ui.deck.agents[4].kind = AgentKind::Claude;
+        })
+    };
+    let (conol, other) = (full(&page(AgentKind::Conol)), full(&page(AgentKind::Other)));
+    let lane = face::HEADER_LANE;
+    for y in lane.top()..lane.bottom() {
+        for x in lane.left()..lane.right() {
+            assert_eq!(pixel(&conol, x, y), pixel(&other, x, y), "header differs at ({x}, {y})");
+        }
+    }
+    assert!(lit_in(&conol, crate::ui::layout::roster_pager(theme::TEXT_X)) > 0, "the pager is drawn");
+}
+
+#[test]
+fn the_pager_dots_each_project_above_the_name_and_turns_with_left_right() {
+    use crate::control::{Button, Control, Edge};
+    use crate::ui::layout;
+    // Three projects: cohdl, openmicro, battlefield.
+    let start = scene(|ui| {
         ui.agents.view = AgentsView::Roster;
-        ui.agents.project.set("Conol");
-        for agent in &mut ui.deck.agents {
-            agent.project.set("Conol");
-            agent.kind = AgentKind::Other;
+        ui.deck.agents[4].project.set("battlefield");
+    });
+    let x = theme::TEXT_X;
+    let (dot, pill, gap, y) = (layout::ROSTER_PAGER_DOT, layout::ROSTER_PAGER_PILL, layout::ROSTER_PAGER_GAP, layout::ROSTER_PAGER_Y);
+    let pill_at = |frame: &[u8], page: i32| {
+        let left = x + page * (dot + gap);
+        count_in(frame, Rect::new(left, y, pill, dot), theme::TEXT_BRIGHT) > pill as usize * 3
+    };
+    let frame = full(&start);
+    assert!(pill_at(&frame, 0), "the first project's pill");
+    assert!(lit_in(&frame, Rect::new(x + pill + gap, y, 2 * (dot + gap), dot)) > 0, "two more dots");
+    assert!(lit_outside_safe_area(&frame).is_none());
+    // RIGHT turns the page and moves the pill; partial refresh keeps up.
+    let right = |ui: &mut UiState| {
+        let mut out = Update::new();
+        ui.apply(Control::Button(Button::Right, Edge::Press), 100, &mut out);
+        ui.apply(Control::Button(Button::Right, Edge::Release), 110, &mut out);
+    };
+    walk(&start, &[("right", &right), ("right again", &right), ("one project", &|ui| {
+        for agent in ui.deck.agents.iter_mut() {
+            agent.project.set("cohdl");
+        }
+    })]);
+    let mut middle = Box::new((*start).clone());
+    right(&mut middle);
+    middle.invalidate();
+    let frame = full(&middle);
+    assert!(pill_at(&frame, 1) && !pill_at(&frame, 0), "the pill moved to the second project");
+    // One project: no pager and no LEFT/RIGHT hint.
+    let solo = scene(|ui| {
+        ui.agents.view = AgentsView::Roster;
+        for agent in ui.deck.agents.iter_mut() {
+            agent.project.set("cohdl");
         }
     });
-    let mut screens = Screens::new(&state);
-    let before = state.clone();
-    for agent in &mut state.deck.agents { agent.kind = AgentKind::Conol; }
-    update(&mut screens, &before, &state);
-    let frame = full(&state);
-    assert_ne!(full(&before), frame);
-    assert!(lit_outside_safe_area(&frame).is_none());
-    if let Ok(path) = std::env::var("CONOL_DECK_PREVIEW") {
-        std::fs::write(path, frame).unwrap();
-    }
+    let frame = full(&solo);
+    assert_eq!(lit_in(&frame, layout::roster_pager(x)), 0);
 }

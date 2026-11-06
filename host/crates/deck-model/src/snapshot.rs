@@ -155,6 +155,18 @@ pub struct DeviceState {
     pub pace_ms: u16,
     pub outbox_depth: u32,
     pub err_counts: ErrCounts,
+    /// The sessions the deck holds (its `hello`'s `agents`); `None` until a
+    /// deck has said, and a deck that predates the field holds 8.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sessions: Option<u8>,
+}
+
+impl DeviceState {
+    /// How many slots the store may assign: the deck's own table.
+    #[must_use]
+    pub fn capacity(&self) -> u8 {
+        self.sessions.unwrap_or(crate::Slot::DEFAULT)
+    }
 }
 
 /// §7.2's output route state machine.

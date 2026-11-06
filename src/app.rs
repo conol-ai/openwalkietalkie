@@ -58,6 +58,55 @@ async fn panel_diag_wake() {
     core::future::pending::<()>().await;
 }
 
+/// The session table: 255 sessions in PSRAM on Rev A and Rev B (4.7 KB
+/// each, 1.2 MB of the 7 MB below the diagnostic scratch area), the old 8 in
+/// SRAM on the LilyGo dev board. PSRAM is NOLOAD, so the table is written
+/// in place, one session at a time, before anything reads it. A PSRAM that
+/// does not read back what was written falls back to the SRAM table rather
+/// than running on garbage.
+fn attach_sessions(state: &mut UiState) {
+    use crate::deck::model::Agent;
+    #[cfg(feature = "hw-a")]
+    use crate::deck::model::DEFAULT_SESSIONS;
+    const SESSIONS: usize = crate::ui::state::SESSIONS;
+    #[cfg_attr(feature = "hw-a", unsafe(link_section = ".psram_bss"))]
+    static mut TABLE: core::mem::MaybeUninit<[Agent; SESSIONS]> = core::mem::MaybeUninit::uninit();
+    #[cfg(feature = "hw-a")]
+    static mut FALLBACK: core::mem::MaybeUninit<[Agent; DEFAULT_SESSIONS]> = core::mem::MaybeUninit::uninit();
+    // SAFETY: called once, before the UI runs; whichever table is chosen is
+    // reached only through `state.deck.agents` from here on.
+    unsafe {
+        let table = core::ptr::addr_of_mut!(TABLE).cast::<Agent>();
+        #[cfg(feature = "hw-a")]
+        let (base, len) = if psram_answers(table.cast(), core::mem::size_of::<[Agent; SESSIONS]>()) {
+            (table, SESSIONS)
+        } else {
+            crate::logln!("sessions: PSRAM does not read back; holding {} in SRAM", DEFAULT_SESSIONS);
+            (core::ptr::addr_of_mut!(FALLBACK).cast::<Agent>(), DEFAULT_SESSIONS)
+        };
+        #[cfg(not(feature = "hw-a"))]
+        let (base, len) = (table, SESSIONS);
+        for i in 0..len {
+            base.add(i).write(Agent::new());
+        }
+        state.deck.agents.attach(base, len);
+        crate::logln!("sessions: {} held", len);
+    }
+}
+
+/// The first and last words of `len` bytes at `at` keep two patterns.
+#[cfg(feature = "hw-a")]
+unsafe fn psram_answers(at: *mut u32, len: usize) -> bool {
+    let words = len / 4;
+    let probes = [at, at.add(words - 1)];
+    [0xA5A5_5A5Au32, 0x0F1E_2D3C].iter().all(|&pattern| {
+        probes.iter().all(|&p| {
+            core::ptr::write_volatile(p, pattern);
+            core::ptr::read_volatile(p) == pattern
+        })
+    })
+}
+
 pub async fn run(mut display: Option<Co5300>, band: &'static mut Band) -> ! {
     // Several kilobytes: const-initialised in its static (a `StaticCell` would
     // build it on this task's stack first and copy) and only filled in place.
@@ -74,6 +123,7 @@ pub async fn run(mut display: Option<Co5300>, band: &'static mut Band) -> ! {
     let state = STATE.take();
     let scratch = SCRATCH.take();
     let frames = FRAMES.take();
+    attach_sessions(state);
     state.reset();
     // A deck that never finished the tutorial starts in it (Settings >
     // Display > Tutorial replays it later).

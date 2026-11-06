@@ -32,6 +32,10 @@ pub fn redact_agent(agent: &mut Agent) {
     if agent.title_source.is_content() {
         agent.title = None;
     }
+    // A task from the first prompt is content; a CLI's session title is not.
+    if agent.task_source.is_none_or(TitleSource::is_content) {
+        agent.task = None;
+    }
     agent.session.cwd = None;
     agent.session.pid = None;
     agent.session.terminal = None;
@@ -92,6 +96,13 @@ pub fn redact_event(event: &Event, scopes: &[Scope], own_agent: bool) -> Option<
                     .is_some_and(|s| !s.is_content());
                 if !title_is_state {
                     null_field(fields, "title");
+                }
+                let task_is_state = fields
+                    .get("task_source")
+                    .and_then(|s| serde_json::from_value::<TitleSource>(s.clone()).ok())
+                    .is_some_and(|s| !s.is_content());
+                if !task_is_state {
+                    null_field(fields, "task");
                 }
                 null_field(fields, "meta");
             }

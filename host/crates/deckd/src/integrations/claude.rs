@@ -128,6 +128,19 @@ const MANAGED: &[Managed] = &[
         timeout: REPORT_TIMEOUT_S,
         optional: true,
     },
+    // The roster's count of running subagents.
+    Managed {
+        event: "SubagentStart",
+        matcher: None,
+        timeout: REPORT_TIMEOUT_S,
+        optional: false,
+    },
+    Managed {
+        event: "SubagentStop",
+        matcher: None,
+        timeout: REPORT_TIMEOUT_S,
+        optional: false,
+    },
     Managed {
         event: "SessionEnd",
         matcher: None,
@@ -673,6 +686,8 @@ mod tests {
                 "SessionStart",
                 "Stop",
                 "StopFailure",
+                "SubagentStart",
+                "SubagentStop",
                 "UserPromptSubmit",
             ],
             "PostToolUse is off without tool_titles"

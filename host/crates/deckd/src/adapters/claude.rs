@@ -138,6 +138,9 @@ struct Memo {
     /// so a line that repeats it (every 300 ms while Claude works) is not
     /// another `agent.update`.
     names: HashMap<String, String>,
+    /// `session_id` → the subagents it has running (`SubagentStart` adds the
+    /// hook's `agent_id`, `SubagentStop` removes it): the roster's count.
+    subagents: HashMap<String, std::collections::BTreeSet<String>>,
 }
 
 /// One `AskUserQuestion` call, normalised: a card per question, and per
@@ -300,9 +303,46 @@ impl Claude {
             memo.released.remove(session_id);
             memo.touched.remove(session_id);
             memo.names.remove(session_id);
+            memo.subagents.remove(session_id);
             memo.seen
                 .retain(|key, _| !key.starts_with(&format!("{session_id}\u{0}")));
         }
+    }
+
+    /// `SubagentStart` / `SubagentStop`: the session's running subagents
+    /// after this hook, as an `agent.update {subagents}`.
+    fn subagent(&self, payload: &HookPayload, session_id: &str, started: bool) -> Request {
+        let id = payload.str("agent_id").unwrap_or_default().to_string();
+        let count = self.memo.lock().map_or(0, |mut memo| {
+            let running = memo.subagents.entry(session_id.to_string()).or_default();
+            if started {
+                running.insert(id);
+            } else if !running.remove(&id) {
+                // A stop that names no agent we saw (an older CLI without
+                // `agent_id`, or a start before deckd ran) still ends one.
+                let first = running.iter().next().cloned();
+                if let Some(first) = first {
+                    running.remove(&first);
+                }
+            }
+            running.len()
+        });
+        Self::work(count)
+    }
+
+    /// The running-subagent count, alone.
+    fn work(count: usize) -> Request {
+        Request::AgentUpdate(AgentUpdate {
+            agent: pending(),
+            state: None,
+            title: None,
+            title_source: None,
+            since: None,
+            name: None,
+            meta: None,
+            task: None,
+            subagents: Some(u16::try_from(count).unwrap_or(u16::MAX)),
+        })
     }
 
     /// Drop the windows whose time is up, so the memo is bounded by the
@@ -335,6 +375,7 @@ impl Claude {
             memo.released.remove(&id);
             memo.touched.remove(&id);
             memo.names.remove(&id);
+            memo.subagents.remove(&id);
             let prefix = format!("{id}\u{0}");
             memo.seen.retain(|key, _| !key.starts_with(&prefix));
         }
@@ -450,7 +491,7 @@ impl Claude {
             title_source,
             since: None,
             name: None,
-            meta: None,
+            meta: None, task: None, subagents: None,
         })
     }
 
@@ -786,6 +827,17 @@ impl Adapter for Claude {
         match event {
             "SessionStart" => {
                 let mut plan = lead();
+                // A new process has no subagents yet; `/clear` starts a new
+                // conversation, so its first prompt is a new task.
+                if let Ok(mut memo) = self.memo.lock() {
+                    memo.subagents.remove(session_id);
+                }
+                plan.push(Self::work(0));
+                if payload.str("source") == Some("clear") {
+                    if let Request::AgentUpdate(u) = plan.last_mut().expect("pushed") {
+                        u.task = Some(String::new());
+                    }
+                }
                 if let Some(title) = payload.str("session_title") {
                     plan.push(Self::update(
                         Some(AgentState::Idle),
@@ -1022,6 +1074,11 @@ impl Adapter for Claude {
                 Ingest::Report(plan)
             }
             "Notification" => self.notification(payload, session_id, lead()),
+            "SubagentStart" | "SubagentStop" => {
+                let mut plan = lead();
+                plan.push(self.subagent(payload, session_id, event == "SubagentStart"));
+                Ingest::Report(plan)
+            }
             "SessionEnd" => {
                 // No register: a session we never saw has no agent to
                 // release, and registering one here only to remove it
@@ -2164,6 +2221,39 @@ mod tests {
                 "{event} re-emitted the stamp"
             );
         }
+    }
+
+    /// `SubagentStart`/`SubagentStop` keep the roster's count; a new process
+    /// starts from none and `/clear` clears the task.
+    #[test]
+    fn subagent_hooks_count_the_running_subagents() {
+        let claude = Claude::default();
+        let t0 = Instant::now();
+        let hook = |event: &str, extra: serde_json::Value| {
+            let mut v = serde_json::json!({"session_id": "s1", "cwd": "/w/web-ui", "hook_event_name": event});
+            v.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            payload(v)
+        };
+        let count = |ingest: Ingest| match ingest {
+            Ingest::Report(plan) | Ingest::Beacon(_, plan) => plan.iter().find_map(|r| match r {
+                Request::AgentUpdate(u) => u.subagents.map(|n| (n, u.task.clone())),
+                _ => None,
+            }),
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(count(claude.ingest(&hook("SubagentStart", serde_json::json!({"agent_id": "a1"})), &ctx(t0))), Some((1, None)));
+        assert_eq!(count(claude.ingest(&hook("SubagentStart", serde_json::json!({"agent_id": "a2"})), &ctx(t0))), Some((2, None)));
+        assert_eq!(count(claude.ingest(&hook("SubagentStart", serde_json::json!({"agent_id": "a2"})), &ctx(t0))), Some((2, None)), "a repeat is one");
+        assert_eq!(count(claude.ingest(&hook("SubagentStop", serde_json::json!({"agent_id": "a1"})), &ctx(t0))), Some((1, None)));
+        assert_eq!(count(claude.ingest(&hook("SubagentStop", serde_json::json!({})), &ctx(t0))), Some((0, None)), "a nameless stop still ends one");
+        assert_eq!(count(claude.ingest(&hook("SubagentStop", serde_json::json!({})), &ctx(t0))), Some((0, None)), "never below zero");
+        claude.ingest(&hook("SubagentStart", serde_json::json!({"agent_id": "a3"})), &ctx(t0));
+        assert_eq!(count(claude.ingest(&hook("SessionStart", serde_json::json!({"source": "resume"})), &ctx(t0))), Some((0, None)));
+        assert_eq!(
+            count(claude.ingest(&hook("SessionStart", serde_json::json!({"source": "clear"})), &ctx(t0))),
+            Some((0, Some(String::new()))),
+            "/clear is a new conversation: a new task"
+        );
     }
 
     /// An http event carries no environment, so it must never blank the

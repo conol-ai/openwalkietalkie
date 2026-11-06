@@ -22,12 +22,13 @@
 //! wrapped here instead, exactly as it always was; the answered choice shows
 //! "sent" and the others dim; without a deck host (and not demo) the tag reads
 //! "offline" and the hint bar says so.
-use crate::deck::model::{Agent, Card, MAX_AGENTS};
+use crate::deck::model::{Agent, Card};
 use crate::deck::msg::{AgentKind, AgentState, DocFont, DocKind, CardKind};
 use crate::deck::text::Text;
 use crate::display::Band;
 use crate::ui::kit::list::Viewport;
 use crate::ui::kit::{Hint, HeaderRight};
+use crate::ui::marks::{self, Presence};
 use crate::ui::signature::{Hasher, SigBuilder};
 use crate::ui::state::{AgentsView, UiState};
 use crate::ui::{font, font::Align, font::Font, kit, layout, layout::Rect, theme};
@@ -38,7 +39,6 @@ pub const HEADER_LANE: Rect = Rect::new(24, 20, 432, 40);
 /// Hairline and hint bar.
 pub const HINT_LANE: Rect = Rect::new(0, theme::HINT_Y - 1, theme::SCREEN, theme::SCREEN - theme::HINT_Y + 1);
 /// "↑ 1 more · 2 more ↓" under the roster rows / the card rows.
-pub const ROSTER_MORE: Rect = Rect::new(32, 378, 416, 48);
 pub const CARD_MORE: Rect = Rect::new(32, 392, 416, 34);
 /// The question: two Title lines in `CARD_QUESTION`, or three Name lines
 /// ending just above the first choice row.
@@ -87,7 +87,9 @@ pub const WORKFLOW_TOGGLE: Rect = Rect::new(316, 68, 128, 30);
 /// A roster row and the active-channel bar beside it.
 pub const fn roster_lane(slot: u8) -> Rect {
     let row = layout::roster_row(slot);
-    Rect::new(row.left() - 8, row.top(), row.width() + 8, row.height())
+    // Up into the 3 px gap above the row: a CJK glyph in the task rises a
+    // pixel past the row's top edge. Lanes still never overlap.
+    Rect::new(row.left() - 8, row.top() - 3, row.width() + 8, row.height() + 3)
 }
 
 /// Text stops this far from a row's right edge.
@@ -107,6 +109,8 @@ const AGENT: Hint<'static> = h("\u{2039} \u{203a}", "agent");
 const TALK: Hint<'static> = h("PTT", "talk");
 const BACK: Hint<'static> = h("CANCEL", "back");
 pub const ROSTER_HINTS: [Hint<'static>; 4] = [PROJECT, h("SCROLL", "select"), h("ENTER", "open"), TALK];
+/// One project: LEFT/RIGHT have nowhere to go.
+pub const ROSTER_SOLO_HINTS: [Hint<'static>; 3] = [h("SCROLL", "select"), h("ENTER", "open"), TALK];
 pub const CHANNEL_CARD_HINTS: [Hint<'static>; 4] = [AGENT, h("ENTER", "card"), TALK, BACK];
 pub const CHANNEL_SHIFT_HINTS: [Hint<'static>; 2] = [h("ENTER", "latest message"), h("SCROLL", "face")];
 pub const CHANNEL_HINTS: [Hint<'static>; 4] = [h("ENTER", "workflow"), h("SCROLL", "chat"), TALK, BACK];
@@ -122,8 +126,9 @@ pub const READY_SEND_HINTS: [Hint<'static>; 4] = [h("SCROLL", "steps"), h("ENTER
 pub const READY_PLAIN_HINTS: [Hint<'static>; 3] = [h("ENTER", "open"), TALK, BACK];
 pub const READY_OFFLINE_HINTS: [Hint<'static>; 3] = [h("", "offline \u{b7} steps need the host"), h("ENTER", "open"), BACK];
 pub const EMPTY_HINTS: [Hint<'static>; 1] = [BACK];
-pub const ALL_HINTS: [&[Hint<'static>]; 17] = [
+pub const ALL_HINTS: [&[Hint<'static>]; 18] = [
     &ROSTER_HINTS,
+    &ROSTER_SOLO_HINTS,
     &CHANNEL_CARD_HINTS,
     &CHANNEL_HINTS,
     &CHANNEL_SHIFT_HINTS,
@@ -234,17 +239,14 @@ pub fn roster_header(ui: &UiState, out: &mut Text<40>) {
             out.push_char(c.to_ascii_uppercase());
         }
     }
-    let mut heads = [0; MAX_AGENTS];
-    let count = ui.deck.project_heads(&mut heads);
-    if count > 1 {
-        let page = heads[..count]
-            .iter()
-            .position(|&head| ui.deck.project_of(head) == label)
-            .unwrap_or(0);
+    // The card's place among the project's sessions ("COHDL · 2 OF 5");
+    // LEFT/RIGHT still turn to the next project.
+    let (row, len) = carousel(ui);
+    if len > 1 {
         out.push_str(" \u{b7} ");
-        push_count(out, page as u8 + 1);
-        out.push_char('/');
-        push_count(out, count as u8);
+        push_count(out, row + 1);
+        out.push_str(" OF ");
+        push_count(out, len);
     }
 }
 
@@ -361,15 +363,22 @@ fn more(viewport: &Viewport) -> (u8, u8) {
     (viewport.top, viewport.count.saturating_sub(shown))
 }
 
-/// The rows of the page shown: the highlighted agent's project.
-fn roster_viewport(ui: &UiState) -> Viewport {
-    let rows = ui.deck.page_len(ui.agents.project.as_str());
-    Viewport::new(ui.agents.top_row, layout::ROSTER_VISIBLE, rows)
+/// (the highlighted session's row on its project's page, the page's length).
+pub fn carousel(ui: &UiState) -> (u8, u8) {
+    let len = ui.deck.page_len(ui.agents.project.as_str());
+    let row = ui.deck.page_row_of(ui.agents.highlight).unwrap_or(0).min(len.saturating_sub(1));
+    (row, len)
 }
 
-fn roster_agent<'a>(ui: &'a UiState, viewport: &Viewport, slot: u8) -> Option<&'a Agent> {
-    let row = viewport.index_at(slot)?;
-    ui.deck.page_agent(ui.agents.project.as_str(), row)
+/// The session at carousel `place`: 0 the one before the card, 1 the card
+/// (the highlighted session), 2 the one after it.
+pub fn carousel_agent(ui: &UiState, place: u8) -> Option<&Agent> {
+    let (row, len) = carousel(ui);
+    let index = i32::from(row) + i32::from(place) - 1;
+    if index < 0 || index >= i32::from(len) {
+        return None;
+    }
+    ui.deck.page_agent(ui.agents.project.as_str(), index as u8)
 }
 
 fn choices_viewport(ui: &UiState, card: &Card, visible: u8) -> Viewport {
@@ -432,128 +441,299 @@ pub fn signature(ui: &UiState, instance: u8, sig: &mut SigBuilder) {
 // ---- roster -------------------------------------------------------------------
 
 
-/// Conol's robot mosaic, the same 16×16 mark as the desktop asset.
-const CONOL_MARK: [u16; 16] = [
-    0b0000000000000000,
-    0b0000000110000000,
-    0b0001100110011000,
-    0b0001100110011000,
-    0b0000100110010000,
-    0b0000011111100000,
-    0b0001111111111000,
-    0b0011100000011100,
-    0b0011000000001100,
-    0b0011001101101100,
-    0b0011001101101100,
-    0b0011000000001100,
-    0b0011001001001100,
-    0b0011100110011100,
-    0b0001111111111000,
-    0b0000000000000000
-];
-fn conol_mark(band: &mut Band, x: i32, y: i32) {
-    for (row, bits) in CONOL_MARK.iter().enumerate() {
-        for col in 0..16 {
-            if bits & (1 << (15 - col)) != 0 {
-                kit::fill(band, Rect::new(x + col * 2, y + row as i32 * 2, 2, 2), 0xFFE238);
-            }
-        }
-    }
-}
-
-fn conol_project(ui: &UiState) -> bool {
-    ui.deck.agents.iter().any(|a| a.kind == AgentKind::Conol && a.project.as_str() == ui.agents.project.as_str())
-}
-
 fn draw_roster(band: &mut Band, ui: &UiState) {
     let mut label = Text::<40>::new();
     roster_header(ui, &mut label);
-    let is_conol = conol_project(ui);
-    if is_conol {
-        conol_mark(band, theme::TEXT_X, 21);
-        font::draw(band, Font::Label, theme::TEXT_X + 40, theme::HEADER_BASELINE,
-            label.as_str(), theme::TEXT_LABEL, Some(theme::CANVAS), 220, Align::Left);
-        kit::header_tag(band, kit::header_right(ui, kit::status_tag(ui)));
-    } else {
-        kit::header(band, label.as_str(), kit::header_right(ui, kit::status_tag(ui)));
-    }
-    let viewport = roster_viewport(ui);
-    for slot in 0..layout::ROSTER_VISIBLE {
-        if let Some(agent) = roster_agent(ui, &viewport, slot) {
-            draw_roster_row(band, ui, slot, agent);
+    // Every page's header is the same shape, so turning pages never moves
+    // the name or the pager (a Conol project is told by its cards' marks).
+    draw_pager(band, ui);
+    kit::header(band, label.as_str(), kit::header_right(ui, kit::status_tag(ui)));
+    for place in [0, 2] {
+        if let Some(agent) = carousel_agent(ui, place) {
+            draw_peek(band, ui, place, agent);
         }
     }
-    draw_more(band, ROSTER_MORE, &viewport);
-    kit::hint_bar(band, &ROSTER_HINTS);
+    if let Some(agent) = carousel_agent(ui, 1) {
+        draw_card(band, ui, agent);
+    }
+    kit::hint_bar(band, roster_hints(ui));
 }
 
-fn draw_roster_row(band: &mut Band, ui: &UiState, slot: u8, agent: &Agent) {
-    if !kit::visible(band, roster_lane(slot)) {
+/// The shown project's page and the page count, when there is more than
+/// one page (the pager and LEFT/RIGHT matter only then).
+fn project_pages(ui: &UiState) -> Option<(u8, u8)> {
+    let (at, count) = ui.deck.project_page(ui.agents.project.as_str());
+    (count > 1).then_some((at, count))
+}
+
+fn roster_hints(ui: &UiState) -> &'static [Hint<'static>] {
+    if project_pages(ui).is_some() { &ROSTER_HINTS } else { &ROSTER_SOLO_HINTS }
+}
+
+/// The first page the pager shows and how many: all of them, or a
+/// `ROSTER_PAGER_MAX` window around the shown one.
+const fn pager_window(at: u8, count: u8) -> (u8, u8) {
+    let max = layout::ROSTER_PAGER_MAX;
+    if count <= max {
+        return (0, count);
+    }
+    let first = at.saturating_sub(max / 2);
+    let last_first = count - max;
+    (if first < last_first { first } else { last_first }, max)
+}
+
+/// The project pager above the header's name (`layout::roster_pager`).
+fn draw_pager(band: &mut Band, ui: &UiState) {
+    let mut x = theme::TEXT_X;
+    if !kit::visible(band, layout::roster_pager(x)) {
         return;
     }
-    let rect = layout::roster_row(slot);
-    let selected = agent.id == ui.agents.highlight;
-    let bg = surface(band, rect, selected, ui.agents.pressed == Some(agent.id), false);
-    if agent.id == ui.global.active_channel {
-        kit::fill(band, layout::roster_active_bar(slot), theme::TEXT_PRIMARY);
+    let Some((at, count)) = project_pages(ui) else {
+        return;
+    };
+    let (first, shown) = pager_window(at, count);
+    let (dot, y) = (layout::ROSTER_PAGER_DOT, layout::ROSTER_PAGER_Y);
+    for page in first..first + shown {
+        if page == at {
+            kit::round(band, Rect::new(x, y, layout::ROSTER_PAGER_PILL, dot), (dot / 2) as u32, theme::TEXT_BRIGHT);
+            x += layout::ROSTER_PAGER_PILL;
+        } else {
+            // A window's end dot is smaller where more pages lie past it.
+            let beyond = (page == first && first > 0) || (page + 1 == first + shown && first + shown < count);
+            let d = if beyond { dot - 2 } else { dot };
+            let inset = (dot - d) / 2;
+            kit::round(band, Rect::new(x + inset, y + inset, d, d), (d / 2) as u32, theme::GRAY);
+            x += dot;
+        }
+        x += layout::ROSTER_PAGER_GAP;
     }
-    let (dx, dy, r) = layout::ROSTER_DOT;
-    kit::dot(band, rect.left() + dx, rect.top() + dy, r, dot_color(ui, agent));
-    let x = rect.left() + layout::ROSTER_TEXT_X;
-    let max_w = rect.right() - ROW_PAD - x;
-    let name = row_name(agent);
-    text(band, Font::Name, x, rect.top() + layout::ROSTER_NAME_BASELINE, name.as_str(), theme::TEXT_PRIMARY, bg, max_w, Align::Left);
-    let baseline = rect.top() + layout::ROSTER_TITLE_BASELINE;
+}
+
+/// What a roster row says about a session: its major task (`task`, a CLI's
+/// session title or first prompt), else its latest title, else its name. A
+/// Conol chat is titled by its name.
+pub fn row_task(agent: &Agent) -> Text<64> {
+    if agent.kind == AgentKind::Conol || (agent.task.is_empty() && row_title(agent).is_empty()) {
+        let mut out = Text::new();
+        out.push_str(row_name(agent).as_str());
+        return out;
+    }
+    if agent.task.is_empty() { Text::from_str(row_title(agent)) } else { agent.task }
+}
+
+/// The status dot on a session's mark.
+pub fn row_dot(agent: &Agent) -> Presence {
+    match agent.state {
+        AgentState::Working => Presence::Running,
+        AgentState::Question => Presence::Waiting,
+        AgentState::Error => Presence::Failed,
+        _ => Presence::Stopped,
+    }
+}
+
+/// The count badge's text: subagents and workflow runs in flight, "99+"
+/// past the wire's cap; nothing when there are none.
+fn badge(agent: &Agent) -> Text<4> {
+    let mut out = Text::new();
+    if agent.subs > 0 {
+        push_count(&mut out, agent.subs.min(99));
+        if agent.subs >= 99 {
+            out.push_char('+');
+        }
+    }
+    out
+}
+
+/// The count pill, right-aligned at `right` and centred on `cy`, in `font`
+/// on `fill`; returns its left edge (`right` when there is no count).
+fn draw_badge(band: &mut Band, agent: &Agent, right: i32, cy: i32, h: i32, font: Font, fill: u32) -> i32 {
+    let count = badge(agent);
+    if count.is_empty() {
+        return right;
+    }
+    let w = (font::measure(font, count.as_str()) + h * 2 / 3).max(h);
+    let pill = Rect::new(right - w, cy - h / 2, w, h);
+    kit::round(band, pill, (h / 2) as u32, fill);
+    let baseline = cy + font::ascent(font) * 9 / 20;
+    text(band, font, pill.center().0, baseline, count.as_str(), theme::TEXT_BRIGHT, fill, w, Align::Center);
+    pill.left()
+}
+
+/// The card's status line: the state, then its age ("Working · 1m",
+/// "Waiting for you · 2m"); "Offline" while there is no host.
+pub fn card_status(ui: &UiState, agent: &Agent) -> Text<40> {
+    let mut out = Text::new();
+    if agent.stale || offline(ui) {
+        out.push_str("Offline");
+        return out;
+    }
+    out.push_str(match agent.state {
+        AgentState::Working => "Working",
+        AgentState::Question => "Waiting for you",
+        AgentState::Error => "Failed",
+        AgentState::Ready => "Ready",
+        AgentState::Idle => "Idle",
+    });
+    let mut age = Text::<12>::new();
+    age_text(ui, agent, " \u{b7} ", &mut age);
+    out.push_str(age.as_str());
+    out
+}
+
+/// What the card's last lines say.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Latest {
+    /// The open question: what the session is waiting for.
+    Question,
+    /// Why the session failed.
+    Error,
+    /// What it is doing now, or its last reply.
+    Plain,
+}
+
+/// The card's latest message: the open question; else for a failed session
+/// its last reply (or title); for a working one what it is doing now (its
+/// title, when that is not the task itself) or else its last reply; else
+/// the last reply, or a title that adds to the task.
+pub fn latest(agent: &Agent) -> (&str, Latest) {
+    if agent.has_card && agent.card.kind == CardKind::Question && !agent.card.text.is_empty() {
+        return (agent.card.text.as_str(), Latest::Question);
+    }
+    let task = row_task(agent);
     let title = row_title(agent);
-    let mut suffix = Text::<12>::new();
-    if matches!(agent.state, AgentState::Working | AgentState::Question) {
-        age_text(ui, agent, " \u{b7} ", &mut suffix);
+    let title = if title == task.as_str() { "" } else { title };
+    let reply = agent.last_reply.as_str();
+    match agent.state {
+        AgentState::Error => (if reply.is_empty() { title } else { reply }, Latest::Error),
+        AgentState::Working => (if title.is_empty() { reply } else { title }, Latest::Plain),
+        _ => (if reply.is_empty() { title } else { reply }, Latest::Plain),
     }
-    // The age is appended only when the whole title still fits beside it.
-    let title_w = font::measure(Font::Body, title);
-    if !suffix.is_empty() && title_w + font::measure(Font::Body, suffix.as_str()) <= max_w {
-        let used = text(band, Font::Body, x, baseline, title, theme::TEXT_SECONDARY, bg, max_w, Align::Left);
-        text(band, Font::Body, x + used, baseline, suffix.as_str(), theme::TEXT_SECONDARY, bg, max_w - used, Align::Left);
-    } else {
-        text(band, Font::Body, x, baseline, title, theme::TEXT_SECONDARY, bg, max_w, Align::Left);
+}
+
+/// A peek: the session before or after the card, on one line.
+fn draw_peek(band: &mut Band, ui: &UiState, place: u8, agent: &Agent) {
+    if !kit::visible(band, roster_lane(place)) {
+        return;
     }
+    let rect = layout::roster_row(place);
+    let bg = surface(band, rect, false, ui.agents.pressed == Some(agent.id), false);
+    if agent.id == ui.global.active_channel {
+        kit::fill(band, layout::roster_active_bar(place), theme::TEXT_PRIMARY);
+    }
+    let dim = agent.stale || offline(ui);
+    let cy = rect.top() + rect.height() / 2;
+    let x = rect.left() + PEEK_INSET;
+    let mark = marks::Size::Small.px();
+    marks::draw_with_dot(band, agent.kind, marks::Size::Small, x, cy - mark / 2, row_dot(agent), bg, dim);
+    let right = draw_badge(band, agent, rect.right() - PEEK_INSET, cy, 24, Font::Small, theme::CHIP_FILL);
+    let tx = x + mark + 14;
+    let task = row_task(agent);
+    text(band, Font::Row, tx, cy + font::ascent(Font::Row) * 9 / 20, task.as_str(),
+        if dim { theme::TEXT_FAINT } else { theme::TEXT_SECONDARY }, bg, right - 10 - tx, Align::Left);
+}
+
+/// How far a peek's mark sits inside its lane.
+pub const PEEK_INSET: i32 = 16;
+/// Inside the card: its padding, the status line's centre, the top of the
+/// task's block, the task's and the message's line budgets (a one-line task
+/// gives its second line to the message).
+pub const CARD_PAD: i32 = 22;
+pub const CARD_STATUS_CY: i32 = 36;
+pub const CARD_TASK_TOP: i32 = 66;
+pub const CARD_TASK: Font = Font::TextStrong;
+pub const CARD_TASK_LINES: usize = 2;
+pub const CARD_MESSAGE_LINES: usize = 2;
+
+/// The card: the highlighted session's status, its task large, and its
+/// latest message under a hairline.
+fn draw_card(band: &mut Band, ui: &UiState, agent: &Agent) {
+    if !kit::visible(band, roster_lane(1)) {
+        return;
+    }
+    let rect = layout::ROSTER_CARD;
+    let bg = surface(band, rect, true, ui.agents.pressed == Some(agent.id), false);
+    if agent.id == ui.global.active_channel {
+        kit::fill(band, layout::roster_active_bar(1), theme::TEXT_PRIMARY);
+    }
+    let dim = agent.stale || offline(ui);
+    let x = rect.left() + CARD_PAD;
+    let inner = rect.width() - 2 * CARD_PAD;
+    // Status: the mark with its dot, the state and age, the running count.
+    let cy = rect.top() + CARD_STATUS_CY;
+    let mark = marks::Size::Large.px();
+    marks::draw_with_dot(band, agent.kind, marks::Size::Large, x, cy - mark / 2, row_dot(agent), bg, dim);
+    let fill = if ui.agents.pressed == Some(agent.id) { theme::OUTLINE_THUMB } else { theme::OUTLINE };
+    let right = draw_badge(band, agent, rect.right() - CARD_PAD, cy, 34, Font::Label, fill);
+    let status_color = match (row_dot(agent), dim) {
+        (_, true) => theme::TEXT_FAINT,
+        (Presence::Waiting, _) => theme::AMBER,
+        (Presence::Failed, _) => theme::RED,
+        _ => theme::TEXT_SECONDARY,
+    };
+    let sx = x + mark + 14;
+    text(band, Font::Body, sx, cy + font::ascent(Font::Body) * 9 / 20, card_status(ui, agent).as_str(),
+        status_color, bg, right - 12 - sx, Align::Left);
+    // The task, at most two lines (the second cut with an ellipsis).
+    let task = row_task(agent);
+    let lh = font::line_height(CARD_TASK) - 2;
+    let first = rect.top() + CARD_TASK_TOP + font::ascent(CARD_TASK);
+    let mut lines = 0;
+    font::wrap(CARD_TASK, task.as_str(), inner, CARD_TASK_LINES, &mut |index, line, _| {
+        text(band, CARD_TASK, x, first + index as i32 * lh, line,
+            if dim { theme::TEXT_SECONDARY } else { theme::TEXT_PRIMARY }, bg, inner, Align::Left);
+        lines = index + 1;
+    });
+    // The latest message under a hairline: a question in white, a failure in
+    // red, the rest in grey.
+    let (message, kind) = latest(agent);
+    if message.is_empty() {
+        return;
+    }
+    let rule = first + (lines.max(1) as i32 - 1) * lh + 16;
+    kit::fill(band, Rect::new(x, rule, inner, 1), theme::OUTLINE);
+    let color = match (kind, dim) {
+        (_, true) => theme::TEXT_FAINT,
+        (Latest::Question, _) => theme::TEXT_PRIMARY,
+        (Latest::Error, _) => theme::RED,
+        (Latest::Plain, _) => theme::TEXT_SECONDARY,
+    };
+    let mlh = font::line_height(Font::Row) - 2;
+    let base = rule + 10 + font::ascent(Font::Row);
+    let budget = CARD_MESSAGE_LINES + CARD_TASK_LINES.saturating_sub(lines.max(1));
+    font::wrap(Font::Row, message, inner, budget, &mut |index, line, _| {
+        text(band, Font::Row, x, base + index as i32 * mlh, line, color, bg, inner, Align::Left);
+    });
 }
 
 fn roster_signature(ui: &UiState, sig: &mut SigBuilder) {
     sig.region_with(HEADER_LANE, |h| {
         let mut label = Text::<40>::new();
         roster_header(ui, &mut label);
-        h.text(&label).u8(conol_project(ui) as u8).header_right(kit::header_right(ui, kit::status_tag(ui)));
+        let (at, count) = project_pages(ui).unwrap_or((0, 0));
+        h.text(&label).u8(at).u8(count).header_right(kit::header_right(ui, kit::status_tag(ui)));
     });
-    let viewport = roster_viewport(ui);
-    for slot in 0..layout::ROSTER_VISIBLE {
-        sig.region_with(roster_lane(slot), |h| match roster_agent(ui, &viewport, slot) {
+    for place in 0..layout::ROSTER_VISIBLE {
+        sig.region_with(roster_lane(place), |h| match carousel_agent(ui, place) {
             None => {
                 h.u8(0);
             }
             Some(agent) => {
                 h.u8(agent.id)
                     .u8(agent.kind as u8)
-                    .text(&agent.name)
-                    .text(&agent.project)
-                    .text(&agent.title)
-                    .u32(dot_color(ui, agent))
-                    .bool(agent.id == ui.agents.highlight)
+                    .text(&row_task(agent))
+                    .u8(row_dot(agent) as u8)
+                    .bool(agent.stale || offline(ui))
+                    .u8(agent.subs)
                     .bool(agent.id == ui.global.active_channel)
-                    .bool(ui.agents.pressed == Some(agent.id))
-                    .u32(if matches!(agent.state, AgentState::Working | AgentState::Question) {
-                        age_step(ui, agent)
-                    } else {
-                        0
-                    });
+                    .bool(ui.agents.pressed == Some(agent.id));
+                if place == 1 {
+                    let (message, kind) = latest(agent);
+                    h.text(&card_status(ui, agent)).str(message).u8(kind as u8);
+                }
             }
         });
     }
-    sig.region_with(ROSTER_MORE, |h| {
-        let (above, below) = more(&viewport);
-        h.u8(above).u8(below);
-    });
-    sig.region(HINT_LANE, hint_variant(&ROSTER_HINTS));
+    sig.region(HINT_LANE, hint_variant(roster_hints(ui)));
 }
 
 // ---- channel ------------------------------------------------------------------
@@ -1150,6 +1330,17 @@ fn empty_signature(ui: &UiState, agent: Option<&Agent>, sig: &mut SigBuilder) {
 mod tests {
     use super::*;
 
+    #[test]
+    fn the_pager_shows_every_project_or_a_window_around_the_shown_one() {
+        assert_eq!(pager_window(0, 3), (0, 3));
+        assert_eq!(pager_window(8, 9), (0, 9));
+        // Twenty projects: nine dots, the shown one centred until an end.
+        assert_eq!(pager_window(0, 20), (0, 9));
+        assert_eq!(pager_window(10, 20), (6, 9));
+        assert_eq!(pager_window(19, 20), (11, 9));
+        assert_eq!(pager_window(254, 255), (246, 9));
+    }
+
     fn demo() -> std::boxed::Box<UiState> {
         let mut ui = std::boxed::Box::new(UiState::new());
         ui.reset();
@@ -1184,26 +1375,25 @@ mod tests {
     }
 
     #[test]
-    fn the_roster_header_names_the_page_and_counts_the_pages() {
+    fn the_roster_header_names_the_project_and_the_cards_place_in_it() {
         let mut ui = demo();
         let mut label = Text::<40>::new();
         roster_header(&ui, &mut label);
-        assert_eq!(label.as_str(), "COHDL \u{b7} 1/2");
+        assert_eq!(label.as_str(), "COHDL \u{b7} 1 OF 3");
+        ui.agents.highlight = ui.deck.page_agent(crate::deck::demo::PROJECTS[0], 1).unwrap().id;
+        roster_header(&ui, &mut label);
+        assert_eq!(label.as_str(), "COHDL \u{b7} 2 OF 3");
         ui.agents.project.set(crate::deck::demo::PROJECTS[1]);
+        ui.agents.highlight = ui.deck.page_agent(crate::deck::demo::PROJECTS[1], 1).unwrap().id;
         roster_header(&ui, &mut label);
-        assert_eq!(label.as_str(), "OPENMICRO \u{b7} 2/2");
-        // One project: no count. None: the face's name. An unlabelled page
-        // has a name of its own.
-        for id in [4u8, 5] {
-            ui.deck.agent_mut(id).unwrap().project.set(crate::deck::demo::PROJECTS[0]);
-        }
-        ui.agents.project.set(crate::deck::demo::PROJECTS[0]);
-        roster_header(&ui, &mut label);
-        assert_eq!(label.as_str(), "COHDL");
+        assert_eq!(label.as_str(), "OPENMICRO \u{b7} 2 OF 2");
+        // A project of one: no count. None: the face's name. An unlabelled
+        // project has a name of its own.
         ui.deck.agent_mut(5).unwrap().project.clear();
         ui.agents.project.clear();
+        ui.agents.highlight = 5;
         roster_header(&ui, &mut label);
-        assert_eq!(label.as_str(), "OTHER \u{b7} 2/2");
+        assert_eq!(label.as_str(), "OTHER");
         ui.deck.clear_host_data();
         roster_header(&ui, &mut label);
         assert_eq!(label.as_str(), "AGENTS");
@@ -1439,13 +1629,60 @@ mod tests {
     }
 
     #[test]
-    fn lanes_cover_what_they_name_and_never_cross() {
-        assert_eq!(roster_lane(0), Rect::new(24, 70, 424, 74));
-        assert!(roster_lane(0).intersection(&layout::roster_active_bar(0)) == layout::roster_active_bar(0));
-        for slot in 1..layout::ROSTER_VISIBLE {
-            assert!(!roster_lane(slot).intersects(&roster_lane(slot - 1)));
+    fn the_card_says_status_task_count_and_the_latest_message() {
+        let mut agent = Agent::new();
+        agent.kind = AgentKind::Claude;
+        agent.name.set("web-ui");
+        agent.project.set("cohdl");
+        assert_eq!(row_task(&agent).as_str(), "Claude \u{b7} web-ui", "no task, no title: the name");
+        agent.title.set("also run the tests");
+        assert_eq!(row_task(&agent).as_str(), "also run the tests", "no task yet: the latest title");
+        agent.task.set("Refactor the site header");
+        assert_eq!(row_task(&agent).as_str(), "Refactor the site header");
+        for (state, dot) in [(AgentState::Working, Presence::Running), (AgentState::Question, Presence::Waiting),
+            (AgentState::Error, Presence::Failed), (AgentState::Ready, Presence::Stopped), (AgentState::Idle, Presence::Stopped)] {
+            agent.state = state;
+            assert_eq!(row_dot(&agent), dot);
         }
-        assert!(!roster_lane(3).intersects(&ROSTER_MORE) && !ROSTER_MORE.intersects(&HINT_LANE));
+        assert_eq!(badge(&agent).as_str(), "", "nothing running, no badge");
+        agent.subs = 3;
+        assert_eq!(badge(&agent).as_str(), "3");
+        agent.subs = 99;
+        assert_eq!(badge(&agent).as_str(), "99+");
+
+        // The latest message: what it is doing while it works, else its reply.
+        agent.last_reply.set("Header refactor done, 34 files changed");
+        agent.state = AgentState::Working;
+        assert_eq!(latest(&agent), ("also run the tests", Latest::Plain));
+        agent.title.set("Refactor the site header");
+        assert_eq!(latest(&agent), ("Header refactor done, 34 files changed", Latest::Plain), "a title that is the task adds nothing");
+        agent.state = AgentState::Ready;
+        assert_eq!(latest(&agent).0, "Header refactor done, 34 files changed");
+        agent.state = AgentState::Error;
+        assert_eq!(latest(&agent).1, Latest::Error);
+        // An open question wins over everything.
+        agent.state = AgentState::Question;
+        agent.has_card = true;
+        agent.card.kind = CardKind::Question;
+        agent.card.text.set("Run pending migrations on staging first?");
+        assert_eq!(latest(&agent), ("Run pending migrations on staging first?", Latest::Question));
+        let mut ready_card = agent;
+        ready_card.card.kind = CardKind::Ready;
+        assert_eq!(latest(&ready_card).1, Latest::Plain, "a Ready card is not a question");
+    }
+
+    #[test]
+    fn lanes_cover_what_they_name_and_never_cross() {
+        assert_eq!(roster_lane(1), Rect::new(24, 119, 424, 239), "the card's lane");
+        for place in 0..layout::ROSTER_VISIBLE {
+            let bar = layout::roster_active_bar(place);
+            assert_eq!(roster_lane(place).intersection(&bar), bar);
+            assert!(layout::in_safe_area(&bar));
+        }
+        for place in 1..layout::ROSTER_VISIBLE {
+            assert!(!roster_lane(place).intersects(&roster_lane(place - 1)));
+        }
+        assert!(!roster_lane(layout::ROSTER_VISIBLE - 1).intersects(&HINT_LANE), "the lower peek clears the hint bar");
         assert!(!HEADER_LANE.intersects(&roster_lane(0)) && !HEADER_LANE.intersects(&QUESTION_LANE));
         // The question's scroll bar is inside its lane, clear of the text.
         assert_eq!(QUESTION_LANE.intersection(&QUESTION_BAR), QUESTION_BAR);

@@ -50,7 +50,7 @@ fn agent(id: u8, state: AgentState, name: &str) -> HostMsg {
         name: Some(Text::from_str(name)),
         project: None,
         title: Some(Text::from_str("working on it")),
-        since_s: Some(120),
+        since_s: Some(120), task: None, subs: None,
     }
 }
 

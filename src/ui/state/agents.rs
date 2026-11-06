@@ -746,10 +746,11 @@ pub(super) fn hit(ui: &UiState, _instance: u8, x: i32, y: i32) -> Option<Target>
     }
     match ui.agents.view {
         AgentsView::Roster => {
-            let slot = layout::roster_row_at(x, y)?;
-            let row = roster_viewport(ui).index_at(slot)?;
-            let agent = page_agent(ui, row)?;
-            Some(Target::list_row(layout::roster_row(slot), agent as u16, layout::ROSTER_PITCH))
+            // The carousel: the card is the highlighted session, the peeks
+            // the ones before and after it.
+            let place = layout::roster_row_at(x, y)?;
+            let agent = faces::agents::carousel_agent(ui, place)?.id;
+            Some(Target::list_row(layout::roster_row(place), agent as u16, layout::ROSTER_PITCH))
         }
         AgentsView::Channel => {
             if crate::ui::session::ENTRY.contains(x, y) {
@@ -840,10 +841,14 @@ pub(super) fn on_touch(
         }
         (_, TouchAct::Cancel | TouchAct::Swipe { .. }) => ui.agents.pressed = None,
         (AgentsView::Roster, TouchAct::Scroll(rows)) => {
+            // A drag turns the carousel: the card moves on by a session per
+            // pitch of travel, and stops at the project's first and last.
             ui.agents.pressed = None;
-            let mut viewport = roster_viewport(ui);
-            viewport.scroll(rows as i32);
-            ui.agents.top_row = viewport.top;
+            let (row, len) = faces::agents::carousel(ui);
+            let to = (i32::from(row) + rows as i32).clamp(0, i32::from(len).max(1) - 1) as u8;
+            if let Some(agent) = page_agent(ui, to) {
+                set_highlight(ui, agent);
+            }
         }
         (AgentsView::Roster, TouchAct::Activate) => {
             ui.agents.pressed = None;
@@ -1053,7 +1058,7 @@ pub(super) fn on_tick(ui: &mut UiState, now_ms: u32, out: &mut Update) {
             }
         }
     }
-    for slot in 0..MAX_AGENTS {
+    for slot in 0..ui.deck.agents.len() {
         let agent = &ui.deck.agents[slot];
         if agent.present
             && agent.has_card
@@ -1162,7 +1167,7 @@ mod tests {
             name: None,
             project: None,
             title: None,
-            since_s: None,
+            since_s: None, task: None, subs: None,
         }
     }
     fn gone(id: u8) -> HostMsg {
@@ -1690,13 +1695,16 @@ mod tests {
         ui.tick(100 + RESORT_QUIET_MS, 0, true, &mut out);
         assert_eq!(&ui.deck.order[..7], &[1, 6, 7, 2, 3, 5, 4]);
         assert!(out.dirty && !ui.deck.sort_pending());
-        assert_eq!((ui.agents.highlight, ui.agents.highlight_row, ui.agents.top_row), (3, 4, 1), "the highlight kept its agent");
+        let (row, top) = (ui.agents.highlight_row, ui.agents.top_row);
+        assert_eq!((ui.agents.highlight, row), (3, 4), "the highlight kept its agent");
+        assert!(row >= top && row < top + layout::ROSTER_VISIBLE, "and it is still in view");
     }
 
     #[test]
     fn tap_cancelled_when_row_identity_changes_between_down_and_up() {
         let mut ui = hosted();
-        let (x, y) = layout::roster_row(1).center();
+        // The lower peek: the session after the card.
+        let (x, y) = layout::roster_row(2).center();
         let touch = |ui: &mut UiState, phase, at| {
             ui.apply(Control::Touch(Touch { phase, x: x as u16, y: y as u16 }), at, &mut Update::new());
         };
@@ -1705,11 +1713,12 @@ mod tests {
         host(&mut ui, &gone(2), 10);
         touch(&mut ui, TouchPhase::Up, 20);
         assert_eq!((ui.agents.highlight, ui.agents.view), (1, AgentsView::Roster));
-        // Tap = highlight, tap the highlighted row = open.
+        // Tap a peek = bring it to the card; tap the card = open.
         touch(&mut ui, TouchPhase::Down, 100);
         touch(&mut ui, TouchPhase::Up, 110);
         assert_eq!((ui.agents.highlight, ui.agents.view), (3, AgentsView::Roster));
-        touch(&mut ui, TouchPhase::Down, 200);
+        let (x, y) = layout::roster_row(1).center();
+        ui.apply(Control::Touch(Touch { phase: TouchPhase::Down, x: x as u16, y: y as u16 }), 200, &mut Update::new());
         let mut out = Update::new();
         ui.apply(Control::Touch(Touch { phase: TouchPhase::Up, x: x as u16, y: y as u16 }), 210, &mut out);
         assert_eq!((ui.agents.view, ui.agents.agent), (AgentsView::Channel, 3));

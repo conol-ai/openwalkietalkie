@@ -72,6 +72,12 @@ pub struct AgentUpdate {
     pub since: Option<crate::Ts>,
     pub name: Option<String>,
     pub meta: Option<serde_json::Value>,
+    /// The session's major task (the roster's title); `""` clears it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task: Option<String>,
+    /// How many subagents the session has running now.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subagents: Option<u16>,
 }
 
 /// `agent.card.set`.

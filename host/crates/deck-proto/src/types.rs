@@ -355,6 +355,11 @@ pub enum HostLine {
         state: Option<AgentState>,
         title: Option<String>,
         since_s: Option<u32>,
+        /// The session's major task, the roster's title (`task`). Absent
+        /// keeps the device's; `Some("")` is "none".
+        task: Option<String>,
+        /// Subagents and workflow runs in flight (`subs`), capped at 99.
+        subs: Option<u8>,
     },
     AgentGone {
         slot: u8,
@@ -486,6 +491,9 @@ pub enum DeviceLine {
         sid: u32,
         boot: bool,
         rx: u16,
+        /// The sessions the deck holds (`agents`); `None` from a deck that
+        /// predates the field, which holds 8.
+        agents: Option<u8>,
         faces: Vec<FaceEntry>,
     },
     Key {

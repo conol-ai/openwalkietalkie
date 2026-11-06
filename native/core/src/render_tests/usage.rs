@@ -62,7 +62,7 @@ struct Session {
 impl Session {
     fn new(ui: Box<UiState>) -> Self {
         let screen = Screens::new(&ui);
-        Self { previous: Box::new(*ui), next: ui, screen }
+        Self { previous: Box::new((*ui).clone()), next: ui, screen }
     }
     fn step(&mut self, f: impl FnOnce(&mut UiState)) -> usize {
         f(&mut self.next);
@@ -191,26 +191,26 @@ fn the_signature_is_one_lane_per_block() {
     for slot in 0..4u8 {
         assert_eq!(base.regions()[1 + slot as usize].0, layout::usage_row(slot));
     }
-    let mut updating = Box::new(*ui);
+    let mut updating = Box::new((*ui).clone());
     updating.usage.updating = true;
     updating.invalidate();
     assert_eq!(differing(&base, &face_signature(&updating)), [0]);
-    let mut nudged = Box::new(*ui);
+    let mut nudged = Box::new((*ui).clone());
     nudged.deck.usage.items[1].percent = 82;
     nudged.invalidate();
     assert_eq!(differing(&base, &face_signature(&nudged)), [2]);
-    let mut switched = Box::new(*ui);
+    let mut switched = Box::new((*ui).clone());
     switched.deck.usage.items[1].account.set("work@example.com");
     assert_eq!(differing(&base, &face_signature(&switched)), [2]);
-    let mut expiring = Box::new(*ui);
+    let mut expiring = Box::new((*ui).clone());
     expiring.deck.usage.items[1].reset_tip.set("2 resets expire in 1d 6h");
     assert_eq!(differing(&base, &face_signature(&expiring)), [2]);
-    let mut scrolled = Box::new(*ui);
+    let mut scrolled = Box::new((*ui).clone());
     let mut out = Update::new();
     scrolled.host(&items(6, "SEP 2026"), 0, &mut out);
     scrolled.usage.top_row = 2;
     assert_eq!(differing(&base, &face_signature(&scrolled)), [1, 2, 3, 4]);
-    let mut same = Box::new(*ui);
+    let mut same = Box::new((*ui).clone());
     same.invalidate();
     assert_eq!(face_signature(&same).regions(), base.regions());
 }

@@ -119,7 +119,7 @@ impl Store {
             return Err(ApiError::invalid("name", "empty"));
         }
         if r.slot_hint.is_some_and(|s| !s.is_valid()) {
-            return Err(ApiError::invalid("slot_hint", "1..=8"));
+            return Err(ApiError::invalid("slot_hint", "1..=255"));
         }
         if let Some(id) = r.key.as_deref().and_then(|k| self.agent_by_key(k)) {
             // Idempotent by key: same session → same agent (§4.6).
@@ -190,7 +190,7 @@ impl Store {
             card: None,
             reply: None,
             messages: Vec::new(),
-            workflow_runs: Vec::new(), workflow: None,
+            workflow_runs: Vec::new(), task: None, task_source: None, subagents: 0, workflow: None,
             chat_rev: 0,
             reply_rev: 0,
             voice,
@@ -501,6 +501,36 @@ impl Store {
                 fields.insert("title".into(), serde_json::json!(title));
                 fields.insert("title_source".into(), serde_json::json!(source));
             }
+            // The major task: the CLI's own session title always, else the
+            // first prompt of the session (later prompts are steps of it).
+            let task = match (source, &agent.task) {
+                (TitleSource::SessionName, _) => title,
+                (TitleSource::Prompt, None) => title,
+                _ => None,
+            };
+            if let Some(task) = task.filter(|t| agent.task.as_ref() != Some(t)) {
+                agent.task = Some(task.clone());
+                agent.task_source = Some(source);
+                fields.insert("task".into(), serde_json::json!(task));
+                fields.insert("task_source".into(), serde_json::json!(source));
+            }
+        }
+        if let Some(task) = u.task {
+            let task = crate::sanitize::cut(&crate::sanitize::collapse(&task), 160);
+            let task = (!task.trim().is_empty()).then_some(task);
+            let source = task.as_ref().map(|_| TitleSource::Api);
+            if agent.task != task {
+                agent.task = task.clone();
+                agent.task_source = source;
+                fields.insert("task".into(), serde_json::json!(task));
+                fields.insert("task_source".into(), serde_json::json!(source));
+            }
+        }
+        if let Some(subagents) = u.subagents {
+            if agent.subagents != subagents {
+                agent.subagents = subagents;
+                fields.insert("subagents".into(), serde_json::json!(subagents));
+            }
         }
         if let Some(name) = u.name.filter(|n| !n.trim().is_empty()) {
             if agent.name != name {
@@ -519,7 +549,9 @@ impl Store {
         }
         let new_state = agent.state;
         let title_changed = fields.contains_key("title");
-        let name_changed = fields.contains_key("name");
+        let name_changed = fields.contains_key("name")
+            || fields.contains_key("task")
+            || fields.contains_key("subagents");
         self.emit(
             EventKind::AgentChanged,
             self.principal_of(&id),
@@ -562,6 +594,9 @@ impl Store {
         if unslotted && state != AgentState::Idle {
             self.assign_slot(id, None, None);
         }
+        // A question asked or answered, a session started or stopped: the
+        // deck's eight slots follow the ranking.
+        self.rebalance_slots();
         if self.snapshot.settings.announce == 1 {
             let max_chars = self.cfg.announce_max_chars;
             if let Some(agent) = self.snapshot.agents.get(id) {
@@ -648,7 +683,9 @@ impl Store {
         meta.summary = meta.summary.filter(|_| meta.role == crate::ChatRole::Tool)
             .map(crate::workflow::ActivitySummary::bounded);
         meta.runs = meta.runs.map(|runs| runs.into_iter().take(crate::workflow::MAX_RUNS).map(crate::workflow::Run::bounded).collect());
+        let work_before = agent.active_work();
         crate::workflow::observe(agent, &meta);
+        let work_changed = agent.active_work() != work_before;
         let duplicate = r.message.is_none() && agent.messages.last().is_some_and(|m|
             m.message.role == crate::ChatRole::Assistant && m.text == r.text);
         if duplicate {
@@ -687,6 +724,10 @@ impl Store {
             agent.chat_rev = agent.chat_rev.wrapping_add(1).max(1);
         }
         self.put_reply(&id);
+        if work_changed {
+            // The roster's count of running work.
+            self.put_agent_state(&id);
+        }
         if r.speak && meta.role == crate::ChatRole::Assistant && !meta.streaming && !r.text.trim().is_empty() {
             let lane = r.lane.as_deref().unwrap_or("chatter").to_string();
             self.say(r.text, Some(id), &lane);
@@ -789,24 +830,82 @@ impl Store {
         self.snapshot.agent_at(slot).map(|a| a.id.clone())
     }
 
+    /// A deck reported how many sessions it holds: the sessions in slots
+    /// above that leave the deck, and a larger deck fills its new slots.
+    pub(crate) fn set_capacity(&mut self, sessions: u8) {
+        if self.snapshot.device.sessions == Some(sessions) {
+            return;
+        }
+        self.snapshot.device.sessions = Some(sessions);
+        let over: Vec<AgentId> = self
+            .snapshot
+            .agents
+            .values()
+            .filter(|a| a.slot.is_some_and(|s| s.0 > sessions))
+            .map(|a| a.id.clone())
+            .collect();
+        for id in over {
+            self.unslot(&id);
+        }
+        self.fill_free_slots();
+        self.rebalance_slots();
+    }
+
     fn lowest_free(&self) -> Option<Slot> {
-        (1..=Slot::MAX)
+        (1..=self.snapshot.device.capacity())
             .map(Slot)
             .find(|s| self.occupant(*s).is_none())
     }
 
-    /// The longest-idle slotted `idle` agent without a pending card, never pinned.
-    fn eviction_candidate(&self) -> Option<AgentId> {
+    /// How much a session deserves one of the deck's eight slots, highest
+    /// first: one asking a question; a running CLI session; any other CLI
+    /// session; a running companion chat or a companion's launcher; any other
+    /// companion chat. A companion (Conol) keeps every chat in its own app
+    /// and gets a chat's slot back when it is opened there, so its chats
+    /// yield to the terminal sessions the deck is the only view of.
+    pub(crate) fn slot_rank(agent: &Agent) -> u8 {
+        let asking = agent.state == AgentState::Question
+            || agent.card.as_ref().is_some_and(|c| c.kind == crate::CardKind::Q);
+        let companion = agent.native_companion();
+        let launcher = agent
+            .companion
+            .as_ref()
+            .is_some_and(|p| p.role == crate::companion::CompanionRole::Launcher);
+        match (asking, companion, agent.state == AgentState::Working) {
+            (true, _, _) => 5,
+            (false, false, true) => 4,
+            (false, false, false) => 3,
+            (false, true, true) => 2,
+            (false, true, false) if launcher => 2,
+            (false, true, false) => 1,
+        }
+    }
+
+    /// The slotted session `id` may take the slot of when the deck is full:
+    /// the lowest-ranked one ([`Self::slot_rank`]) that ranks below `id`,
+    /// longest idle first. Unless `strict`, an idle session also yields to an
+    /// equal one, so a newcomer still replaces the longest-idle session of
+    /// its own kind; a rebalance is strict, or two equals would trade places
+    /// forever. Never a pinned one, one whose card is on the deck, or the
+    /// focus.
+    fn eviction_candidate(&self, id: &AgentId, strict: bool) -> Option<AgentId> {
+        let incoming = self.snapshot.agents.get(id)?;
+        let key = |a: &Agent| (Self::slot_rank(a), a.state != AgentState::Idle);
+        let wanted = key(incoming);
+        let focus = self.snapshot.focus.agent.as_ref();
         self.snapshot
             .agents
             .values()
             .filter(|a| {
                 a.slot.is_some()
+                    && &a.id != id
                     && !a.pinned
-                    && a.state == AgentState::Idle
+                    && Some(&a.id) != focus
                     && !a.card.as_ref().is_some_and(|c| c.status.on_device())
+                    && (key(a) < wanted
+                        || (!strict && a.state == AgentState::Idle && Self::slot_rank(a) <= wanted.0))
             })
-            .min_by_key(|a| (a.since, a.id.clone()))
+            .min_by_key(|a| (key(a), a.since, a.id.clone()))
             .map(|a| a.id.clone())
     }
 
@@ -821,7 +920,8 @@ impl Store {
         let key = agent.session.key.clone();
         let kind = agent.kind;
         let cwd = agent.session.cwd.clone();
-        if let Some(p) = pin.filter(|p| p.is_valid()) {
+        let fits = |s: &Slot| s.is_valid() && s.0 <= self.snapshot.device.capacity();
+        if let Some(p) = pin.filter(fits) {
             match self.occupant(p) {
                 None => return self.place(id, p),
                 Some(other) if !self.snapshot.agents[&other].pinned => {
@@ -846,16 +946,16 @@ impl Store {
                         .map(|m| m.slot)
                 })
             });
-        if let Some(s) = remembered.filter(|s| s.is_valid() && self.occupant(*s).is_none()) {
+        if let Some(s) = remembered.filter(|s| fits(s) && self.occupant(*s).is_none()) {
             return self.place(id, s);
         }
-        if let Some(s) = hint.filter(|s| s.is_valid() && self.occupant(*s).is_none()) {
+        if let Some(s) = hint.filter(|s| fits(s) && self.occupant(*s).is_none()) {
             return self.place(id, s);
         }
         if let Some(s) = self.lowest_free() {
             return self.place(id, s);
         }
-        if let Some(victim) = self.eviction_candidate() {
+        if let Some(victim) = self.eviction_candidate(id, false) {
             if let Some(s) = self.unslot(&victim) {
                 self.place(id, s);
             }
@@ -941,7 +1041,27 @@ impl Store {
         Some(slot)
     }
 
-    /// A slot freed: the most recently active unslotted agent takes it.
+    /// Rankings changed (a state, a question, a companion profile): while a
+    /// session off the deck strictly outranks one on it, it takes that slot.
+    pub(crate) fn rebalance_slots(&mut self) {
+        for _ in 0..Slot::MAX {
+            let waiting = self
+                .snapshot
+                .agents
+                .values()
+                .filter(|a| a.slot.is_none())
+                .map(|a| (Self::slot_rank(a), a.state != AgentState::Idle, self.aux.get(&a.id).and_then(|x| x.last_active), a.id.clone()))
+                .max_by_key(|(rank, busy, active, id)| (*rank, *busy, *active, std::cmp::Reverse(id.clone())))
+                .map(|(_, _, _, id)| id);
+            let Some(waiting) = waiting else { return };
+            let Some(victim) = self.eviction_candidate(&waiting, true) else { return };
+            let Some(slot) = self.unslot(&victim) else { return };
+            self.place(&waiting, slot);
+        }
+    }
+
+    /// A slot freed: the highest-ranked unslotted agent takes it, the most
+    /// recently active among equals.
     pub(crate) fn fill_free_slots(&mut self) {
         while self.lowest_free().is_some() {
             let Some(next) = self
@@ -951,12 +1071,15 @@ impl Store {
                 .filter(|a| a.slot.is_none())
                 .map(|a| {
                     (
+                        Self::slot_rank(a),
                         self.aux.get(&a.id).and_then(|x| x.last_active),
                         a.id.clone(),
                     )
                 })
-                .max_by_key(|(active, id)| (*active, std::cmp::Reverse(id.clone())))
-                .map(|(_, id)| id)
+                // The highest-ranked waiting session first, then the most
+                // recently active.
+                .max_by_key(|(rank, active, id)| (*rank, *active, std::cmp::Reverse(id.clone())))
+                .map(|(_, _, id)| id)
             else {
                 return;
             };
@@ -1047,6 +1170,59 @@ mod tests {
     use crate::testkit::{claude_adapter, register, Sim, UID, UID2};
     use crate::{CardKind, Command, LinkEvent, PinConfig, Request, Ts};
 
+    #[test]
+    fn the_task_is_the_first_prompt_or_the_session_title_and_the_count_adds_running_runs() {
+        let mut sim = Sim::new();
+        let id = sim.register(UID, SessionId(1), "web-ui", None);
+        let titled = |text: &str, source: TitleSource| Request::AgentUpdate(AgentUpdate {
+            agent: id.clone(), state: None, title: Some(text.into()), title_source: Some(source),
+            since: None, name: None, meta: None, task: None, subagents: None,
+        });
+        let state_line = |sim: &Sim| sim.effects.iter().rev().find_map(|e| match e {
+            Effect::Device(DeviceOp::Put(Key::AgentState(_), HostLine::Agent { task, subs, .. })) => Some((task.clone(), *subs)),
+            _ => None,
+        });
+        sim.api(UID, SessionId(1), titled("Refactor the auth module", TitleSource::Prompt)).unwrap();
+        assert_eq!(state_line(&sim), Some((Some("Refactor the auth module".into()), Some(0))));
+        sim.api(UID, SessionId(1), titled("also update the changelog", TitleSource::Prompt)).unwrap();
+        let agent = &sim.store.snapshot().agents[&id];
+        assert_eq!(agent.task.as_deref(), Some("Refactor the auth module"), "later prompts are steps of the task");
+        assert_eq!(agent.title.as_deref(), Some("also update the changelog"));
+        sim.api(UID, SessionId(1), titled("Auth refactor", TitleSource::SessionName)).unwrap();
+        assert_eq!(sim.store.snapshot().agents[&id].task.as_deref(), Some("Auth refactor"), "the CLI's own title wins");
+
+        // Subagents reported by the owner, plus workflow runs still running.
+        sim.api(UID, SessionId(1), Request::AgentUpdate(AgentUpdate {
+            agent: id.clone(), state: None, title: None, title_source: None, since: None, name: None,
+            meta: None, task: None, subagents: Some(2),
+        })).unwrap();
+        assert_eq!(state_line(&sim).unwrap().1, Some(2));
+        let run = |rid: &str, status| crate::workflow::Run {
+            id: rid.into(), name: "review".into(), status, completed: 0, total: 3, elapsed_ms: 0, tokens: 0,
+        };
+        sim.api(UID, SessionId(1), Request::Reply(crate::ReplySet {
+            agent: id.clone(), text: "Running a workflow".into(), speak: false, announce: None, lane: None,
+            message: Some(crate::MessageMeta {
+                summary: None, images: vec![], id: "wf".into(), role: crate::ChatRole::Tool, streaming: true,
+                plan: None, activity: None,
+                runs: Some(vec![run("a", crate::workflow::ActivityStatus::Running), run("b", crate::workflow::ActivityStatus::Completed)]),
+            }),
+        })).unwrap();
+        assert_eq!(sim.store.snapshot().agents[&id].active_work(), 3);
+        assert_eq!(state_line(&sim).unwrap().1, Some(3), "a new running run re-sends the state line");
+
+        // `""` clears the task; an observer never sees a prompt-derived one.
+        sim.api(UID, SessionId(1), Request::AgentUpdate(AgentUpdate {
+            agent: id.clone(), state: None, title: None, title_source: None, since: None, name: None,
+            meta: None, task: Some(String::new()), subagents: None,
+        })).unwrap();
+        assert_eq!(sim.store.snapshot().agents[&id].task, None);
+        sim.api(UID, SessionId(1), titled("Ship the release", TitleSource::Prompt)).unwrap();
+        let mut agent = sim.store.snapshot().agents[&id].clone();
+        crate::redact::redact_agent(&mut agent);
+        assert_eq!(agent.task, None, "a prompt is content");
+    }
+
     fn update(id: &AgentId, state: AgentState) -> Request {
         Request::AgentUpdate(AgentUpdate {
             agent: id.clone(),
@@ -1055,7 +1231,7 @@ mod tests {
             title_source: None,
             since: None,
             name: None,
-            meta: None,
+            meta: None, task: None, subagents: None,
         })
     }
 
@@ -1222,13 +1398,13 @@ mod tests {
             .api(claude_adapter(), SessionId(1), Request::AgentRegister(r))
             .is_ok());
         let mut r = register("  ", None);
-        r.slot_hint = Some(Slot(9));
+        r.slot_hint = Some(Slot(0));
         let err = sim
             .api(UID, SessionId(1), Request::AgentRegister(r))
             .unwrap_err();
         assert_eq!(err.data["field"], "name");
         let mut r = register("x", None);
-        r.slot_hint = Some(Slot(9));
+        r.slot_hint = Some(Slot(0));
         let err = sim
             .api(UID, SessionId(1), Request::AgentRegister(r))
             .unwrap_err();
@@ -1329,7 +1505,7 @@ mod tests {
                 title_source: None,
                 since: None,
                 name: None,
-                meta: None,
+                meta: None, task: None, subagents: None,
             }),
         )
         .unwrap();
@@ -1411,7 +1587,7 @@ mod tests {
                 title_source: Some(TitleSource::Prompt),
                 since: Some(Ts(5)),
                 name: Some("renamed".into()),
-                meta: Some(serde_json::json!({"k": 1})),
+                meta: Some(serde_json::json!({"k": 1})), task: None, subagents: None,
             }),
         )
         .unwrap();
@@ -1441,7 +1617,7 @@ mod tests {
                 title_source: None,
                 since: None,
                 name: None,
-                meta: None,
+                meta: None, task: None, subagents: None,
             }),
         )
         .unwrap();
@@ -1578,6 +1754,74 @@ mod tests {
             None,
             "the next-longest-idle went instead"
         );
+    }
+
+    #[test]
+    fn the_decks_capacity_bounds_its_slots_both_ways() {
+        let mut sim = Sim::new();
+        assert_eq!(sim.store.snapshot().device.capacity(), Slot::DEFAULT, "an old deck holds eight");
+        let ids: Vec<AgentId> = (0..20)
+            .map(|i| sim.register(UID, SessionId(1), &format!("s{i}"), Some(&format!("claude:{i}"))))
+            .collect();
+        assert_eq!(ids.iter().filter(|c| sim.slot_of(c).is_some()).count(), 8);
+        // A deck that holds 255 seats every waiting session.
+        sim.store.set_capacity(Slot::MAX);
+        assert!(ids.iter().all(|c| sim.slot_of(c).is_some()));
+        // A smaller deck unseats the sessions above its last slot.
+        sim.store.set_capacity(4);
+        assert_eq!(ids.iter().filter(|c| sim.slot_of(c).is_some()).count(), 4);
+        assert!(ids.iter().filter_map(|c| sim.slot_of(c)).all(|s| s.0 <= 4));
+    }
+
+    #[test]
+    fn terminal_sessions_and_questions_outrank_a_companions_chats_for_the_eight_slots() {
+        let mut sim = Sim::new();
+        // A companion fills the deck: its launcher and seven ready chats.
+        let mut chats = Vec::new();
+        for i in 0..8 {
+            sim.advance(Duration::from_secs(1));
+            let mut r = register(&format!("Chat {i}"), Some(&format!("conol:{i}")));
+            r.kind = crate::Kind::Conol;
+            let result = sim.api(UID, SessionId(1), Request::AgentRegister(r)).unwrap();
+            let id: AgentId = serde_json::from_value(result["agent"].clone()).unwrap();
+            let profile = serde_json::from_value(serde_json::json!({"method":"agent.companion.set", "params": {
+                "agent": id, "profile": {"app_id": "conol", "group_id": "me", "group_label": "Conol",
+                    "role": if i == 0 { "launcher" } else { "session" }}}})).unwrap();
+            sim.api(UID, SessionId(1), profile).unwrap();
+            sim.api(UID, SessionId(1), update(&id, AgentState::Ready)).unwrap();
+            chats.push(id);
+        }
+        assert!(chats.iter().all(|c| sim.slot_of(c).is_some()));
+        // Terminal sessions arrive, idle: each takes a ready chat's slot,
+        // never the launcher's.
+        let cli: Vec<AgentId> = (0..3)
+            .map(|i| sim.register(UID, SessionId(2), &format!("claude {i}"), Some(&format!("claude:{i}"))))
+            .collect();
+        assert!(cli.iter().all(|c| sim.slot_of(c).is_some()), "the terminal sessions are on the deck");
+        assert!(sim.slot_of(&chats[0]).is_some(), "the launcher stays");
+        assert_eq!(chats.iter().filter(|c| sim.slot_of(c).is_none()).count(), 3, "three chats made room");
+        // Five more terminal sessions take the rest; the ninth waits.
+        let more: Vec<AgentId> = (3..9)
+            .map(|i| sim.register(UID, SessionId(2), &format!("claude {i}"), Some(&format!("claude:{i}"))))
+            .collect();
+        let off = more.iter().chain(&cli).filter(|c| sim.slot_of(c).is_none()).count();
+        assert_eq!(off, 1, "eight slots, nine terminal sessions");
+        assert!(sim.slot_of(&chats[0]).is_none(), "and the launcher yields to them too");
+        // The waiting one asks a question: it takes an idle session's slot.
+        let waiting = more.iter().chain(&cli).find(|c| sim.slot_of(c).is_none()).unwrap().clone();
+        sim.api(UID, SessionId(2), update(&waiting, AgentState::Question)).unwrap();
+        assert!(sim.slot_of(&waiting).is_some(), "a question is always on the deck");
+        // Busy sessions are not shuffled among themselves.
+        for c in more.iter().chain(&cli) {
+            if sim.slot_of(c).is_some() {
+                sim.api(UID, SessionId(2), update(c, AgentState::Working)).unwrap();
+            }
+        }
+        let before: Vec<_> = more.iter().chain(&cli).map(|c| sim.slot_of(c)).collect();
+        let late = sim.register(UID, SessionId(2), "claude late", Some("claude:late"));
+        sim.api(UID, SessionId(2), update(&late, AgentState::Working)).unwrap();
+        assert_eq!(sim.slot_of(&late), None, "a working newcomer does not bump a working equal");
+        assert_eq!(more.iter().chain(&cli).map(|c| sim.slot_of(c)).collect::<Vec<_>>(), before);
     }
 
     #[test]

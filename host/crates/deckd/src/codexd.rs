@@ -2007,7 +2007,7 @@ async fn apply(
                             title_source,
                             since: None,
                             name: None,
-                            meta: None,
+                            meta: None, task: None, subagents: None,
                         }),
                     )
                     .await;
