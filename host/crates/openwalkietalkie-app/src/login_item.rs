@@ -110,10 +110,36 @@ pub fn register_bundled_agent() -> Result<(), String> {
     let service =
         unsafe { objc2_service_management::SMAppService::agentServiceWithPlistName(&name) };
     let status = unsafe { service.status() }.0;
-    if status == 1 || status == 2 {
+    // 2: waiting on the operator's approval in System Settings.
+    if status == 2 {
         return Ok(());
     }
+    // 1: registered — but a registration can outlive the copy of the app
+    // that made it (moved, replaced, booted out: `deckd doctor`'s "the
+    // registration outlived the bundle"), and then launchd has no job and
+    // nothing ever starts the daemon again. Only a registration launchd
+    // actually holds is left alone; a dangling one is made again from this
+    // copy.
+    if status == 1 {
+        if agent_loaded() {
+            return Ok(());
+        }
+        let _ = unsafe { service.unregisterAndReturnError() };
+    }
     unsafe { service.registerAndReturnError() }.map_err(|e| e.to_string())
+}
+
+/// Whether launchd holds the daemon's job in this user's GUI domain.
+#[cfg(target_os = "macos")]
+fn agent_loaded() -> bool {
+    let uid = unsafe { libc::getuid() };
+    std::process::Command::new("/bin/launchctl")
+        .args(["print", &format!("gui/{uid}/ai.cohdl.openwalkietalkie.deckd")])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        // A launchctl that cannot run proves nothing: leave it registered.
+        .map_or(true, |s| s.success())
 }
 
 #[cfg(test)]

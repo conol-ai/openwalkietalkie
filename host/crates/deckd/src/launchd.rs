@@ -119,9 +119,13 @@ impl LastExit {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Agent {
     pub label: String,
-    /// `path = …`: the plist launchd loaded, which for an SMAppService
-    /// registration is the one inside the app bundle.
+    /// `path = …`: the plist launchd loaded. An SMAppService registration
+    /// has no file here — launchd prints `(submitted by smd.N)` — so that
+    /// is `None`, with [`Agent::submitted`] set instead.
     pub plist: Option<PathBuf>,
+    /// Registered by the app through SMAppService (`path = (submitted by
+    /// smd.N)`), not from a plist file.
+    pub submitted: bool,
     /// `state = running` / `not running` / `spawn scheduled`.
     pub state: String,
     pub pid: Option<u32>,
@@ -139,7 +143,10 @@ impl Agent {
     pub fn parse(label: &str, output: &str) -> Agent {
         Agent {
             label: label.to_string(),
-            plist: field(output, "path").map(PathBuf::from),
+            plist: field(output, "path")
+                .filter(|p| !p.starts_with('('))
+                .map(PathBuf::from),
+            submitted: field(output, "path").is_some_and(|p| p.starts_with("(submitted by")),
             state: field(output, "state").unwrap_or("?").to_string(),
             pid: field(output, "pid").and_then(|p| p.parse().ok()),
             program: field(output, "program").map(PathBuf::from),
@@ -151,7 +158,14 @@ impl Agent {
 
     /// Read the agent launchd currently holds under `label`.
     pub fn load(label: &str) -> Option<Agent> {
-        print(label).map(|out| Agent::parse(label, &out))
+        let mut agent = print(label).map(|out| Agent::parse(label, &out))?;
+        // An SMAppService job names only its `program identifier`, relative
+        // to a bundle launchd does not print: the running pid says which
+        // copy of deckd it actually is.
+        if agent.program.is_none() {
+            agent.program = agent.pid.and_then(crate::trust::exe_path);
+        }
+        Some(agent)
     }
 
     /// The last exit **and what it means**, in the daemon's own vocabulary.
@@ -513,6 +527,22 @@ mod tests {
         let why = agent.dangling().expect("the plist is gone");
         assert!(why.contains("gone.plist"), "{why}");
         assert!(why.contains("outlived the bundle"), "{why}");
+    }
+
+    /// An app-registered job has no plist file: `(submitted by smd.N)` is
+    /// launchd's marker for one, not a path that went missing.
+    #[test]
+    fn an_app_registered_job_is_not_a_dangling_plist() {
+        let agent = Agent::parse(
+            DECKD_LABEL,
+            &print_output(
+                "\tpath = (submitted by smd.40195)\n\tstate = running\n\tprogram identifier = Contents/MacOS/deckd (mode: 2)\n\tpid = 50557",
+            ),
+        );
+        assert!(agent.submitted);
+        assert_eq!(agent.plist, None);
+        assert_eq!(agent.program, None, "parse names no program; `load` reads the pid's");
+        assert_eq!(agent.dangling(), None);
     }
 
     #[test]

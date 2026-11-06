@@ -2123,6 +2123,28 @@ pub fn launchd_checks() -> Vec<(String, bool, String)> {
                 ),
                 Some(why) => ("launchd deckd program".into(), false, why),
             });
+            // Several copies of the app on one Mac (an old download, a test
+            // build) can each register the daemon, and launchd runs whichever
+            // did last — an old deckd behind a new app. Only a bundled copy
+            // can say so: a dev binary is expected to differ.
+            if let (Some(program), Ok(this)) = (&agent.program, std::env::current_exe()) {
+                let same = |a: &std::path::Path, b: &std::path::Path| {
+                    a.canonicalize().ok().zip(b.canonicalize().ok()).is_some_and(|(a, b)| a == b)
+                };
+                let bundled = crate::launchd::app_bundle_of(&this).is_some();
+                if bundled && !same(program, &this) {
+                    checks.push((
+                        "launchd deckd copy".into(),
+                        false,
+                        format!(
+                            "launchd runs {}, not this copy ({}). Quit every OpenWalkieTalkie, \
+                             then open the one you mean to use: it registers its own daemon.",
+                            program.display(),
+                            this.display()
+                        ),
+                    ));
+                }
+            }
         }
     }
     checks
