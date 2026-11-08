@@ -67,6 +67,8 @@ pub fn face_signature(ui: &UiState, face: FaceEntry, sig: &mut SigBuilder) {
 /// Fill `sig` for the frame `draw` would produce from `ui`.
 pub fn signature(ui: &UiState, sig: &mut Signature) {
     let mut builder = SigBuilder::new(sig);
+    // Language changes affect every built-in label, including opaque overlays.
+    builder.mode(ui.language as u32);
     // Whole pixels: a sub-pixel step of the slide changes nothing on screen.
     builder.mode((ui.global.strip_x >> 8) as u32);
     // Under an opaque overlay the faces keep their mode (what is beneath

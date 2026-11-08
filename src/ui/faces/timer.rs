@@ -10,13 +10,15 @@
 //! dot.
 //!
 //! Signature: header, tabs, readout, the two detail lanes, each button, hint
-//! bar. The readout hashes what it shows (tenths or seconds), never `now_ms`.
+//! bar. The readout hashes what it shows (hundredths or seconds), never
+//! `now_ms`.
 use crate::deck::text::Text;
 use crate::display::Band;
 use crate::ui::layout::{self, Rect};
 use crate::ui::signature::{Hasher, SigBuilder};
 use crate::ui::state::timer::{Action, Mode, Phase, PRESETS_S, PRESET_ID, PRIMARY_ID, SECONDARY_ID, TAB_ID};
 use crate::ui::state::UiState;
+use crate::ui::i18n::Language;
 use crate::ui::{font, font::Align, font::Font, kit, theme};
 
 const TABS: Rect = Rect::new(theme::MARGIN, 68, theme::SCREEN - 2 * theme::MARGIN, 34);
@@ -35,7 +37,7 @@ enum Glyph {
     Digit(u8),
     Colon,
     Point,
-    /// The stopwatch's tenths, smaller and on the baseline.
+    /// The stopwatch's hundredths, two smaller digits on the baseline.
     Small(u8),
 }
 
@@ -67,9 +69,9 @@ impl Readout {
     }
 }
 
-/// "H:MM:SS" from an hour, else "M:SS" ("MM:SS" with `pad`); then ".t" when
-/// `tenths` is given.
-fn readout(seconds: u32, pad: bool, tenths: Option<u32>) -> Readout {
+/// "H:MM:SS" from an hour, else "M:SS" ("MM:SS" with `pad`); then ".cc" when
+/// `hundredths` is given (a count of hundredths; its last two digits show).
+fn readout(seconds: u32, pad: bool, hundredths: Option<u32>) -> Readout {
     let mut out = Readout::new();
     let (h, m, s) = (seconds / 3600, seconds / 60 % 60, seconds % 60);
     if h > 0 {
@@ -86,9 +88,10 @@ fn readout(seconds: u32, pad: bool, tenths: Option<u32>) -> Readout {
     }
     out.push(Glyph::Colon);
     out.two(s);
-    if let Some(tenths) = tenths {
+    if let Some(hundredths) = hundredths {
         out.push(Glyph::Point);
-        out.push(Glyph::Small((tenths % 10) as u8));
+        out.push(Glyph::Small((hundredths / 10 % 10) as u8));
+        out.push(Glyph::Small((hundredths % 10) as u8));
     }
     out
 }
@@ -100,8 +103,8 @@ fn current(ui: &UiState) -> Readout {
         Mode::Stopwatch => {
             let ms = view.stopwatch_ms(ui.now_ms);
             let seconds = ms / 1000;
-            // Tenths only while they fit beside the hours.
-            readout(seconds, true, (seconds < 10 * 3600).then_some(ms / 100))
+            // Hundredths only while they fit beside the hours.
+            readout(seconds, true, (seconds < 10 * 3600).then_some(ms / 10))
         }
         Mode::Countdown => readout(view.remaining_ms(ui.now_ms).div_ceil(1000), false, None),
         Mode::Pomodoro => readout(view.pomodoro.remaining_ms(ui.now_ms).div_ceil(1000), false, None),
@@ -223,9 +226,9 @@ fn draw_readout(band: &mut Band, ui: &UiState) {
 
 // ---- text helpers ---------------------------------------------------------------------------
 
-/// "1:05.3", "12:00.0", "1:02:03.4"; without tenths "5:00", "1:00:00".
-fn clock_text(ms: u32, tenths: bool, out: &mut Text<16>) {
-    let seconds = if tenths { ms / 1000 } else { ms.div_ceil(1000) };
+/// "1:05.32", "12:00.00", "1:02:03.45"; without hundredths "5:00", "1:00:00".
+fn clock_text(ms: u32, hundredths: bool, out: &mut Text<16>) {
+    let seconds = if hundredths { ms / 1000 } else { ms.div_ceil(1000) };
     let (h, m, s) = (seconds / 3600, seconds / 60 % 60, seconds % 60);
     let digits = |value: u32, pad: bool, out: &mut Text<16>| {
         if pad || value >= 10 {
@@ -241,20 +244,21 @@ fn clock_text(ms: u32, tenths: bool, out: &mut Text<16>) {
     digits(m, h > 0, out);
     out.push_char(':');
     digits(s, true, out);
-    if tenths {
+    if hundredths {
         out.push_char('.');
         out.push_char((b'0' + (ms / 100 % 10) as u8) as char);
+        out.push_char((b'0' + (ms / 10 % 10) as u8) as char);
     }
 }
 
-fn preset_label(seconds: u32, out: &mut Text<16>) {
+fn preset_label(seconds: u32, language: Language, out: &mut Text<16>) {
     let minutes = seconds / 60;
     out.clear();
     if minutes >= 10 {
         out.push_char((b'0' + (minutes / 10 % 10) as u8) as char);
     }
     out.push_char((b'0' + (minutes % 10) as u8) as char);
-    out.push_str(" min");
+    out.push_str(language.text(" min"));
 }
 
 /// The status line that replaces the presets once the timer has started.
@@ -262,13 +266,13 @@ fn status(ui: &UiState, out: &mut Text<16>) -> (&'static str, u32) {
     let view = &ui.timer;
     if view.done {
         out.clear();
-        return ("Time\u{2019}s up", theme::RED);
+        return (ui.tr("Time\u{2019}s up"), theme::RED);
     }
     clock_text(view.length_ms, false, out);
     if view.countdown.running() {
-        ("of ", theme::TEXT_LABEL)
+        (ui.tr("of "), theme::TEXT_LABEL)
     } else {
-        ("Paused \u{00B7} of ", theme::TEXT_LABEL)
+        (ui.tr("Paused \u{00B7} of "), theme::TEXT_LABEL)
     }
 }
 
@@ -290,7 +294,8 @@ fn draw_chip(band: &mut Band, rect: Rect, name: &str, selected: bool, pressed: b
         kit::round(band, rect, theme::CHIP_R, theme::CHIP_FILL);
         kit::outline(band, rect, theme::CHIP_R, theme::OUTLINE, 1);
         let (cx, cy) = rect.center();
-        font::draw(band, Font::Small, cx, cy + font::ascent(Font::Small) * 9 / 20, name, theme::TEXT_PRIMARY, Some(theme::CHIP_FILL), rect.width() - 8, Align::Center);
+        let size = if font::measure(Font::Small, name) <= rect.width() - 8 { Font::Small } else { Font::Hint };
+        font::draw(band, size, cx, cy + font::ascent(size) * 9 / 20, name, theme::TEXT_PRIMARY, Some(theme::CHIP_FILL), rect.width() - 8, Align::Center);
     } else {
         kit::chip(band, rect, name, selected);
     }
@@ -315,7 +320,7 @@ fn draw_tabs(band: &mut Band, ui: &UiState) {
     for (index, mode) in Mode::ALL.into_iter().enumerate() {
         let rect = layout::timer_tab(index as u8);
         let selected = mode == ui.timer.mode;
-        draw_chip(band, rect, mode.label(), selected, ui.timer.pressed == Some((TAB_ID + index as u16) as u8));
+        draw_chip(band, rect, ui.tr(mode.label()), selected, ui.timer.pressed == Some((TAB_ID + index as u16) as u8));
         if let Some(color) = tab_dot(ui, mode).filter(|_| !selected) {
             let (_, cy) = rect.center();
             kit::dot(band, rect.right() - 10, cy, 3, color);
@@ -333,7 +338,7 @@ fn draw_laps(band: &mut Band, ui: &UiState) {
         }
         let baseline = rect.top() + 22;
         text.clear();
-        text.push_str("Lap ");
+        text.push_str(ui.tr("Lap "));
         let number = view.lap_count - slot as u16;
         let mut digits = [0u8; 5];
         let mut n = number;
@@ -364,7 +369,7 @@ fn draw_countdown_detail(band: &mut Band, ui: &UiState) {
             if !kit::visible(band, rect) {
                 continue;
             }
-            preset_label(seconds, &mut text);
+            preset_label(seconds, ui.language, &mut text);
             let pressed = view.pressed == Some((PRESET_ID + index as u16) as u8);
             draw_chip(band, rect, text.as_str(), view.length_ms == seconds * 1000, pressed);
         }
@@ -392,12 +397,12 @@ fn draw_pomodoro_detail(band: &mut Band, ui: &UiState) {
         return;
     }
     let mut text = Text::<48>::new();
-    text.push_str(view.phase.label());
+    text.push_str(ui.tr(view.phase.label()));
     if view.phase == Phase::Focus {
         text.push_char(' ');
         let session = if view.done { view.completed } else { view.completed + 1 };
         text.push_char((b'0' + session.min(4)) as char);
-        text.push_str(" of 4");
+        text.push_str(ui.tr(" of 4"));
     }
     font::draw(band, Font::Row, 38, 285, text.as_str(), theme::TEXT_ROW, Some(theme::CANVAS), 250, Align::Left);
     for index in 0..4 {
@@ -411,21 +416,21 @@ fn draw_pomodoro_detail(band: &mut Band, ui: &UiState) {
     }
     text.clear();
     if view.done {
-        text.push_str("Next: ");
+        text.push_str(ui.tr("Next: "));
         let next = view.next_phase();
-        text.push_str(next.label());
+        text.push_str(ui.tr(next.label()));
         text.push_str(" \u{00B7} ");
         let mut length = Text::<16>::new();
-        preset_label(next.duration_ms() / 1000, &mut length);
+        preset_label(next.duration_ms() / 1000, ui.language, &mut length);
         text.push_str(length.as_str());
     } else if view.idle() {
-        text.push_str("25 min focus \u{00B7} 5 min break");
+        text.push_str(ui.tr("25 min focus \u{00B7} 5 min break"));
     } else {
         if !view.run.running() {
-            text.push_str("Paused \u{00B7} ");
+            text.push_str(ui.tr("Paused \u{00B7} "));
         }
-        text.push_str("Next: ");
-        text.push_str(view.next_phase().label());
+        text.push_str(ui.tr("Next: "));
+        text.push_str(ui.tr(view.next_phase().label()));
     }
     font::draw(band, Font::Small, DETAIL_REST.center().0, 321, text.as_str(), if view.done { theme::GREEN } else { theme::TEXT_LABEL }, Some(theme::CANVAS), DETAIL_REST.width() - 12, Align::Center);
 }
@@ -467,7 +472,7 @@ fn draw_buttons(band: &mut Band, ui: &UiState) {
         kit::outline(band, rect, radius, if pressed { theme::OUTLINE_SELECTED } else { theme::OUTLINE_KEY }, 1);
         let fg = if enabled { theme::TEXT_PRIMARY } else { theme::TEXT_FAINT };
         let (cx, cy) = rect.center();
-        font::draw(band, Font::Name, cx, cy + font::ascent(Font::Name) * 9 / 20, view.secondary_label(), fg, Some(fill), rect.width() - 24, Align::Center);
+        font::draw(band, Font::Name, cx, cy + font::ascent(Font::Name) * 9 / 20, ui.tr(view.secondary_label()), fg, Some(fill), rect.width() - 24, Align::Center);
     }
     let rect = layout::TIMER_PRIMARY;
     if kit::visible(band, rect) {
@@ -478,7 +483,7 @@ fn draw_buttons(band: &mut Band, ui: &UiState) {
             kit::outline(band, rect, radius, theme::OUTLINE_SELECTED, 2);
         }
         let (cx, cy) = rect.center();
-        font::draw(band, Font::Name, cx, cy + font::ascent(Font::Name) * 9 / 20, action.label(), fg, Some(fill), rect.width() - 24, Align::Center);
+        font::draw(band, Font::Name, cx, cy + font::ascent(Font::Name) * 9 / 20, ui.tr(action.label()), fg, Some(fill), rect.width() - 24, Align::Center);
     }
 }
 
@@ -520,7 +525,7 @@ const fn action_hint(action: Action) -> &'static str {
 pub fn draw(band: &mut Band, ui: &UiState, instance: u8) {
     let _ = instance;
     band.fill(kit::rgb(theme::CANVAS));
-    kit::header(band, "TIMER", kit::header_right(ui, kit::status_tag(ui)));
+    kit::header(band, ui.tr("TIMER"), kit::header_right(ui, kit::status_tag(ui)));
     draw_tabs(band, ui);
     draw_readout(band, ui);
     match ui.timer.mode {
@@ -530,7 +535,7 @@ pub fn draw(band: &mut Band, ui: &UiState, instance: u8) {
     }
     draw_buttons(band, ui);
     let (hints, len) = hints(ui);
-    kit::hint_bar(band, &hints[..len]);
+    kit::hint_bar_localized(band, &hints[..len], ui.language);
 }
 
 // ---- signature --------------------------------------------------------------------------------
@@ -616,18 +621,18 @@ mod tests {
 
     #[test]
     fn readouts_pad_and_grow_hours() {
-        assert_eq!(glyphs(&readout(0, true, Some(0))), "00:00.0");
-        assert_eq!(glyphs(&readout(65, true, Some(653))), "01:05.3");
+        assert_eq!(glyphs(&readout(0, true, Some(0))), "00:00.00");
+        assert_eq!(glyphs(&readout(65, true, Some(6532))), "01:05.32");
         assert_eq!(glyphs(&readout(300, false, None)), "5:00");
         assert_eq!(glyphs(&readout(659, false, None)), "10:59");
         assert_eq!(glyphs(&readout(3723, false, None)), "1:02:03");
-        assert_eq!(glyphs(&readout(3723, true, Some(4))), "1:02:03.4");
+        assert_eq!(glyphs(&readout(3723, true, Some(372_345))), "1:02:03.45");
         assert_eq!(glyphs(&readout(36_000, true, None)), "10:00:00");
     }
 
     #[test]
     fn every_readout_fits_the_lane() {
-        for readout in [readout(5 * 3600, false, None), readout(9 * 3600 + 3599, true, Some(9)), readout(36_000 + 3599, true, None)] {
+        for readout in [readout(5 * 3600, false, None), readout(9 * 3600 + 3599, true, Some(99)), readout(36_000 + 3599, true, None)] {
             let h = fitted_height(readout.glyphs());
             assert!(total_width(readout.glyphs(), h) <= layout::TIMER_READOUT.width() - 12, "{}", glyphs(&readout));
             assert!(h >= 60);
@@ -637,17 +642,37 @@ mod tests {
 
     #[test]
     fn clock_text_matches_the_readout() {
-        let text = |ms: u32, tenths: bool| {
+        let text = |ms: u32, hundredths: bool| {
             let mut out = Text::<16>::new();
-            clock_text(ms, tenths, &mut out);
+            clock_text(ms, hundredths, &mut out);
             std::string::String::from(out.as_str())
         };
-        assert_eq!(text(12_400, true), "0:12.4");
+        assert_eq!(text(12_430, true), "0:12.43");
         assert_eq!(text(300_000, false), "5:00");
         assert_eq!(text(299_001, false), "5:00");
-        assert_eq!(text(3_723_400, true), "1:02:03.4");
+        assert_eq!(text(3_723_450, true), "1:02:03.45");
         let mut out = Text::<16>::new();
-        preset_label(25 * 60, &mut out);
+        preset_label(25 * 60, Language::English, &mut out);
         assert_eq!(out.as_str(), "25 min");
+    }
+
+    #[test]
+    fn translated_timer_controls_fit_and_preset_units_stay_complete() {
+        for language in Language::ALL {
+            for (index, mode) in Mode::ALL.into_iter().enumerate() {
+                let label = language.text(mode.label());
+                let width = layout::timer_tab(index as u8).width() - 8;
+                assert!(font::measure(Font::Hint, label) <= width, "{language:?}: {label}");
+            }
+            for action in [Action::Start, Action::Pause, Action::Resume, Action::Restart, Action::Lap, Action::Reset, Action::Next] {
+                let label = language.text(action.label());
+                assert!(font::measure(Font::Name, label) <= layout::TIMER_PRIMARY.width() - 24, "{language:?}: {label}");
+            }
+            for seconds in PRESETS_S {
+                let mut text = Text::<16>::new();
+                preset_label(seconds, language, &mut text);
+                assert!(text.as_str().ends_with(language.text(" min")), "{language:?}: {}", text.as_str());
+            }
+        }
     }
 }

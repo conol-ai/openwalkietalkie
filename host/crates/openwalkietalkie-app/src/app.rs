@@ -98,9 +98,12 @@ fn boot(
     cx: &mut App,
 ) {
     gpui_component::init(cx);
+    let preview = shots.as_ref().is_some_and(Shots::synthetic_only);
     #[cfg(target_os = "macos")]
-    if let Err(error) = crate::login_item::register_bundled_agent() {
-        eprintln!("openwalkietalkie-app: background service registration: {error}");
+    if !preview {
+        if let Err(error) = crate::login_item::register_bundled_agent() {
+            eprintln!("openwalkietalkie-app: background service registration: {error}");
+        }
     }
     style::register_fonts(cx);
     // Pinned before the window exists, so it opens in the right appearance
@@ -115,14 +118,12 @@ fn boot(
     cx.set_global(Tokio(bridge));
     cx.on_action(|_: &Quit, cx: &mut App| cx.quit());
     cx.bind_keys([KeyBinding::new("cmd-q", Quit, None)]);
-    cx.set_menus(vec![Menu {
-        name: "OpenWalkieTalkie".into(),
-        items: vec![MenuItem::action("Quit OpenWalkieTalkie", Quit)],
-    }]);
+    let language = deck_gui_core::i18n::Language::from_id(state.mirror().settings.language.min(255) as u8);
+    apply_menu_language(language, cx);
     // The status item, before the window: §8.2's tray-only mode means the
     // tray has to be there whether or not a window ever opens, and a menu
     // bar that refused it is not fatal — the window works exactly as it did.
-    if let Some(tray) = crate::tray::install() {
+    if let Some(tray) = crate::tray::install_localized(language) {
         cx.set_global(tray);
     }
     if let Err(e) = open(state, receiver, cx) {
@@ -131,6 +132,14 @@ fn boot(
         return;
     }
     cx.activate(true);
+}
+
+/// Keep the app-owned menu item in the same language as the shared snapshot.
+pub fn apply_menu_language(language: deck_gui_core::i18n::Language, cx: &mut App) {
+    cx.set_menus(vec![Menu {
+        name: "OpenWalkieTalkie".into(),
+        items: vec![MenuItem::action(deck_gui_core::TrayCommand::Quit.label_localized(language), Quit)],
+    }]);
 }
 
 fn open(state: HostState, receiver: EventReceiver, cx: &mut App) -> Result<()> {

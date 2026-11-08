@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the shared Chinese fallback atlas (Pillow + fontTools required).
+"""Generate the shared Chinese/Japanese fallback atlas (Pillow + fontTools required).
 
 The 26 px, 2 bpp atlas lives in the application's upper NOR bank. The renderer
 scales it to each face with bilinear filtering.
@@ -18,12 +18,14 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "assets/fonts/NotoSansCJKsc-Regular.otf"
 SHA256 = "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b"
 PX = 26
-# Radicals, Chinese punctuation/Bopomofo, unified ideographs + Extension A,
-# compatibility ideographs and fullwidth forms. Coverage follows the source
-# cmap; unassigned codepoints are never rasterized as .notdef boxes.
-RANGES = [(0x2E80, 0x2FDF), (0x3000, 0x303F), (0x3100, 0x312F),
-          (0x31A0, 0x31BF), (0x3400, 0x4DBF), (0x4E00, 0x9FFF),
-          (0xF900, 0xFAFF), (0xFF01, 0xFF60), (0xFFE0, 0xFFE6)]
+# Radicals, CJK punctuation, Japanese kana, Chinese Bopomofo, unified
+# ideographs + Extension A, compatibility ideographs and full/halfwidth forms.
+# Coverage follows the source cmap; unassigned codepoints are never rasterized
+# as .notdef boxes. Reuse the same source and lookup for Chinese and Japanese.
+RANGES = [(0x2E80, 0x2FDF), (0x3000, 0x30FF), (0x3100, 0x312F),
+          (0x31A0, 0x31BF), (0x31F0, 0x31FF), (0x3400, 0x4DBF),
+          (0x4E00, 0x9FFF), (0xF900, 0xFAFF), (0xFF01, 0xFF9F),
+          (0xFFE0, 0xFFE6)]
 
 
 def generate(directory):
@@ -65,10 +67,10 @@ def generate(directory):
                     byte |= alpha << (6 - 2 * i)
                 atlas.append(byte)
         above, below = max(above, top), max(below, h - top)
-    assert len(atlas) + len(metrics) < 5_200_000, "Chinese font exceeds its flash budget"
+    assert len(atlas) + len(metrics) < 5_200_000, "CJK font exceeds its flash budget"
     (directory / "cjk.bin").write_bytes(atlas)
     (directory / "cjk-metrics.bin").write_bytes(metrics)
-    print(f"Chinese: {len(metrics) // 12} glyphs, {len(atlas)} bitmap + {len(metrics)} metric bytes; above={above}, below={below}")
+    print(f"CJK: {len(metrics) // 12} glyphs, {len(atlas)} bitmap + {len(metrics)} metric bytes; above={above}, below={below}")
 
 
 def main():
@@ -84,7 +86,7 @@ def main():
         generate(directory)
         for name in ["cjk.bin", "cjk-metrics.bin"]:
             assert (directory / name).read_bytes() == (destination / name).read_bytes(), f"stale {name}"
-    print("Chinese atlas and metrics are up to date")
+    print("CJK atlas and metrics are up to date")
 
 
 if __name__ == "__main__":

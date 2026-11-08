@@ -15,6 +15,10 @@ const PREFS_MAGIC: &[u8; 4] = b"OWTP";
 pub struct Prefs {
     /// The first-run tutorial has been finished or skipped once.
     pub tutorial_done: bool,
+    /// Device UI language: 0 English, 1 Simplified Chinese, 2 Traditional
+    /// Chinese, 3 Japanese. Byte 6 was zero in existing v1 records.
+    pub language: u8,
+    pub language_revision: u32,
 }
 
 impl Prefs {
@@ -23,6 +27,8 @@ impl Prefs {
         bytes[..4].copy_from_slice(PREFS_MAGIC);
         bytes[4] = 1;
         bytes[5] = u8::from(self.tutorial_done);
+        bytes[6] = self.language.min(3);
+        bytes[7..11].copy_from_slice(&self.language_revision.to_le_bytes());
         let checksum = crc32(&bytes[..60]);
         bytes[60..].copy_from_slice(&checksum.to_le_bytes());
         bytes
@@ -32,12 +38,17 @@ impl Prefs {
         if &bytes[..4] != PREFS_MAGIC
             || bytes[4] != 1
             || bytes[5] > 1
+            || bytes[6] > 3
             || crc32(&bytes[..60]) != u32::from_le_bytes(bytes[60..].try_into().ok()?)
         {
             return None;
         }
         Some(Self {
             tutorial_done: bytes[5] != 0,
+            language: bytes[6],
+            // Existing non-English selections were explicit choices made
+            // before sync support; they beat an untouched app default.
+            language_revision: u32::from_le_bytes(bytes[7..11].try_into().ok()?).max(u32::from(bytes[6] != 0)),
         })
     }
 }
@@ -148,19 +159,50 @@ mod tests {
     }
     #[test]
     fn prefs_round_trip_and_the_two_record_kinds_never_parse_as_each_other() {
-        assert_eq!(Prefs::default(), Prefs { tutorial_done: false });
+        assert_eq!(Prefs::default(), Prefs { tutorial_done: false, language: 0, language_revision: 0 });
         for done in [false, true] {
-            let p = Prefs { tutorial_done: done };
-            assert_eq!(Prefs::decode(&p.encode()), Some(p));
-            assert!(Record::decode(&p.encode()).is_none());
+            for language in 0..4 {
+                let p = Prefs { tutorial_done: done, language, language_revision: u32::from(language != 0) };
+                assert_eq!(Prefs::decode(&p.encode()), Some(p));
+                assert!(Record::decode(&p.encode()).is_none());
+            }
         }
         assert!(Prefs::decode(&record().encode()).is_none());
         assert!(Prefs::decode(&[255; SIZE]).is_none());
-        let bytes = Prefs { tutorial_done: true }.encode();
+        let bytes = Prefs { tutorial_done: true, language: 0, language_revision: 0 }.encode();
         for bit in 0..SIZE * 8 {
             let mut damaged = bytes;
             damaged[bit / 8] ^= 1 << (bit % 8);
             assert!(Prefs::decode(&damaged).is_none());
+        }
+    }
+
+    #[test]
+    fn legacy_preferences_default_to_english_and_invalid_languages_are_rejected() {
+        let mut legacy = [0u8; SIZE];
+        legacy[..4].copy_from_slice(b"OWTP");
+        legacy[4] = 1;
+        legacy[5] = 1;
+        let checksum = crc32(&legacy[..60]);
+        legacy[60..].copy_from_slice(&checksum.to_le_bytes());
+        assert_eq!(Prefs::decode(&legacy), Some(Prefs { tutorial_done: true, language: 0, language_revision: 0 }));
+        legacy[6] = 2;
+        let checksum = crc32(&legacy[..60]);
+        legacy[60..].copy_from_slice(&checksum.to_le_bytes());
+        assert_eq!(Prefs::decode(&legacy), Some(Prefs { tutorial_done: true, language: 2, language_revision: 1 }));
+        legacy[6] = 4;
+        let checksum = crc32(&legacy[..60]);
+        legacy[60..].copy_from_slice(&checksum.to_le_bytes());
+        assert!(Prefs::decode(&legacy).is_none());
+    }
+
+    #[test]
+    fn preference_revisions_survive_english_reset_and_all_language_values() {
+        for language in 0..4 {
+            for language_revision in [1, 5, u32::MAX] {
+                let prefs = Prefs { tutorial_done: true, language, language_revision };
+                assert_eq!(Prefs::decode(&prefs.encode()), Some(prefs));
+            }
         }
     }
 }

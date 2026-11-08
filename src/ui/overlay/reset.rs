@@ -18,7 +18,7 @@ const LINES: [&str; 2] = ["Forgets the Bluetooth pairing,", "shows the tutorial,
 const LABELS: [&str; 2] = ["Keep", "Reset"];
 
 pub fn draw(band: &mut Band, ui: &UiState) {
-    kit::hint_bar(band, &HINTS);
+    kit::hint_bar_localized(band, &HINTS, ui.language);
     let bx = layout::CONFIRM_BOX;
     if !kit::visible(band, bx) {
         return;
@@ -28,9 +28,9 @@ pub fn draw(band: &mut Band, ui: &UiState) {
     let text = layout::CONFIRM_TEXT;
     let (cx, _) = text.center();
     let lh = font::line_height(Font::Body);
-    font::draw(band, Font::Name, cx, text.top() + 28, TITLE, theme::TEXT_PRIMARY, Some(theme::CARD_FILL), text.width(), Align::Center);
+    font::draw(band, Font::Name, cx, text.top() + 28, ui.tr(TITLE), theme::TEXT_PRIMARY, Some(theme::CARD_FILL), text.width(), Align::Center);
     for (index, line) in LINES.iter().enumerate() {
-        font::draw(band, Font::Body, cx, text.top() + 28 + 32 + index as i32 * lh, line, theme::TEXT_SECONDARY, Some(theme::CARD_FILL), text.width(), Align::Center);
+        font::draw(band, Font::Body, cx, text.top() + 28 + 32 + index as i32 * lh, ui.tr(line), theme::TEXT_SECONDARY, Some(theme::CARD_FILL), text.width(), Align::Center);
     }
     for (index, label) in LABELS.iter().enumerate() {
         let rect = layout::confirm_button(index as u8);
@@ -49,7 +49,7 @@ pub fn draw(band: &mut Band, ui: &UiState) {
             (theme::CARD_FILL, theme::TEXT_ROW)
         };
         let (bx, by) = rect.center();
-        font::draw(band, Font::Name, bx, by + font::ascent(Font::Name) * 9 / 20, label, color, Some(fill), rect.width() - 16, Align::Center);
+        font::draw(band, Font::Name, bx, by + font::ascent(Font::Name) * 9 / 20, ui.tr(label), color, Some(fill), rect.width() - 16, Align::Center);
     }
 }
 

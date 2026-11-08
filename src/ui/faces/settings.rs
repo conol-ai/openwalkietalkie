@@ -11,7 +11,7 @@ use crate::deck::msg::{SettingKey, FW_VERSION};
 use crate::deck::text::Text;
 use crate::display::Band;
 use crate::ui::signature::{Hasher, SigBuilder};
-use crate::ui::state::settings::{rows, setting_at, FACTORY_RESET_ROW, PANEL_NAMES, TUTORIAL_ROW};
+use crate::ui::state::settings::{rows, setting_at, viewport, FACTORY_RESET_ROW, LANGUAGE_ROW, PANEL_NAMES, TUTORIAL_ROW};
 use crate::ui::state::UiState;
 use crate::ui::{font, font::Align, font::Font, kit, layout, layout::Rect, theme};
 use crate::battery::ChargeState;
@@ -23,7 +23,7 @@ pub enum Value {
     /// A bar filled `level` of `max`, with the number beside it.
     Level { level: u8, max: u8 },
     Toggle(bool),
-    Text(Text<24>),
+    Text(Text<64>),
     /// Speaker/mic/announce/chime without a deck host: dimmed, inert.
     NeedsHost,
 }
@@ -41,7 +41,7 @@ fn text(s: &str) -> Value {
 }
 
 fn percent_text(percent: u8, suffix: &str) -> Value {
-    let mut t = Text::<24>::new();
+    let mut t = Text::<64>::new();
     let p = percent.min(100);
     if p >= 100 {
         t.push_char('1');
@@ -76,61 +76,62 @@ pub fn row_content(ui: &UiState, panel: u8, row: u8) -> Option<Row> {
         Some(SettingKey::Brightness) => ("Brightness", Value::Level { level: settings.brightness, max: 5 }),
         Some(SettingKey::IdleHome) => (
             "Idle home",
-            text(match settings.idle_home_s {
+            text(ui.tr(match settings.idle_home_s {
                 0 => "Never",
                 1..=30 => "30 s",
                 31..=60 => "1 min",
                 _ => "2 min",
-            }),
+            })),
         ),
-        Some(SettingKey::ArcadeSound) => ("Arcade sound", text(crate::ui::state::arcade::sound_label(settings.arcade_sound))),
+        Some(SettingKey::ArcadeSound) => ("Arcade sound", text(ui.tr(crate::ui::state::arcade::sound_label(settings.arcade_sound)))),
         Some(SettingKey::TextSize) => (
             "Text size",
-            text(match settings.text_size {
+            text(ui.tr(match settings.text_size {
                 0 => "Small",
                 1 => "Medium",
                 _ => "Large",
-            }),
+            })),
         ),
         Some(SettingKey::Demo) => ("Demo data", Value::Toggle(settings.demo)),
         None => match (panel, row) {
-            TUTORIAL_ROW => ("Tutorial", text("replay")),
-            (4, 0) => ("Link", text(if ui.connected { "Connected" } else { "Disconnected" })),
+            LANGUAGE_ROW => ("Language", text(ui.language.name())),
+            TUTORIAL_ROW => ("Tutorial", text(ui.tr("replay"))),
+            (4, 0) => ("Link", text(ui.tr(if ui.connected { "Connected" } else { "Disconnected" }))),
             (4, 1) => (
                 "Deck host",
-                text(if !ui.deck.host_present {
+                text(ui.tr(if !ui.deck.host_present {
                     "Absent"
                 } else if ui.deck.syncing {
                     "Syncing"
                 } else {
                     "Present"
-                }),
+                })),
             ),
             (5, 0) => ("Firmware", firmware_value()),
             (5, 1) => (
                 "Battery",
                 match (ui.battery.percentage(), ui.battery.charge) {
-                    (Some(p), ChargeState::Charging) => percent_text(p, " \u{b7} charging"),
-                    (Some(p), ChargeState::Full) => percent_text(p, " \u{b7} full"),
+                    (Some(p), ChargeState::Charging) => percent_text(p, ui.tr(" \u{b7} charging")),
+                    (Some(p), ChargeState::Full) => percent_text(p, ui.tr(" \u{b7} full")),
                     (Some(p), _) => percent_text(p, ""),
-                    (None, ChargeState::Charging) => text("charging"),
+                    (None, ChargeState::Charging) => text(ui.tr("charging")),
                     (None, _) => text("\u{2014}"),
                 },
             ),
             // Discoverability only. The gesture is the CANCEL the deck itself
             // owns.
-            (5, 2) => ("Power off", text("hold CANCEL 3 s")),
-            FACTORY_RESET_ROW => ("Factory reset", text("press ENTER")),
+            (5, 2) => ("Power off", text(ui.tr("hold CANCEL 3 s"))),
+            FACTORY_RESET_ROW => ("Factory reset", text(ui.tr("press ENTER"))),
             _ => return None,
         },
     };
-    Some(Row { label, value })
+    Some(Row { label: ui.tr(label), value })
 }
 
 /// "0.1.0 · Rev B": the version and the board it was built for (the panel
 /// rotation that used to have its own row follows from the board).
 pub fn firmware_value() -> Value {
-    let mut t = Text::<24>::new();
+    let mut t = Text::<64>::new();
     t.set(FW_VERSION);
     t.push_str(" \u{b7} ");
     t.push_str(orientation::BOARD);
@@ -164,7 +165,7 @@ fn level_text(level: u8) -> Text<4> {
     t
 }
 
-fn draw_row(band: &mut Band, rect: Rect, row: Row, focused: bool, adjusting: bool, pressed: bool) {
+fn draw_row(band: &mut Band, ui: &UiState, rect: Rect, row: Row, focused: bool, adjusting: bool, pressed: bool) {
     let (fill, label_color) = if adjusting {
         kit::round(band, rect, theme::CARD_R, theme::CARD_FILL);
         kit::outline(band, rect, theme::CARD_R, theme::BLUE, 2);
@@ -212,13 +213,13 @@ fn draw_row(band: &mut Band, rect: Rect, row: Row, focused: bool, adjusting: boo
                 kit::outline(band, pill, radius, theme::OUTLINE_KEY, 1);
                 kit::dot(band, pill.left() + 12, pill.top() + 12, 8, theme::TEXT_LABEL);
             }
-            font::draw(band, Font::Row, pill.left() - 12, baseline, if on { "On" } else { "Off" }, theme::TEXT_ROW, Some(fill), 60, Align::Right);
+            font::draw(band, Font::Row, pill.left() - 12, baseline, ui.tr(if on { "On" } else { "Off" }), theme::TEXT_ROW, Some(fill), 60, Align::Right);
         }
         Value::Text(value) => {
             font::draw(band, Font::Row, right, baseline, value.as_str(), theme::TEXT_ROW, Some(fill), 210, Align::Right);
         }
         Value::NeedsHost => {
-            font::draw(band, Font::Small, right, baseline, "needs host", theme::TEXT_FAINT, Some(fill), 120, Align::Right);
+            font::draw(band, Font::Small, right, baseline, ui.tr("needs host"), theme::TEXT_FAINT, Some(fill), 120, Align::Right);
         }
     }
 }
@@ -234,8 +235,8 @@ pub fn tab_font() -> Font {
     }
 }
 
-fn draw_tab(band: &mut Band, rect: Rect, name: &str, selected: bool, pressed: bool) {
-    let font = tab_font();
+fn draw_tab(band: &mut Band, ui: &UiState, rect: Rect, name: &str, selected: bool, pressed: bool) {
+    let font = if PANEL_NAMES.iter().all(|name| font::measure(Font::Small, ui.tr(name)) <= rect.width() - 8) { Font::Small } else { Font::Hint };
     if pressed && !selected {
         kit::round(band, rect, theme::CHIP_R, theme::CHIP_FILL);
         kit::outline(band, rect, theme::CHIP_R, theme::OUTLINE, 1);
@@ -250,23 +251,21 @@ fn draw_tab(band: &mut Band, rect: Rect, name: &str, selected: bool, pressed: bo
 pub fn draw(band: &mut Band, ui: &UiState, instance: u8) {
     let _ = instance;
     band.fill(kit::rgb(theme::CANVAS));
-    kit::header(band, "SETTINGS", kit::header_right(ui, kit::status_tag(ui)));
+    kit::header(band, ui.tr("SETTINGS"), kit::header_right(ui, kit::status_tag(ui)));
     let panel = ui.settings.panel.min(layout::SETTINGS_PANELS - 1);
     if kit::visible(band, TABS) {
         for index in 0..layout::SETTINGS_PANELS {
             let name = PANEL_NAMES.get(index as usize).copied().unwrap_or("");
-            draw_tab(band, layout::settings_tab(index), name, index == panel, ui.settings.pressed == Some(index));
+            draw_tab(band, ui, layout::settings_tab(index), ui.tr(name), index == panel, ui.settings.pressed == Some(index));
         }
     }
-    for index in 0..layout::SETTINGS_ROWS {
-        let rect = layout::settings_row(index);
-        let Some(row) = row_content(ui, panel, index) else {
-            break;
-        };
+    for (slot, index) in viewport(ui).slots() {
+        let rect = layout::settings_row(slot);
+        let Some(row) = row_content(ui, panel, index) else { continue };
         if kit::visible(band, rect) {
             let focused = index == ui.settings.row;
             let adjusting = focused && ui.settings.adjusting;
-            draw_row(band, rect, row, focused, adjusting, ui.settings.pressed == Some(PRESSED_ROW + index));
+            draw_row(band, ui, rect, row, focused, adjusting, ui.settings.pressed == Some(PRESSED_ROW + index));
         }
     }
     if panel == 5 && kit::visible(band, ABOUT_BRAND) {
@@ -274,7 +273,12 @@ pub fn draw(band: &mut Band, ui: &UiState, instance: u8) {
         font::draw(band, Font::Small, 124, 394, "OpenWalkieTalkie", theme::TEXT_PRIMARY, Some(theme::CANVAS), 300, Align::Left);
         crate::ui::splash::draw_credit(band, 204, 397, theme::TEXT_LABEL);
     }
-    kit::hint_bar(band, if ui.settings.adjusting { &ADJUST_HINTS } else { &HINTS });
+    let mut hints = HINTS;
+    let mut adjust_hints = ADJUST_HINTS;
+    for hint in hints.iter_mut().chain(adjust_hints.iter_mut()) {
+        hint.label = ui.tr(hint.label);
+    }
+    kit::hint_bar(band, if ui.settings.adjusting { &adjust_hints } else { &hints });
 }
 
 fn hash_row(row: Option<Row>, h: &mut Hasher) {
@@ -299,8 +303,10 @@ pub fn signature(ui: &UiState, instance: u8, sig: &mut SigBuilder) {
     sig.region_with(TABS, |h| {
         h.u8(panel).opt_u32(ui.settings.pressed.filter(|&p| p < PRESSED_ROW).map(u32::from));
     });
-    for index in 0..layout::SETTINGS_ROWS {
-        sig.region_with(layout::settings_row(index), |h| {
+    let viewport = viewport(ui);
+    for slot in 0..layout::SETTINGS_ROWS {
+        sig.region_with(layout::settings_row(slot), |h| {
+            let Some(index) = viewport.index_at(slot) else { h.bool(false); return };
             let focused = index == ui.settings.row;
             h.bool(focused)
                 .bool(focused && ui.settings.adjusting)

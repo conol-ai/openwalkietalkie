@@ -184,37 +184,118 @@ impl VoicePane {
 /// synthesiser in force — the two agree by construction (the daemon names
 /// the engine from the same config), so the line uses the config's words
 /// and the engine's badge, and says nothing it cannot read.
+#[cfg(test)]
 pub(crate) fn replies_line(tts: &TtsConfig, voice: Option<&TtsStatus>, engine: Option<&Engine>) -> String {
+    replies_line_localized(tts, voice, engine, deck_gui_core::i18n::Language::English)
+}
+
+fn replies_line_localized(tts: &TtsConfig, voice: Option<&TtsStatus>, engine: Option<&Engine>, language: deck_gui_core::i18n::Language) -> String {
     let provider = tts.provider_row().map_or(tts.provider.as_str(), |(_, name, _)| name);
     if tts.engine == "kokoro" {
         return voice.map_or_else(
-            || "Reading the voice's status\u{2026}".to_string(),
-            TtsStatus::line,
+            || language.text("Reading the voice's status\u{2026}").to_string(),
+            |voice| tts_status_line(voice, language),
         );
     }
     if tts.engine == "apple" {
-        return "Apple's synthesiser speaks, on this Mac.".to_string();
+        return language.text("Apple's synthesiser speaks, on this Mac.").to_string();
     }
     if !tts.cloud_selected() {
-        return format!(
-            "[voice.tts] engine is \"{}\": the key is kept but not used until the engine is \"cloud\".",
-            tts.engine
-        );
+        return language.format("[voice.tts] engine is \"{0}\": the key is kept but not used until the engine is \"cloud\".", &[&(tts.engine).to_string()]);
     }
     if !tts.has_key() {
-        return "No key: Apple's synthesiser speaks, on this Mac.".to_string();
+        return language.text("No key: Apple's synthesiser speaks, on this Mac.").to_string();
     }
     let model = tts
         .effective_model()
-        .map(|m| format!(", model {m}"))
+        .map(|m| language.format(", model {0}", &[&(m).to_string()]))
         .unwrap_or_default();
     let badge = engine
-        .map(|e| format!(" \u{b7} {}", present::engine_badge(e)))
+        .map(|e| format!(" \u{b7} {}", present::engine_badge_localized(e, language)))
         .unwrap_or_default();
-    format!("Key {} \u{2014} spoken by {provider}{model}{badge}", tts.key_hint)
+    language.format("Key {0} — spoken by {1}{2}{3}", &[&(tts.key_hint).to_string(), (provider), &(model).to_string(), &(badge).to_string()])
 }
 
+fn stt_status_line(status: &SttStatus, language: deck_gui_core::i18n::Language) -> String {
+        let size = size_text(status.total);
+        if let Some(d) = status.download.as_ref().filter(|d| d.running) {
+            return match status.fraction() {
+                Some(f) => language.format("Downloading {0} — {1} of {2} ({3}%)", &[&(d.model).to_string(), &(size_text(d.bytes)).to_string(), &(size).to_string(), &(format!("{:.0}", f * 100.)).to_string()]),
+                None => language.format("Downloading {0} — {1}", &[&(d.model).to_string(), &(size_text(d.bytes)).to_string()]),
+            };
+        }
+        if let Some(why) = status.download.as_ref().and_then(|d| d.error.clone()) {
+            return language.format("The download of {0} stopped: {1}", &[&(status.model).to_string(), &(why).to_string()]);
+        }
+        if status.engine != "whisper" {
+            return if status.present {
+                language.format("Apple's recogniser is selected; {0} ({1}) stays on disk.", &[&(status.model).to_string(), &(size).to_string()])
+            } else {
+                language.text("Apple's on-device recogniser. Nothing to download.").to_string()
+            };
+        }
+        if !status.present {
+            return language.format("Whisper is selected but {0} ({1}) is not downloaded: Apple's recogniser answers until it is.", &[&(status.model).to_string(), &(size).to_string()]);
+        }
+        if let Some(e) = &status.load_error {
+            return language.format("{0} did not load: {1}", &[&(status.model).to_string(), &(e).to_string()]);
+        }
+        if status.loading {
+            return language.format("Loading {0} ({1})…", &[&(status.model).to_string(), &(size).to_string()]);
+        }
+        if status.loaded {
+            return language.format("{0} ({1}) is loaded and recognises on this Mac.", &[&(status.model).to_string(), &(size).to_string()]);
+        }
+        language.format("{0} ({1}) is downloaded; it loads before the next press.", &[&(status.model).to_string(), &(size).to_string()])
+    }
+
+fn tts_status_line(status: &TtsStatus, language: deck_gui_core::i18n::Language) -> String {
+        let size = size_text(status.total);
+        if let Some(d) = status.download.as_ref().filter(|d| d.running) {
+            return match status.fraction() {
+                Some(f) => language.format("Downloading {0} — {1} of {2} ({3}%)", &[&(d.model).to_string(), &(size_text(d.bytes)).to_string(), &(size).to_string(), &(format!("{:.0}", f * 100.)).to_string()]),
+                None => language.format("Downloading {0} — {1}", &[&(d.model).to_string(), &(size_text(d.bytes)).to_string()]),
+            };
+        }
+        if let Some(why) = status.download.as_ref().and_then(|d| d.error.clone()) {
+            return language.format("The download of {0} stopped: {1}", &[&(status.model).to_string(), &(why).to_string()]);
+        }
+        if status.engine != "kokoro" {
+            return if status.present {
+                language.format("The Kokoro voice is not selected; {0} ({1}) stays on disk.", &[&(status.model).to_string(), &(size).to_string()])
+            } else {
+                language.format("A Kokoro voice ({0}) can be downloaded here; nothing is until you ask.", &[&(size).to_string()])
+            };
+        }
+        if !status.present {
+            return language.format("Kokoro is selected but {0} ({1}) is not downloaded: Apple's synthesiser speaks until it is.", &[&(status.model).to_string(), &(size).to_string()]);
+        }
+        if let Some(e) = &status.load_error {
+            return language.format("{0} did not load: {1}", &[&(status.model).to_string(), &(e).to_string()]);
+        }
+        if status.loading {
+            return language.format("Loading {0} ({1})…", &[&(status.model).to_string(), &(size).to_string()]);
+        }
+        let voices = if status.voices.is_empty() {
+            String::new()
+        } else {
+            language.format(" Agents speak as {0}.", &[&(status.voices.join(", ")).to_string()])
+        };
+        if status.loaded {
+            return language.format("{0} ({1}) is loaded and speaks on this Mac.{2}", &[&(status.model).to_string(), &(size).to_string(), &(voices).to_string()]);
+        }
+        language.format("{0} ({1}) is downloaded; it loads before the next announcement.{2}", &[&(status.model).to_string(), &(size).to_string(), &(voices).to_string()])
+    }
+
+
 impl Shell {
+    pub(crate) fn localize_voice_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let language = self.language();
+        self.voice.key.update(cx, |input, cx| input.set_placeholder(language.text("Paste the provider's API key…"), window, cx));
+        let placeholder = self.voice.tts.as_ref().and_then(|tts| tts.provider_row()).map_or_else(|| language.text("Provider default"), |(_, _, model)| model);
+        self.voice.model.update(cx, |input, cx| input.set_placeholder(placeholder, window, cx));
+    }
+
     /// Ask for the one thing this screen cannot get off the stream.
     ///
     /// `voice.engines` only: the route, the UIDs, the permissions and the
@@ -226,6 +307,7 @@ impl Shell {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.localize_voice_inputs(window, cx);
         if self.voice.busy || (self.voice.asked && !force) {
             return;
         }
@@ -247,9 +329,9 @@ impl Shell {
                     Err(e) => {
                         this.voice.engines = None;
                         this.voice.engines_error = Some(if method_missing(&e) {
-                            present::missing_method_line("voice.engines")
+                            present::missing_method_line_localized("voice.engines", this.language())
                         } else {
-                            present::engines_missing_line(&e.to_string())
+                            present::engines_missing_line_localized(&e.to_string(), this.language())
                         });
                     }
                 }
@@ -265,7 +347,7 @@ impl Shell {
                     // at what the provider uses when nothing is.
                     let placeholder = tts
                         .provider_row()
-                        .map_or_else(|| "Provider default".to_string(), |(_, _, m)| m.to_string());
+                        .map_or_else(|| this.tr("Provider default").to_string(), |(_, _, m)| m.to_string());
                     this.voice.model.update(cx, |input, cx| {
                         input.set_placeholder(placeholder, window, cx);
                         if input.value().as_ref() != tts.model {
@@ -279,9 +361,9 @@ impl Shell {
                 Err(e) => {
                     this.voice.tts = None;
                     this.voice.tts_error = Some(if method_missing(&e) {
-                        present::missing_method_line("config.get")
+                        present::missing_method_line_localized("config.get", this.language())
                     } else {
-                        format!("config.get did not answer: {e}")
+                        this.fmt("config.get did not answer: {0}", &[&(e).to_string()])
                     });
                 }
             }
@@ -306,9 +388,9 @@ impl Shell {
             Err(e) => {
                 this.voice.voice = None;
                 this.voice.voice_error = Some(if method_missing(&e) {
-                    present::missing_method_line("tts.status")
+                    present::missing_method_line_localized("tts.status", this.language())
                 } else {
-                    format!("tts.status did not answer: {e}")
+                    this.fmt("tts.status did not answer: {0}", &[&(e).to_string()])
                 });
             }
         });
@@ -344,9 +426,9 @@ impl Shell {
                 } else {
                     this.toast(
                         match engine {
-                            "kokoro" => "The Kokoro voice speaks from the next announcement.",
-                            "cloud" => "The provider speaks when a key is set; Apple's otherwise.",
-                            _ => "Apple's synthesiser from the next announcement.",
+                            "kokoro" => this.tr("The Kokoro voice speaks from the next announcement."),
+                            "cloud" => this.tr("The provider speaks when a key is set; Apple's otherwise."),
+                            _ => this.tr("Apple's synthesiser from the next announcement."),
                         },
                         window,
                         cx,
@@ -365,7 +447,7 @@ impl Shell {
                 Ok(value) => {
                     let status = TtsStatus::parse(&value);
                     this.toast(
-                        format!("Downloading the {} voice ({}).", status.model, size_text(status.total)),
+                        this.fmt("Downloading the {0} voice ({1}).", &[&(status.model).to_string(), &(size_text(status.total)).to_string()]),
                         window,
                         cx,
                     );
@@ -374,9 +456,9 @@ impl Shell {
                     this.refresh_voice(true, window, cx);
                 }
                 Err(e) if method_missing(&e) => {
-                    this.toast(present::missing_method_line("tts.install"), window, cx);
+                    this.toast(present::missing_method_line_localized("tts.install", this.language()), window, cx);
                 }
-                Err(e) => this.toast(format!("Could not start the download: {e}"), window, cx),
+                Err(e) => this.toast(this.fmt("Could not start the download: {0}", &[&(e).to_string()]), window, cx),
             }
         });
     }
@@ -386,13 +468,13 @@ impl Shell {
         self.ask(UiAction::TtsRemove, window, cx, |this, result, window, cx| match result {
             Ok(value) => {
                 this.voice.voice = Some(TtsStatus::parse(&value));
-                this.toast("Voice removed. Apple's synthesiser from the next announcement.", window, cx);
+                this.toast(this.tr("Voice removed. Apple's synthesiser from the next announcement."), window, cx);
                 this.refresh_voice(true, window, cx);
             }
             Err(e) if method_missing(&e) => {
-                this.toast(present::missing_method_line("tts.remove"), window, cx);
+                this.toast(present::missing_method_line_localized("tts.remove", this.language()), window, cx);
             }
-            Err(e) => this.toast(format!("Could not remove the voice: {e}"), window, cx),
+            Err(e) => this.toast(this.fmt("Could not remove the voice: {0}", &[&(e).to_string()]), window, cx),
         });
     }
 
@@ -412,9 +494,9 @@ impl Shell {
             Err(e) => {
                 this.voice.stt = None;
                 this.voice.stt_error = Some(if method_missing(&e) {
-                    present::missing_method_line("stt.status")
+                    present::missing_method_line_localized("stt.status", this.language())
                 } else {
-                    format!("stt.status did not answer: {e}")
+                    this.fmt("stt.status did not answer: {0}", &[&(e).to_string()])
                 });
             }
         });
@@ -457,9 +539,9 @@ impl Shell {
                     } else {
                         this.toast(
                             if engine == "whisper" {
-                                "Whisper recognises from the next press."
+                                this.tr("Whisper recognises from the next press.")
                             } else {
-                                "Apple's recogniser from the next press."
+                                this.tr("Apple's recogniser from the next press.")
                             },
                             window,
                             cx,
@@ -468,9 +550,9 @@ impl Shell {
                     }
                 }
                 Err(e) if method_missing(&e) => {
-                    this.toast(present::missing_method_line("config.set"), window, cx);
+                    this.toast(present::missing_method_line_localized("config.set", this.language()), window, cx);
                 }
-                Err(e) => this.toast(format!("Could not select the engine: {e}"), window, cx),
+                Err(e) => this.toast(this.fmt("Could not select the engine: {0}", &[&(e).to_string()]), window, cx),
             },
         );
     }
@@ -483,7 +565,7 @@ impl Shell {
                 Ok(value) => {
                     let status = SttStatus::parse(&value);
                     this.toast(
-                        format!("Downloading {} ({}).", status.model, size_text(status.total)),
+                        this.fmt("Downloading {0} ({1}).", &[&(status.model).to_string(), &(size_text(status.total)).to_string()]),
                         window,
                         cx,
                     );
@@ -492,9 +574,9 @@ impl Shell {
                     this.refresh_voice(true, window, cx);
                 }
                 Err(e) if method_missing(&e) => {
-                    this.toast(present::missing_method_line("stt.install"), window, cx);
+                    this.toast(present::missing_method_line_localized("stt.install", this.language()), window, cx);
                 }
-                Err(e) => this.toast(format!("Could not start the download: {e}"), window, cx),
+                Err(e) => this.toast(this.fmt("Could not start the download: {0}", &[&(e).to_string()]), window, cx),
             }
         });
     }
@@ -504,13 +586,13 @@ impl Shell {
         self.ask(UiAction::SttRemove, window, cx, |this, result, window, cx| match result {
             Ok(value) => {
                 this.voice.stt = Some(SttStatus::parse(&value));
-                this.toast("Model removed. Apple's recogniser from the next press.", window, cx);
+                this.toast(this.tr("Model removed. Apple's recogniser from the next press."), window, cx);
                 this.refresh_voice(true, window, cx);
             }
             Err(e) if method_missing(&e) => {
-                this.toast(present::missing_method_line("stt.remove"), window, cx);
+                this.toast(present::missing_method_line_localized("stt.remove", this.language()), window, cx);
             }
-            Err(e) => this.toast(format!("Could not remove the model: {e}"), window, cx),
+            Err(e) => this.toast(this.fmt("Could not remove the model: {0}", &[&(e).to_string()]), window, cx),
         });
     }
 
@@ -529,7 +611,7 @@ impl Shell {
             cx,
             move |this, result, window, cx| {
                 if let Err(e) = result {
-                    this.toast(format!("Could not record the answer: {e}"), window, cx);
+                    this.toast(this.fmt("Could not record the answer: {0}", &[&(e).to_string()]), window, cx);
                     return;
                 }
                 if opt != Opt::Keep {
@@ -587,7 +669,7 @@ impl Shell {
                         div()
                             .ts(15., 20.)
                             .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .child("Recognise and speak on this Mac with local models?"),
+                            .child(self.tr("Recognise and speak on this Mac with local models?")),
                     ),
             )
             .child(
@@ -595,16 +677,7 @@ impl Shell {
                     .mt(px(8.))
                     .ts(13., 19.)
                     .text_color(p.muted)
-                    .child(ui::para(format!(
-                        "What you say into the deck is recognised by Apple's on-device recogniser, \
-                         which handles English and needs no download, and the replies are spoken by \
-                         Apple's synthesiser. A Whisper model ({model}, {}) recognises Chinese and \
-                         English in one utterance, and a Kokoro voice ({}) speaks both, each entirely \
-                         on this Mac. Nothing leaves the machine either way. You can change this any \
-                         time on the Voice screen.",
-                        size_text(bytes),
-                        size_text(voice_bytes)
-                    ))),
+                    .child(ui::para(self.fmt("What you say into the deck is recognised by Apple's on-device recogniser, which handles English and needs no download, and the replies are spoken by Apple's synthesiser. A Whisper model ({0}, {1}) recognises Chinese and English in one utterance, and a Kokoro voice ({2}) speaks both, each entirely on this Mac. Nothing leaves the machine either way. You can change this any time on the Voice screen.", &[&(model).to_string(), &(size_text(bytes)).to_string(), &(size_text(voice_bytes)).to_string()]))),
             )
             .child(
                 h_flex()
@@ -612,7 +685,7 @@ impl Shell {
                     .gap(px(8.))
                     .justify_end()
                     .child(
-                        Btn::new("recognition-keep", "Keep Apple's")
+                        Btn::new("recognition-keep", self.tr("Keep Apple's"))
                             .quiet()
                             .on_click(cx.listener(|this, _, window, cx| {
                                 this.answer_recognition(Opt::Keep, window, cx);
@@ -621,7 +694,7 @@ impl Shell {
                     .child(
                         Btn::new(
                             "recognition-download",
-                            format!("Recogniser only ({})", size_text(bytes)),
+                            self.fmt("Recogniser only ({0})", &[&(size_text(bytes)).to_string()]),
                         )
                         .on_click(cx.listener(|this, _, window, cx| {
                             this.answer_recognition(Opt::Recogniser, window, cx);
@@ -630,7 +703,7 @@ impl Shell {
                     .child(
                         Btn::new(
                             "recognition-download-both",
-                            format!("Recogniser and voice ({})", size_text(bytes + voice_bytes)),
+                            self.fmt("Recogniser and voice ({0})", &[&(size_text(bytes + voice_bytes)).to_string()]),
                         )
                         .solid()
                         .on_click(cx.listener(|this, _, window, cx| {
@@ -670,9 +743,9 @@ impl Shell {
                         this.refresh_voice(true, window, cx);
                     }
                     Err(e) if method_missing(&e) => {
-                        this.toast(present::missing_method_line("config.set"), window, cx);
+                        this.toast(present::missing_method_line_localized("config.set", this.language()), window, cx);
                     }
-                    Err(e) => this.toast(format!("Could not write {key}: {e}"), window, cx),
+                    Err(e) => this.toast(this.fmt("Could not write {0}: {1}", &[(key), &(e).to_string()]), window, cx),
                 }
             },
         );
@@ -687,7 +760,7 @@ impl Shell {
         self.write_tts(
             "voice.tts.provider",
             ConfigValue::Text(id.into()),
-            move |this, window, cx| this.toast(format!("Provider set to {name}."), window, cx),
+            move |this, window, cx| this.toast(this.fmt("Provider set to {0}.", &[(name)]), window, cx),
             window,
             cx,
         );
@@ -699,7 +772,7 @@ impl Shell {
         let typed = self.voice.key.read(cx).value().trim().to_string();
         if typed.is_empty() {
             self.voice.key.update(cx, |input, cx| input.focus(window, cx));
-            self.toast("Paste the key first.", window, cx);
+            self.toast(self.tr("Paste the key first."), window, cx);
             return;
         }
         let provider = self
@@ -707,7 +780,7 @@ impl Shell {
             .tts
             .as_ref()
             .and_then(TtsConfig::provider_row)
-            .map_or("the provider", |(_, name, _)| name);
+            .map_or(self.tr("the provider"), |(_, name, _)| name);
         self.write_tts(
             "voice.tts.api_key",
             ConfigValue::Text(typed),
@@ -716,7 +789,7 @@ impl Shell {
                     .key
                     .update(cx, |input, cx| input.set_value("", window, cx));
                 this.toast(
-                    format!("Key saved. Announcements are spoken by {provider} from the next one."),
+                    this.fmt("Key saved. Announcements are spoken by {0} from the next one.", &[(provider)]),
                     window,
                     cx,
                 );
@@ -732,7 +805,7 @@ impl Shell {
             "voice.tts.api_key",
             ConfigValue::Null,
             |this, window, cx| {
-                this.toast("Key removed. Apple's synthesiser speaks.", window, cx);
+                this.toast(this.tr("Key removed. Apple's synthesiser speaks."), window, cx);
             },
             window,
             cx,
@@ -743,9 +816,9 @@ impl Shell {
     pub(crate) fn set_tts_model(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let typed = self.voice.model.read(cx).value().trim().to_string();
         let (value, said) = if typed.is_empty() {
-            (ConfigValue::Null, "Model reset to the provider's default.".to_string())
+            (ConfigValue::Null, self.tr("Model reset to the provider's default.").to_string())
         } else {
-            (ConfigValue::Text(typed.clone()), format!("Model set to {typed}."))
+            (ConfigValue::Text(typed.clone()), self.fmt("Model set to {0}.", &[&(typed).to_string()]))
         };
         self.write_tts(
             "voice.tts.model",
@@ -780,9 +853,9 @@ impl Shell {
                 Err(e) => {
                     this.voice.report = None;
                     let line = if method_missing(&e) {
-                        present::missing_method_line("voice.test")
+                        present::missing_method_line_localized("voice.test", this.language())
                     } else {
-                        format!("{what}: {e}")
+                        this.fmt("{0}: {1}", &[(what), &(e).to_string()])
                     };
                     this.voice.report_error = Some(line.clone());
                     this.toast(line, window, cx);
@@ -813,14 +886,14 @@ impl Shell {
             move |this, result, window, cx| match result {
                 Ok(value) => {
                     let prompt = Prompt::parse(&value);
-                    this.toast(present::prompt_line(&prompt), window, cx);
+                    this.toast(present::prompt_line_localized(&prompt, this.language()), window, cx);
                     this.voice.remember(prompt);
                 }
                 Err(e) => {
                     let line = if method_missing(&e) {
-                        present::missing_method_line("perm.request")
+                        present::missing_method_line_localized("perm.request", this.language())
                     } else {
-                        format!("Could not ask for the {which}: {e}")
+                        this.fmt("Could not ask for the {0}: {1}", &[(which), &(e).to_string()])
                     };
                     this.toast(line, window, cx);
                 }
@@ -843,11 +916,11 @@ impl Shell {
 
     pub(crate) fn render_voice(&self, dim: bool, cx: &Context<Self>) -> Stateful<Div> {
         let p = *palette(cx);
-        let reread = Btn::new("voice-refresh", "Re-read")
+        let reread = Btn::new("voice-refresh", self.tr("Re-read"))
             .quiet()
             .icon(ic::REFRESH)
             .disabled(dim || self.voice.busy)
-            .tooltip("Ask for the engine report again")
+            .tooltip(self.tr("Ask for the engine report again"))
             .on_click(cx.listener(|this, _, window, cx| this.refresh_voice(true, window, cx)))
             .into_any_element();
         ui::page(
@@ -857,13 +930,13 @@ impl Shell {
             ui::PAGE_MAX,
             v_flex()
                 .child(ui::page_header(
-                    "Voice",
+                    self.tr("Voice"),
                     Some(
                         div()
                             .child(
-                                "Everything here belongs to the service's audio side. The window \
+                                self.tr("Everything here belongs to the service's audio side. The window \
                                  only watches it, and nothing on this screen changes your Mac's \
-                                 audio devices.",
+                                 audio devices."),
                             )
                             .into_any_element(),
                     ),
@@ -888,14 +961,14 @@ impl Shell {
         let here = voice.route;
         let steps: Vec<Div> = present::route_steps(voice.transport)
             .iter()
-            .map(|route| route_step(*route, *route == here, &p))
+            .map(|route| route_step(*route, *route == here, &p, self.language()))
             .collect();
         let uid = |uid: Option<&str>| match uid {
             Some(uid) => div().mono().ts(12., 18.).child(uid.to_string()),
-            None => div().text_color(p.faint).child("none selected"),
+            None => div().text_color(p.faint).child(self.tr("none selected")),
         };
         ui::section(
-            "Route",
+            self.tr("Route"),
             ui::panel(&p)
                 .gap(px(14.))
                 .child(h_flex().flex_wrap().gap(px(6.)).children(steps))
@@ -903,7 +976,7 @@ impl Shell {
                     div()
                         .ts(13., 19.)
                         .text_color(p.text)
-                        .child(present::route_help(here, voice.transport)),
+                        .child(self.tr(present::route_help(here, voice.transport))),
                 )
                 .child(
                     v_flex()
@@ -912,12 +985,12 @@ impl Shell {
                         .border_t_1()
                         .border_color(p.divider())
                         .child(ui::kv(
-                            "Transport",
-                            present::transport_line(voice.transport),
+                            self.tr("Transport"),
+                            self.tr(present::transport_line(voice.transport)),
                             &p,
                         ))
-                        .child(ui::kv("Output", uid(voice.output_uid.as_deref()), &p))
-                        .child(ui::kv("Input", uid(voice.input_uid.as_deref()), &p)),
+                        .child(ui::kv(self.tr("Output"), uid(voice.output_uid.as_deref()), &p))
+                        .child(ui::kv(self.tr("Input"), uid(voice.input_uid.as_deref()), &p)),
                 ),
             &p,
         )
@@ -942,7 +1015,7 @@ impl Shell {
             p.accent.opacity(0.8)
         };
         ui::section(
-            "Microphone",
+            self.tr("Microphone"),
             ui::panel(&p)
                 .gap(px(10.))
                 .child(
@@ -962,7 +1035,7 @@ impl Shell {
                                 .child(div().h_full().w(relative(fill)).rounded_full().bg(color)),
                         ),
                 )
-                .child(ui::hint(present::meter_line(level, now), &p)),
+                .child(ui::hint(present::meter_line_localized(level, now, self.language()), &p)),
             &p,
         )
     }
@@ -974,25 +1047,25 @@ impl Shell {
         let engines = self.voice.engines.clone().unwrap_or_default();
         let locale = engines.locale.clone();
         let rows: Vec<AnyElement> = [
-            ("Speech to text", ic::MICROPHONE, engines.stt()),
-            ("Text to speech", ic::VOLUME, engines.tts()),
+            (self.tr("Speech to text"), ic::MICROPHONE, engines.stt()),
+            (self.tr("Text to speech"), ic::VOLUME, engines.tts()),
         ]
         .into_iter()
         .map(|(what, glyph, engine)| {
             let row = Row::new().tile(ui::tile(glyph, p.muted, &p)).title(what);
             match engine {
                 Some(engine) => row
-                    .meta(present::locales_line(&engine.locales, locale.as_deref()))
-                    .trailing(ui::badge(present::engine_badge(engine), Tint::Neutral, &p)),
+                    .meta(present::locales_line_localized(&engine.locales, locale.as_deref(), self.language()))
+                    .trailing(ui::badge(present::engine_badge_localized(engine, self.language()), Tint::Neutral, &p)),
                 None => row
-                    .meta("Not reported.")
-                    .trailing(ui::badge("none", Tint::Neutral, &p)),
+                    .meta(self.tr("Not reported."))
+                    .trailing(ui::badge(self.tr("none"), Tint::Neutral, &p)),
             }
             .into_any_element()
         })
         .collect();
         ui::section(
-            "Engines",
+            self.tr("Engines"),
             v_flex()
                 .gap(px(10.))
                 .children(self.voice.engines_error.as_ref().map(|line| {
@@ -1010,10 +1083,10 @@ impl Shell {
                 // cheaper than an operator hunting for a voice list that
                 // was never here.
                 .child(div().px(px(4.)).child(ui::hint(
-                    "voice.engines reports the locales each engine accepts. The per-agent voice \
+                    self.tr("voice.engines reports the locales each engine accepts. The per-agent voice \
                      pool is the synthesiser's own ([voice.tts] voices, or [voice.voices] \
                      default_pool when Apple speaks) and the assignments the service persists \
-                     \u{2014} not this list.",
+                     \u{2014} not this list."),
                     &p,
                 ))),
             &p,
@@ -1034,12 +1107,12 @@ impl Shell {
             .map_or(status.engine.clone(), |c| c.engine.clone());
         let dim = dim || !known;
         let downloading = status.downloading();
-        let chips: Vec<AnyElement> = [("apple", "Apple"), ("whisper", "Whisper (local model)")]
+        let chips: Vec<AnyElement> = [("apple", "Apple"), ("whisper", self.tr("Whisper (local model)"))]
             .into_iter()
             .map(|(id, label)| {
                 ui::chip(
                     SharedString::from(format!("stt-engine-{id}")),
-                    label,
+                    self.tr(label),
                     engine == id,
                     &p,
                 )
@@ -1059,7 +1132,7 @@ impl Shell {
         } else if status.present {
             ("downloaded", Tint::Success)
         } else {
-            ("not downloaded", Tint::Neutral)
+            (self.tr("not downloaded"), Tint::Neutral)
         };
         let label = |text: &'static str| {
             div()
@@ -1072,7 +1145,7 @@ impl Shell {
         let mut model_row = h_flex()
             .items_center()
             .gap(px(8.))
-            .child(label("Model"))
+            .child(label(self.tr("Model")))
             .child(
                 div()
                     .flex_1()
@@ -1082,16 +1155,16 @@ impl Shell {
                     .child(if status.model.is_empty() {
                         "\u{2014}".to_string()
                     } else {
-                        format!("{} \u{b7} {size}", status.model)
+                        self.fmt("{0} · {1}", &[&(status.model).to_string(), &(size).to_string()])
                     }),
             )
-            .child(ui::badge(state.0, state.1, &p));
+            .child(ui::badge(self.tr(state.0), state.1, &p));
         if !status.present && !downloading {
             model_row = model_row.child(
-                Btn::new("stt-download", format!("Download ({size})"))
+                Btn::new("stt-download", self.fmt("Download ({0})", &[&(size).to_string()]))
                     .solid()
                     .disabled(dim)
-                    .tooltip("Fetches the model's weights into the caches directory; nothing else is downloaded")
+                    .tooltip(self.tr("Fetches the model's weights into the caches directory; nothing else is downloaded"))
                     .on_click(cx.listener(|this, _, window, cx| this.install_stt(window, cx))),
             );
         }
@@ -1099,30 +1172,30 @@ impl Shell {
             model_row = model_row.child(
                 Btn::new(
                     "stt-remove",
-                    if downloading { "Cancel download" } else { "Remove model" },
+                    if downloading { self.tr("Cancel download") } else { self.tr("Remove model") },
                 )
                 .danger_quiet()
                 .disabled(dim)
-                .tooltip("Deletes the weights; Apple's recogniser answers from then on")
+                .tooltip(self.tr("Deletes the weights; Apple's recogniser answers from then on"))
                 .on_click(cx.listener(|this, _, window, cx| this.remove_stt(window, cx))),
             );
         }
         ui::section(
-            "Recognition",
+            self.tr("Recognition"),
             ui::panel(&p)
                 .gap(px(12.))
                 .child(ui::para(
-                    "Apple's recogniser needs nothing downloaded and recognises English on this \
+                    self.tr("Apple's recogniser needs nothing downloaded and recognises English on this \
                      Mac. Whisper is a local model too: it recognises Chinese and English in one \
                      utterance, after a one-time download. Either way, nothing you say leaves the \
-                     machine.",
+                     machine."),
                 ))
                 .child(
                     h_flex()
                         .flex_wrap()
                         .items_center()
                         .gap(px(8.))
-                        .child(label("Engine"))
+                        .child(label(self.tr("Engine")))
                         .children(chips),
                 )
                 .child(model_row)
@@ -1131,9 +1204,9 @@ impl Shell {
                 }))
                 .child(ui::hint(
                     if known {
-                        status.line()
+                        stt_status_line(&status, self.language())
                     } else {
-                        "Reading the recogniser's status\u{2026}".to_string()
+                        self.tr("Reading the recogniser's status\u{2026}").to_string()
                     },
                     &p,
                 ))
@@ -1169,8 +1242,8 @@ impl Shell {
         };
         let engines: Vec<AnyElement> = [
             ("apple", "Apple"),
-            ("kokoro", "Kokoro voice (local)"),
-            ("cloud", "Cloud (your key)"),
+            ("kokoro", self.tr("Kokoro voice (local)")),
+            ("cloud", self.tr("Cloud (your key)")),
         ]
         .into_iter()
         .map(|(id, name)| {
@@ -1200,12 +1273,12 @@ impl Shell {
         } else if voice.present {
             ("downloaded", Tint::Success)
         } else {
-            ("not downloaded", Tint::Neutral)
+            (self.tr("not downloaded"), Tint::Neutral)
         };
         let mut voice_row = h_flex()
             .items_center()
             .gap(px(8.))
-            .child(label("Voice"))
+            .child(label(self.tr("Voice")))
             .child(
                 div()
                     .flex_1()
@@ -1215,16 +1288,16 @@ impl Shell {
                     .child(if voice.model.is_empty() {
                         "\u{2014}".to_string()
                     } else {
-                        format!("{} \u{b7} {voice_size}", voice.model)
+                        self.fmt("{0} · {1}", &[&(voice.model).to_string(), &(voice_size).to_string()])
                     }),
             )
-            .child(ui::badge(state.0, state.1, &p));
+            .child(ui::badge(self.tr(state.0), state.1, &p));
         if !voice.present && !downloading {
             voice_row = voice_row.child(
-                Btn::new("tts-download", format!("Download ({voice_size})"))
+                Btn::new("tts-download", self.fmt("Download ({0})", &[&(voice_size).to_string()]))
                     .solid()
                     .disabled(dim || !voice_known)
-                    .tooltip("Fetches the voice package into the caches directory; nothing else is downloaded")
+                    .tooltip(self.tr("Fetches the voice package into the caches directory; nothing else is downloaded"))
                     .on_click(cx.listener(|this, _, window, cx| this.install_tts(window, cx))),
             );
         }
@@ -1232,11 +1305,11 @@ impl Shell {
             voice_row = voice_row.child(
                 Btn::new(
                     "tts-remove",
-                    if downloading { "Cancel download" } else { "Remove voice" },
+                    if downloading { self.tr("Cancel download") } else { self.tr("Remove voice") },
                 )
                 .danger_quiet()
                 .disabled(dim || !voice_known)
-                .tooltip("Deletes the package; Apple's synthesiser speaks from then on")
+                .tooltip(self.tr("Deletes the package; Apple's synthesiser speaks from then on"))
                 .on_click(cx.listener(|this, _, window, cx| this.remove_tts(window, cx))),
             );
         }
@@ -1258,22 +1331,22 @@ impl Shell {
         let cloud = tts.engine == "cloud";
         let kokoro = tts.engine == "kokoro";
         ui::section(
-            "Spoken replies",
+            self.tr("Spoken replies"),
             ui::panel(&p)
                 .gap(px(12.))
                 .child(ui::para(
-                    "Apple's synthesiser speaks on this Mac and needs no download. A Kokoro voice \
+                    self.tr("Apple's synthesiser speaks on this Mac and needs no download. A Kokoro voice \
                      speaks Chinese and English, also on this Mac, after a one-time download. With \
                      your own key, each announcement is spoken by a provider's model instead, and its \
                      text is sent to the provider to be synthesised. Changes take effect at the next \
-                     announcement.",
+                     announcement."),
                 ))
                 .child(
                     h_flex()
                         .flex_wrap()
                         .items_center()
                         .gap(px(8.))
-                        .child(label("Engine"))
+                        .child(label(self.tr("Engine")))
                         .children(engines),
                 )
                 .children(kokoro.then_some(voice_row))
@@ -1285,14 +1358,14 @@ impl Shell {
                         .flex_wrap()
                         .items_center()
                         .gap(px(8.))
-                        .child(label("Provider"))
+                        .child(label(self.tr("Provider")))
                         .children(chips)
                 }))
                 .children(cloud.then(|| {
                     h_flex()
                         .items_center()
                         .gap(px(8.))
-                        .child(label("API key"))
+                        .child(label(self.tr("API key")))
                         .child(
                             div()
                                 .flex_1()
@@ -1300,7 +1373,7 @@ impl Shell {
                                 .child(ui::field(&self.voice.key, &p).disabled(dim).mono()),
                         )
                         .child(
-                            Btn::new("tts-key-save", "Save key")
+                            Btn::new("tts-key-save", self.tr("Save key"))
                                 .solid()
                                 .disabled(dim)
                                 .tooltip("Writes [voice.tts] api_key; the field is emptied once it is saved")
@@ -1309,10 +1382,10 @@ impl Shell {
                                 })),
                         )
                         .child(
-                            Btn::new("tts-key-clear", "Remove key")
+                            Btn::new("tts-key-clear", self.tr("Remove key"))
                                 .danger_quiet()
                                 .disabled(dim || !tts.has_key())
-                                .tooltip("Unsets the key: Apple's synthesiser speaks again")
+                                .tooltip(self.tr("Unsets the key: Apple's synthesiser speaks again"))
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.clear_tts_key(window, cx);
                                 })),
@@ -1322,7 +1395,7 @@ impl Shell {
                     h_flex()
                         .items_center()
                         .gap(px(8.))
-                        .child(label("Model"))
+                        .child(label(self.tr("Model")))
                         .child(
                             div()
                                 .flex_1()
@@ -1330,9 +1403,9 @@ impl Shell {
                                 .child(ui::field(&self.voice.model, &p).disabled(dim).mono()),
                         )
                         .child(
-                            Btn::new("tts-model-set", "Set model")
+                            Btn::new("tts-model-set", self.tr("Set model"))
                                 .disabled(dim)
-                                .tooltip("Writes [voice.tts] model; blank is the provider's default")
+                                .tooltip(self.tr("Writes [voice.tts] model; blank is the provider's default"))
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.set_tts_model(window, cx);
                                 })),
@@ -1340,9 +1413,9 @@ impl Shell {
                 }))
                 .child(ui::hint(
                     if known {
-                        replies_line(&tts, self.voice.voice.as_ref(), engine)
+                        replies_line_localized(&tts, self.voice.voice.as_ref(), engine, self.language())
                     } else {
-                        "Reading [voice.tts]\u{2026}".to_string()
+                        self.tr("Reading [voice.tts]\u{2026}").to_string()
                     },
                     &p,
                 ))
@@ -1372,14 +1445,14 @@ impl Shell {
     fn render_permissions(&self, dim: bool, cx: &Context<Self>) -> Div {
         let p = *palette(cx);
         ui::section(
-            "Permissions",
+            self.tr("Permissions"),
             v_flex()
                 .gap(px(10.))
                 .child(ui::card(self.voice_permission_rows(dim, cx), &p))
                 .child(
                     div()
                         .px(px(4.))
-                        .child(ui::hint(present::PERMISSION_CAVEAT, &p)),
+                        .child(ui::hint(self.tr(present::PERMISSION_CAVEAT), &p)),
                 ),
             &p,
         )
@@ -1437,21 +1510,21 @@ impl Shell {
             && asked.is_none_or(|p| !p.not_shown());
         let mut row = Row::new()
             .tile(ui::tile(glyph, p.muted, &p))
-            .title(present::permission_title(which, transport))
-            .meta(present::permission_help(state))
+            .title(self.tr(present::permission_title(which, transport)))
+            .meta(self.tr(present::permission_help(state)))
             .trailing(ui::badge(
-                present::permission_word(state),
+                self.tr(present::permission_word(state)),
                 Tint::of(present::permission_tone(state)),
                 &p,
             ));
         if let Some(note) = present::permission_note(which, transport) {
-            row = row.detail(ui::hint(note, &p));
+            row = row.detail(ui::hint(self.tr(note), &p));
         }
         if offer_grant {
             row = row.trailing(
                 Btn::new(
                     SharedString::from(format!("grant-{which}")),
-                    "Grant\u{2026}",
+                    self.tr("Grant\u{2026}"),
                 )
                 .small()
                 .outlined()
@@ -1465,7 +1538,7 @@ impl Shell {
             row = row.trailing(
                 Btn::new(
                     SharedString::from(format!("settings-{which}")),
-                    "Open Settings",
+                    self.tr("Open Settings"),
                 )
                 .small()
                 .outlined()
@@ -1484,7 +1557,7 @@ impl Shell {
                         div()
                             .ts(12., 17.)
                             .text_color(p.warning_muted)
-                            .child(present::prompt_line(prompt)),
+                            .child(present::prompt_line_localized(prompt, self.language())),
                     )
                     .children(
                         prompt
@@ -1505,7 +1578,7 @@ impl Shell {
             .map(|what| {
                 let button = Btn::new(
                     SharedString::from(format!("voice-test-{what}")),
-                    test_label(what),
+                    self.tr(test_label(what)),
                 )
                 .disabled(dim)
                 .on_click(cx.listener(move |this, _, window, cx| {
@@ -1519,7 +1592,7 @@ impl Shell {
             })
             .collect();
         ui::section(
-            "Test",
+            self.tr("Test"),
             ui::panel(&p)
                 .gap(px(12.))
                 .child(
@@ -1529,12 +1602,12 @@ impl Shell {
                         .gap(px(8.))
                         .children(buttons),
                 )
-                .child(ui::hint(present::TEST_NOTE, &p))
+                .child(ui::hint(self.tr(present::TEST_NOTE), &p))
                 .children(
                     self.voice
                         .report
                         .as_ref()
-                        .map(|report| test_result(report, true, &p)),
+                        .map(|report| test_result_localized(report, true, &p, self.language())),
                 )
                 .children(self.voice.report_error.as_ref().map(|line| {
                     ui::strip(
@@ -1553,7 +1626,7 @@ impl Shell {
 /// A `voice.test` answer: the headline, the fields the reply carried, and
 /// the daemon's own account of what it did not check, verbatim. The Welcome
 /// screen shows the same block.
-pub(crate) fn test_result(report: &TestReport, with_heading: bool, p: &Palette) -> Div {
+pub(crate) fn test_result_localized(report: &TestReport, with_heading: bool, p: &Palette, language: deck_gui_core::i18n::Language) -> Div {
     v_flex()
         .gap(px(6.))
         .p(px(12.))
@@ -1567,11 +1640,11 @@ pub(crate) fn test_result(report: &TestReport, with_heading: bool, p: &Palette) 
                     div()
                         .ts(13., 17.)
                         .medium()
-                        .child(present::test_headline(report)),
+                        .child(present::test_headline_localized(report, language)),
                 ),
         )
         .children(
-            present::test_lines(report)
+            present::test_lines_localized(report, language)
                 .into_iter()
                 .map(|line| div().mono().ts(12., 18.).text_color(p.muted).child(line)),
         )
@@ -1582,7 +1655,7 @@ pub(crate) fn test_result(report: &TestReport, with_heading: bool, p: &Palette) 
                     .ts(12., 16.)
                     .medium()
                     .text_color(p.muted)
-                    .child("What this did not check"),
+                    .child(language.text("What this did not check")),
             )
         })
         // Verbatim. These are the daemon's own sentences about what it did
@@ -1592,7 +1665,7 @@ pub(crate) fn test_result(report: &TestReport, with_heading: bool, p: &Palette) 
 
 /// One step of the route diagram: the one the machine is in is lit in its
 /// tone, the others are quiet.
-fn route_step(route: Route, here: bool, p: &Palette) -> Div {
+fn route_step(route: Route, here: bool, p: &Palette, language: deck_gui_core::i18n::Language) -> Div {
     let tone = present::route_tone(route);
     h_flex()
         .gap(px(6.))
@@ -1615,7 +1688,7 @@ fn route_step(route: Route, here: bool, p: &Palette) -> Div {
                 this.bg(p.wash(0.05)).text_color(p.faint)
             }
         })
-        .child(present::route_word(route))
+        .child(language.text(present::route_word(route)))
 }
 
 /// The four Test buttons' labels. Only the first makes a sound, and the
@@ -1632,6 +1705,36 @@ fn test_label(what: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn local_model_status_translates_copy_and_preserves_model_voice_and_error_values() {
+        let mut stt = SttStatus {
+            engine: "whisper".into(), model: "model-{0}-Ready".into(),
+            present: true, loaded: true, ..SttStatus::default()
+        };
+        let mut tts = TtsStatus {
+            engine: "kokoro".into(), model: "voice-{1}-Ready".into(),
+            present: true, loaded: true, voices: vec!["speaker-{2}-Ready".into()],
+            ..TtsStatus::default()
+        };
+        for language in deck_gui_core::i18n::Language::ALL {
+            let recognizer = stt_status_line(&stt, language);
+            let voice = tts_status_line(&tts, language);
+            assert!(recognizer.contains(&stt.model));
+            assert!(voice.contains(&tts.model) && voice.contains(&tts.voices[0]));
+            if language != deck_gui_core::i18n::Language::English {
+                assert!(!recognizer.contains("is loaded"));
+                assert!(!voice.contains("Agents speak as"));
+            }
+            let error = "private-{0}-Ready";
+            stt.load_error = Some(error.into());
+            tts.load_error = Some(error.into());
+            assert!(stt_status_line(&stt, language).contains(error));
+            assert!(tts_status_line(&tts, language).contains(error));
+            stt.load_error = None;
+            tts.load_error = None;
+        }
+    }
 
     #[test]
     fn only_one_of_the_four_test_buttons_says_it_will_make_a_sound() {

@@ -23,6 +23,55 @@ pub enum Effect {
     Hit,
     Over,
     Win,
+    /// The Timer face's countdown ran out: four quick beeps a second.
+    Alarm,
+    /// A Pomodoro focus session ended: a rising three-note chime.
+    FocusDone,
+    /// A Pomodoro break ended: the same chime falling.
+    BreakDone,
+}
+
+/// How long an alarm effect rings at most, in samples (30 s at 16 kHz).
+/// The Timer face stops it sooner on any touch of the deck.
+pub const RING_SAMPLES: u32 = 30 * 16_000;
+
+/// One sample's tone of a ringing alarm effect: (Hz, amplitude). Zero
+/// amplitude is a gap. Notes start and end on short ramps, so the gaps never
+/// click.
+fn ring(effect: u8, t: u32) -> (u32, i32) {
+    const PEAK: i32 = 2000;
+    // Linear ramps `up` samples in and `down` samples out of a note `len` long.
+    let shape = |pos: u32, len: u32, up: u32, down: u32| -> i32 {
+        PEAK * pos.min(up) as i32 / up as i32 * len.saturating_sub(pos).min(down) as i32 / down as i32
+    };
+    match effect {
+        // 100 ms beeps every 150 ms, four of them, in each second.
+        8 => {
+            let at = t % 16_000;
+            let (beep, pos) = (at / 2400, at % 2400);
+            if beep < 4 && pos < 1600 {
+                (1760, shape(pos, 1600, 40, 80))
+            } else {
+                (0, 0)
+            }
+        }
+        // C6-E6-G6 (or falling), 200 ms each with the last held, every 2 s;
+        // each note decays from its attack like a struck bell.
+        9 | 10 => {
+            const NOTES: [u32; 3] = [1047, 1319, 1568];
+            let at = t % 32_000;
+            let (note, pos, len) = match at {
+                0..3200 => (0, at, 3200),
+                3200..6400 => (1, at - 3200, 3200),
+                6400..12_800 => (2, at - 6400, 6400),
+                _ => return (0, 0),
+            };
+            let hz = NOTES[if effect == 9 { note } else { 2 - note }];
+            let decay = (len - pos) as i32 * 1000 / len as i32;
+            (hz, shape(pos, len, 40, 80) * decay / 1000)
+        }
+        _ => (0, 0),
+    }
 }
 // track 0..3, mode 0..2, effect, 16-bit event serial, volume 0..10.
 pub fn command(track: u8, mode: u8, effect: Effect, serial: u16, volume: u8) -> u32 {
@@ -86,6 +135,7 @@ impl Synth {
                 5 => 2400,
                 6 => 8000,
                 7 => 9600,
+                8..=10 => RING_SAMPLES,
                 _ => 0,
             };
             self.effect_left = self.effect_len;
@@ -138,7 +188,14 @@ impl Synth {
                     self.sample = 0;
                 }
             }
-            if self.effect_left > 0 {
+            if self.effect_left > 0 && self.effect >= 8 {
+                let t = self.effect_len - self.effect_left;
+                let (hz, amp) = ring(self.effect, t);
+                if amp > 0 {
+                    value += if phase(&mut self.fx_phase, hz) < 32768 { amp } else { -amp };
+                }
+                self.effect_left -= 1;
+            } else if self.effect_left > 0 {
                 let t = self.effect_len - self.effect_left;
                 let hz = match self.effect {
                     1 => [523, 659, 784, 1047][(t / 800).min(3) as usize],
@@ -187,6 +244,49 @@ mod tests {
             assert!(pcm.iter().all(|&s| s == 0));
         }
     }
+    #[test]
+    fn alarms_ring_with_gaps_stay_bounded_and_stop_with_their_word() {
+        for (effect, gap_at) in [(Effect::Alarm, 12_000), (Effect::FocusDone, 20_000), (Effect::BreakDone, 20_000)] {
+            let mut synth = Synth::default();
+            let word = command(0, 1, effect, 1, 10);
+            let mut second = [0i16; 16_000];
+            synth.run(word, &mut second);
+            assert!(second.iter().all(|s| s.abs() < 4096), "{effect:?} must not hit the limiter");
+            assert!(second[..4000].iter().any(|s| s.abs() > 1000), "{effect:?} sounds at once");
+            assert!(synth.pending(), "{effect:?} rings on");
+            // A gap in the pattern is silence, not a held level.
+            let mut rest = [0i16; 320];
+            let mut gap = Synth::default();
+            let mut skip = std::vec![0i16; gap_at as usize];
+            gap.run(word, &mut skip);
+            gap.run(word, &mut rest);
+            assert!(rest.iter().all(|&s| s == 0), "{effect:?} has quiet gaps");
+            // The word going away silences it on the next block.
+            synth.run(0, &mut rest);
+            assert!(rest.iter().all(|&s| s == 0) && !synth.pending());
+        }
+        // The three sound different.
+        let block = |effect| {
+            let mut synth = Synth::default();
+            let mut pcm = [0i16; 8000];
+            synth.run(command(0, 1, effect, 1, 10), &mut pcm);
+            pcm
+        };
+        assert_ne!(block(Effect::Alarm), block(Effect::FocusDone));
+        assert_ne!(block(Effect::FocusDone), block(Effect::BreakDone));
+    }
+
+    #[test]
+    fn an_alarm_rings_for_its_whole_length_then_ends() {
+        let mut synth = Synth::default();
+        let word = command(0, 1, Effect::Alarm, 1, 6);
+        let mut pcm = [0i16; 16_000];
+        for _ in 0..RING_SAMPLES / 16_000 {
+            synth.run(word, &mut pcm);
+        }
+        assert!(!synth.pending(), "30 s and no more");
+    }
+
     #[test]
     fn original_tracks_differ_and_stay_bounded() {
         let mut hashes = [0u64; 3];

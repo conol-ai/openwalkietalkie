@@ -507,6 +507,8 @@ impl SessionMenu {
 /// an out-parameter and pass by reference, never by value.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum HostMsg {
+    /// Versioned interface preference; separate from ordinary host settings.
+    Language { value: u8, revision: u32 },
     Image { agent: u8, rev: u16, index: u8, offset: u16, total: u16, width: u16, height: u16, len: u16, data: [u8; 384] },
     SessionMenu(SessionMenu),
     /// Nothing to apply: an unknown `m`, or the out-parameter before parsing.
@@ -618,6 +620,8 @@ pub enum HostMsg {
 /// `Faces`) are read from `UiState` when the event is encoded.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Event {
+    /// Encoded from the current preference, like Hello/Faces.
+    Language,
     Image { agent: u8, rev: u16, index: u8, offset: u16 },
     Session { agent: u8, field: u8, page: u8, rev: u16, choice: u8 },
     Hello,

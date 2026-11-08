@@ -30,6 +30,7 @@ pub enum BarrierItem {
 
 #[derive(Debug, Default)]
 pub struct DeviceView {
+    language_supported: bool,
     entries: BTreeMap<Key, HostLine>,
     /// The face on screen, unknown until the first `face` event.
     visible_face: Option<u8>,
@@ -121,9 +122,14 @@ impl DeviceView {
         self.faces = faces;
     }
 
+    pub fn set_language_supported(&mut self, supported: bool) {
+        self.language_supported = supported;
+    }
+
     /// New settings require a template advertised by the device, not merely
     /// one in the host's saved layout. Legacy firmware rejects unknown keys.
     pub fn set_allowed(&self, key: SetKey) -> bool {
+        if key == SetKey::Language { return self.language_supported; }
         key != SetKey::Arcadesound || self.faces.iter().any(|f| f.t == Template::Arcade)
     }
 
@@ -218,7 +224,7 @@ impl DeviceView {
                 Key::System => self.system_allowed(),
                 Key::Ws => self.ws_gate() != WsGate::No,
                 Key::Faces => boot,
-                Key::Set(key) => boot && self.set_allowed(*key),
+                Key::Set(key) => (boot || *key == SetKey::Language) && self.set_allowed(*key),
                 _ => false,
             };
             if keep {

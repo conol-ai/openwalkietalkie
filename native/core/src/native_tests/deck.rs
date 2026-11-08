@@ -66,13 +66,20 @@ fn hello_gets_a_hello_reply_without_any_channel2_request() {
     assert_eq!(reply.len(), 1);
     assert!(reply[0].starts_with(r#"{"m":"hello","v":1,"fw":""#), "{}", reply[0]);
     let agents = core.ui.deck.agents.len();
-    assert!(reply[0].contains(&format!(r#""boot":1,"rx":1024,"agents":{agents},"faces":[{{"f":1,"t":"agents","n":"Agents"}}"#)), "{}", reply[0]);
+    assert!(reply[0].contains(&format!(r#""boot":1,"rx":1024,"agents":{agents},"lang":0,"lang_rev":0,"faces":[{{"f":1,"t":"agents","n":"Agents"}}"#)), "{}", reply[0]);
     assert!(core.ui.deck.host_present && !core.ui.deck.demo_active());
     assert_eq!(core.ui.deck.sid, 7);
     assert!(core.ui.deck.clock_valid);
+    // A saved interface preference is advertised independently of boot's
+    // host-settings freshness, including its revision on every heartbeat.
+    core.ui.language = crate::ui::i18n::Language::Japanese;
+    core.ui.language_revision = 7;
     // A heartbeat with the same sid is answered too and changes nothing.
     host_line(HELLO);
-    assert_eq!(deck_lines().len(), 1);
+    let heartbeat = deck_lines();
+    assert_eq!(heartbeat.len(), 1);
+    assert!(heartbeat[0].contains(r#""boot":1"#), "{}", heartbeat[0]);
+    assert!(heartbeat[0].contains(r#""lang":3,"lang_rev":7"#), "{}", heartbeat[0]);
     assert!(core.ui.deck.host_present);
 }
 

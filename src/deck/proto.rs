@@ -563,6 +563,11 @@ fn parse_into(line: &[u8], out: &mut HostMsg) -> Result<(), ErrWhy> {
                 key.present = !key.label.is_empty();
             }
         }
+        b"language" => {
+            let value = object.need("v")?.u8()?;
+            if value > 3 { return Err(ErrWhy::Range); }
+            *out = HostMsg::Language { value, revision: object.need("rev")?.u32()? };
+        }
         b"system" => {
             let status = super::msg::SystemStatus {
                 cpu: object.get("cpu")?.map(|v| v.u8()).transpose()?,
@@ -681,8 +686,15 @@ pub fn encode(event: Event, ui: &UiState, out: &mut [u8; TX_MAX]) -> usize {
             // The sessions this deck holds: a host sends no agent id above it
             // (one that does not say is the old eight).
             json.key("agents").number(ui.deck.agents.len() as u32);
+            json.key("lang").number(ui.language as u32);
+            json.key("lang_rev").number(ui.language_revision);
             json.key("faces");
             faces(&mut json, ui);
+        }
+        Event::Language => {
+            json.key("m").string("language");
+            json.key("v").number(ui.language as u32);
+            json.key("rev").number(ui.language_revision);
         }
         Event::Up => {
             json.key("m").string("up");
@@ -1367,7 +1379,7 @@ mod tests {
         let strip = r#"[{"f":1,"t":"agents","n":"Agents"},{"f":2,"t":"omarchy","n":"Omarchy"},{"f":3,"t":"macropad","n":"Macropad"},{"f":4,"t":"usage","n":"Usage"},{"f":7,"t":"system","n":"System"},{"f":6,"t":"arcade","n":"Arcade"},{"f":5,"t":"settings","n":"Settings"}]"#;
         assert_eq!(
             encoded(Event::Hello, &ui),
-            std::format!(r#"{{"m":"hello","v":1,"fw":"{FW_VERSION}","sid":0,"boot":1,"rx":1024,"agents":{agents},"faces":{strip}}}"#, agents = ui.deck.agents.len())
+            std::format!(r#"{{"m":"hello","v":1,"fw":"{FW_VERSION}","sid":0,"boot":1,"rx":1024,"agents":{agents},"lang":0,"lang_rev":0,"faces":{strip}}}"#, agents = ui.deck.agents.len())
         );
         assert_eq!(encoded(Event::Faces, &ui), std::format!(r#"{{"m":"faces","list":{strip}}}"#));
         // A held session is reported once the sync is complete; a renamed face ends `boot`.

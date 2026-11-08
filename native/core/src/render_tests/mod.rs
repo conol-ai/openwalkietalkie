@@ -25,6 +25,7 @@ mod arcade;
 mod bluetooth;
 mod fuzz;
 mod kit;
+mod i18n;
 mod macropad;
 mod omarchy;
 mod overlay;

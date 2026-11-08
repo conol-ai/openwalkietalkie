@@ -5,7 +5,7 @@
 use super::*;
 use crate::{
     battery::{BatteryState, ChargeState},
-    control::{Button, Control, Edge},
+    control::{Button, Control, Edge, Touch, TouchPhase, Wheel},
     deck::msg::{HostMsg, SettingKey},
     ui::{
         faces::settings::{needs_host, row_content, Value},
@@ -13,7 +13,7 @@ use crate::{
         kit, theme, Rect, Update,
     },
 };
-use crate::ui::state::settings::{rows, PANELS};
+use crate::ui::state::settings::{rows, viewport, LANGUAGE_ROW, PANELS, TUTORIAL_ROW};
 
 fn pixel(frame: &[u8], x: i32, y: i32) -> u16 {
     let at = (y as usize * 480 + x as usize) * 2;
@@ -58,9 +58,11 @@ fn every_panel_fits_its_strings_and_stays_inside_the_arcs() {
         assert!(font::measure(tab_font, name) <= layout::settings_tab(0).width() - 8, "{name}");
     }
     for panel in 0..PANELS {
+        for selected in 0..rows(panel) {
+            let frame = full(&settings(panel, selected));
+            assert_eq!(lit_outside_safe_area(&frame), None, "panel {panel}, row {selected}");
+        }
         let ui = settings(panel, 0);
-        let frame = full(&ui);
-        assert_eq!(lit_outside_safe_area(&frame), None, "panel {panel}");
         for row in 0..rows(panel) {
             let content = row_content(&ui, panel, row).unwrap();
             let label_room = layout::SETTING_BAR.left() - layout::SETTING_LABEL_X - 8;
@@ -92,7 +94,9 @@ fn every_panel_fits_its_strings_and_stays_inside_the_arcs() {
 fn the_outlined_tab_and_row_are_the_ones_layout_hit_tests() {
     for panel in 0..PANELS {
         for row in 0..rows(panel) {
-            let frame = full(&settings(panel, row));
+            let ui = settings(panel, row);
+            let view = viewport(&ui);
+            let frame = full(&ui);
             for index in 0..layout::SETTINGS_PANELS {
                 let tab = layout::settings_tab(index);
                 let (cx, cy) = tab.center();
@@ -101,19 +105,28 @@ fn the_outlined_tab_and_row_are_the_ones_layout_hit_tests() {
                 let expected = if index == panel { theme::OUTLINE_SELECTED } else { theme::OUTLINE };
                 assert_eq!(edge, rgb(expected), "panel {panel} tab {index}");
             }
-            for index in 0..rows(panel) {
-                let rect = layout::settings_row(index);
+            for (slot, index) in view.slots() {
+                let rect = layout::settings_row(slot);
                 let (cx, cy) = rect.center();
-                assert_eq!(layout::settings_row_at(cx, cy), Some(index));
+                assert_eq!(layout::settings_row_at(cx, cy), Some(slot));
                 let expected = if index == row { theme::OUTLINE_SELECTED } else { theme::OUTLINE };
                 assert_eq!(pixel(&frame, rect.left(), cy), rgb(expected), "panel {panel} row {index}");
                 // The focused row is filled, the others show canvas.
                 let fill = if index == row { theme::CARD_FILL } else { theme::CANVAS };
                 assert_eq!(pixel(&frame, cx, rect.top() + 6), rgb(fill));
+                // Input maps the physical lane back to its logical row,
+                // including the bottom lane after Display scrolls to Tutorial.
+                let mut touched = ui.clone();
+                let mut out = Update::new();
+                for (phase, at) in [(TouchPhase::Down, 1000), (TouchPhase::Up, 1001)] {
+                    touched.apply(Control::Touch(Touch { phase, x: cx as u16, y: cy as u16 }), at, &mut out);
+                }
+                assert_eq!(touched.settings.row, index, "panel {panel}, slot {slot}");
             }
             // Rows the panel does not have are not drawn.
-            for index in rows(panel)..layout::SETTINGS_ROWS {
-                let rect = layout::settings_row(index);
+            for slot in 0..layout::SETTINGS_ROWS {
+                if view.index_at(slot).is_some() { continue; }
+                let rect = layout::settings_row(slot);
                 assert_eq!(pixel(&frame, rect.left(), rect.center().1), 0);
             }
         }
@@ -156,8 +169,8 @@ fn host_side_rows_dim_to_needs_host_without_a_host_or_demo() {
         let (a, b) = (full(&hosted), full(&alone));
         // The Host panel's "Deck host" and "Demo data" rows report the change itself.
         let reports = |row: u8| panel == 4 && (row == 1 || row == 2);
-        for row in 0..rows(panel) {
-            let rect = layout::settings_row(row);
+        for (slot, row) in viewport(&alone).slots() {
+            let rect = layout::settings_row(slot);
             let dims = row_content(&alone, panel, row).map(|r| r.value) == Some(Value::NeedsHost);
             assert_eq!(differs_in(&a, &b, rect), dims || reports(row), "panel {panel} row {row}");
             if dims {
@@ -172,11 +185,43 @@ fn host_side_rows_dim_to_needs_host_without_a_host_or_demo() {
         demo.deck.settings.demo = true;
         demo.invalidate();
         let c = full(&demo);
-        for row in 0..rows(panel) {
-            let rect = layout::settings_row(row);
+        for (slot, row) in viewport(&demo).slots() {
+            let rect = layout::settings_row(slot);
             assert_eq!(differs_in(&a, &c, rect), panel == 4 && row == 1, "demo panel {panel} row {row}");
         }
     }
+}
+
+#[test]
+fn partial_refresh_tracks_the_display_viewport_language_adjustment_and_tutorial() {
+    let mut ui = settings(LANGUAGE_ROW.0, LANGUAGE_ROW.1);
+    let mut screens = Screens::new(&ui);
+    let step = |ui: &mut Box<UiState>, screens: &mut Screens, control: Control, at| {
+        let before = ui.clone();
+        ui.apply(control, at, &mut Update::new());
+        update(screens, &before, ui);
+    };
+    assert_eq!(viewport(&ui).top, 0);
+    step(&mut ui, &mut screens, Control::Wheel(Wheel::Ccw), 1000);
+    assert_eq!(ui.settings.row, TUTORIAL_ROW.1);
+    assert_eq!(viewport(&ui).top, 1);
+    assert_eq!(viewport(&ui).index_at(3), Some(TUTORIAL_ROW.1));
+    step(&mut ui, &mut screens, Control::Wheel(Wheel::Cw), 1010);
+    assert_eq!(ui.settings.row, LANGUAGE_ROW.1);
+    assert_eq!(viewport(&ui).top, 0);
+    step(&mut ui, &mut screens, Control::Button(Button::Enter, Edge::Press), 1020);
+    step(&mut ui, &mut screens, Control::Button(Button::Enter, Edge::Release), 1021);
+    assert!(ui.settings.adjusting);
+    step(&mut ui, &mut screens, Control::Wheel(Wheel::Cw), 1030);
+    assert_eq!(ui.language, crate::ui::i18n::Language::SimplifiedChinese);
+    step(&mut ui, &mut screens, Control::Button(Button::Enter, Edge::Press), 1040);
+    step(&mut ui, &mut screens, Control::Button(Button::Enter, Edge::Release), 1041);
+    assert!(!ui.settings.adjusting);
+    step(&mut ui, &mut screens, Control::Wheel(Wheel::Ccw), 1050);
+    assert_eq!(viewport(&ui).top, 1);
+    step(&mut ui, &mut screens, Control::Button(Button::Enter, Edge::Press), 1060);
+    assert_eq!(ui.global.overlay, crate::ui::state::Overlay::Tutorial);
+    assert!(ui.tutorial.replay);
 }
 
 #[test]

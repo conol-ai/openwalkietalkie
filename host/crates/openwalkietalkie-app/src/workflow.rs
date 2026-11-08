@@ -65,6 +65,17 @@ pub fn visible_steps(plan: &Plan, expanded: bool, limit: usize) -> Range<usize> 
     start..start + limit
 }
 
+fn run_metrics(run: &workflow::Run, language: deck_gui_core::i18n::Language) -> String {
+    let seconds = run.elapsed_ms / 1000;
+    let elapsed = if seconds >= 3600 { format!("{}h{}m", seconds / 3600, seconds % 3600 / 60) }
+        else if seconds >= 60 { format!("{}m{}s", seconds / 60, seconds % 60) }
+        else { format!("{seconds}s") };
+    let tokens = if run.tokens >= 1_000_000 { format!("{:.1}m", run.tokens as f64 / 1_000_000.) }
+        else if run.tokens >= 1000 { format!("{:.1}k", run.tokens as f64 / 1000.) }
+        else { run.tokens.to_string() };
+    language.format("{0}/{1} · {2} · {3} tokens", &[&run.completed.to_string(), &run.total.to_string(), &elapsed, &tokens])
+}
+
 impl Shell {
     pub(crate) fn render_workflow(&self, agent: &Agent, dim: bool, cx: &Context<Self>) -> Div {
         let p = *palette(cx);
@@ -74,16 +85,16 @@ impl Shell {
             .any(|r| r.status == ActivityStatus::Running);
         let live = !dim && (matches!(agent.state, AgentState::Working) || runs_live);
         let status = if dim {
-            "Disconnected"
+            self.tr("Disconnected")
         } else if runs_live && agent.state != AgentState::Question {
-            "In progress"
+            self.tr("In progress")
         } else {
             match agent.state {
-                AgentState::Working => "In progress",
-                AgentState::Question => "Waiting for you",
-                AgentState::Error => "Needs attention",
-                AgentState::Ready => "Ready",
-                _ => "Idle",
+                AgentState::Working => self.tr("In progress"),
+                AgentState::Question => self.tr("Waiting for you"),
+                AgentState::Error => self.tr("Needs attention"),
+                AgentState::Ready => self.tr("Ready"),
+                _ => self.tr("Idle"),
             }
         };
         let mut body = ui::panel(&p).gap(px(12.));
@@ -92,7 +103,7 @@ impl Shell {
                 div()
                     .ts(12., 18.)
                     .text_color(p.muted)
-                    .child(crate::present::REDACTED),
+                    .child(self.tr(crate::present::REDACTED)),
             );
         } else {
             for run in &agent.workflow_runs {
@@ -139,7 +150,7 @@ impl Shell {
                                         div()
                                             .ts(10., 14.)
                                             .text_color(color)
-                                            .child(run.status.label()),
+                                            .child(self.tr(run.status.label())),
                                     )
                                 }),
                         )
@@ -161,7 +172,7 @@ impl Shell {
                                 .pl(px(21.))
                                 .ts(11., 16.)
                                 .text_color(p.muted)
-                                .child(run.metrics()),
+                                .child(run_metrics(run, self.language())),
                         ),
                 );
             }
@@ -171,12 +182,12 @@ impl Shell {
                     h_flex()
                         .gap(px(8.))
                         .child(ui::icon(ic::LIST, 15., p.accent))
-                        .child(div().flex_1().ts(13., 18.).medium().child("Plan"))
+                        .child(div().flex_1().ts(13., 18.).medium().child(self.tr("Plan")))
                         .child(
                             div()
                                 .ts(12., 16.)
                                 .text_color(p.muted)
-                                .child(format!("{completed}/{} complete", plan.steps.len())),
+                                .child(self.fmt("{0}/{1} complete", &[&(completed).to_string(), &(plan.steps.len()).to_string()])),
                         ),
                 );
                 if !plan.steps.is_empty() {
@@ -209,7 +220,7 @@ impl Shell {
                             .pb(px(6.))
                             .ts(11., 16.)
                             .text_color(p.faint)
-                            .child(format!("{} earlier steps", range.start)),
+                            .child(self.fmt("{0} earlier steps", &[&(range.start).to_string()])),
                     );
                 }
                 for index in range.clone() {
@@ -277,9 +288,9 @@ impl Shell {
                         Btn::new(
                             "workflow-plan-more",
                             if expanded {
-                                "Show current steps".into()
+                                self.tr("Show current steps").into()
                             } else {
-                                format!("Show all {} steps", plan.steps.len())
+                                self.fmt("Show all {0} steps", &[&(plan.steps.len()).to_string()])
                             },
                         )
                         .small()
@@ -301,7 +312,7 @@ impl Shell {
                         })
                         .ts(12., 16.)
                         .text_color(p.muted)
-                        .child("Recent activity"),
+                        .child(self.tr("Recent activity")),
                 );
                 for (index, item) in activity.iter().enumerate() {
                     let open = self
@@ -359,7 +370,7 @@ impl Shell {
                             div()
                                 .ts(10., 14.)
                                 .text_color(color)
-                                .child(item.status.label()),
+                                .child(self.tr(item.status.label())),
                         )
                         .child(ui::icon(
                             if open {
@@ -370,12 +381,7 @@ impl Shell {
                             12.,
                             p.faint,
                         ))
-                        .tooltip(ui::tip(format!(
-                            "{} · {} · Click to {} details",
-                            item.title,
-                            item.status.label(),
-                            if open { "hide" } else { "show" }
-                        )))
+                        .tooltip(ui::tip(self.fmt("{0} · {1} · Click to {2} details", &[&(item.title).to_string(), (self.tr(item.status.label())), (if open { self.tr("hide") } else { self.tr("show") })])))
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.deck.workflow.toggle_tool(&id, &message);
                             cx.notify();
@@ -383,15 +389,14 @@ impl Shell {
                     body = body.child(row);
                     if open {
                         body = body.child(
-                            ui::code_block(
+                            ui::code_block_localized(
                                 SharedString::from(format!(
                                     "workflow-output-{}",
                                     item.message.message.id
                                 )),
                                 item.message.text.clone(),
                                 true,
-                                &p,
-                            )
+                                &p, self.language())
                             .max_h(px(260.))
                             .overflow_y_scroll(),
                         );
@@ -403,9 +408,9 @@ impl Shell {
                         Btn::new(
                             "workflow-activity-more",
                             if expanded {
-                                "Show recent activity".into()
+                                self.tr("Show recent activity").into()
                             } else {
-                                format!("Show all {} tools", activity.len())
+                                self.fmt("Show all {0} tools", &[&(activity.len()).to_string()])
                             },
                         )
                         .small()
@@ -417,14 +422,14 @@ impl Shell {
                 }
             } else if agent.workflow.is_none() && agent.workflow_runs.is_empty() {
                 body = body.child(div().ts(12., 18.).text_color(p.muted).child(if live {
-                    "Waiting for the agent’s next step…"
+                    self.tr("Waiting for the agent’s next step…")
                 } else {
-                    "Plans and tool activity will appear here."
+                    self.tr("Plans and tool activity will appear here.")
                 }));
             }
         }
         ui::section_with(
-            "Workflow",
+            self.tr("Workflow"),
             vec![div()
                 .ts(11., 16.)
                 .text_color(p.muted)

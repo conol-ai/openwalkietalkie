@@ -200,8 +200,9 @@ is shown, an overlay is open, or the screen is dark. A dot marks a running or
 finished clock on another tab. A running clock keeps idle-home on this face;
 the screen still dims and sleeps normally.
 
-- **Stopwatch:** ENTER starts, pauses or resumes. CANCEL records a lap while
-  running (the newest three are shown), or resets a paused stopwatch.
+- **Stopwatch:** shows hundredths of a second. ENTER starts, pauses or
+  resumes. CANCEL records a lap while running (the newest three are shown),
+  or resets a paused stopwatch.
 - **Timer:** SCROLL changes its length while idle, or tap a preset. ENTER
   starts, pauses, resumes or restarts a finished countdown; CANCEL resets.
 - **Pomodoro:** a 25-minute focus session is followed by a 5-minute short
@@ -211,8 +212,13 @@ the screen still dims and sleeps normally.
   whole cycle to the first focus session. Focus progress and the next phase
   appear below the readout.
 
-Finished countdowns and Pomodoro phases wake the screen and raise a toast.
-Tapping it opens the Timer face on the corresponding tab. The timers run
+Finished countdowns and Pomodoro phases wake the screen, raise a toast and
+ring through the deck's speaker at its volume: four quick beeps a second for
+the timer, a rising chime when a focus session ends and a falling one when a
+break ends. The alarm rings for up to 30 seconds and stops at any touch of the
+deck (a button, the wheel or the screen, including the press that wakes it),
+or when the timer is restarted or reset or the next Pomodoro phase starts.
+Tapping the toast opens the Timer face on the corresponding tab. The timers run
 locally without a host, and reset when the device restarts. CANCEL with
 nothing to reset goes home.
 
@@ -221,11 +227,12 @@ nothing to reset goes home.
 The list grammar of every other face: SCROLL selects, ENTER acts. SCROLL moves
 the selection through every row of every panel in order, the tab following it
 (hard ends); LEFT/RIGHT or a tab jump to a panel's first row. ENTER on a toggle
-flips it; ENTER on a value (speaker, mic, brightness, idle home, text size)
+flips it; ENTER on a value (speaker, mic, brightness, idle home, text size, language)
 starts adjusting it, drawn with a blue outline: SCROLL then steps the value
 (hard ends) and ENTER or CANCEL ends adjusting. Read-only rows ignore ENTER.
 Leaving the face ends adjusting. A change applies locally and is sent once as
-`set`; a host `set` overrides without an echo. Touch: tap a row to select it,
+`set`; a host `set` overrides without an echo. Language is saved in device preferences and synchronized with capable apps
+using its own versioned `language` message, without an ordinary `set` event. Touch: tap a row to select it,
 tap the selected row to act as ENTER does. CANCEL (not adjusting) goes home.
 
 | Panel | Row | Values | Default | Applied by |
@@ -237,11 +244,22 @@ tap the selected row to act as ENTER does. CANCEL (not adjusting) goes home.
 | Alerts | Auto-jump | on/off | off | device |
 | Display | Brightness | 1–5 (panel 40/80/130/190/255) | 5 | device |
 | Display | Idle home | never, 30 s, 1 min, 2 min | 2 min | device |
+| Display | Text size | small, medium, large | medium | device and host wrapping |
+| Display | Language | English, 简体中文, 繁體中文, 日本語 | English | device and app |
 | Display | Tutorial | action: replays the tutorial | | device |
 | Host | Link, Deck host | read-only status | | |
 | Host | Demo data | on/off | off | device |
 | About | Firmware, Battery, Power off | read-only (Firmware shows `0.1.0 · LilyGo` or `0.1.0 · Rev A`; Power off shows `hold CANCEL 3 s`) | | |
 | About | Factory reset | action: the `Factory reset?` dialog | | device |
+
+Display scrolls its four visible rows to reach Language and Tutorial. The
+language choice applies immediately, survives a restart, and uses stable
+ids `0=en`, `1=zh-Hans`, `2=zh-Hant`, `3=ja`. Built-in labels are translated;
+host documents, custom names and physical keycap names are preserved. The
+language revision is persisted on both sides: newer revisions win when reconnecting,
+with the app winning ties. Each explicit local choice increments the revision.
+Language sync is independent of `boot` settings restoration and speech recognition;
+older firmware and older apps continue without the new message.
 
 Host-side rows show "needs host" while there is neither a deck host nor the
 demo. Turning Demo data off without a host clears the demo at once; turning it

@@ -24,6 +24,7 @@
 use super::{global, global::Overlay, UiState, Update};
 use crate::control::{Button, Control, Edge};
 use crate::deck::text::Text;
+use crate::ui::i18n::Language;
 
 /// The buttons the first step asks for, in order.
 pub const BUTTONS: [Button; 5] = [
@@ -139,43 +140,48 @@ pub const fn role(button: Button) -> &'static str {
 /// The caption line under a step's content. Pure: `draw` and `signature`
 /// both go through it.
 pub fn caption(view: &View, out: &mut Text<48>) {
+    caption_localized(view, out, Language::English);
+}
+
+/// Device-owned captions; physical key names remain the labels on the case.
+pub fn caption_localized<const N: usize>(view: &View, out: &mut Text<N>, language: Language) {
     out.clear();
     match view.step {
         Step::Buttons => match (view.wrong, view.named, view.current()) {
             (true, Some(pressed), Some(wanted)) => {
-                out.push_str("That's ");
+                out.push_str(language.text("That's "));
                 out.push_str(name(pressed));
-                out.push_str(", not ");
+                out.push_str(language.text(", not "));
                 out.push_str(name(wanted));
             }
             (_, Some(done), _) => {
-                out.push_str("That was ");
+                out.push_str(language.text("That was "));
                 out.push_str(name(done));
                 out.push_str(" \u{b7} ");
-                progress(view, out);
+                progress(view, out, language);
             }
-            _ => progress(view, out),
+            _ => progress(view, out, language),
         },
-        Step::Wheel => out.set(match WHEEL_DETENTS.saturating_sub(view.detents) {
+        Step::Wheel => out.set(language.text(match WHEEL_DETENTS.saturating_sub(view.detents) {
             0 => "",
             1 => "One more",
             2 => "Two more",
             _ => "Turn the wheel",
-        }),
-        Step::Panels if view.needs_shift => out.set("Hold SHIFT while you turn"),
-        Step::Panels => out.set("Hold SHIFT and turn the wheel"),
-        Step::Latest if view.needs_shift => out.set("Hold SHIFT while you press ENTER"),
-        Step::Latest => out.set("Hold SHIFT and press ENTER"),
-        Step::Ptt if view.ptt_down => out.set("Listening\u{2026} let go to send"),
-        Step::Ptt => out.set("Hold PTT"),
+        })),
+        Step::Panels if view.needs_shift => out.set(language.text("Hold SHIFT while you turn")),
+        Step::Panels => out.set(language.text("Hold SHIFT and turn the wheel")),
+        Step::Latest if view.needs_shift => out.set(language.text("Hold SHIFT while you press ENTER")),
+        Step::Latest => out.set(language.text("Hold SHIFT and press ENTER")),
+        Step::Ptt if view.ptt_down => out.set(language.text("Listening\u{2026} let go to send")),
+        Step::Ptt => out.set(language.text("Hold PTT")),
         Step::Done => {}
     }
 }
 
 /// "2 of 5" on the Buttons step.
-fn progress(view: &View, out: &mut Text<48>) {
+fn progress<const N: usize>(view: &View, out: &mut Text<N>, language: Language) {
     out.push_char((b'1' + view.index.min(BUTTONS.len() as u8 - 1)) as char);
-    out.push_str(" of ");
+    out.push_str(language.text(" of "));
     out.push_char((b'0' + BUTTONS.len() as u8) as char);
 }
 
@@ -311,6 +317,32 @@ pub(super) fn animating(_ui: &UiState) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn localized_captions_keep_physical_key_names_and_fit_the_lane() {
+        use crate::ui::{font, font::Font};
+        for language in Language::ALL {
+            for step in Step::ALL {
+                let mut view = View::new();
+                view.step = step;
+                for needs_shift in [false, true] {
+                    view.needs_shift = needs_shift;
+                    for named in Button::ALL {
+                        view.named = Some(named);
+                        for wrong in [false, true] {
+                            view.wrong = wrong;
+                            let mut text = Text::<96>::new();
+                            caption_localized(&view, &mut text, language);
+                            assert!(font::measure(Font::Row, text.as_str()) <= 404, "{} {step:?}: {}", language.code(), text.as_str());
+                            if step == Step::Buttons {
+                                assert!(text.as_str().contains(name(named)));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
     use crate::control::Wheel;
     use crate::deck::msg::Template;
 

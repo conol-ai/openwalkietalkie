@@ -79,17 +79,17 @@ fn centred_baseline(font: Font, cy: i32) -> i32 {
 }
 
 /// Label the lit control: a leader line away from the body and its name.
-fn callout(band: &mut Band, left: i32, top: i32, highlight: Highlight) {
+fn callout(band: &mut Band, left: i32, top: i32, highlight: Highlight, language: crate::ui::i18n::Language) {
     let (name, from, dir): (&str, (i32, i32), (i32, i32)) = match highlight {
         Highlight::None => return,
         Highlight::Chord(first, second) => {
-            callout(band, left, top, Highlight::Button(first));
-            callout(band, left, top, Highlight::Button(second));
+            callout(band, left, top, Highlight::Button(first), language);
+            callout(band, left, top, Highlight::Button(second), language);
             return;
         }
         Highlight::Wheel => {
             let (cx, cy, r) = WHEEL;
-            ("WHEEL", (left + px(cx - r), top + px(cy)), (-1, 0))
+            (language.text("WHEEL"), (left + px(cx - r), top + px(cy)), (-1, 0))
         }
         Highlight::Button(button) => {
             let rect = cap_rect(left, top, button);
@@ -152,6 +152,11 @@ fn wheel(band: &mut Band, left: i32, top: i32, lit: bool) {
 
 /// Draw the deck with its body's top-left corner at (`left`, `top`).
 pub fn draw(band: &mut Band, left: i32, top: i32, highlight: Highlight) {
+    draw_localized(band, left, top, highlight, crate::ui::i18n::Language::English);
+}
+
+/// Localize the wheel callout; key names match the physical keycaps.
+pub fn draw_localized(band: &mut Band, left: i32, top: i32, highlight: Highlight, language: crate::ui::i18n::Language) {
     let reach = Rect::new(left - LABEL_ROOM, top - 8, WIDTH + 2 * LABEL_ROOM, HEIGHT + 8 + LABEL_ROOM);
     if !kit::visible(band, reach) {
         return;
@@ -184,7 +189,7 @@ pub fn draw(band: &mut Band, left: i32, top: i32, highlight: Highlight) {
     }
     // The wheel last: it sits over the corner.
     wheel(band, left, top, highlight == Highlight::Wheel);
-    callout(band, left, top, highlight);
+    callout(band, left, top, highlight, language);
 }
 
 #[cfg(test)]

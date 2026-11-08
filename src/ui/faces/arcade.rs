@@ -93,7 +93,7 @@ pub fn draw(b: &mut Band, ui: &UiState, _id: u8) {
     let a = &ui.arcade;
     b.fill(kit::rgb(theme::CANVAS));
     if a.phase == Phase::Menu {
-        kit::header(b, "ARCADE", kit::HeaderRight::Text("8-BIT"));
+        kit::header(b, ui.tr("ARCADE"), kit::HeaderRight::Text(ui.tr("8-BIT")));
         for (i, game) in Game::ALL.into_iter().enumerate() {
             let r = arcade::menu_row(i as u8);
             let selected = a.selection == i as u8;
@@ -106,7 +106,7 @@ pub fn draw(b: &mut Band, ui: &UiState, _id: u8) {
                 b,
                 r.left() + 64,
                 r.top() + 30,
-                game.title(),
+                ui.tr(game.title()),
                 theme::TEXT_PRIMARY,
                 Font::Name,
                 296,
@@ -115,7 +115,7 @@ pub fn draw(b: &mut Band, ui: &UiState, _id: u8) {
                 b,
                 r.left() + 64,
                 r.top() + 57,
-                game.controls(),
+                ui.tr(game.controls()),
                 theme::TEXT_SECONDARY,
                 Font::Small,
                 296,
@@ -125,17 +125,17 @@ pub fn draw(b: &mut Band, ui: &UiState, _id: u8) {
         if a.selection == 3 {
             kit::outline(b, arcade::SOUND, 12, theme::BLUE, 2);
         }
-        label(b, 80, 398, "Sound", theme::TEXT_SECONDARY, Font::Small, 80);
+        label(b, 80, 398, ui.tr("Sound"), theme::TEXT_SECONDARY, Font::Small, 80);
         label(
             b,
             164,
             398,
-            arcade::sound_label(ui.deck.settings.arcade_sound),
+            ui.tr(arcade::sound_label(ui.deck.settings.arcade_sound)),
             theme::TEXT_PRIMARY,
             Font::Small,
             236,
         );
-        kit::hint_bar(
+        kit::hint_bar_localized(
             b,
             &[
                 kit::Hint {
@@ -147,6 +147,7 @@ pub fn draw(b: &mut Band, ui: &UiState, _id: u8) {
                     label: "select",
                 },
             ],
+            ui.language,
         );
         return;
     }
@@ -276,8 +277,9 @@ pub fn draw(b: &mut Band, ui: &UiState, _id: u8) {
     let mut stats = Text::<64>::new();
     let _ = write!(
         stats,
-        "{:04}  BEST {:04}",
+        "{:04}  {} {:04}",
         a.score(),
+        ui.tr("BEST"),
         a.best[a.game as usize]
     );
     // Transparent HUD leaves the whole board available. Shadow keeps numbers
@@ -306,7 +308,7 @@ pub fn draw(b: &mut Band, ui: &UiState, _id: u8) {
             Font::Small,
             240,
             182,
-            a.game.title(),
+            ui.tr(a.game.title()),
             theme::TEXT_SECONDARY,
             None,
             344,
@@ -317,7 +319,7 @@ pub fn draw(b: &mut Band, ui: &UiState, _id: u8) {
             Font::Small,
             240,
             254,
-            a.game.controls(),
+            ui.tr(a.game.controls()),
             theme::TEXT_SECONDARY,
             None,
             344,
@@ -334,7 +336,7 @@ pub fn draw(b: &mut Band, ui: &UiState, _id: u8) {
             Font::Name,
             240,
             224,
-            title,
+            ui.tr(title),
             theme::TEXT_PRIMARY,
             None,
             344,
@@ -345,12 +347,12 @@ pub fn draw(b: &mut Band, ui: &UiState, _id: u8) {
             Font::Small,
             240,
             284,
-            match a.phase {
+            ui.tr(match a.phase {
                 Phase::Ready if a.game == Game::Flappy => "PTT / Enter to start",
                 Phase::Ready => "Enter to start",
                 Phase::Paused => "Enter to resume",
                 _ => "Enter to retry",
-            },
+            }),
             theme::TEXT_SECONDARY,
             None,
             344,
@@ -361,7 +363,7 @@ pub fn draw(b: &mut Band, ui: &UiState, _id: u8) {
             Font::Small,
             240,
             312,
-            "Cancel · game list",
+            ui.tr("Cancel · game list"),
             theme::TEXT_SECONDARY,
             None,
             344,
@@ -404,5 +406,24 @@ pub fn signature(ui: &UiState, _id: u8, sig: &mut SigBuilder) {
         sig.region_with(FIELD, |h| {
             h.u32(a.visual).u16(a.score()).u16(a.best[a.game as usize]);
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ui::i18n::Language;
+
+    #[test]
+    fn localized_game_names_and_instructions_fit_the_menu() {
+        for language in Language::ALL {
+            for game in Game::ALL {
+                assert!(font::measure(Font::Name, language.text(game.title())) <= 296, "{language:?}: {}", game.title());
+                assert!(font::measure(Font::Small, language.text(game.controls())) <= 296, "{language:?}: {}", game.controls());
+            }
+            for mode in 0..3 {
+                assert!(font::measure(Font::Small, language.text(arcade::sound_label(mode))) <= 236);
+            }
+        }
     }
 }

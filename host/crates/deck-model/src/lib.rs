@@ -9,6 +9,8 @@ mod api;
 mod cards;
 mod command;
 mod devapi;
+#[cfg(test)]
+mod language_tests;
 mod device;
 mod effect;
 pub mod guard;

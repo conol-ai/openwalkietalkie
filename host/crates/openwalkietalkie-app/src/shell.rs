@@ -181,8 +181,7 @@ pub const SCREEN_ENV: &str = "OPENWALKIETALKIE_SCREEN";
 /// so a card answered meanwhile does not rewrite the question under them.
 pub(crate) struct Confirming {
     pub(crate) request: ConfirmRequest,
-    summary: String,
-    text: Option<String>,
+    summary_card: Option<Card>,
 }
 
 /// The dialog in front of the window, derived from the state each one shows
@@ -246,6 +245,18 @@ pub struct Shell {
 }
 
 impl Shell {
+    pub(crate) fn language(&self) -> deck_gui_core::i18n::Language {
+        deck_gui_core::i18n::Language::from_id(self.state.mirror().settings.language.min(255) as u8)
+    }
+
+    pub(crate) fn tr<'a>(&self, english: &'a str) -> &'a str {
+        self.language().text(english)
+    }
+
+    pub(crate) fn fmt(&self, english: &str, values: &[&str]) -> String {
+        self.language().format(english, values)
+    }
+
     pub fn new(
         state: HostState,
         bus: EventReceiver,
@@ -291,7 +302,12 @@ impl Shell {
         // *after* construction, because `go` needs the `Shell` that is still
         // being built here.
         cx.spawn_in(window, async move |this, cx| {
-            this.update_in(cx, move |this, window, cx| this.go(screen, window, cx))
+            this.update_in(cx, move |this, window, cx| {
+                this.go(screen, window, cx);
+                this.localize_order_input(window, cx);
+                this.localize_voice_inputs(window, cx);
+                this.localize_integration_inputs(window, cx);
+            })
                 .ok();
         })
         .detach();
@@ -328,6 +344,7 @@ impl Shell {
 
     /// One event from the bus: fold it, then do what the reducer asked.
     fn on_app_event(&mut self, event: AppEvent, window: &mut Window, cx: &mut Context<Self>) {
+        let previous_language = self.language();
         // A tray click is an action and the reducer issues none, so it is
         // taken here. It still goes through the bus rather than straight
         // into a call, because `muda` runs its handler on the menu's own
@@ -338,6 +355,12 @@ impl Shell {
         }
         for effect in self.state.handle_event(event) {
             self.apply(effect, window, cx);
+        }
+        if self.language() != previous_language {
+            app::apply_menu_language(self.language(), cx);
+            self.localize_voice_inputs(window, cx);
+            self.localize_integration_inputs(window, cx);
+            self.localize_order_input(window, cx);
         }
         // A selection the roster no longer has is not a selection.
         if self
@@ -383,8 +406,9 @@ impl Shell {
     /// when the window is open and the tooltip carries it when it is not.
     fn update_tray(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let summary = self.tray_summary();
+        let language = self.language();
         if cx.has_global::<Tray>() {
-            cx.update_global::<Tray, ()>(|tray, _| tray.update(&summary));
+            cx.update_global::<Tray, ()>(|tray, _| tray.update_localized(&summary, language));
         }
         if summary.degraded == self.announced_degrade {
             return;
@@ -396,7 +420,7 @@ impl Shell {
         let entity = cx.entity();
         window.push_notification(
             Notification::warning(detail)
-                .title("The service is degraded")
+                .title(self.tr("The service is degraded"))
                 .autohide(false)
                 .w(px(380.))
                 .on_click(move |_, window, cx| {
@@ -431,10 +455,11 @@ impl Shell {
     /// What the tray draws: the mirror, the socket, and the one `[hooks]`
     /// key `config.get` answered.
     pub(crate) fn tray_summary(&self) -> Summary {
-        Summary::of(
+        Summary::of_localized(
             self.state.mirror(),
             self.state.connected(),
             self.service.hooks_enabled(),
+            self.language(),
         )
     }
 
@@ -458,7 +483,7 @@ impl Shell {
                 // The tick is disabled until `config.get` has answered, so
                 // this is only reachable by a click that raced the read.
                 None => self.toast(
-                    "The service has not said whether hooks are on yet.",
+                    self.tr("The service has not said whether hooks are on yet."),
                     window,
                     cx,
                 ),
@@ -474,9 +499,9 @@ impl Shell {
     ///
     /// Sparkle owns signed download, installation, and relaunch.
     pub(crate) fn check_updates(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        match self.updater.check_for_updates() {
+        match self.updater.check_for_updates_localized(self.language()) {
             Ok(crate::updater::UpdateCheck::Started) => {}
-            Ok(crate::updater::UpdateCheck::Busy) => self.toast("An app update is already in progress.", window, cx),
+            Ok(crate::updater::UpdateCheck::Busy) => self.toast(self.tr("An app update is already in progress."), window, cx),
             Err(reason) => self.toast(reason, window, cx),
         }
         self.refresh_firmware(true, window, cx);
@@ -502,11 +527,11 @@ impl Shell {
             // raising a sheet with a button that cannot prompt (§10.4).
             HostEffect::RaisePermissionSheet(SheetKind::Microphone) => {
                 self.go(Screen::Voice, window, cx);
-                self.toast("Voice needs the microphone permission", window, cx);
+                self.toast(self.tr("Voice needs the microphone permission"), window, cx);
             }
             HostEffect::RaisePermissionSheet(SheetKind::Speech) => {
                 self.go(Screen::Voice, window, cx);
-                self.toast("Voice needs the speech-recognition permission", window, cx);
+                self.toast(self.tr("Voice needs the speech-recognition permission"), window, cx);
             }
             HostEffect::Toast(message) => self.toast(message, window, cx),
             // The `ApiClient` owns the reconnect and is already counting the
@@ -548,7 +573,7 @@ impl Shell {
             }
             if announce {
                 this.update_in(cx, |this, window, cx| {
-                    this.toast("Could not re-read the service's state", window, cx);
+                    this.toast(this.tr("Could not re-read the service's state"), window, cx);
                 })
                 .ok();
             }
@@ -585,6 +610,7 @@ impl Shell {
             }
         }
         let what = action_name(&action);
+        let language = self.language();
         let Some(reply) = self.state.send(&action) else {
             return;
         };
@@ -593,11 +619,11 @@ impl Shell {
                 // §4.7: `op.answer`/`op.order` answer *after* delivery, so a
                 // `delivered:false` is the daemon's own report and not an
                 // error — and this is the only place it is ever said.
-                Ok(result) => undelivered(&result).map(|why| format!("{what}: {why}")),
+                Ok(result) => undelivered(&result).map(|why| language.format("{0}: {1}", &[language.text(what), &why])),
                 // `Reply` folds a dropped sender into `Disconnected`, so the
                 // socket going away between the click and the reply arrives
                 // here as an ordinary client error rather than a second layer.
-                Err(e) => Some(format!("{what} failed: {e}")),
+                Err(e) => Some(language.format("{0} failed: {1}", &[language.text(what), &e.to_string()])),
             };
             if let Some(complaint) = complaint {
                 this.update_in(cx, |this, window, cx| this.toast(complaint, window, cx))
@@ -709,15 +735,9 @@ impl Shell {
             self.deck.selected = Some(agent);
         }
         let card = self.card_of(request.agent.as_ref());
-        let summary = confirm::summary(&request, card.as_ref());
-        let text = card
-            .as_ref()
-            .map(|card| present::card_text(card).to_string())
-            .filter(|text| !text.is_empty());
         self.confirm = Some(Confirming {
             request,
-            summary,
-            text,
+            summary_card: card,
         });
         self.dialog_opened(window);
         cx.notify();
@@ -739,7 +759,7 @@ impl Shell {
             // difference between "the click did nothing" and "the click was
             // ignored".
             None if decision == Decision::Allow => {
-                self.toast("that request is no longer open", window, cx);
+                self.toast(self.tr("that request is no longer open"), window, cx);
             }
             None => {}
         }
@@ -790,17 +810,19 @@ impl Shell {
                                 div()
                                     .ts(15., 20.)
                                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                                    .child("Confirm this operation"),
+                                    .child(self.tr("Confirm this operation")),
                             )
                             .child(
                                 div()
                                     .ts(13., 19.)
                                     .text_color(p.muted)
-                                    .child(confirming.summary.clone()),
+                                    .child(confirm::summary_localized(&confirming.request, confirming.summary_card.as_ref(), self.language())),
                             ),
                     ),
             )
-            .children(confirming.text.clone().map(|text| {
+            .children(confirming.summary_card.as_ref()
+                .map(|card| present::card_text_localized(card, self.language()).to_owned())
+                .filter(|text| !text.is_empty()).map(|text| {
                 div()
                     .id("confirm-text")
                     .mt(px(16.))
@@ -814,23 +836,21 @@ impl Shell {
                     .mono()
                     .child(text)
             }))
-            .child(div().mt(px(14.)).ts(12., 17.).text_color(p.faint).child(if allow {
-                "Allowing re-issues the call as this app, which is the trusted principal. \
-                 Closing this dialog denies it."
+            .child(div().mt(px(14.)).ts(12., 17.).text_color(p.faint).child(self.tr(if allow {
+                "Allowing re-issues the call as this app, which is the trusted principal. Closing this dialog denies it."
             } else {
-                "This request can only be denied here: there is no allow to re-issue, or this \
-                 build was not verified as the trusted principal. Closing this dialog denies it."
-            }))
+                "This request can only be denied here: there is no allow to re-issue, or this build was not verified as the trusted principal. Closing this dialog denies it."
+            })))
             .child(
                 h_flex()
                     .mt(px(20.))
                     .gap(px(8.))
                     .justify_end()
-                    .child(Btn::new("confirm-deny", "Deny").on_click(cx.listener(
+                    .child(Btn::new("confirm-deny", self.tr("Deny")).on_click(cx.listener(
                         |this, _, window, cx| this.decide(Decision::Deny, window, cx),
                     )))
                     .when(allow, |this| {
-                        this.child(Btn::new("confirm-allow", "Allow").danger().on_click(
+                        this.child(Btn::new("confirm-allow", self.tr("Allow")).danger().on_click(
                             cx.listener(|this, _, window, cx| {
                                 this.decide(Decision::Allow, window, cx);
                             }),
@@ -939,7 +959,7 @@ impl Shell {
                     16.,
                     if here { p.text } else { p.muted },
                 ))
-                .child(div().flex_1().min_w_0().child(screen.label()))
+                .child(div().flex_1().min_w_0().child(self.tr(screen.label())))
                 .children(suffix)
                 .on_click(cx.listener(move |this, _, window, cx| this.go(screen, window, cx)))
         };
@@ -987,13 +1007,13 @@ impl Shell {
         let (dot, title, meta) = if !connected {
             (
                 p.faint,
-                "Service not running".to_string(),
-                "Showing the last state it sent".to_string(),
+                self.tr("Service not running").to_string(),
+                self.tr("Showing the last state it sent").to_string(),
             )
         } else if service.degraded.is_some() {
             (
                 p.warning,
-                "Service degraded".to_string(),
+                self.tr("Service degraded").to_string(),
                 service.degraded.clone().unwrap_or_default(),
             )
         } else {
@@ -1003,12 +1023,12 @@ impl Shell {
                 format!("deckd {}", service.version)
             };
             let agents = match agents {
-                1 => "1 agent".to_string(),
-                n => format!("{n} agents"),
+                1 => self.tr("1 agent").to_string(),
+                n => self.fmt("{0} agents", &[&n.to_string()]),
             };
             (
                 p.success,
-                "Service running".to_string(),
+                self.tr("Service running").to_string(),
                 format!("{version} \u{b7} {agents}"),
             )
         };
@@ -1047,7 +1067,7 @@ impl Shell {
                                 .min_w_0()
                                 .ts(11.5, 15.)
                                 .text_color(p.warning_muted)
-                                .child("Not verified as the trusted GUI: this build cannot allow permissions."),
+                                .child(self.tr("Not verified as the trusted GUI: this build cannot allow permissions.")),
                         ),
                 )
             })
@@ -1094,7 +1114,7 @@ impl Shell {
         if !connected {
             // The Service screen has Start in its own header.
             let start = (self.screen != Screen::Service).then(|| {
-                Btn::new("start-service", "Start")
+                Btn::new("start-service", self.tr("Start"))
                     .solid()
                     .small()
                     .on_click(cx.listener(|this, _, window, cx| {
@@ -1105,22 +1125,21 @@ impl Shell {
             return Some(
                 div().px(px(24.)).pb(px(10.)).child(ui::strip(
                     Severity::Warning,
-                    Some("Service not running".into()),
+                    Some(self.tr("Service not running").into()),
                     Some(
                         div()
                             .child(
-                                "What you see is the last state it sent. Start it and this \
-                                 window reconnects on its own.",
+                                self.tr("What you see is the last state it sent. Start it and this window reconnects on its own."),
                             )
                             .into_any_element(),
                     ),
                     start
                         .into_iter()
                         .chain(std::iter::once(
-                            Btn::new("open-log", "Open log")
+                            Btn::new("open-log", self.tr("Open log"))
                             .quiet()
                             .small()
-                            .tooltip("Opens the launchd log, which says why a service will not start")
+                            .tooltip(self.tr("Opens the launchd log, which says why a service will not start"))
                                 .on_click(|_, _, cx: &mut App| {
                                     cx.open_with_system(&app::launchd_log());
                                 })
@@ -1143,20 +1162,20 @@ impl Shell {
                     .ts(12., 16.)
                     .text_color(p.muted)
                     .child(ui::spinner(13., p.muted))
-                    .child("Re-reading the service's state\u{2026}"),
+                    .child(self.tr("Re-reading the service's state\u{2026}")),
             )
         })
     }
 
     pub(crate) fn start_service(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.toast("Starting the service\u{2026}", window, cx);
+        self.toast(self.tr("Starting the service…"), window, cx);
         // The one piece of I/O this crate does itself, and it goes where all
         // I/O goes: the bridge's runtime, never the UI thread.
         let done = app::start_service(&cx.global::<app::Tokio>().0);
         cx.spawn_in(window, async move |this, cx| {
             if let Ok(Err(why)) = done.recv().await {
                 this.update_in(cx, |this, window, cx| {
-                    this.toast(format!("Could not start the service: {why}"), window, cx);
+                    this.toast(this.fmt("Could not start the service: {0}", &[&why]), window, cx);
                 })
                 .ok();
             }

@@ -442,7 +442,13 @@ pub fn encode(line: &HostLine) -> Result<Vec<u8>, EncodeError> {
         HostLine::Name { text } => {
             w.cut("text", text, CAPS.spoken_name);
         }
+        HostLine::Language { value, revision } => {
+            if *value > 3 { return Err(EncodeError::Range { field: "v" }); }
+            w.num("v", u64::from(*value));
+            w.num("rev", u64::from(*revision));
+        }
         HostLine::Set { key, value } => {
+            if *key == crate::SetKey::Language { return Err(EncodeError::Range { field: "k" }); }
             if !key.accepts(*value) {
                 return Err(EncodeError::Range { field: "v" });
             }

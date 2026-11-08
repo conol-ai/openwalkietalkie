@@ -25,6 +25,7 @@ pub mod admin;
 pub mod api_client;
 pub mod events;
 pub mod host_state;
+pub mod i18n;
 pub mod tokio_bridge;
 pub mod tray;
 pub mod voice;

@@ -33,6 +33,9 @@ impl Global for Shots {}
 impl Shots {
     /// Workflow-only captures use synthetic data, with no service connection.
     pub fn synthetic_only(&self) -> bool {
+        if std::env::var("OPENWALKIETALKIE_SHOTS_SYNTHETIC").as_deref() == Ok("1") {
+            return true;
+        }
         std::env::var("OPENWALKIETALKIE_SHOTS_ONLY").ok().is_some_and(|list| {
             !list.is_empty() && list.split(',').all(|scene| matches!(scene.trim(),
                 "images" | "image-expanded" | "usage-fable" | "usage-reset-expiring" | "workflow" | "workflow-runs" | "workflow-expanded" | "workflow-complete"))
@@ -193,6 +196,9 @@ impl Shell {
     /// Put the window in `scene`, clearing whatever the last scene left up
     /// without answering it.
     fn stage(&mut self, scene: Scene, window: &mut Window, cx: &mut Context<Self>) {
+        let language = std::env::var("OPENWALKIETALKIE_SHOTS_LANGUAGE").ok()
+            .and_then(|code| deck_gui_core::i18n::Language::ALL.into_iter().find(|language| language.code() == code))
+            .unwrap_or_else(|| self.language());
         self.confirm = None;
         self.recognition_prompt = false;
         self.integrations.stage_token(None);
@@ -275,6 +281,17 @@ impl Shell {
                 self.page_scroll.scroll_to_bottom();
             }
         }
+        // Staged snapshots contain synthetic settings; preserve the chosen
+        // visual-test locale without writing to the daemon or the deck.
+        if self.language() != language {
+            let mut snapshot = self.state.mirror().clone();
+            snapshot.settings.language = language as u16;
+            self.state.handle_event(deck_gui_core::AppEvent::Api(deck_gui_core::ApiEvent::Connected { snapshot }));
+        }
+        self.localize_order_input(window, cx);
+        self.localize_voice_inputs(window, cx);
+        self.localize_integration_inputs(window, cx);
+        crate::app::apply_menu_language(language, cx);
         cx.notify();
     }
 

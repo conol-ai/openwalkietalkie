@@ -12,6 +12,7 @@ use crate::display::Band;
 use crate::ui::layout::Rect;
 use crate::ui::signature::SigBuilder;
 use crate::ui::state::UiState;
+use crate::ui::i18n::Language;
 use crate::ui::{font, font::Align, font::Font, kit, layout, theme};
 
 /// `layout::HEADER` with room for glyph overhang.
@@ -19,7 +20,7 @@ const HEADER_LANE: Rect = Rect::new(34, 30, 412, 32);
 
 fn tag<'a>(ui: &'a UiState) -> kit::HeaderRight<'a> {
     let own = if ui.usage.updating {
-        kit::HeaderRight::Text("updating\u{2026}")
+        kit::HeaderRight::Text(ui.tr("updating\u{2026}"))
     } else if ui.deck.usage.period.is_empty() {
         kit::HeaderRight::None
     } else {
@@ -44,7 +45,7 @@ fn hidden(viewport: &kit::list::Viewport, slot: u8) -> Option<(u8, bool)> {
     }
 }
 
-fn more(count: u8, below: bool, out: &mut Text<12>) {
+fn more(count: u8, below: bool, language: Language, out: &mut Text<24>) {
     out.clear();
     if !below {
         out.push_str("\u{2191} ");
@@ -53,7 +54,7 @@ fn more(count: u8, below: bool, out: &mut Text<12>) {
         out.push_char((b'0' + count / 10 % 10) as char);
     }
     out.push_char((b'0' + count % 10) as char);
-    out.push_str(" more");
+    out.push_str(language.text(" more"));
     if below {
         out.push_str(" \u{2193}");
     }
@@ -72,8 +73,8 @@ fn percent_label(percent: u8, out: &mut Text<8>) {
     out.push_char('%');
 }
 
-fn block(band: &mut Band, rect: Rect, item: &UsageItem, marker: Option<(u8, bool)>, connected: bool) {
-    let mut text = Text::<12>::new();
+fn block(band: &mut Band, rect: Rect, item: &UsageItem, marker: Option<(u8, bool)>, connected: bool, language: Language) {
+    let mut text = Text::<24>::new();
     let baseline = rect.top() + layout::USAGE_NAME_BASELINE;
     let mut percent = Text::<8>::new();
     percent_label(item.percent, &mut percent);
@@ -95,7 +96,7 @@ fn block(band: &mut Band, rect: Rect, item: &UsageItem, marker: Option<(u8, bool
     let reset_baseline = rect.top() + if tip { 64 } else { layout::USAGE_RESET_BASELINE + account_offset };
     let mut reset_w = theme::TEXT_RIGHT - theme::TEXT_X;
     if let Some((count, below)) = marker {
-        more(count, below, &mut text);
+        more(count, below, language, &mut text);
         reset_w -= font::draw(band, Font::Small, theme::TEXT_RIGHT, reset_baseline, text.as_str(), theme::TEXT_FAINT, Some(theme::CANVAS), 120, Align::Right) + 12;
     }
     font::draw(band, if tip { Font::Hint } else { Font::Body }, theme::TEXT_X, reset_baseline, item.reset.as_str(), theme::TEXT_LABEL, Some(theme::CANVAS), reset_w, Align::Left);
@@ -109,12 +110,12 @@ fn block(band: &mut Band, rect: Rect, item: &UsageItem, marker: Option<(u8, bool
 pub fn draw(band: &mut Band, ui: &UiState, instance: u8) {
     let _ = instance;
     band.fill(kit::rgb(theme::CANVAS));
-    kit::header(band, "USAGE", tag(ui));
+    kit::header(band, ui.tr("USAGE"), tag(ui));
     let viewport = viewport(ui);
     if viewport.count == 0 {
         let rect = layout::usage_row(0);
         if kit::visible(band, rect) {
-            font::draw(band, Font::Row, theme::TEXT_X, rect.top() + layout::USAGE_NAME_BASELINE, "no usage data", theme::TEXT_FAINT,
+            font::draw(band, Font::Row, theme::TEXT_X, rect.top() + layout::USAGE_NAME_BASELINE, ui.tr("no usage data"), theme::TEXT_FAINT,
                 Some(theme::CANVAS), 300, Align::Left);
         }
     }
@@ -124,10 +125,10 @@ pub fn draw(band: &mut Band, ui: &UiState, instance: u8) {
             continue;
         };
         if kit::visible(band, rect) {
-            block(band, rect, item, hidden(&viewport, slot), ui.deck.host_present);
+            block(band, rect, item, hidden(&viewport, slot), ui.deck.host_present, ui.language);
         }
     }
-    kit::hint_bar(band, HINTS);
+    kit::hint_bar_localized(band, HINTS, ui.language);
 }
 
 const HINTS: &[kit::Hint] = &[
@@ -193,10 +194,10 @@ mod tests {
         assert_eq!(hidden(&top, 3), Some((2, true)));
         let short = Viewport::new(0, 4, 3);
         assert!((0..4).all(|slot| hidden(&short, slot).is_none()));
-        let mut text = Text::<12>::new();
-        more(2, true, &mut text);
+        let mut text = Text::<24>::new();
+        more(2, true, Language::English, &mut text);
         assert_eq!(text.as_str(), "2 more \u{2193}");
-        more(1, false, &mut text);
+        more(1, false, Language::English, &mut text);
         assert_eq!(text.as_str(), "\u{2191} 1 more");
     }
 

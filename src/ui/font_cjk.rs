@@ -1,4 +1,4 @@
-//! Shared, allocation-free Chinese fallback. See tools/generate-cjk-font.py.
+//! Shared, allocation-free Chinese/Japanese fallback. See tools/generate-cjk-font.py.
 //! Records and pixels are byte arrays so the atlas needs no aligned reads.
 use super::font_data::Glyph;
 
@@ -50,7 +50,7 @@ pub fn scaled(source: Glyph, px: u8) -> Glyph {
     }
 }
 
-/// Conservative line-box bounds, including Chinese punctuation.
+/// Conservative line-box bounds, including CJK punctuation and kana.
 pub fn above(px: u8) -> i32 { (px as i32 * 29 + 25) / PX }
 pub fn below(px: u8) -> i32 { (px as i32 * 9 + 25) / PX }
 
@@ -83,9 +83,10 @@ mod tests {
     use crate::ui::theme::RAMP;
 
     #[test]
-    fn chinese_atlas_is_sorted_bounded_and_covers_both_scripts() {
+    fn cjk_atlas_is_sorted_bounded_and_covers_both_chinese_scripts() {
         assert_eq!(METRICS.len() % RECORD, 0);
         assert!(METRICS.len() / RECORD > 28_000);
+        assert!(METRICS.len() + ATLAS.len() < 5_200_000);
         let mut previous = 0;
         for row in METRICS.chunks_exact(RECORD) {
             let cp = u16::from_le_bytes([row[0], row[1]]) as u32;
@@ -104,5 +105,27 @@ mod tests {
         }
         assert!(source('😀' as u32).is_none());
         assert!(source(0xFFFD).is_none());
+    }
+
+    #[test]
+    fn japanese_kana_and_kanji_resolve_to_real_glyphs() {
+        // Assigned hiragana (including combining / spacing voicing marks),
+        // katakana, phonetic extensions, and halfwidth kana / punctuation.
+        let kana = (0x3041..=0x3096)
+            .chain(0x3099..=0x30FF)
+            .chain(0x31F0..=0x31FF)
+            .chain(0xFF61..=0xFF9F);
+        assert_eq!(kana.clone().count(), 268);
+        for cp in kana {
+            let glyph = source(cp).unwrap_or_else(|| panic!("U+{cp:04X} missing"));
+            assert_eq!(glyph.cp as u32, cp);
+            assert!(glyph.w > 0 && glyph.h > 0, "U+{cp:04X} is blank");
+        }
+        for c in "日本語設定言語時計休憩集中開始停止戻る".chars() {
+            assert_eq!(source(c as u32).unwrap().cp as u32, c as u32);
+        }
+        assert!(source(0x3040).is_none());
+        assert!(source(0x3097).is_none());
+        assert!(source(0x3098).is_none());
     }
 }

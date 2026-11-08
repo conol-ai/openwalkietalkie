@@ -216,6 +216,8 @@ pub struct Update {
     pub factory_reset: bool,
     /// The tutorial was finished or skipped: the runtime remembers it.
     pub tutorial_done: bool,
+    /// A device-local language change for the runtime's preference store.
+    pub language: Option<super::i18n::Language>,
 }
 
 impl Update {
@@ -228,6 +230,7 @@ impl Update {
             power_off: false,
             factory_reset: false,
             tutorial_done: false,
+            language: None,
         }
     }
     pub fn clear(&mut self) {
@@ -267,6 +270,10 @@ pub struct Visible {
 /// Not `Copy`: the deck's session table is storage its owner attaches
 /// (`deck.agents`); [`UiState::copy_into`] copies its contents.
 pub struct UiState {
+    pub language: super::i18n::Language,
+    pub language_revision: u32,
+    /// A versioned preference handshake proves this host understands it.
+    pub language_sync_supported: bool,
     pub image: crate::ui::image::View,
     pub battery: BatteryState,
     /// HID link.
@@ -309,6 +316,9 @@ impl UiState {
     /// For statics. An empty strip and no data: call `reset` before use.
     pub const fn new() -> Self {
         Self {
+            language: super::i18n::Language::English,
+            language_revision: 0,
+            language_sync_supported: false,
             image: crate::ui::image::View::new(),
             battery: BatteryState::UNKNOWN,
             connected: false,
@@ -337,6 +347,9 @@ impl UiState {
     /// settings, and the demo data those defaults ask for.
     pub fn reset(&mut self) {
         self.ensure_sessions();
+        self.language = super::i18n::Language::English;
+        self.language_revision = 0;
+        self.language_sync_supported = false;
         self.image.open = false;
         self.battery = BatteryState::UNKNOWN;
         self.connected = false;
@@ -389,6 +402,20 @@ impl UiState {
         agents::on_reset(self);
     }
 
+    /// Translate an explicitly marked built-in interface string.
+    pub fn tr<'a>(&self, english: &'a str) -> &'a str {
+        self.language.text(english)
+    }
+
+    /// Default face names follow the language; custom names stay as supplied.
+    pub fn face_name<'a>(&self, face: &'a crate::deck::msg::FaceEntry) -> &'a str {
+        if face.name.is_empty() || face.name == face.template.label() {
+            self.tr(face.template.label())
+        } else {
+            face.name.as_str()
+        }
+    }
+
     /// Snapshot for the renderer, `static` to `static`, without a temporary.
     pub fn copy_into(&self, dst: &mut UiState) {
         dst.ensure_sessions();
@@ -425,6 +452,9 @@ impl UiState {
 
     pub fn apply(&mut self, control: Control, at_ms: u32, out: &mut Update) {
         self.advance(at_ms);
+        // The firmware hushes before it decides whether to deliver (a
+        // waking press is not); here for every other driver of the state.
+        timer::hush(self, control);
         let mut consumed = global::on_control(self, control, at_ms, out);
         if !consumed {
             consumed = match control {
@@ -442,6 +472,22 @@ impl UiState {
     /// Never emits the mirror event of what it applied.
     pub fn host(&mut self, msg: &HostMsg, at_ms: u32, out: &mut Update) {
         self.advance(at_ms);
+        if let HostMsg::Language { value, revision } = msg {
+            if *value <= 3 {
+                self.language_sync_supported = true;
+                if *revision >= self.language_revision && (*revision != self.language_revision || *value != self.language as u8) {
+                    self.language = super::i18n::Language::from_id(*value);
+                    self.language_revision = *revision;
+                    out.language = Some(self.language);
+                    out.dirty = true;
+                }
+            }
+            self.finish(out);
+            return;
+        }
+        if matches!(msg, HostMsg::Hello { .. }) && !self.deck.host_present {
+            self.language_sync_supported = false;
+        }
         if let HostMsg::Transcript { press: Some(press), .. } = msg {
             if self.global.ptt.or(self.global.ptt_pending).is_none_or(|p| p.press != *press) {
                 return;
@@ -449,6 +495,7 @@ impl UiState {
         }
         let mut fx = Effects::new();
         self.deck.apply(msg, at_ms, &mut fx);
+        if fx.new_session { self.language_sync_supported = false; }
         if let Some(why) = fx.reject {
             global::on_reject(self, why, at_ms, out);
         } else {
@@ -524,6 +571,7 @@ impl UiState {
     /// A link drop clears every hold WITHOUT emitting, and the deck goes
     /// stale/offline.
     pub fn set_connected(&mut self, connected: bool, out: &mut Update) {
+        if !connected { self.language_sync_supported = false; }
         out.dirty |= self.connected != connected;
         self.connected = connected;
         global::on_link(self, connected, out);
@@ -678,6 +726,7 @@ impl UiState {
     }
 
     fn finish(&mut self, out: &mut Update) {
+        if !self.deck.host_present { self.language_sync_supported = false; }
         if out.dirty {
             self.invalidate();
         }
@@ -1010,4 +1059,10 @@ mod tests {
         assert_eq!(second.unwrap().origin_x, 12);
         assert!(!ui.strip_at_rest());
     }
+}
+
+/// The speaker's local command: a ringing Timer alarm first, else the
+/// arcade's music and effects.
+pub fn sound_command(ui: &UiState) -> u32 {
+    timer::alarm_command(ui).unwrap_or_else(|| arcade::sound_command(ui))
 }

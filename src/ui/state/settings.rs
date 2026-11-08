@@ -11,6 +11,8 @@
 //!   starts adjusting it: SCROLL then steps it by one (hard ends) and ENTER
 //!   or CANCEL ends adjusting. Read-only rows ignore ENTER. A change is
 //!   applied locally through `Settings::set` and reported once as `set`.
+//!   Language instead increments its persisted revision and sends `language`
+//!   only after the current host has acknowledged support for that protocol.
 //! - CANCEL while not adjusting goes home. Leaving the face ends adjusting.
 //! - Turning demo data on/off without a deck host loads/clears the built-in
 //!   data at once.
@@ -26,6 +28,8 @@ use crate::deck::demo;
 use crate::deck::model::{Effects, Settings};
 use crate::deck::msg::{Event, HostMsg, SettingKey};
 use crate::ui::layout;
+use crate::ui::i18n::Language;
+use crate::ui::kit::list::Viewport;
 
 /// The idle-home values SCROLL steps through, in seconds; 0 = never.
 pub const IDLE_HOME_STEPS: [u16; 4] = [0, 30, 60, 120];
@@ -174,6 +178,11 @@ fn neighbour(panel: u8, row: u8, forward: bool) -> Option<(u8, u8)> {
 /// ENTER (or a tap on the selected row): flip a toggle, start adjusting a
 /// value, act on the two action rows, nothing on a read-only row.
 fn activate(ui: &mut UiState, at_ms: u32, out: &mut Update) {
+    if (ui.settings.panel, ui.settings.row) == LANGUAGE_ROW {
+        ui.settings.adjusting = true;
+        out.dirty = true;
+        return;
+    }
     let Some(key) = setting_at(ui.settings.panel, ui.settings.row) else {
         match (ui.settings.panel, ui.settings.row) {
             TUTORIAL_ROW => super::tutorial::open(ui, true, at_ms, out),
@@ -238,7 +247,24 @@ pub(super) fn on_control(
     let (panel, row) = (ui.settings.panel, ui.settings.row);
     match control {
         Control::Wheel(wheel) if ui.settings.adjusting => {
-            if let Some(key) = setting_at(panel, row) {
+            if (panel, row) == LANGUAGE_ROW {
+                let index = ui.language as usize;
+                let next = if wheel == Wheel::Cw {
+                    (index + 1).min(Language::ALL.len() - 1)
+                } else {
+                    index.saturating_sub(1)
+                };
+                let language = Language::ALL[next];
+                if ui.language != language {
+                    ui.language = language;
+                    ui.language_revision = ui.language_revision.saturating_add(1);
+                    out.language = Some(language);
+                    out.dirty = true;
+                    if ui.language_sync_supported && ui.deck.host_present {
+                        out.push_deck(Event::Language);
+                    }
+                }
+            } else if let Some(key) = setting_at(panel, row) {
                 let value = stepped(&ui.deck.settings, key, wheel == Wheel::Cw);
                 set(ui, key, value, at_ms, out);
             }
@@ -271,8 +297,9 @@ pub(super) fn hit(ui: &UiState, _instance: u8, x: i32, y: i32) -> Option<Target>
     if let Some(tab) = layout::settings_tab_at(x, y) {
         return Some(Target::tap(layout::settings_tab(tab), tab as u16));
     }
-    let row = layout::settings_row_at(x, y)?;
-    (row < rows(ui.settings.panel)).then(|| Target::tap(layout::settings_row(row), 8 + row as u16))
+    let slot = layout::settings_row_at(x, y)?;
+    let row = viewport(ui).index_at(slot)?;
+    Some(Target::list_row(layout::settings_row(slot), 8 + row as u16, 66))
 }
 
 /// One act of a touch that latched a target of this face: a tab switches
@@ -311,6 +338,13 @@ pub(super) fn on_touch(
             }
         }
         TouchAct::Cancel | TouchAct::Swipe { .. } => ui.settings.pressed = None,
+        TouchAct::Scroll(steps) => {
+            stop_adjusting(ui, out);
+            ui.settings.pressed = None;
+            let next = (ui.settings.row as i32 + steps as i32)
+                .clamp(0, rows(ui.settings.panel).saturating_sub(1) as i32);
+            ui.settings.row = next as u8;
+        }
         _ => return,
     }
     out.dirty = true;
@@ -352,15 +386,23 @@ pub const fn rows(panel: u8) -> u8 {
         0 => 2, // speaker, mic
         1 => 1, // auto-announce
         2 => 2, // chime, auto-jump
-        3 => 4, // brightness, idle-home, text size, tutorial
+        3 => 5, // brightness, idle-home, text size, language, tutorial
         4 => 3, // link, deck host, demo data
         _ => 4, // firmware, battery, power off, factory reset
     }
 }
 
 /// The two rows that act on ENTER instead of adjusting a setting.
-pub const TUTORIAL_ROW: (u8, u8) = (3, 3);
+pub const LANGUAGE_ROW: (u8, u8) = (3, 3);
+pub const TUTORIAL_ROW: (u8, u8) = (3, 4);
 pub const FACTORY_RESET_ROW: (u8, u8) = (5, 3);
+
+/// Four physical row lanes, following the selection on longer panels.
+pub fn viewport(ui: &UiState) -> Viewport {
+    let mut view = Viewport::new(0, layout::SETTINGS_ROWS, rows(ui.settings.panel));
+    view.follow(ui.settings.row);
+    view
+}
 
 /// The setting a row adjusts; `None` = an action row (`TUTORIAL_ROW`,
 /// `FACTORY_RESET_ROW`), a read-only row (Host: link, deck host; the rest
@@ -428,6 +470,77 @@ mod tests {
         assert!(out.dirty && !ui.settings.adjusting);
         assert_eq!(ui.global.overlay, Overlay::Tutorial);
         assert!(ui.tutorial.replay);
+    }
+
+    #[test]
+    fn language_is_adjusted_locally_without_a_host_setting_event() {
+        let mut ui = on_row(LANGUAGE_ROW);
+        ui.deck.settings.demo = false;
+        ui.deck.host_present = false;
+        press(&mut ui, Button::Enter, 10);
+        assert!(ui.settings.adjusting);
+        for language in Language::ALL.into_iter().skip(1) {
+            let mut out = Update::new();
+            ui.apply(Control::Wheel(Wheel::Cw), 20, &mut out);
+            assert_eq!(ui.language, language);
+            assert_eq!(out.language, Some(language));
+            assert!(out.dirty);
+            assert!(out.deck_events().next().is_none(), "UI language never enters the host settings protocol");
+        }
+        let mut out = Update::new();
+        ui.apply(Control::Wheel(Wheel::Cw), 30, &mut out);
+        assert_eq!(out.language, None, "the last language is a hard end");
+        ui.apply(Control::Wheel(Wheel::Ccw), 40, &mut out);
+        assert_eq!(ui.language, Language::TraditionalChinese);
+        press(&mut ui, Button::Enter, 50);
+        assert!(!ui.settings.adjusting);
+    }
+
+    #[test]
+    fn display_viewport_and_touch_scroll_reach_language_and_tutorial() {
+        let mut ui = on_row(LANGUAGE_ROW);
+        assert_eq!(viewport(&ui).top, 0);
+        let (x, y) = layout::settings_row(3).center();
+        let target = hit(&ui, 5, x, y).unwrap();
+        assert_eq!(target.id, 8 + LANGUAGE_ROW.1 as u16);
+        assert_eq!(target.kind, super::super::TargetKind::ListRow);
+        on_touch(&mut ui, 5, target, TouchAct::Scroll(1), 10, &mut Update::new());
+        assert_eq!(ui.settings.row, TUTORIAL_ROW.1);
+        assert_eq!(viewport(&ui).top, 1);
+        let target = hit(&ui, 5, x, y).unwrap();
+        assert_eq!(target.id, 8 + TUTORIAL_ROW.1 as u16);
+        on_touch(&mut ui, 5, target, TouchAct::Activate, 20, &mut Update::new());
+        assert_eq!(ui.global.overlay, Overlay::Tutorial);
+        assert!(ui.tutorial.replay);
+    }
+
+    #[test]
+    fn versioned_language_handshake_syncs_changes_without_echo_or_boot_semantic_changes() {
+        let mut ui = on_row(LANGUAGE_ROW);
+        ui.deck.settings.demo = false;
+        ui.host(&HostMsg::Hello { v: 1, sid: 7, minute_of_day: None }, 1, &mut Update::new());
+        assert!(!ui.language_sync_supported, "an old host never receives new message kinds");
+        ui.host(&HostMsg::Language { value: 0, revision: 0 }, 2, &mut Update::new());
+        assert!(ui.language_sync_supported);
+        press(&mut ui, Button::Enter, 10);
+        let mut out = Update::new();
+        ui.apply(Control::Wheel(Wheel::Cw), 40, &mut out);
+        assert_eq!(ui.language_revision, 1);
+        assert_eq!(out.deck_events().collect::<std::vec::Vec<_>>(), [Event::Language]);
+        let mut out = Update::new();
+        ui.host(&HostMsg::Language { value: 3, revision: 0 }, 41, &mut out);
+        assert_eq!(ui.language, Language::SimplifiedChinese, "a stale in-flight app sync loses to a newer local change");
+        ui.host(&HostMsg::Language { value: 2, revision: 1 }, 42, &mut out);
+        assert_eq!(ui.language, Language::TraditionalChinese, "app wins a revision tie");
+        assert!(out.deck_events().next().is_none(), "host changes never mirror back");
+        assert_eq!(out.language, Some(Language::TraditionalChinese));
+        assert!(ui.still_default(), "persisted language is independent of boot settings freshness");
+        ui.set_connected(false, &mut Update::new());
+        assert!(!ui.language_sync_supported);
+        let mut out = Update::new();
+        ui.apply(Control::Wheel(Wheel::Cw), 43, &mut out);
+        assert_eq!(ui.language_revision, 2);
+        assert!(out.deck_events().next().is_none());
     }
 
     #[test]

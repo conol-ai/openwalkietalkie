@@ -20,7 +20,8 @@
 //! `objc2 =0.6.4` and cargo answers that by building both — five objc2
 //! crates at two major versions each, for a menu.
 use crate::present;
-use deck_gui_core::tray::{Summary, TrayCommand, QUIT_TOOLTIP};
+use deck_gui_core::i18n::Language;
+use deck_gui_core::tray::{Summary, TrayCommand, quit_tooltip};
 use deck_gui_core::{events, AppEvent};
 use gpui::Global;
 use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
@@ -38,6 +39,8 @@ pub struct Tray {
     icon: TrayIcon,
     mute: CheckMenuItem,
     pause_hooks: CheckMenuItem,
+    labels: Vec<(TrayCommand, MenuItem)>,
+    language: Language,
     /// The last dot drawn, so a redraw that would change nothing does not
     /// rebuild a PNG on every event the bus delivers.
     dot: Option<deck_model::Tone>,
@@ -52,16 +55,20 @@ impl Global for Tray {}
 /// leaves the window working exactly as it did. The caller says so and
 /// carries on.
 pub fn install() -> Option<Tray> {
+    install_localized(Language::English)
+}
+
+pub fn install_localized(language: Language) -> Option<Tray> {
     let menu = Menu::new();
     let open = MenuItem::with_id(
         TrayCommand::Open.id(),
-        TrayCommand::Open.label(),
+        TrayCommand::Open.label_localized(language),
         true,
         None,
     );
     let mute = CheckMenuItem::with_id(
         TrayCommand::Mute.id(),
-        TrayCommand::Mute.label(),
+        TrayCommand::Mute.label_localized(language),
         true,
         false,
         None,
@@ -70,26 +77,26 @@ pub fn install() -> Option<Tray> {
     // re-enable hooks the operator had paused in `config.toml` by hand.
     let pause_hooks = CheckMenuItem::with_id(
         TrayCommand::PauseHooks.id(),
-        TrayCommand::PauseHooks.label(),
+        TrayCommand::PauseHooks.label_localized(language),
         false,
         false,
         None,
     );
     let updates = MenuItem::with_id(
         TrayCommand::CheckUpdates.id(),
-        TrayCommand::CheckUpdates.label(),
+        TrayCommand::CheckUpdates.label_localized(language),
         true,
         None,
     );
     let stop = MenuItem::with_id(
         TrayCommand::StopService.id(),
-        TrayCommand::StopService.label(),
+        TrayCommand::StopService.label_localized(language),
         true,
         None,
     );
     let quit = MenuItem::with_id(
         TrayCommand::Quit.id(),
-        TrayCommand::Quit.label(),
+        TrayCommand::Quit.label_localized(language),
         true,
         None,
     );
@@ -108,7 +115,7 @@ pub fn install() -> Option<Tray> {
     }
     let icon = TrayIconBuilder::new()
         .with_menu(Box::new(menu))
-        .with_tooltip(QUIT_TOOLTIP)
+        .with_tooltip(quit_tooltip(language))
         .with_icon(icon_for(deck_model::Tone::Gray)?)
         // AppKit tints the alpha mask for the menu bar and its selected state.
         .with_icon_as_template(true)
@@ -127,6 +134,8 @@ pub fn install() -> Option<Tray> {
         icon,
         mute,
         pause_hooks,
+        labels: vec![(TrayCommand::Open, open), (TrayCommand::CheckUpdates, updates), (TrayCommand::StopService, stop), (TrayCommand::Quit, quit)],
+        language,
         dot: Some(deck_model::Tone::Gray),
     })
 }
@@ -138,6 +147,18 @@ impl Tray {
     /// rasterising the icon and encoding it as a PNG — are skipped whenever
     /// the dot has not moved.
     pub fn update(&mut self, summary: &Summary) {
+        self.update_localized(summary, Language::English);
+    }
+
+    pub fn update_localized(&mut self, summary: &Summary, language: Language) {
+        if self.language != language {
+            for (command, item) in &self.labels {
+                item.set_text(command.label_localized(language));
+            }
+            self.mute.set_text(TrayCommand::Mute.label_localized(language));
+            self.pause_hooks.set_text(TrayCommand::PauseHooks.label_localized(language));
+            self.language = language;
+        }
         if self.dot != Some(summary.dot) {
             if let Some(icon) = icon_for(summary.dot) {
                 if self.icon.set_icon_with_as_template(Some(icon), true).is_ok() {

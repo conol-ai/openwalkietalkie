@@ -127,7 +127,10 @@ pub async fn run(mut display: Option<Co5300>, band: &'static mut Band) -> ! {
     state.reset();
     // A deck that never finished the tutorial starts in it (Settings >
     // Display > Tutorial replays it later).
-    if !crate::link::prefs().tutorial_done {
+    let prefs = crate::link::prefs();
+    state.language = crate::ui::i18n::Language::from_id(prefs.language);
+    state.language_revision = prefs.language_revision;
+    if !prefs.tutorial_done {
         state.start_tutorial(false);
         logln!("app: first run: starting the tutorial");
     }
@@ -323,11 +326,17 @@ fn emit(state: &mut UiState, power: &mut Policy, scratch: &mut HostMsg, update: 
     if update.factory_reset {
         FACTORY_RESET.store(true, Ordering::Release);
     }
-    if update.tutorial_done {
+    if update.tutorial_done || update.language.is_some() {
         // A few milliseconds with interrupts off: one journal slot.
-        crate::link::save_prefs(crate::link::Prefs { tutorial_done: true });
+        let mut prefs = crate::link::prefs();
+        prefs.tutorial_done |= update.tutorial_done;
+        if let Some(language) = update.language {
+            prefs.language = language as u8;
+            prefs.language_revision = state.language_revision;
+        }
+        crate::link::save_prefs(prefs);
     }
-    crate::audio::arcade::publish(crate::ui::state::arcade::sound_command(state));
+    crate::audio::arcade::publish(crate::ui::state::sound_command(state));
     if crate::ui::state::arcade::playing(state) && power.screen() != Screen::Off {
         power.notify(now_ms());
     }
@@ -492,6 +501,10 @@ fn apply(
     (control, at_ms): Stamped,
 ) -> bool {
     let before = power.screen();
+    // Any touch of the deck silences a ringing timer, even the press that
+    // only wakes the screen and is never delivered; the tick below
+    // publishes the silence.
+    ui::state::timer::hush(state, control);
     let deliver = power.input(control, at_ms);
     let lock_dirty = state.set_screen_lock(power.lock_progress());
     let dirty = tick(state, power, scratch) | (before != power.screen()) | lock_dirty;

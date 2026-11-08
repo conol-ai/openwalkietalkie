@@ -203,7 +203,7 @@ fn text(band: &mut Band, y: i32, value: &str) {
 pub fn draw(band: &mut Band, ui: &UiState) {
     let v = &ui.image;
     band.fill(kit::rgb(theme::CANVAS));
-    kit::header(band, "Image", kit::header_right(ui, kit::HeaderRight::None));
+    kit::header(band, ui.tr("Image"), kit::header_right(ui, kit::HeaderRight::None));
     if v.total > 0 && v.received == v.total && !v.failed {
         let scale = (384 / i32::from(v.width))
             .min(320 / i32::from(v.height))
@@ -226,23 +226,24 @@ pub fn draw(band: &mut Band, ui: &UiState) {
             Pixel(p, Rgb565::from(RawU16::new(rgb)))
         }));
     } else if v.failed {
-        text(band, 220, "Preview unavailable");
-        text(band, 258, "Close and tap the image to retry.");
+        text(band, 220, ui.tr("Preview unavailable"));
+        text(band, 258, ui.tr("Close and tap the image to retry."));
     } else {
         use core::fmt::Write;
         let mut label = crate::deck::text::Text::<48>::new();
         if v.total > 0 {
             let _ = write!(
                 label,
-                "Loading image… {}%",
+                "{} {}%",
+                ui.tr("Loading image…"),
                 u32::from(v.received) * 100 / u32::from(v.total)
             );
         } else {
-            label.set("Loading image…");
+            label.set(ui.tr("Loading image…"));
         }
         text(band, 240, label.as_str());
     }
-    text(band, 442, "Close · CANCEL");
+    text(band, 442, ui.tr("Close · CANCEL"));
 }
 pub fn signature(ui: &UiState, sig: &mut super::signature::SigBuilder) {
     sig.mode(0x494d47);

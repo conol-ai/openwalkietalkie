@@ -26,6 +26,8 @@ pub struct Global {
 }
 
 pub struct UiState {
+    pub language: u8,
+    pub language_revision: u32,
     pub global: Global,
     pub deck: Deck,
 }
@@ -39,6 +41,8 @@ impl Default for UiState {
 impl UiState {
     pub fn new() -> Self {
         Self {
+            language: 0,
+            language_revision: 0,
             global: Global {
                 strip: [FaceEntry::EMPTY; MAX_FACES],
                 strip_len: 0,

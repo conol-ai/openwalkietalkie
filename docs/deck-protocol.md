@@ -138,6 +138,27 @@ host                                   device
   `focus` does not produce a `channel`, a `set` no `set`, a `faces` no
   `faces`).
 
+### Interface-language preferences
+
+Capable device hellos include both `lang` (0 English, 1 Simplified Chinese,
+2 Traditional Chinese, 3 Japanese) and `lang_rev` (u32). A host must not send
+language messages to a deck that omits either field. The preference is
+independent of `boot`: a saved device locale must not suppress restoration
+of other settings or be reset by a boot-default push.
+
+Both directions use `{"m":"language","v":0,"rev":1}`. Every explicit local
+choice increments its persisted revision. A newer revision wins on reconnect;
+if revisions are equal and values differ, the app wins. The host reconciles
+every capable hello and acknowledges the chosen value with a language line,
+even when the values already agree. The device accepts equal/newer host
+revisions and persists them without echoing a language event. It sends local
+language events only after this host acknowledgement; a disconnect, heartbeat
+expiry or new session clears that negotiation, preserving older-host behavior.
+Existing non-English device preferences without a revision migrate to revision 1;
+an untouched English default remains revision 0. App choices are persisted even
+without a connected deck. The API spelling is `device.set` with `k:"language"`
+and `v:0..3`; the wire uses the dedicated message above, never ordinary `set`.
+
 ## Host → device
 
 Required fields have no `?`. Text capacities are in bytes of UTF-8.
@@ -146,6 +167,7 @@ Required fields have no `?`. Text capacities are in bytes of UTF-8.
 |---|---|---|
 | `hello` | `v` (1), `sid` u32, `hm?` `"HH:MM"` | See *Session*. `hm` sets the header clock. |
 | `synced` | | End of a full sync: purge entries the sync did not refresh. |
+| `language` | `v` 0..3, `rev` u32 | Versioned UI preference and capability acknowledgement; see Interface-language preferences. |
 | `system` | `cpu?`, `gpu?` 0..100; `mu`, `mt`, `df`, `dt`, `seq` u32 | Complete computer sample: memory used/total and disk free/total in MiB. Used/free must not exceed total. Omitted CPU/GPU or zero capacity means unavailable. `seq` changes on every sample, including unchanged readings. Send every 2 s in the coalescing P3 lane only when the device advertises and enables the `system` template; never send unsolicited to legacy firmware. After 10 s without a sample the deck marks the values stale. |
 | `agent` | `id` 1..8, `kind?` `claude`/`codex`/`gemini`/`other`, `name?` (24), `proj?` (24), `state?` `working`/`question`/`ready`/`error`/`idle`, `title?` (64), `since?` age of the state in seconds, or `gone:1` | Upsert the roster entry; `gone` removes it (and its card and notices). `id` is the stable slot the daemon assigns (1..4 map to the Hyprland binds). `proj` is the project the session runs in (the working directory's last component): the roster is one page per project, in name order, the agents without one last on a page of their own; an agent whose `name` equals its `proj` shows its kind alone on the row, and a `title` equal to it is left blank there. |
 | `card` | `agent`, `id` u16, `type` `q` (question) / `r` (ready), `text` (128), `choices?` up to 4 strings (32 each), `rec?` 0-based recommended choice, or `clear:1` | The agent's pending card. A new (agent, id) raises a notice, chime and toast; re-sending an id updates the text and choices only. `clear` resolves it (after an `answer`, or when the agent moved on). Unknown agent → `range`. |
@@ -164,7 +186,7 @@ Required fields have no `?`. Text capacities are in bytes of UTF-8.
 
 | `m` | fields | when |
 |---|---|---|
-| `hello` | `v`, `fw` firmware version, `sid` held (or 0), `boot` 0/1, `rx` 1024, `faces` list of `{f,t,n}` | Reply to every host hello. |
+| `hello` | `v`, `fw` firmware version, `sid` held (or 0), `boot` 0/1, `rx` 1024, `lang?` 0..3, `lang_rev?` u32, `faces` list of `{f,t,n}` | Reply to every host hello. Both language fields advertise versioned language sync. |
 | `key` | `k` `enter`/`cancel`/`left`/`right`/`cw`/`ccw`, `act` 1 press / 0 release / 2 step (wheel), `shift` 0/1, `f` face id | Hardware keys on an Omarchy-type face, for the host to map to compositor actions. A release carries the `shift` and `f` of its press. SHIFT and PTT never come as keys. |
 | `up` | | Everything is released: sent when a press was stranded by a context change, after the hello that ends a heartbeat gap, and on overflow recovery. Release every key you synthesised and cancel any open PTT utterance. |
 | `channel` | `agent`, `seq` u16 | The active channel changed by a user action or a PTT press; focus that agent's window and echo `focus {agent, ack: seq}`. |
@@ -176,6 +198,7 @@ Required fields have no `?`. Text capacities are in bytes of UTF-8.
 | `ws` | `go` workspace number, or `win` window row index | A workspace chip or window row was tapped. |
 | `session` | `agent`, `f` 0..2, `p` page 0..63, `r` displayed revision, `i` 0..3 or 255 | `i:255` requests the overview or a picker page; otherwise applies that row from the exact displayed revision. Choices cannot cross sessions, reordered catalogs, or slot reuse. |
 | `refresh` | `what`: `usage` | ENTER on the Usage face: send a fresh `usage`. |
+| `language` | `v` 0..3, `rev` u32 | A local UI-language choice, emitted only after host support is negotiated. |
 | `set` | `k`, `v` | A setting changed on the device (persist host-side ones: speaker, mic, announce, chime). |
 | `faces` | `list` of `{f,t,n}` | The strip changed in the face manager; persist it. |
 | `face` | `f` | The visible face changed (start/stop `ws` pushes, send `macro` for a Macropad). |

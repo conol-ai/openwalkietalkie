@@ -37,41 +37,41 @@ fn metric(ui: &UiState, index: usize) -> (&'static str, Option<u8>, Text<64>) {
     let mut detail = Text::new();
     let (name, value) = match index {
         0 => {
-            detail.push_str("Total processor load");
+            detail.push_str(ui.tr("Total processor load"));
             ("CPU", s.cpu)
         }
         1 => {
             gib(s.memory_used_mib, &mut detail);
             detail.push_str(" / ");
             gib(s.memory_total_mib, &mut detail);
-            detail.push_str(" GiB used");
-            ("Memory", percent(s.memory_used_mib, s.memory_total_mib))
+            detail.push_str(ui.tr(" GiB used"));
+            (ui.tr("Memory"), percent(s.memory_used_mib, s.memory_total_mib))
         }
         2 => {
-            detail.push_str("Graphics processor load");
+            detail.push_str(ui.tr("Graphics processor load"));
             ("GPU", s.gpu)
         }
         _ => {
             gib(s.disk_free_mib, &mut detail);
             detail.push_str(" / ");
             gib(s.disk_total_mib, &mut detail);
-            detail.push_str(" GiB free");
-            ("Storage", percent(s.disk_free_mib, s.disk_total_mib))
+            detail.push_str(ui.tr(" GiB free"));
+            (ui.tr("Storage"), percent(s.disk_free_mib, s.disk_total_mib))
         }
     };
     if value.is_none() {
         detail.clear();
-        detail.push_str(if ui.deck.system_at.is_none() {
+        detail.push_str(ui.tr(if ui.deck.system_at.is_none() {
             "Waiting for computer"
         } else {
             "Not available"
-        });
+        }));
     }
     (name, value, detail)
 }
 pub fn draw(band: &mut Band, ui: &UiState, _: u8) {
     band.fill(kit::rgb(theme::CANVAS));
-    kit::header(band, "SYSTEM STATUS", kit::HeaderRight::Text(state(ui)));
+    kit::header(band, ui.tr("SYSTEM STATUS"), kit::HeaderRight::Text(ui.tr(state(ui))));
     for i in 0..4 {
         let r = row(i);
         if !kit::visible(band, r) {
@@ -136,12 +136,13 @@ pub fn draw(band: &mut Band, ui: &UiState, _: u8) {
             Align::Left,
         );
     }
-    kit::hint_bar(
+    kit::hint_bar_localized(
         band,
         &[kit::Hint {
-            key: "2 SEC",
+            key: ui.tr("2 SEC"),
             label: "live refresh",
         }],
+        ui.language,
     );
 }
 pub fn signature(ui: &UiState, _: u8, sig: &mut SigBuilder) {

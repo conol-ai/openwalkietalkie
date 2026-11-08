@@ -11,6 +11,7 @@ use crate::display::Band;
 use crate::ui::layout::Rect;
 use crate::ui::signature::SigBuilder;
 use crate::ui::state::UiState;
+use crate::ui::i18n::Language;
 use crate::ui::{font, font::Align, font::Font, kit, layout, theme};
 
 /// Chip row: every chip rect, chips 0..9.
@@ -27,11 +28,11 @@ const WINDOWS_LINE: Rect = Rect::new(32, 176, 416, 24);
 /// The header tag: the deck-wide status ("demo", "offline") displaces
 /// "remote", and a low battery displaces everything.
 fn tag(ui: &UiState) -> kit::HeaderRight<'static> {
-    kit::face_tag(ui, kit::HeaderRight::Text("remote"))
+    kit::face_tag(ui, kit::HeaderRight::Text(ui.tr("remote")))
 }
 
-fn title(ui: &UiState, out: &mut Text<16>) {
-    out.set("Workspace ");
+fn title(ui: &UiState, out: &mut Text<32>) {
+    out.set(ui.tr("Workspace "));
     match ui.deck.workspaces.active {
         0 => {
             out.push_char('\u{2014}');
@@ -54,7 +55,7 @@ fn viewport(ui: &UiState) -> kit::list::Viewport {
 }
 
 /// "2 more ↓" / "↑ 1 more".
-fn more(count: u8, below: bool, out: &mut Text<12>) {
+fn more(count: u8, below: bool, language: Language, out: &mut Text<24>) {
     out.clear();
     if !below {
         out.push_str("\u{2191} ");
@@ -63,7 +64,7 @@ fn more(count: u8, below: bool, out: &mut Text<12>) {
         out.push_char((b'0' + count / 10 % 10) as char);
     }
     out.push_char((b'0' + count % 10) as char);
-    out.push_str(" more");
+    out.push_str(language.text(" more"));
     if below {
         out.push_str(" \u{2193}");
     }
@@ -119,12 +120,13 @@ fn window_row(band: &mut Band, ui: &UiState, slot: u8, row: u8) {
 pub fn draw(band: &mut Band, ui: &UiState, instance: u8) {
     let _ = instance;
     band.fill(kit::rgb(theme::CANVAS));
-    kit::header(band, "OMARCHY", tag(ui));
+    kit::header(band, ui.tr("OMARCHY"), tag(ui));
     let ws = &ui.deck.workspaces;
     if kit::visible(band, TITLE) {
-        let mut text = Text::<16>::new();
+        let mut text = Text::<32>::new();
         title(ui, &mut text);
-        font::draw(band, Font::Display, layout::OMARCHY_TITLE.left(), layout::OMARCHY_TITLE_BASELINE, text.as_str(),
+        let size = if font::measure(Font::Display, text.as_str()) > layout::OMARCHY_TITLE.width() { Font::Title } else { Font::Display };
+        font::draw(band, size, layout::OMARCHY_TITLE.left(), layout::OMARCHY_TITLE_BASELINE, text.as_str(),
             theme::TEXT_PRIMARY, Some(theme::CANVAS), layout::OMARCHY_TITLE.width(), Align::Left);
     }
     if kit::visible(band, CHIPS) {
@@ -135,11 +137,11 @@ pub fn draw(band: &mut Band, ui: &UiState, instance: u8) {
     let viewport = viewport(ui);
     if kit::visible(band, WINDOWS_LINE) {
         let x = layout::OMARCHY_WINDOWS_LABEL.left();
-        font::draw(band, Font::Label, x, layout::OMARCHY_WINDOWS_BASELINE, "WINDOWS", theme::TEXT_FAINT, Some(theme::CANVAS),
+        font::draw(band, Font::Label, x, layout::OMARCHY_WINDOWS_BASELINE, ui.tr("WINDOWS"), theme::TEXT_FAINT, Some(theme::CANVAS),
             layout::OMARCHY_WINDOWS_LABEL.width(), Align::Left);
         if viewport.more_above() {
-            let mut text = Text::<12>::new();
-            more(viewport.top, false, &mut text);
+            let mut text = Text::<24>::new();
+            more(viewport.top, false, ui.language, &mut text);
             font::draw(band, Font::Small, theme::TEXT_RIGHT, layout::OMARCHY_WINDOWS_BASELINE, text.as_str(), theme::TEXT_FAINT,
                 Some(theme::CANVAS), 120, Align::Right);
         }
@@ -147,7 +149,7 @@ pub fn draw(band: &mut Band, ui: &UiState, instance: u8) {
     if viewport.count == 0 {
         let rect = layout::omarchy_window(0);
         if kit::visible(band, rect) {
-            font::draw(band, Font::Row, rect.left() + layout::WINDOW_TEXT_X, rect.top() + layout::WINDOW_BASELINE, "no windows",
+            font::draw(band, Font::Row, rect.left() + layout::WINDOW_TEXT_X, rect.top() + layout::WINDOW_BASELINE, ui.tr("no windows"),
                 theme::TEXT_FAINT, Some(theme::CANVAS), 300, Align::Left);
         }
     }
@@ -155,11 +157,11 @@ pub fn draw(band: &mut Band, ui: &UiState, instance: u8) {
         window_row(band, ui, slot, row);
     }
     if viewport.more_below() && kit::visible(band, MORE_BELOW) {
-        let mut text = Text::<12>::new();
-        more(viewport.count - viewport.top - viewport.visible, true, &mut text);
+        let mut text = Text::<24>::new();
+        more(viewport.count - viewport.top - viewport.visible, true, ui.language, &mut text);
         font::draw(band, Font::Small, theme::TEXT_RIGHT, MORE_BELOW_BASELINE, text.as_str(), theme::TEXT_FAINT, Some(theme::CANVAS), 120, Align::Right);
     }
-    kit::hint_bar(band, HINTS);
+    kit::hint_bar_localized(band, HINTS, ui.language);
 }
 
 const HINTS: &[kit::Hint] = &[
@@ -215,7 +217,7 @@ mod tests {
     #[test]
     fn the_title_names_the_active_workspace_or_none() {
         let mut ui = std::boxed::Box::new(UiState::new());
-        let mut text = Text::<16>::new();
+        let mut text = Text::<32>::new();
         ui.deck.workspaces.active = 2;
         title(&ui, &mut text);
         assert_eq!(text.as_str(), "Workspace 2");
@@ -232,13 +234,30 @@ mod tests {
 
     #[test]
     fn more_markers_count_the_hidden_rows() {
-        let mut text = Text::<12>::new();
-        more(2, true, &mut text);
+        let mut text = Text::<24>::new();
+        more(2, true, Language::English, &mut text);
         assert_eq!(text.as_str(), "2 more \u{2193}");
-        more(1, false, &mut text);
+        more(1, false, Language::English, &mut text);
         assert_eq!(text.as_str(), "\u{2191} 1 more");
-        more(12, true, &mut text);
+        more(12, true, Language::English, &mut text);
         assert_eq!(text.as_str(), "12 more \u{2193}");
+    }
+
+    #[test]
+    fn translated_workspace_titles_and_markers_keep_numbers_and_suffixes() {
+        let mut ui = std::boxed::Box::new(UiState::new());
+        ui.deck.workspaces.active = 255;
+        for language in Language::ALL {
+            ui.language = language;
+            let mut text = Text::<32>::new();
+            title(&ui, &mut text);
+            assert!(text.as_str().ends_with("255"), "{language:?}: {}", text.as_str());
+            assert!(font::measure(Font::Title, text.as_str()) <= layout::OMARCHY_TITLE.width());
+            let mut marker = Text::<24>::new();
+            more(12, true, language, &mut marker);
+            assert!(marker.as_str().starts_with("12") && marker.as_str().ends_with(" \u{2193}"));
+            assert!(marker.as_str().contains(language.text(" more")));
+        }
     }
 
     #[test]

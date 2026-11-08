@@ -5,7 +5,7 @@
 //! pixel work: by its line box in y, then per glyph in x, then row by row.
 //! `bg = Some` writes a 16-step fg/bg ramp straight into the band rows;
 //! `bg = None` blends each pixel over what is there (about 3x the cost).
-//! Chinese uses the shared, scaled 2 bpp atlas in `font_cjk`. Codepoints
+//! Chinese and Japanese use the shared, scaled 2 bpp atlas in `font_cjk`. Codepoints
 //! missing from both atlases draw as the replacement box.
 use super::font_cjk;
 use super::font_data::{FontData, Glyph, FONTS, FONT_COUNT, REPLACEMENT};
@@ -163,7 +163,7 @@ fn blit(band: &mut Band, atlas: &[u8], glyph: &Glyph, gx: i32, gy: i32, fg: u32,
     }
 }
 
-/// Chinese uses the same clipping and blending contract as the Latin atlas.
+/// CJK uses the same clipping and blending contract as the Latin atlas.
 #[allow(clippy::too_many_arguments)]
 fn blit_cjk(band: &mut Band, source: &Glyph, glyph: &Glyph, gx: i32, gy: i32, fg: u32, ramp: Option<&[[u8; 2]; 16]>) {
     let clip = band.bounding_box();
@@ -444,6 +444,26 @@ mod tests {
             let width = measure(spec.font, "中文");
             let mut joined = String::new();
             wrap(spec.font, text, width, 20, &mut |_, line, cut| {
+                assert!(!cut);
+                assert!(measure(spec.font, line) <= width);
+                joined.push_str(line);
+            });
+            assert_eq!(joined, text);
+            let (end, cut, fitted) = fit(data(spec.font), &spec, text, width);
+            assert!(text.is_char_boundary(end) && cut && px(fitted) <= width);
+        }
+    }
+
+    #[test]
+    fn japanese_uses_kana_fallback_and_wraps_at_character_boundaries() {
+        let text = "日本語の設定です。カタカナも表示できます。";
+        for spec in RAMP {
+            for c in text.chars().chain("ｶﾀｶﾅﾞﾟ".chars()) {
+                assert_eq!(glyph(data(spec.font), c).cp as u32, c as u32, "{c:?} missing");
+            }
+            let width = measure(spec.font, "日本");
+            let mut joined = String::new();
+            wrap(spec.font, text, width, 40, &mut |_, line, cut| {
                 assert!(!cut);
                 assert!(measure(spec.font, line) <= width);
                 joined.push_str(line);

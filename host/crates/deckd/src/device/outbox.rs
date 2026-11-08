@@ -363,6 +363,14 @@ impl Outbox {
         self.shadow.written.insert(key, line);
     }
 
+    /// Every capable hello needs an acknowledgement, including reconnects
+    /// where a previous device-side host-capability flag was cleared.
+    pub fn language_hello(&mut self, view: &DeviceView, now: Instant) {
+        let key = Key::Set(deck_model::SetKey::Language);
+        self.shadow.written.remove(&key);
+        if view.get(&key).is_some() { self.put(key, now); }
+    }
+
     /// Queue `op` after the view has folded it in (`view` is the desired
     /// state; the outbox decides what and when to write).
     pub fn enqueue(&mut self, view: &DeviceView, op: DeviceOp, now: Instant) {

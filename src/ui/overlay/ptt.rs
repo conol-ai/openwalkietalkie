@@ -25,7 +25,7 @@ use crate::deck::model::Agent;
 use crate::deck::msg::PttCtx;
 use crate::deck::text::Text;
 use crate::display::Band;
-use crate::ui::faces::agents::{kind_name, offline, text, HINT_LANE};
+use crate::ui::faces::agents::{offline, text, HINT_LANE};
 use crate::ui::kit::Hint;
 use crate::ui::signature::{Hasher, SigBuilder};
 use crate::ui::state::{Overlay, PttSession, UiState};
@@ -107,23 +107,29 @@ pub fn bar_height(bar: u8, phase: u32, agent: u8) -> i32 {
 
 /// "Claude · web-ui", "New Macropad" (naming), "Key label" (the key
 /// editor), "Channel 3" (agent unknown).
-fn title(ui: &UiState, session: &PttSession, agent: Option<&Agent>) -> Text<40> {
+fn title(ui: &UiState, session: &PttSession, agent: Option<&Agent>) -> Text<64> {
     match (session.ctx, agent) {
         (PttCtx::Name, _) if ui.global.overlay == Overlay::MacroEdit => {
             let mut out = Text::new();
-            out.push_str("Key label");
+            out.push_str(ui.tr("Key label"));
             out
         }
         (PttCtx::Name, _) => {
             let mut out = Text::new();
-            out.push_str("New ");
-            out.push_str(ui.manager.naming_template.label());
+            out.push_str(ui.tr("New "));
+            out.push_str(ui.tr(ui.manager.naming_template.label()));
             out
         }
-        (_, Some(agent)) => kind_name(agent),
+        (_, Some(agent)) => {
+            let mut out = Text::new();
+            out.push_str(ui.tr(crate::ui::overlay::notify::kind_label(agent.kind)));
+            out.push_str(" \u{b7} ");
+            out.push_str(agent.name.as_str());
+            out
+        },
         (_, None) => {
             let mut out = Text::new();
-            out.push_str("Channel ");
+            out.push_str(ui.tr("Channel "));
             out.push_char((b'0' + session.agent % 10) as char);
             out
         }
@@ -137,13 +143,13 @@ fn channel_tip(ui: &UiState, session: &PttSession, agent: Option<&Agent>) -> boo
 
 /// The context line: (prefix, text).
 fn context<'a>(ui: &UiState, session: &PttSession, agent: Option<&'a Agent>) -> (&'static str, &'a str) {
-    if channel_tip(ui, session, agent) { return (CHANNEL_TIP, ""); }
+    if channel_tip(ui, session, agent) { return (ui.tr(CHANNEL_TIP), ""); }
     match (session.ctx, agent) {
-        (PttCtx::Name, _) if ui.global.overlay == Overlay::MacroEdit => ("Say a label for the key", ""),
-        (PttCtx::Name, _) => ("Say a name for the new face", ""),
-        (PttCtx::Answer, Some(agent)) if agent.has_card => ("Answering \u{b7} ", agent.card.text.as_str()),
-        (_, Some(agent)) if !agent.last_reply.is_empty() => ("Last reply \u{b7} ", agent.last_reply.as_str()),
-        _ => ("Last reply \u{b7} none yet", ""),
+        (PttCtx::Name, _) if ui.global.overlay == Overlay::MacroEdit => (ui.tr("Say a label for the key"), ""),
+        (PttCtx::Name, _) => (ui.tr("Say a name for the new face"), ""),
+        (PttCtx::Answer, Some(agent)) if agent.has_card => (ui.tr("Answering \u{b7} "), agent.card.text.as_str()),
+        (_, Some(agent)) if !agent.last_reply.is_empty() => (ui.tr("Last reply \u{b7} "), agent.last_reply.as_str()),
+        _ => (ui.tr("Last reply \u{b7} none yet"), ""),
     }
 }
 
@@ -161,9 +167,9 @@ pub fn draw(band: &mut Band, ui: &UiState) {
         text(band, Font::Name, theme::TEXT_X, layout::PTT_NAME_BASELINE, name.as_str(), theme::TEXT_PRIMARY, theme::CANVAS, layout::PTT_NAME.width(), Align::Left);
         if live {
             let pill = if pending { "TRANSCRIBING" } else if rec { "RECORDING" } else { "LISTENING" };
-            kit::pill(band, layout::PTT_PILL, pill, theme::GREEN, theme::LISTENING_FILL, theme::LISTENING_OUTLINE);
+            kit::pill(band, layout::PTT_PILL, ui.tr(pill), theme::GREEN, theme::LISTENING_FILL, theme::LISTENING_OUTLINE);
         } else {
-            kit::pill(band, layout::PTT_PILL, "NO HOST", theme::AMBER, theme::CHIP_FILL, theme::OUTLINE_KEY);
+            kit::pill(band, layout::PTT_PILL, ui.tr("NO HOST"), theme::AMBER, theme::CHIP_FILL, theme::OUTLINE_KEY);
         }
     }
     if pending {
@@ -185,7 +191,7 @@ pub fn draw(band: &mut Band, ui: &UiState) {
         let used = text(band, face, x, layout::PTT_LAST_REPLY_BASELINE, prefix, theme::TEXT_FAINT, theme::CANVAS, layout::PTT_LAST_REPLY.width(), Align::Left);
         text(band, face, x + used, layout::PTT_LAST_REPLY_BASELINE, rest, theme::TEXT_FAINT, theme::CANVAS, layout::PTT_LAST_REPLY.width() - used, Align::Left);
     }
-    kit::hint_bar(band, hints(live, pending));
+    kit::hint_bar_localized(band, hints(live, pending), ui.language);
 }
 
 fn draw_progress(band: &mut Band, now_ms: u32) {
@@ -283,7 +289,7 @@ fn draw_recording(band: &mut Band, ui: &UiState, session: &PttSession, pending: 
     let lane = layout::PTT_TRANSCRIPT;
     let caption_baseline = lane.bottom() - 8;
     if pending {
-        text(band, Font::Hint, lane.left(), caption_baseline, REC_PENDING, theme::TEXT_FAINT, theme::CANVAS, lane.width(), Align::Left);
+        text(band, Font::Hint, lane.left(), caption_baseline, ui.tr(REC_PENDING), theme::TEXT_FAINT, theme::CANVAS, lane.width(), Align::Left);
         return;
     }
     let elapsed = ui.now_ms.wrapping_sub(session.started_ms);
@@ -306,7 +312,7 @@ fn draw_recording(band: &mut Band, ui: &UiState, session: &PttSession, pending: 
     let top = cy - REC_MAX / 2 - 6;
     kit::fill(band, Rect::new(px, top, 2, REC_MAX + 12), theme::RED);
     kit::round(band, Rect::new(px - 3, top - 8, 8, 8), 4, theme::RED);
-    text(band, Font::Hint, lane.left(), caption_baseline, REC_CAPTION, theme::TEXT_FAINT, theme::CANVAS, lane.width(), Align::Left);
+    text(band, Font::Hint, lane.left(), caption_baseline, ui.tr(REC_CAPTION), theme::TEXT_FAINT, theme::CANVAS, lane.width(), Align::Left);
 }
 
 /// The transcript in straight quotes.
@@ -345,7 +351,7 @@ fn draw_transcript(band: &mut Band, ui: &UiState, live: bool) {
     let ascent = font::ascent(Font::Text);
     let first = lane.top() + ascent;
     if !live {
-        text(band, Font::Text, lane.left(), first, "No host is listening.", theme::TEXT_FAINT, theme::CANVAS, lane.width(), Align::Left);
+        text(band, Font::Text, lane.left(), first, ui.tr("No host is listening."), theme::TEXT_FAINT, theme::CANVAS, lane.width(), Align::Left);
         return;
     }
     let quoted = quoted(ui);
@@ -427,6 +433,19 @@ mod tests {
         ui.deck.host_present = true;
         ui.global.ptt = Some(PttSession::new(agent, ctx, 0, 0));
         ui
+    }
+
+    #[test]
+    fn translated_recording_context_preserves_host_text_and_agent_names() {
+        let mut ui = session_ui(2, PttCtx::Talk);
+        ui.deck.agent_mut(2).unwrap().name.set("Ready");
+        ui.deck.agent_mut(2).unwrap().last_reply.set("Waiting for you");
+        let session = ui.global.ptt.unwrap();
+        for language in crate::ui::i18n::Language::ALL {
+            ui.language = language;
+            assert!(title(&ui, &session, ui.deck.agent(2)).as_str().ends_with("Ready"));
+            assert_eq!(context(&ui, &session, ui.deck.agent(2)), (language.text("Last reply \u{b7} "), "Waiting for you"));
+        }
     }
 
     #[test]

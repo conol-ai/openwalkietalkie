@@ -14,7 +14,7 @@ use crate::ui::kit::{self, HeaderRight, Hint};
 use crate::ui::overlay::device::{self, Highlight};
 use crate::ui::overlay::notify::header_inputs;
 use crate::ui::signature::SigBuilder;
-use crate::ui::state::tutorial::{caption, name, role, Step, PANEL_SWITCHES, WHEEL_DETENTS};
+use crate::ui::state::tutorial::{caption_localized, name, role, Step, PANEL_SWITCHES, WHEEL_DETENTS};
 use crate::ui::state::UiState;
 use crate::ui::{font, font::Align, font::Font, layout, layout::Rect, theme};
 
@@ -62,8 +62,8 @@ const DONE_LINES: [&str; 2] = ["Replay this any time from", "Settings \u{203a} D
 const PANELS_FOOTNOTE: &str = "Two quick SHIFT taps open the face manager.";
 
 /// "Press ENTER" on the Buttons step, the step's title otherwise.
-fn title_text(ui: &UiState, out: &mut Text<24>) {
-    out.set(title(ui.tutorial.step));
+fn title_text(ui: &UiState, out: &mut Text<64>) {
+    out.set(ui.tr(title(ui.tutorial.step)));
     if ui.tutorial.step == Step::Buttons {
         out.push_str(ui.tutorial.current().map_or("", name));
     }
@@ -92,9 +92,9 @@ fn hints(ui: &UiState) -> [Hint<'static>; 2] {
     }
 }
 
-fn hint_bar(band: &mut Band, hints: &[Hint]) {
+fn hint_bar(band: &mut Band, hints: &[Hint], language: crate::ui::i18n::Language) {
     let count = hints.iter().take_while(|hint| !hint.key.is_empty() || !hint.label.is_empty()).count();
-    kit::hint_bar(band, hints.get(..count).unwrap_or(&[]));
+    kit::hint_bar_localized(band, hints.get(..count).unwrap_or(&[]), language);
 }
 
 fn step_tag(step: Step, out: &mut Text<8>) {
@@ -104,10 +104,10 @@ fn step_tag(step: Step, out: &mut Text<8>) {
     out.push_char((b'0' + Step::ALL.len() as u8) as char);
 }
 
-fn draw_lines(band: &mut Band, lines: [&str; 2], first_baseline: i32, color: u32) {
+fn draw_lines(band: &mut Band, lines: [&str; 2], first_baseline: i32, color: u32, language: crate::ui::i18n::Language) {
     let lh = font::line_height(Font::Body);
     for (index, line) in lines.iter().enumerate() {
-        font::draw(band, Font::Body, theme::TEXT_X, first_baseline + index as i32 * lh, line, color, Some(theme::CANVAS), theme::TEXT_RIGHT - theme::TEXT_X, Align::Left);
+        font::draw(band, Font::Body, theme::TEXT_X, first_baseline + index as i32 * lh, language.text(line), color, Some(theme::CANVAS), theme::TEXT_RIGHT - theme::TEXT_X, Align::Left);
     }
 }
 
@@ -118,10 +118,11 @@ fn draw_panels(band: &mut Band, ui: &UiState) {
     let left = (theme::SCREEN - (count * width + (count - 1) * CHIP_GAP)) / 2;
     for index in 0..count {
         let rect = Rect::new(left + index * (width + CHIP_GAP), CHIPS_Y, width, CHIPS_H);
-        let name = ui.face_at(index as u8).map(|face| face.name).unwrap_or_default();
-        kit::chip(band, rect, name.as_str(), index as u8 == ui.tutorial.panel);
+        if let Some(face) = ui.face_at(index as u8) {
+            kit::chip(band, rect, ui.face_name(&face), index as u8 == ui.tutorial.panel);
+        }
     }
-    font::draw(band, Font::Small, theme::SCREEN / 2, FOOTNOTE_BASELINE, PANELS_FOOTNOTE, theme::TEXT_LABEL, Some(theme::CANVAS), theme::TEXT_RIGHT - theme::TEXT_X, Align::Center);
+    font::draw(band, Font::Small, theme::SCREEN / 2, FOOTNOTE_BASELINE, ui.tr(PANELS_FOOTNOTE), theme::TEXT_LABEL, Some(theme::CANVAS), theme::TEXT_RIGHT - theme::TEXT_X, Align::Center);
     let _ = (PANEL_SWITCHES, WHEEL_DETENTS);
 }
 
@@ -130,7 +131,7 @@ pub fn draw(band: &mut Band, ui: &UiState) {
     let step = ui.tutorial.step;
     let mut tag = Text::new();
     step_tag(step, &mut tag);
-    kit::header(band, "TUTORIAL", kit::header_right(ui, HeaderRight::Text(tag.as_str())));
+    kit::header(band, ui.tr("TUTORIAL"), kit::header_right(ui, HeaderRight::Text(tag.as_str())));
     if kit::visible(band, BODY) {
         let mut title = Text::new();
         title_text(ui, &mut title);
@@ -138,28 +139,28 @@ pub fn draw(band: &mut Band, ui: &UiState) {
         match step {
             Step::Buttons => {
                 let role = ui.tutorial.current().map_or("", role);
-                draw_lines(band, [role, ""], LINE_1_BASELINE, theme::TEXT_ROW);
-                device::draw(band, DEVICE_LEFT, DEVICE_TOP, highlight(ui));
+                draw_lines(band, [role, ""], LINE_1_BASELINE, theme::TEXT_ROW, ui.language);
+                device::draw_localized(band, DEVICE_LEFT, DEVICE_TOP, highlight(ui), ui.language);
             }
             Step::Wheel | Step::Latest | Step::Ptt => {
-                draw_lines(band, lines(step), LINE_1_BASELINE, theme::TEXT_ROW);
-                device::draw(band, DEVICE_LEFT, DEVICE_TOP, highlight(ui));
+                draw_lines(band, lines(step), LINE_1_BASELINE, theme::TEXT_ROW, ui.language);
+                device::draw_localized(band, DEVICE_LEFT, DEVICE_TOP, highlight(ui), ui.language);
             }
             Step::Panels => {
-                draw_lines(band, lines(step), LINE_1_BASELINE, theme::TEXT_ROW);
+                draw_lines(band, lines(step), LINE_1_BASELINE, theme::TEXT_ROW, ui.language);
                 draw_panels(band, ui);
             }
             Step::Done => {
-                draw_lines(band, lines(step), LINE_1_BASELINE, theme::TEXT_ROW);
-                draw_lines(band, DONE_LINES, LINE_1_BASELINE + 3 * font::line_height(Font::Body), theme::TEXT_SECONDARY);
+                draw_lines(band, lines(step), LINE_1_BASELINE, theme::TEXT_ROW, ui.language);
+                draw_lines(band, DONE_LINES, LINE_1_BASELINE + 3 * font::line_height(Font::Body), theme::TEXT_SECONDARY, ui.language);
             }
         }
-        let mut caption_text = Text::new();
-        caption(&ui.tutorial, &mut caption_text);
+        let mut caption_text = Text::<96>::new();
+        caption_localized(&ui.tutorial, &mut caption_text, ui.language);
         let color = if step == Step::Buttons && ui.tutorial.wrong { theme::AMBER } else { theme::TEXT_SECONDARY };
         font::draw(band, Font::Row, theme::SCREEN / 2, CAPTION_BASELINE, caption_text.as_str(), color, Some(theme::CANVAS), theme::TEXT_RIGHT - theme::TEXT_X, Align::Center);
     }
-    hint_bar(band, &hints(ui));
+    hint_bar(band, &hints(ui), ui.language);
 }
 
 pub fn signature(ui: &UiState, sig: &mut SigBuilder) {
@@ -195,8 +196,8 @@ pub fn signature(ui: &UiState, sig: &mut SigBuilder) {
         Step::Latest | Step::Done => sig.region(CONTENT, 0),
     }
     sig.region_with(CAPTION_LANE, |h| {
-        let mut caption_text = Text::new();
-        caption(view, &mut caption_text);
+        let mut caption_text = Text::<96>::new();
+        caption_localized(view, &mut caption_text, ui.language);
         h.text(&caption_text).bool(view.wrong);
     });
     sig.region_with(layout::HINT_BAR, |h| {
@@ -210,6 +211,32 @@ pub fn signature(ui: &UiState, sig: &mut SigBuilder) {
 mod tests {
     use super::*;
     use crate::ui::state::tutorial::BUTTONS;
+
+    #[test]
+    fn every_language_fits_the_tutorial_title_and_instructions() {
+        use crate::ui::i18n::Language;
+        let room = theme::TEXT_RIGHT - theme::TEXT_X;
+        let mut ui = std::boxed::Box::new(UiState::new());
+        for language in Language::ALL {
+            ui.language = language;
+            for step in Step::ALL {
+                ui.tutorial.step = step;
+                let mut title = Text::new();
+                title_text(&ui, &mut title);
+                assert!(font::measure(Font::Title, title.as_str()) <= room, "{} {step:?}: {}", language.code(), title.as_str());
+                for line in lines(step) {
+                    assert!(font::measure(Font::Body, language.text(line)) <= room, "{} {line}", language.code());
+                }
+            }
+            for line in DONE_LINES {
+                assert!(font::measure(Font::Body, language.text(line)) <= room, "{} {line}", language.code());
+            }
+            assert!(font::measure(Font::Small, language.text(PANELS_FOOTNOTE)) <= room);
+            for button in crate::control::Button::ALL {
+                assert!(font::measure(Font::Body, language.text(role(button))) <= room, "{} {button:?}", language.code());
+            }
+        }
+    }
 
     #[test]
     fn every_page_string_fits_its_line_and_the_lanes_tile_the_body() {

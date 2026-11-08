@@ -920,7 +920,7 @@ impl Deck {
     /// (`Focus`, `Faces`, `Name`) are left to the state handlers.
     pub fn apply(&mut self, msg: &HostMsg, now_ms: u32, fx: &mut Effects) {
         match msg {
-            HostMsg::Image { .. } | HostMsg::SessionMenu(_) | HostMsg::None | HostMsg::Focus { .. } | HostMsg::Faces { .. } | HostMsg::Name { .. } => {
+            HostMsg::Language { .. } | HostMsg::Image { .. } | HostMsg::SessionMenu(_) | HostMsg::None | HostMsg::Focus { .. } | HostMsg::Faces { .. } | HostMsg::Name { .. } => {
                 // Nothing for the model, but any line from the host is a heartbeat.
                 self.heard_ms = now_ms;
                 return;

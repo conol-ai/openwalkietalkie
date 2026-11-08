@@ -218,7 +218,7 @@ impl Shell {
         let mut actions: Vec<AnyElement> = Vec::new();
         if !connected {
             actions.push(
-                Btn::new("service-start", "Start")
+                Btn::new("service-start", self.tr("Start"))
                     .solid()
                     .icon(ic::PLAY)
                     .on_click(cx.listener(|this, _, window, cx| this.start_service(window, cx)))
@@ -226,7 +226,7 @@ impl Shell {
             );
         }
         actions.push(
-            Btn::new("service-restart", "Restart")
+            Btn::new("service-restart", self.tr("Restart"))
                 .icon(ic::REFRESH)
                 .disabled(dim)
                 .on_click(cx.listener(|this, _, window, cx| {
@@ -235,7 +235,7 @@ impl Shell {
                 .into_any_element(),
         );
         actions.push(
-            Btn::new("service-stop", "Stop")
+            Btn::new("service-stop", self.tr("Stop"))
                 .danger_quiet()
                 .icon(ic::STOP)
                 .disabled(dim)
@@ -246,7 +246,7 @@ impl Shell {
         );
         let subtitle = v_flex()
             .gap(px(2.))
-            .child(present::service_headline(connected, &info))
+            .child(present::service_headline_localized(connected, &info, self.language()))
             .children(info.uds.as_ref().map(|uds| {
                 div()
                     .mono()
@@ -261,13 +261,14 @@ impl Shell {
             ui::PAGE_MAX,
             v_flex()
                 .child(ui::page_header(
-                    "Service",
+                    self.tr("Service"),
                     Some(subtitle.into_any_element()),
                     actions,
                     &p,
                 ))
+                .child(self.render_language(cx))
                 .children(
-                    present::degraded_banner(&self.state.mirror().service)
+                    present::degraded_banner_localized(&self.state.mirror().service, self.language())
                         .map(|line| self.render_degraded(line, dim, cx)),
                 )
                 .children(self.service.missing.iter().map(|method| {
@@ -280,7 +281,7 @@ impl Shell {
                         None,
                         Some(
                             div()
-                                .child(present::missing_method_line(method))
+                                .child(present::missing_method_line_localized(method, self.language()))
                                 .into_any_element(),
                         ),
                         Vec::new(),
@@ -288,9 +289,9 @@ impl Shell {
                     ))
                 }))
                 .child(self.render_updates(dim, cx))
-                .child(ui::section("About", v_flex().gap(px(12.))
-                    .child(ui::brand_lockup(&p))
-                    .child(div().text_color(p.muted).child(format!("Version {}", env!("CARGO_PKG_VERSION"))))
+                .child(ui::section(self.tr("About"), v_flex().gap(px(12.))
+                    .child(ui::brand_lockup_localized(&p, self.language()))
+                    .child(div().text_color(p.muted).child(self.fmt("Version {0}", &[env!("CARGO_PKG_VERSION")])))
                     .child(Btn::new("about-website", "openwalkietalkie.org")
                         .icon(ic::EXTERNAL)
                         .on_click(|_, _, cx| cx.open_url("https://openwalkietalkie.org/"))), &p))
@@ -300,15 +301,41 @@ impl Shell {
         )
     }
 
+    fn render_language(&self, cx: &Context<Self>) -> Div {
+        let p = *palette(cx);
+        let selected = self.language();
+        let choices = deck_gui_core::i18n::Language::ALL.into_iter().map(|language| {
+            ui::chip(
+                SharedString::from(format!("language-{}", language.code())),
+                language.name(),
+                language == selected,
+                &p,
+            )
+            .when(!self.state.connected(), |chip| chip.opacity(0.45))
+            .on_click(cx.listener(move |this, _, window, cx| {
+                if this.state.connected() {
+                    this.act(UiAction::DeviceSet {
+                        key: deck_model::SetKey::Language,
+                        value: language as u16,
+                    }, window, cx);
+                }
+            }))
+            .into_any_element()
+        }).collect::<Vec<_>>();
+        ui::section(self.tr("Language"), v_flex().gap(px(10.))
+            .child(h_flex().gap(px(8.)).flex_wrap().children(choices))
+            .child(ui::hint(self.tr("The app and your deck use the same language. This setting is remembered when the deck is disconnected."), &p)), &p)
+    }
+
     /// §8.2's degraded strip. Its repair is the port field below, so the
     /// button puts the caret there rather than changing anything itself.
     fn render_degraded(&self, line: String, dim: bool, cx: &Context<Self>) -> Div {
         let p = *palette(cx);
         div().mt(px(20.)).child(ui::strip(
             Severity::Warning,
-            Some("The service is degraded".into()),
+            Some(self.tr("The service is degraded").into()),
             Some(div().child(line).into_any_element()),
-            vec![Btn::new("degraded-pick-port", "Pick a new port")
+            vec![Btn::new("degraded-pick-port", self.tr("Pick a new port"))
                 .small()
                 .disabled(dim)
                 .on_click(cx.listener(|this, _, window, cx| {
@@ -331,7 +358,7 @@ impl Shell {
             .login
             .unwrap_or(present::LoginItem::Unknown(-1));
         ui::section(
-            "Lifecycle",
+            self.tr("Lifecycle"),
             ui::card(
                 vec![
                     Row::new()
@@ -340,18 +367,18 @@ impl Shell {
                             if running { p.success_muted } else { p.muted },
                             p,
                         ))
-                        .title("launchd agent")
+                        .title(self.tr("launchd agent"))
                         .meta_el(
                             v_flex()
                                 .gap(px(2.))
-                                .child(present::launchd_line(&launchd))
-                                .child(div().text_color(p.faint).child(present::LOGIN_ITEM_NOTE)),
+                                .child(present::launchd_line_localized(&launchd, self.language()))
+                                .child(div().text_color(p.faint).child(self.tr(present::LOGIN_ITEM_NOTE))),
                         )
                         .into_any_element(),
                     Row::new()
                         .tile(ui::tile(ic::MONITOR, p.muted, p))
-                        .title("This window at login")
-                        .meta(present::login_item_line(login))
+                        .title(self.tr("This window at login"))
+                        .meta(present::login_item_line_localized(login, self.language()))
                         .into_any_element(),
                 ],
                 p,
@@ -363,8 +390,8 @@ impl Shell {
     /// `service.stop` / `service.restart`, honestly.
     fn lifecycle(&mut self, action: UiAction, window: &mut Window, cx: &mut Context<Self>) {
         let (method, what) = match action {
-            UiAction::ServiceStop => ("service.stop", "Stop"),
-            _ => ("service.restart", "Restart"),
+            UiAction::ServiceStop => ("service.stop", self.tr("Stop")),
+            _ => ("service.restart", self.tr("Restart")),
         };
         self.ask(action, window, cx, move |this, result, window, cx| {
             match result {
@@ -372,12 +399,12 @@ impl Shell {
                 // reply here means the request was accepted, not that the
                 // process has gone. The socket dropping is what says that,
                 // and the mirror already reports it.
-                Ok(_) => this.toast(format!("{what} accepted."), window, cx),
+                Ok(_) => this.toast(this.fmt("{0} accepted.", &[(what)]), window, cx),
                 Err(e) if method_missing(&e) => {
                     this.service.note_missing(method);
-                    this.toast(present::missing_method_line(method), window, cx);
+                    this.toast(present::missing_method_line_localized(method, this.language()), window, cx);
                 }
-                Err(e) => this.toast(format!("{what} failed: {e}"), window, cx),
+                Err(e) => this.toast(this.fmt("{0} failed: {1}", &[(what), &(e).to_string()]), window, cx),
             }
         });
     }
@@ -388,47 +415,47 @@ impl Shell {
         let info = self.service.info.clone().unwrap_or_default();
         let curl = present::curl_example(info.port.or(self.service.config.port));
         ui::section(
-            "The HTTP door",
+            self.tr("The HTTP door"),
             ui::card(
                 vec![
                     Row::new()
                         .tile(ui::tile(ic::GLOBAL, p.muted, &p))
-                        .title("Port")
-                        .meta(present::port_line(&info, &self.service.config))
+                        .title(self.tr("Port"))
+                        .meta(present::port_line_localized(&info, &self.service.config, self.language()))
                         .trailing(
                             div()
                                 .w(px(96.))
                                 .child(ui::field(&self.service.port, &p).disabled(dim).mono()),
                         )
                         .trailing(
-                            Btn::new("port-change", "Change port")
+                            Btn::new("port-change", self.tr("Change port"))
                                 .outlined()
                                 .disabled(dim)
-                                .tooltip("Sets the port and re-installs Claude's hooks to match")
+                                .tooltip(self.tr("Sets the port and re-installs Claude's hooks to match"))
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.change_port(window, cx);
                                 })),
                         )
                         .detail(ui::hint(
-                            "Changing the port rewrites the URL Claude's http hooks POST to, so \
+                            self.tr("Changing the port rewrites the URL Claude's http hooks POST to, so \
                              the hooks are re-installed in the same breath \u{2014} a port change \
-                             without it leaves every hook pointed at the old one.",
+                             without it leaves every hook pointed at the old one."),
                             &p,
                         ))
                         .into_any_element(),
                     Row::new()
                         .tile(ui::tile(ic::CHECK_CIRCLE, p.muted, &p))
-                        .title("Allowed origins")
-                        .meta(present::origins_line(&self.service.config.allowed_origins))
+                        .title(self.tr("Allowed origins"))
+                        .meta(present::origins_line_localized(&self.service.config.allowed_origins, self.language()))
                         .into_any_element(),
                     Row::new()
                         .tile(ui::tile(ic::TERMINAL, p.muted, &p))
-                        .title("Try it")
+                        .title(self.tr("Try it"))
                         .meta(
                             "The socket is not HTTP, so curl --unix-socket cannot speak to it \
                              \u{2014} that door is deckd ctl.",
                         )
-                        .detail(ui::code_block("curl", curl, true, &p))
+                        .detail(ui::code_block_localized("curl", curl, true, &p, self.language()))
                         .into_any_element(),
                 ],
                 &p,
@@ -446,16 +473,16 @@ impl Shell {
             self.service
                 .port
                 .update(cx, |input, cx| input.focus(window, cx));
-            self.toast("Type the new port first.", window, cx);
+            self.toast(self.tr("Type the new port first."), window, cx);
             return;
         }
         let Ok(port) = typed.parse::<u16>() else {
-            self.toast("A port is a number from 1 to 65535.", window, cx);
+            self.toast(self.tr("A port is a number from 1 to 65535."), window, cx);
             return;
         };
         if port < 1024 {
             self.toast(
-                "Ports below 1024 need root, and this daemon is a per-user agent.",
+                self.tr("Ports below 1024 need root, and this daemon is a per-user agent."),
                 window,
                 cx,
             );
@@ -471,7 +498,7 @@ impl Shell {
             move |this, result, window, cx| match result {
                 Ok(_) => {
                     this.toast(
-                        format!("Port set to {port}. Re-installing the Claude hooks\u{2026}"),
+                        this.fmt("Port set to {0}. Re-installing the Claude hooks…", &[&(port).to_string()]),
                         window,
                         cx,
                     );
@@ -490,14 +517,11 @@ impl Shell {
                         cx,
                         |this, result, window, cx| match result {
                             Ok(_) => {
-                                this.toast("Claude's hooks now point at the new port.", window, cx);
+                                this.toast(this.tr("Claude's hooks now point at the new port."), window, cx);
                                 this.refresh_service(true, window, cx);
                             }
                             Err(e) => this.toast(
-                                format!(
-                                    "The port changed but the hooks did not: {e}. Repair Claude \
-                                     on the Integrations screen before the next session."
-                                ),
+                                this.fmt("The port changed but the hooks did not: {0}. Repair Claude on the Integrations screen before the next session.", &[&(e).to_string()]),
                                 window,
                                 cx,
                             ),
@@ -506,9 +530,9 @@ impl Shell {
                 }
                 Err(e) if method_missing(&e) => {
                     this.service.note_missing("config.set");
-                    this.toast(present::missing_method_line("config.set"), window, cx);
+                    this.toast(present::missing_method_line_localized("config.set", this.language()), window, cx);
                 }
-                Err(e) => this.toast(format!("Could not set the port: {e}"), window, cx),
+                Err(e) => this.toast(this.fmt("Could not set the port: {0}", &[&(e).to_string()]), window, cx),
             },
         );
     }
@@ -536,7 +560,7 @@ impl Shell {
             .collect();
         let empty = lines.is_empty();
         let mut chips: Vec<Stateful<Div>> =
-            vec![self.level_chip("log-level-all", "All", None, dim, cx)];
+            vec![self.level_chip("log-level-all", self.tr("All"), None, dim, cx)];
         chips.extend(present::LOG_LEVELS.iter().map(|level| {
             self.level_chip(
                 SharedString::from(format!("log-level-{level}")),
@@ -547,13 +571,13 @@ impl Shell {
             )
         }));
         ui::section_with(
-            "Log",
+            self.tr("Log"),
             vec![
                 h_flex()
                     .gap(px(8.))
                     .ts(12., 16.)
                     .text_color(p.muted)
-                    .child("Hide content")
+                    .child(self.tr("Hide content"))
                     .child(Switch::new("log-redact", redact).on_toggle(cx.listener(
                         |this, on: &bool, _, cx| {
                             this.service.redact = *on;
@@ -564,7 +588,7 @@ impl Shell {
                 Btn::icon_only("log-refresh", ic::REFRESH)
                     .small()
                     .disabled(dim)
-                    .tooltip("Read the log again")
+                    .tooltip(self.tr("Read the log again"))
                     .on_click(cx.listener(|this, _, window, cx| this.tail_log(window, cx)))
                     .into_any_element(),
             ],
@@ -601,7 +625,7 @@ impl Shell {
                         .ts(11.5, 18.)
                         .children(lines)
                         .when(empty, |this| {
-                            this.child(div().text_color(p.faint).child("Nothing at this level."))
+                            this.child(div().text_color(p.faint).child(self.tr("Nothing at this level.")))
                         }),
                 ),
             &p,
