@@ -122,6 +122,7 @@ impl Wire {
 }
 
 fn candidates(api: &mut HidApi) -> Result<Vec<(String, std::ffi::CString)>, String> {
+    #[cfg(target_os = "macos")]
     api.set_open_exclusive(false);
     api.refresh_devices().map_err(|e| e.to_string())?;
     Ok(api

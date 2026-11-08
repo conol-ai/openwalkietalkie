@@ -213,6 +213,7 @@ pub struct Instance {
 
 /// Every instance of the vendor collection, in hidapi's order.
 fn instances(api: &mut HidApi) -> Result<Vec<Instance>, HidError> {
+    #[cfg(target_os = "macos")]
     api.set_open_exclusive(false);
     api.refresh_devices().map_err(|_| HidError::Enumerate)?;
     Ok(api

@@ -55,8 +55,8 @@ pub const TICK: Duration = Duration::from_millis(50);
 /// sentence, since `rtrb` refuses the newest sample when full.
 pub const CAPTURE_RING: usize = 4 * 16_000;
 
-/// Default final-decode budget. Only a completed decode may be dispatched.
-pub const FINISH_BUDGET: Duration = Duration::from_secs(30);
+/// Default final-decode budget (defined beside the traits so non-macOS builds see it).
+pub use super::traits::FINISH_BUDGET;
 /// Bound backend workers and their model state during repeated quick presses.
 const MAX_FINALS: usize = 4;
 /// How long a release waits for the deck's END before closing the capture:

@@ -353,7 +353,7 @@ impl SttSession for FakeSttSession {
 
     fn finish_budget(&self) -> std::time::Duration {
         if self.inner.never_finishes.load(Ordering::SeqCst) { std::time::Duration::ZERO }
-        else { super::engine::FINISH_BUDGET }
+        else { super::traits::FINISH_BUDGET }
     }
 
     fn cancel(self: Box<Self>) {
