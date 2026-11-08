@@ -86,9 +86,23 @@ class Keys(unittest.TestCase):
             self.remote().on_key({'k': 'left', 'act': 1, 'shift': 1})
         d.assert_called_once_with('hl.dsp.focus({ direction = "l" })', ['movefocus', 'l'])
 
-    def test_unmapped_keys_are_ignored(self):
+    def test_home_cancel_toggles_the_scratchpad_and_home_enter_sends_a_window_there(self):
         with mock.patch.object(o, 'dispatch') as d:
             self.remote().on_key({'k': 'cancel', 'act': 1, 'shift': 1})
+            self.remote().on_key({'k': 'enter', 'act': 1, 'shift': 1})
+        self.assertEqual([c.args[1] for c in d.call_args_list],
+                         [['togglespecialworkspace', 'scratchpad'], ['movetoworkspacesilent', 'special:scratchpad']])
+
+    def test_an_open_scratchpad_lists_its_own_windows(self):
+        monitors = [{'id': 0, 'focused': True, 'activeWorkspace': {'id': 7}, 'specialWorkspace': {'id': -98}}]
+        clients = [client('0xa', 7, title='main'), client('0xs', -98, title='notes')]
+        line, addresses = o.build_ws(monitors, [], clients)
+        self.assertEqual(addresses, ['0xs'])
+        self.assertTrue(line['windows'][0]['title'].endswith('notes'))
+
+    def test_unmapped_keys_are_ignored(self):
+        with mock.patch.object(o, 'dispatch') as d:
+            self.remote().on_key({'k': 'cancel', 'act': 1, 'shift': 0})
         d.assert_not_called()
 
     def test_tapping_a_row_focuses_its_window_and_a_stale_index_is_ignored(self):

@@ -17,6 +17,8 @@ Deck controls on the Omarchy face (the face's own grammar, docs/agent-command-de
   LEFT / RIGHT          previous / next workspace
   SHIFT+LEFT / RIGHT    focus the window to the left / right
   ENTER                 toggle fullscreen
+  HOME+CANCEL           open / close the scratchpad (Super+S); its windows are then listed
+  HOME+ENTER            move the focused window to the scratchpad (Super+Alt+S)
   tap a workspace chip  go to that workspace slot (Omarchy's per-monitor 1-10)
   tap a window row      focus that window
 Edit KEYMAP to change them; an unmapped key does nothing.
@@ -69,6 +71,10 @@ KEYMAP = {
     ('left', 1): ('hl.dsp.focus({ direction = "l" })', ['movefocus', 'l']),
     ('right', 1): ('hl.dsp.focus({ direction = "r" })', ['movefocus', 'r']),
     ('enter', 0): ('hl.dsp.window.fullscreen({ mode = "fullscreen" })', ['fullscreen', '0']),
+    # Omarchy's Super+S and Super+Alt+S.
+    ('cancel', 1): ('hl.dsp.workspace.toggle_special("scratchpad")', ['togglespecialworkspace', 'scratchpad']),
+    ('enter', 1): ('hl.dsp.window.move({ workspace = "special:scratchpad", follow = false })',
+                   ['movetoworkspacesilent', 'special:scratchpad']),
 }
 # LEFT / RIGHT step through the monitor's workspace slots 1-10 (and wrap), as
 # Super+<n> would: Hyprland's own `m+1` only visits workspaces that have windows.
@@ -124,9 +130,11 @@ def build_ws(monitors: list, workspaces: list, clients: list):
     active_slot = slot_of(active_id)
     count = min(MAX_CHIPS, max([slot_of(w['id']) for w in mine] + [active_slot]))
     active = active_slot if active_slot <= MAX_CHIPS else 0
+    # With the scratchpad open its windows are the ones on screen and the ones to list.
+    shown_id = (monitor.get('specialWorkspace') or {}).get('id') or active_id
     on_active = [c for c in clients
                  if c.get('mapped', True) and not c.get('hidden')
-                 and c.get('workspace', {}).get('id') == active_id]
+                 and c.get('workspace', {}).get('id') == shown_id]
     # Spatial order, so the rows read like the screen; focus history picks the highlight.
     on_active.sort(key=lambda c: (c.get('at', [0, 0])[0], c.get('at', [0, 0])[1], c['address']))
     focused_addr = next((c['address'] for c in sorted(on_active, key=lambda c: c.get('focusHistoryID', 9))),
