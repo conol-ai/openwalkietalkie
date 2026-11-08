@@ -48,6 +48,7 @@ STATE_BY_EVENT = {
     'PreToolUse': 'working',
     'PostToolUse': 'working',
     'PermissionRequest': 'question',
+    'PermissionResult': 'working',
     'Stop': 'ready',
     'StopFailure': 'error',
     'Interrupt': 'ready',

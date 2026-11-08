@@ -97,6 +97,15 @@ def process_cwd(pid: int, proc: str = PROC) -> str:
         return ''
 
 
+def hooks_installed(home: str | None = None) -> bool:
+    """Whether omarchy_hook.py's block is in Kimi's config: then hooks, not this log reader, are the source."""
+    path = Path(home or os.environ.get('KIMI_CODE_HOME') or os.path.expanduser('~/.kimi-code')) / 'config.toml'
+    try:
+        return 'omarchy_hook.py' in path.read_text()
+    except OSError:
+        return False
+
+
 class KimiWatcher:
     def __init__(self, home: str | None = None, proc: str = PROC):
         self.root = Path(home or os.path.expanduser('~/.kimi-code')) / 'sessions'

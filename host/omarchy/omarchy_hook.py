@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Claude Code / Codex hook for the Omarchy deck adapter (Python 3.10+, stdlib only).
+"""Claude Code / Codex / Kimi Code hook for the Omarchy deck adapter (Python 3.10+, stdlib only).
 
-    omarchy_hook.py hook claude|codex     what the CLIs run for every hook event
-    omarchy_hook.py install [claude|codex|all]
-    omarchy_hook.py uninstall [claude|codex|all]
+    omarchy_hook.py hook claude|codex|kimi     what the CLIs run for every hook event
+    omarchy_hook.py install [claude|codex|kimi|all]
+    omarchy_hook.py uninstall [claude|codex|kimi|all]
     omarchy_hook.py status
 
 `hook` is fail-open by construction: whatever goes wrong (no daemon, a bad
@@ -14,7 +14,8 @@ notification line; never a prompt, a tool input or a reply.
 
 `install` merges one handler per event into the CLI's own settings, keeping
 everything already there, and backs the file up first. Codex hooks must also be
-trusted in Codex (README.zh-CN.md).
+trusted in Codex (README.zh-CN.md). Kimi Code keeps its hooks as `[[hooks]]`
+tables in `config.toml`, so ours live in one marked block there.
 """
 from __future__ import annotations
 
@@ -22,6 +23,7 @@ import json
 import os
 from pathlib import Path
 import shlex
+import re
 import shutil
 import socket
 import sys
@@ -38,13 +40,19 @@ EVENTS = {
                ('Notification', 5), ('Stop', 5), ('StopFailure', 5), ('SessionEnd', 5)],
     'codex': [('SessionStart', 5), ('UserPromptSubmit', 5), ('PreToolUse', 5), ('PermissionRequest', 5),
               ('Stop', 5), ('Interrupt', 5), ('SessionEnd', 5)],
+    'kimi': [('SessionStart', 5), ('UserPromptSubmit', 5), ('PermissionRequest', 5), ('PermissionResult', 5),
+             ('Stop', 5), ('StopFailure', 5), ('Interrupt', 5), ('SessionEnd', 5)],
 }
+KIMI_BEGIN = '# >>> omarchy-deck hooks (managed by omarchy_hook.py) >>>'
+KIMI_END = '# <<< omarchy-deck hooks <<<'
 
 
 def settings_path(cli: str, home: Path | None = None) -> Path:
     home = home or Path.home()
     if cli == 'claude':
         return Path(os.environ.get('CLAUDE_CONFIG_DIR') or home / '.claude') / 'settings.json'
+    if cli == 'kimi':
+        return Path(os.environ.get('KIMI_CODE_HOME') or home / '.kimi-code') / 'config.toml'
     return Path(os.environ.get('CODEX_HOME') or home / '.codex') / 'hooks.json'
 
 
@@ -130,6 +138,42 @@ def strip(settings: dict) -> dict:
     return settings
 
 
+def kimi_block(command: str) -> str:
+    rows = [KIMI_BEGIN]
+    for event, timeout in EVENTS['kimi']:
+        rows += ['[[hooks]]', f'event = {json.dumps(event)}', f'command = {json.dumps(command)}',
+                 f'timeout = {timeout}', '']
+    return '\n'.join(rows + [KIMI_END]) + '\n'
+
+
+KIMI_BLOCK = re.compile(re.escape(KIMI_BEGIN) + r'.*?' + re.escape(KIMI_END) + r'\n?', re.S)
+
+
+def kimi_merge(text: str, command: str) -> str:
+    """config.toml with our block once, everything else byte for byte as it was."""
+    import tomllib
+    base = KIMI_BLOCK.sub('', text).rstrip('\n')
+    out = (base + '\n\n' if base else '') + kimi_block(command)
+    parsed = tomllib.loads(out)  # refuse to write a config Kimi could not read
+    ours = [h for h in parsed.get('hooks', []) if MARKER in str(h.get('command', ''))]
+    if len(ours) != len(EVENTS['kimi']):
+        raise ValueError('config.toml already defines `hooks` in a way a [[hooks]] block cannot join')
+    return out
+
+
+def kimi_strip(text: str) -> str:
+    return KIMI_BLOCK.sub('', text).rstrip('\n') + '\n' if KIMI_BLOCK.search(text) else text
+
+
+def write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        shutil.copy2(path, path.with_name(f'{path.name}.omarchy-deck.{int(time.time())}.bak'))
+    tmp = path.with_name(path.name + '.tmp')
+    tmp.write_text(text)
+    os.replace(tmp, path)
+
+
 def load(path: Path) -> dict:
     if not path.exists():
         return {}
@@ -155,6 +199,10 @@ def targets(which: str) -> list[str]:
 def install(which: str, home: Path | None = None) -> None:
     for cli in targets(which):
         path = settings_path(cli, home)
+        if cli == 'kimi':
+            write_text(path, kimi_merge(path.read_text() if path.exists() else '', hook_command(cli)))
+            print(f'{cli}: hooks written to {path}')
+            continue
         write(path, merge(load(path), cli, hook_command(cli)))
         print(f'{cli}: hooks written to {path}')
 
@@ -162,6 +210,11 @@ def install(which: str, home: Path | None = None) -> None:
 def uninstall(which: str, home: Path | None = None) -> None:
     for cli in targets(which):
         path = settings_path(cli, home)
+        if cli == 'kimi':
+            if path.exists():
+                write_text(path, kimi_strip(path.read_text()))
+                print(f'{cli}: our hooks removed from {path}')
+            continue
         if path.exists():
             write(path, strip(load(path)))
             print(f'{cli}: our hooks removed from {path}')
@@ -170,6 +223,14 @@ def uninstall(which: str, home: Path | None = None) -> None:
 def status(home: Path | None = None) -> None:
     for cli in CLI_NAMES:
         path = settings_path(cli, home)
+        if cli == 'kimi':
+            try:
+                text = path.read_text() if path.exists() else ''
+            except OSError as error:
+                print(f'{cli}: {path}: {error}')
+                continue
+            print(f'{cli}: {"installed" if KIMI_BLOCK.search(text) else "absent"} ({path})')
+            continue
         try:
             hooks = load(path).get('hooks', {})
         except (OSError, ValueError) as error:

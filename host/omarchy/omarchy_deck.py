@@ -41,7 +41,7 @@ import time
 
 from omarchy_hypr import Hypr, dispatch, focus_slot, focus_window, hyprctl_json  # noqa: E402,F401
 
-from omarchy_kimi import KimiWatcher  # noqa: E402
+from omarchy_kimi import KimiWatcher, hooks_installed  # noqa: E402
 from omarchy_sessions import Bridge, ControlServer, control_socket_path  # noqa: E402
 
 EVENTS = ['device.ws', 'device.key', 'device.link', 'agent.order', 'focus.changed']
@@ -290,8 +290,9 @@ class Remote:
                 now = time.monotonic()
                 if now - self.kimi_polled >= KIMI_POLL_S:
                     self.kimi_polled = now
-                    for message in self.kimi.poll():
-                        self.bridge.on_hook(message)
+                    if not hooks_installed():  # hooks are the better source once installed
+                        for message in self.kimi.poll():
+                            self.bridge.on_hook(message)
                 self.bridge.tick(now)
                 if self.dirty.is_set():
                     self.dirty.clear()

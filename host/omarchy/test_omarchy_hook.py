@@ -14,6 +14,58 @@ import omarchy_hook as h  # noqa: E402
 from test_omarchy_sessions import TREE, fake_proc  # noqa: E402
 
 
+class KimiInstall(unittest.TestCase):
+    CMD = 'python3 /a/omarchy_hook.py hook kimi'
+    ORIGINAL = '[providers.x]\nname = "x"\n\n[thinking]\neffort = "high"\n'
+
+    def test_block_is_appended_once_and_the_rest_is_untouched(self):
+        import tomllib
+        out = h.kimi_merge(self.ORIGINAL, self.CMD)
+        self.assertTrue(out.startswith(self.ORIGINAL.rstrip('\n')))
+        parsed = tomllib.loads(out)
+        self.assertEqual(parsed['thinking'], {'effort': 'high'})
+        self.assertEqual([x['event'] for x in parsed['hooks']], [e for e, _ in h.EVENTS['kimi']])
+        self.assertTrue(all(x['command'] == self.CMD and x['timeout'] == 5 for x in parsed['hooks']))
+        again = h.kimi_merge(out, self.CMD.replace('/a/', '/b/'))
+        self.assertEqual(again.count('[[hooks]]'), len(h.EVENTS['kimi']))
+        self.assertIn('/b/', again)
+        self.assertNotIn('/a/', again)
+
+    def test_foreign_hooks_stay_and_uninstall_restores_the_file(self):
+        import tomllib
+        mine = self.ORIGINAL + '\n[[hooks]]\nevent = "Stop"\ncommand = "other.sh"\n'
+        out = h.kimi_merge(mine, self.CMD)
+        hooks = tomllib.loads(out)['hooks']
+        self.assertEqual(hooks[0]['command'], 'other.sh')
+        self.assertEqual(len(hooks), 1 + len(h.EVENTS['kimi']))
+        self.assertEqual(h.kimi_strip(out), mine)
+
+    def test_a_config_that_cannot_join_a_hooks_table_is_refused(self):
+        with self.assertRaises(Exception):
+            h.kimi_merge('hooks = []\n', self.CMD)
+
+    def test_kimi_install_status_and_uninstall_on_disk(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {'KIMI_CODE_HOME': tmp}):
+            path = Path(tmp) / 'config.toml'
+            path.write_text(self.ORIGINAL)
+            h.install('kimi')
+            self.assertIn('omarchy_hook.py', path.read_text())
+            self.assertEqual(len(list(Path(tmp).glob('config.toml.omarchy-deck.*.bak'))), 1)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                h.status()
+            self.assertIn('kimi: installed', buf.getvalue())
+            h.uninstall('kimi')
+            self.assertEqual(path.read_text(), self.ORIGINAL)
+
+    def test_the_kimi_payload_becomes_a_message_with_the_kimi_process(self):
+        proc = fake_proc({500: ('kimi', 1, ['kimi']), 501: ('sh', 500, ['sh', '-c', 'x'])})
+        msg = h.build_message('kimi', {'session_id': 'session_a', 'hook_event_name': 'PermissionRequest',
+                                       'cwd': '/w', 'tool_input': {'secret': 1}}, 501, proc)
+        self.assertEqual(msg, {'cli': 'kimi', 'event': 'PermissionRequest', 'session_id': 'session_a',
+                               'cwd': '/w', 'pid': 500})
+
+
 class Install(unittest.TestCase):
     def test_install_adds_one_handler_per_event_and_keeps_foreign_hooks_in_place(self):
         mine = h.hook_command('claude')
