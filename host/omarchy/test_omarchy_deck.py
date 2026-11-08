@@ -117,6 +117,19 @@ class Keys(unittest.TestCase):
         f.assert_called_once_with(4)
 
 
+class KimiSeed(unittest.TestCase):
+    def test_with_hooks_the_log_reader_runs_once_and_without_them_always(self):
+        remote = o.Remote.__new__(o.Remote)
+        remote.kimi_seeded = False
+        remote.kimi = mock.Mock(poll=mock.Mock(return_value=['m']))
+        with mock.patch.object(o, 'hooks_installed', return_value=True):
+            self.assertEqual(remote.kimi_messages(), ['m'])
+            self.assertEqual(remote.kimi_messages(), [])
+        with mock.patch.object(o, 'hooks_installed', return_value=False):
+            self.assertEqual(remote.kimi_messages(), ['m'])
+            self.assertEqual(remote.kimi_messages(), ['m'])
+
+
 class Instance(unittest.TestCase):
     def serve(self, root, name):
         import socket as _s

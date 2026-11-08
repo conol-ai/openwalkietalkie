@@ -229,6 +229,20 @@ class Remote:
         self.bridge = Bridge(self.call, Hypr())
         self.kimi = KimiWatcher()
         self.kimi_polled = 0.0
+        self.kimi_seeded = False
+
+    def kimi_messages(self) -> list[dict]:
+        """Kimi session messages from the log reader.
+
+        Without hooks it is the source, polled for good. With them it only
+        runs once, so a restart finds the Kimi already open: hooks speak only
+        when something happens in a session, and would leave it off the deck
+        until the next prompt.
+        """
+        if hooks_installed() and self.kimi_seeded:
+            return []
+        self.kimi_seeded = True
+        return self.kimi.poll()
 
     def call(self, method: str, params: dict | None = None):
         if self.rpc is None:
@@ -310,9 +324,8 @@ class Remote:
                 now = time.monotonic()
                 if now - self.kimi_polled >= KIMI_POLL_S:
                     self.kimi_polled = now
-                    if not hooks_installed():  # hooks are the better source once installed
-                        for message in self.kimi.poll():
-                            self.bridge.on_hook(message)
+                    for message in self.kimi_messages():
+                        self.bridge.on_hook(message)
                 self.bridge.tick(now)
                 if self.dirty.is_set():
                     self.dirty.clear()
