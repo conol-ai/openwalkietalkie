@@ -1,7 +1,8 @@
 """Kimi Code sessions for the deck roster (stdlib only).
 
-Kimi Code has no hook system, so this watcher finds its sessions the way a
-person would: a running `kimi` process, the project directory it runs in, and
+Kimi Code reports itself through hooks (`omarchy_hook.py install kimi`). This
+watcher is the fallback for when they are not installed: it finds sessions the
+way a person would: a running `kimi` process, the project directory it runs in, and
 the session Kimi keeps under `~/.kimi-code/sessions/<project>/<session>/`.
 The session's `agents/main/wire.jsonl` is an append-only event log; the last
 significant event says what the session is doing:

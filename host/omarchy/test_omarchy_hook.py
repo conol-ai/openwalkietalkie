@@ -65,6 +65,11 @@ class KimiInstall(unittest.TestCase):
         self.assertEqual(msg, {'cli': 'kimi', 'event': 'PermissionRequest', 'session_id': 'session_a',
                                'cwd': '/w', 'pid': 500})
 
+    def test_the_real_kimi_process_is_named_kimi_code(self):
+        proc = fake_proc({500: ('kimi-code', 1, ['kimi-code']), 501: ('sh', 500, ['sh', '-c', 'x'])})
+        msg = h.build_message('kimi', {'session_id': 'session_a', 'hook_event_name': 'Stop'}, 501, proc)
+        self.assertEqual(msg['pid'], 500)
+
 
 class Install(unittest.TestCase):
     def test_install_adds_one_handler_per_event_and_keeps_foreign_hooks_in_place(self):

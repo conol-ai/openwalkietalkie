@@ -31,7 +31,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 PROC = '/proc'
-CLI_NAMES = {'claude': 'claude', 'codex': 'codex', 'kimi': 'kimi'}
+# Program names per CLI; Kimi Code's process is `kimi-code`, its launcher `kimi`.
+CLI_NAMES = {'claude': ('claude',), 'codex': ('codex',), 'kimi': ('kimi', 'kimi-code')}
 # The agent kinds deckd knows; any other CLI registers as 'other'.
 DECK_KINDS = {'claude', 'codex'}
 MAX_HOOK_LINE = 64 * 1024
@@ -109,13 +110,13 @@ def cli_process(start_pid: int, cli: str, proc: str = PROC) -> int | None:
     `claude` is a Node/Bun program on some installs, so `node /…/claude` counts:
     the program name may be either of the first two arguments.
     """
-    name = CLI_NAMES.get(cli)
-    if name is None:
+    names = CLI_NAMES.get(cli)
+    if names is None:
         return None
     for pid in ancestors(start_pid, proc):
         stat = read_stat(pid, proc)
         argv = read_cmdline(pid, proc)
-        if (stat and stat[0] == name) or any(os.path.basename(a) == name for a in argv[:2]):
+        if (stat and stat[0] in names) or any(os.path.basename(a) in names for a in argv[:2]):
             return pid
     return None
 
