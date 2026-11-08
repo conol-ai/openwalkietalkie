@@ -75,10 +75,13 @@ class Keys(unittest.TestCase):
             self.remote().on_key({'k': 'enter', 'act': 0, 'shift': 0})
         d.assert_called_once_with('hl.dsp.window.cycle_next()', ['cyclenext'])
 
-    def test_left_is_the_previous_workspace_and_shift_left_the_window_to_the_left(self):
-        with mock.patch.object(o, 'dispatch') as d:
-            self.remote().on_key({'k': 'left', 'act': 1, 'shift': 0})
-        d.assert_called_once_with('hl.dsp.focus({ workspace = "m-1" })', ['workspace', 'm-1'])
+    def test_left_and_right_step_workspace_slots_and_wrap_and_shift_moves_window_focus(self):
+        monitors = lambda ws: [{'focused': True, 'activeWorkspace': {'id': ws}}]
+        for active, key, want in ((7, 'left', 6), (7, 'right', 8), (1, 'left', 10), (10, 'right', 1)):
+            with mock.patch.object(o, 'hyprctl_json', return_value=monitors(active)), \
+                    mock.patch.object(o, 'focus_slot') as f:
+                self.remote().on_key({'k': key, 'act': 1, 'shift': 0})
+            f.assert_called_once_with(want)
         with mock.patch.object(o, 'dispatch') as d:
             self.remote().on_key({'k': 'left', 'act': 1, 'shift': 1})
         d.assert_called_once_with('hl.dsp.focus({ direction = "l" })', ['movefocus', 'l'])

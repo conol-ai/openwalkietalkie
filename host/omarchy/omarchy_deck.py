@@ -66,12 +66,13 @@ LEGACY = 'legacy'
 KEYMAP = {
     ('ccw', 0): ('hl.dsp.window.cycle_next()', ['cyclenext']),
     ('cw', 0): ('hl.dsp.window.cycle_next({ next = false })', ['cyclenext', 'prev']),
-    ('left', 0): ('hl.dsp.focus({ workspace = "m-1" })', ['workspace', 'm-1']),
-    ('right', 0): ('hl.dsp.focus({ workspace = "m+1" })', ['workspace', 'm+1']),
     ('left', 1): ('hl.dsp.focus({ direction = "l" })', ['movefocus', 'l']),
     ('right', 1): ('hl.dsp.focus({ direction = "r" })', ['movefocus', 'r']),
     ('enter', 0): ('hl.dsp.window.fullscreen({ mode = "fullscreen" })', ['fullscreen', '0']),
 }
+# LEFT / RIGHT step through the monitor's workspace slots 1-10 (and wrap), as
+# Super+<n> would: Hyprland's own `m+1` only visits workspaces that have windows.
+WORKSPACE_STEP = {'left': -1, 'right': 1}
 
 
 def socket_path() -> Path:
@@ -249,6 +250,17 @@ class Remote:
         action = KEYMAP.get((k, shift))
         if action:
             dispatch(*action)
+        elif k in WORKSPACE_STEP and not shift:
+            self.step_workspace(WORKSPACE_STEP[k])
+
+    def step_workspace(self, step: int) -> None:
+        monitor = next((m for m in hyprctl_json('monitors') if m.get('focused')), None)
+        if monitor is None:
+            return
+        active = monitor['activeWorkspace']['id']
+        if active < 1:  # a special workspace is on top: step from the slot underneath
+            active = 1
+        focus_slot((slot_of(active) - 1 + step) % SLOTS + 1)
 
     def on_ws(self, data: dict) -> None:
         if 'go' in data:
