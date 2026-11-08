@@ -19,7 +19,17 @@
 > python3 omarchy/omarchy_hook.py install kimi     # Kimi Code；claude / codex 同理
 > ```
 >
-> 服务是 `deckd.service` 和 `omarchy-deck.service`（`systemctl --user status ...`）。适配器会自动找到正在运行的 Hyprland 实例和 Wayland 显示，不用写环境变量。**还没有的：** 语音（PTT）。语音走 CoreBluetooth 音频服务，Linux 上还没实现。
+> 服务是 `deckd.service` 和 `omarchy-deck.service`（`systemctl --user status ...`）。适配器会自动找到正在运行的 Hyprland 实例和 Wayland 显示，不用写环境变量。**语音（PTT）** 已支持：`deckd` 的 Linux 版通过 BlueZ 连对讲机的音频 GATT 服务，用本机 Whisper 识别，没有本地麦克风、也没有语音合成（回复不会被朗读）。先下载模型再用：
+
+> ```sh
+> echo '[voice.stt]
+> engine = "whisper"
+> model = "large-v3-turbo-q5_0"
+> language = "auto"' >> ~/.local/share/openwalkietalkie/config.toml
+> DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd stt install --model large-v3-turbo-q5_0
+> ```
+>
+> `stt install` 走 HuggingFace；连不上时用镜像下载同名文件（`https://hf-mirror.com/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin`）放到 `~/.local/share/openwalkietalkie/caches/stt/`。
 > Kimi Code 有 hook（`config.toml` 里的 `[[hooks]]`），`omarchy_hook.py install kimi` 会写入一个带标记的块，先备份，卸载时原样还原。没装 hook 时，适配器会退回去读 `~/.kimi-code/sessions/*/agents/main/wire.jsonl` 判断状态。
 
 ## 能做什么
