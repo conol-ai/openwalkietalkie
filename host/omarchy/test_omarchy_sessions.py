@@ -265,6 +265,28 @@ class BridgeOrders(unittest.TestCase):
         bridge2.on_hook(hook('Stop'))
         self.assertEqual(bridge2.deliver_order(next(iter(bridge2.sessions.values())), 'hi'), 'no_window')
 
+    def test_a_session_in_a_herdr_pane_is_typed_to_through_herdr_not_a_window(self):
+        calls = []
+
+        def run(cmd, **kw):
+            calls.append((cmd, kw.get('env')))
+            return SimpleNamespace(returncode=0)
+
+        proc = fake_proc({os.getpid(): ('kimi', 1, ['kimi'])})
+        env = {'HERDR_ENV': '1', 'HERDR_PANE_ID': 'w1:p1', 'HERDR_BIN_PATH': '/h/herdr',
+               'HERDR_SOCKET_PATH': '/h/sock', 'SECRET': 'x'}
+        (Path(proc) / str(os.getpid()) / 'environ').write_bytes(
+            b'\0'.join(f'{k}={v}'.encode() for k, v in env.items()) + b'\0')
+        hypr = FakeHypr()
+        bridge = make_bridge(hypr=hypr, run=run, proc=proc)
+        bridge.on_hook({**hook('Stop'), 'cli': 'kimi'})
+        session = next(iter(bridge.sessions.values()))
+        self.assertIsNone(bridge.deliver_order(session, 'list files'))
+        self.assertEqual(calls, [(['/h/herdr', 'pane', 'run', 'w1:p1', 'list files'], {'HERDR_SOCKET_PATH': '/h/sock'})])
+        self.assertEqual(hypr.focused, [])
+        bridge.run = lambda cmd, **kw: SimpleNamespace(returncode=1)
+        self.assertEqual(bridge.deliver_order(session, 'x'), 'herdr_failed')
+
     def test_a_failed_wtype_reports_it(self):
         bridge, session = self.bridge()
         bridge.run = lambda cmd, **kw: SimpleNamespace(returncode=1)

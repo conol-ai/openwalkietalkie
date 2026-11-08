@@ -122,6 +122,26 @@ def cli_process(start_pid: int, cli: str, proc: str = PROC) -> int | None:
     return None
 
 
+HERDR_ENV_KEYS = ('HERDR_SOCKET_PATH', 'XDG_CONFIG_HOME', 'XDG_STATE_HOME', 'HOME', 'PATH')
+
+
+def herdr_target(pid: int, proc: str = PROC):
+    """(herdr binary, pane id, environment) when `pid` runs in a herdr pane, else None.
+
+    herdr keeps its terminals in a background server, so no window is an
+    ancestor of such a session; herdr itself is the way in.
+    """
+    try:
+        raw = Path(f'{proc}/{pid}/environ').read_bytes().split(b'\0')
+    except OSError:
+        return None
+    env = dict(item.decode('utf-8', 'replace').split('=', 1) for item in raw if b'=' in item)
+    binary, pane = env.get('HERDR_BIN_PATH') or env.get('HERDR_BIN'), env.get('HERDR_PANE_ID')
+    if env.get('HERDR_ENV') != '1' or not binary or not pane:
+        return None
+    return binary, pane, {k: env[k] for k in HERDR_ENV_KEYS if k in env}
+
+
 def pid_alive(pid: int) -> bool:
     try:
         os.kill(pid, 0)
@@ -356,6 +376,11 @@ class Bridge:
             return 'dialog_open'
         if not pid_alive(s.pid):
             return 'session_gone'
+        target = herdr_target(s.pid, self.proc)
+        if target:
+            binary, pane, env = target
+            sent = self.run([binary, 'pane', 'run', pane, text], capture_output=True, timeout=5, env=env)
+            return None if sent.returncode == 0 else 'herdr_failed'
         window = window_for(s.pid, self.hypr.clients(), s.cwd, self.proc)
         if window is None:
             return 'no_window'
