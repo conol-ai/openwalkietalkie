@@ -39,7 +39,7 @@ import sys
 import threading
 import time
 
-from omarchy_hypr import Hypr, dispatch, focus_slot, focus_window, hyprctl_json  # noqa: E402,F401
+from omarchy_hypr import Hypr, dispatch, ensure_instance, focus_slot, focus_window, hyprctl_json  # noqa: E402,F401
 
 from omarchy_kimi import KimiWatcher, hooks_installed  # noqa: E402
 from omarchy_sessions import Bridge, ControlServer, control_socket_path  # noqa: E402
@@ -309,6 +309,7 @@ def watch_hyprland(remote: Remote) -> None:
     """Mark the face stale on every Hyprland event that can change it."""
     while True:
         try:
+            ensure_instance()
             path = (Path(os.environ['XDG_RUNTIME_DIR']) / 'hypr' /
                     os.environ['HYPRLAND_INSTANCE_SIGNATURE'] / '.socket2.sock')
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:

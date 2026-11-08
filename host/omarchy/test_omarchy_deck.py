@@ -97,5 +97,31 @@ class Keys(unittest.TestCase):
         f.assert_called_once_with(4)
 
 
+class Instance(unittest.TestCase):
+    def serve(self, root, name):
+        import socket as _s
+        d = Path(root) / 'hypr' / name
+        d.mkdir(parents=True)
+        srv = _s.socket(_s.AF_UNIX)
+        srv.bind(str(d / '.socket.sock'))
+        srv.listen(16)  # nobody accepts: leave room for every probe
+        self.addCleanup(srv.close)
+        return d
+
+    def test_a_stale_signature_is_replaced_by_the_live_instance(self):
+        import os as _os
+        import tempfile as _t
+        import omarchy_hypr as hy
+        with _t.TemporaryDirectory(dir='/tmp') as root:
+            (Path(root) / 'hypr' / 'dead_1').mkdir(parents=True)  # a directory with no socket
+            self.serve(root, 'live_2')
+            env = {'XDG_RUNTIME_DIR': root, 'HYPRLAND_INSTANCE_SIGNATURE': 'dead_1'}
+            with mock.patch.dict(_os.environ, env):
+                hy.ensure_instance()
+                self.assertEqual(_os.environ['HYPRLAND_INSTANCE_SIGNATURE'], 'live_2')
+            with mock.patch.dict(_os.environ, {'XDG_RUNTIME_DIR': root}, clear=True):
+                hy.ensure_instance()
+                self.assertEqual(_os.environ['HYPRLAND_INSTANCE_SIGNATURE'], 'live_2')
+
 if __name__ == '__main__':
     unittest.main()

@@ -10,6 +10,18 @@
                                                    └─ omarchy_hook.py   Claude Code / Codex 的 hook
 ```
 
+> **当前推荐方案：Linux 版 `deckd` 直接装在 Omarchy 上。** 对讲机用蓝牙直连 Omarchy（BlueZ 的 HID 服务会把它暴露成 `/dev/hidraw*`，现有的 `hid.rs` 直接驱动），不再需要 Mac 和 SSH 转发。下面“部署”里的 SSH 转发方案只在对讲机连着 Mac 时用。
+>
+> ```sh
+> # 在 Omarchy 上：构建 Linux 版 deckd，再装成 systemd 用户服务
+> cd host && cargo build --release --target x86_64-unknown-linux-gnu -p deckd
+> sh omarchy/install.sh target/x86_64-unknown-linux-gnu/release/deckd
+> python3 omarchy/omarchy_hook.py install kimi     # Kimi Code；claude / codex 同理
+> ```
+>
+> 服务是 `deckd.service` 和 `omarchy-deck.service`（`systemctl --user status ...`）。适配器会自动找到正在运行的 Hyprland 实例和 Wayland 显示，不用写环境变量。**还没有的：** 语音（PTT）。语音走 CoreBluetooth 音频服务，Linux 上还没实现。
+> Kimi Code 有 hook（`config.toml` 里的 `[[hooks]]`），`omarchy_hook.py install kimi` 会写入一个带标记的块，先备份，卸载时原样还原。没装 hook 时，适配器会退回去读 `~/.kimi-code/sessions/*/agents/main/wire.jsonl` 判断状态。
+
 ## 能做什么
 
 | 功能 | 怎么用 |

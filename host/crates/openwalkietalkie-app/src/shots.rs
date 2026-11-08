@@ -177,9 +177,16 @@ pub fn start(shell: Entity<Shell>, window: &mut Window, cx: &mut App) {
                         "light"
                     };
                     let path = dir.join(format!("{name}-{appearance}{suffix}.png"));
+                    // The window's own NSView is the only snapshot source there is.
+                    #[cfg(target_os = "macos")]
                     match crate::snapshot::save_window_png(window, &path) {
                         Ok(()) => println!("{}", path.display()),
                         Err(e) => eprintln!("openwalkietalkie-app: {name}: {e}"),
+                    }
+                    #[cfg(not(target_os = "macos"))]
+                    {
+                        let _ = (window, &path);
+                        eprintln!("openwalkietalkie-app: {name}: window snapshots need macOS");
                     }
                 })
                 .ok();
