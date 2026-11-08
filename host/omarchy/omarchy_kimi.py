@@ -70,6 +70,39 @@ def read_tail(path: Path, limit: int = TAIL_BYTES) -> list[str]:
     return lines[1:] if size > limit and lines else lines
 
 
+def last_reply(wire: Path | None) -> str:
+    """The text of the last assistant message of the latest turn, or ''.
+
+    Read when a turn ends, to show a summary on the deck; a prompt marks the
+    turn's start, so a turn without text does not repeat the one before it.
+    """
+    if wire is None:
+        return ''
+    for line in reversed(read_tail(wire)):
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        kind = event.get('type') if isinstance(event, dict) else None
+        if kind in ('turn.prompt', 'turn.steer'):
+            return ''
+        if kind != 'agent.message.appended':
+            continue
+        message = (event.get('message') or {}).get('message') or {}
+        if message.get('role') != 'assistant':
+            continue
+        words = ' '.join(b.get('text', '') for b in message.get('content') or []
+                         if isinstance(b, dict) and b.get('type') == 'text').split()
+        if words:
+            return ' '.join(words)
+    return ''
+
+
+def find_wire(sid: str, home: str | None = None) -> Path | None:
+    root = Path(home or os.environ.get('KIMI_CODE_HOME') or os.path.expanduser('~/.kimi-code')) / 'sessions'
+    return next(iter(root.glob(f'*/{sid}/agents/main/wire.jsonl')), None)
+
+
 def is_kimi(argv: list[str]) -> bool:
     return any(os.path.basename(a) in PROGRAMS for a in argv[:3])
 

@@ -139,6 +139,27 @@ class BridgeSessions(unittest.TestCase):
         bridge.on_hook(hook('Stop'))
         self.assertEqual([m for m, _ in deck.calls].count('agent.update'), 1)
 
+    def test_a_kimi_turn_end_pushes_its_reply_once_and_not_for_other_clis(self):
+        import json, tempfile
+        with tempfile.TemporaryDirectory() as home:
+            wire = os.path.join(home, 'sessions', 'wd_x', 'sid1', 'agents', 'main')
+            os.makedirs(wire)
+            line = {'type': 'agent.message.appended', 'message': {'message': {'role': 'assistant', 'content': [
+                {'type': 'think', 'think': 'hidden'}, {'type': 'text', 'text': 'It is\n done.'}]}}}
+            with open(os.path.join(wire, 'wire.jsonl'), 'w') as f:
+                f.write(json.dumps(line) + '\n')
+            os.environ['KIMI_CODE_HOME'] = home
+            self.addCleanup(os.environ.pop, 'KIMI_CODE_HOME')
+            deck = FakeDeck()
+            bridge = make_bridge(deck)
+            bridge.on_hook({**hook('Stop'), 'cli': 'kimi'})
+            bridge.on_hook({**hook('Stop'), 'cli': 'kimi'})
+            replies = [p for m, p in deck.calls if m == 'agent.reply']
+            self.assertEqual(replies, [{'agent': 'ag_1', 'text': 'It is done.', 'speak': False}])
+            other = FakeDeck()
+            make_bridge(other).on_hook(hook('Stop'))
+            self.assertNotIn('agent.reply', [m for m, _ in other.calls])
+
     def test_a_question_carries_the_notification_line(self):
         deck = FakeDeck()
         bridge = make_bridge(deck)

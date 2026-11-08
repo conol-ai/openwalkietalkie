@@ -38,6 +38,7 @@ DECK_KINDS = {'claude', 'codex'}
 MAX_HOOK_LINE = 64 * 1024
 MAX_ORDER = 2000
 TITLE_MAX = 64
+REPLY_MAX = 600  # a turn's closing reply, as the deck shows it
 GC_EVERY_S = 15.0
 HEARTBEAT_EVERY_S = 10.0
 FOCUS_WAIT_S = 1.0
@@ -169,6 +170,8 @@ class Session:
     agent: str | None = None
     gone: bool = False
     synced: dict = field(default_factory=dict)
+    reply: str = ''
+    replied: str = ''
 
 
 def clip(text: str, limit: int) -> str:
@@ -236,6 +239,9 @@ class Bridge:
         if msg['event'] == 'SessionEnd':
             session.gone = True
         else:
+            if msg['event'] == 'Stop' and cli == 'kimi':
+                from omarchy_kimi import find_wire, last_reply  # omarchy_kimi imports this module
+                session.reply = clip(last_reply(find_wire(sid)), REPLY_MAX)
             state = state_for(msg['event'], msg.get('ntype'))
             if state:
                 session.state = state
@@ -270,6 +276,9 @@ class Bridge:
         if s.synced != want:
             self.call('agent.update', {'agent': s.agent, **want})
             s.synced = want
+        if s.reply and s.reply != s.replied:
+            self.call('agent.reply', {'agent': s.agent, 'text': s.reply, 'speak': False})
+            s.replied = s.reply
         self.dirty.discard(s.key)
 
     def register(self, s: Session) -> None:
@@ -283,12 +292,12 @@ class Bridge:
             self.call('agent.claim', {'key': s.key})
             result = self.call('agent.register', params)
         s.agent = result['agent']
-        s.synced = {}
+        s.synced, s.replied = {}, ''
 
     def reregister(self) -> None:
         """After a reconnect the daemon has forgotten this connection's agents."""
         for key, s in self.sessions.items():
-            s.agent, s.synced = None, {}
+            s.agent, s.synced, s.replied = None, {}, ''
             self.dirty.add(key)
         self.flush()
 

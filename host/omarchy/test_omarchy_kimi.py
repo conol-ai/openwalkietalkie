@@ -29,6 +29,32 @@ class StateFromWire(unittest.TestCase):
         self.assertEqual(k.state_from_wire(lines), 'working')
 
 
+class LastReply(unittest.TestCase):
+    def line(self, kind, text=None):
+        event = {'type': kind}
+        if text is not None:
+            event['message'] = {'message': {'role': 'assistant', 'content': [
+                {'type': 'think', 'think': 'secret'}, {'type': 'text', 'text': text}]}}
+        return json.dumps(event)
+
+    def wire(self, *lines):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        path = Path(tmp.name) / 'wire.jsonl'
+        path.write_text('\n'.join(lines) + '\n')
+        return path
+
+    def test_the_closing_text_of_the_turn_without_thoughts(self):
+        w = self.wire(self.line('turn.prompt'), self.line('agent.message.appended', 'first'),
+                      self.line('agent.message.appended', 'Done:\n  all good'), self.line('turn.ended'))
+        self.assertEqual(k.last_reply(w), 'Done: all good')
+
+    def test_a_turn_without_text_does_not_repeat_the_one_before(self):
+        w = self.wire(self.line('agent.message.appended', 'old'), self.line('turn.prompt'), self.line('turn.ended'))
+        self.assertEqual(k.last_reply(w), '')
+        self.assertEqual(k.last_reply(None), '')
+
+
 class Fixture(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
