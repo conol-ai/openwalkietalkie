@@ -177,7 +177,7 @@ pub struct Core {
     pub firmware: crate::firmware::Updater,
     /// The local recogniser, when this build has one, for `stt.status`
     /// and for loading a model the moment it is on disk.
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub whisper: Option<Arc<crate::audio::whisper::WhisperStt>>,
     /// `[voice.tts]` as the local voice reads it at every utterance
     /// (`audio::kokoro`), refreshed the same way as the others.
@@ -310,7 +310,7 @@ impl Core {
             stt_install: crate::download::Installer::default(),
             firmware: crate::firmware::Updater::default(),
             executable: std::env::current_exe().ok(),
-            #[cfg(target_os = "macos")]
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
             whisper: None,
             kokoro_settings: Arc::new(arc_swap::ArcSwap::from_pointee(crate::kokoro::Settings::default())),
             tts_install: crate::download::Installer::default(),
@@ -429,6 +429,10 @@ impl Core {
         }
         // A model that is wanted and on disk is loaded now, not by the
         // next press or utterance.
+        #[cfg(target_os = "linux")]
+        if let Some(whisper) = &self.whisper {
+            whisper.ensure_loaded();
+        }
         #[cfg(target_os = "macos")]
         {
             if let Some(whisper) = &self.whisper {
@@ -2560,11 +2564,11 @@ pub fn run(opts: RunOptions) -> Result<i32, CoreError> {
     // connected); its cable port is the hid thread's, driven whenever the
     // instance it opened is the USB one. Only with the BLE transport, and
     // never for `--no-device`: a door test may not touch the radio.
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     let voice_link = (!opts.no_device
         && opts.config.voice.transport == crate::config::VoiceTransport::Ble)
         .then(crate::ble::BleAudio::spawn);
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     let voice_link: Option<crate::ble::BleAudio> = None;
     // `--no-device`: the hid thread runs without hardware (never enumerates),
     // so the link's metrics and debug controls keep answering.
@@ -2618,6 +2622,33 @@ pub fn run(opts: RunOptions) -> Result<i32, CoreError> {
             cloud: Some(core.tts_settings.clone()),
             stt: Some(whisper),
             local_tts: Some(kokoro),
+            companion: Some(core.transcribe.clone()),
+        }));
+    }
+    // Linux: the deck's BLE audio service through BlueZ and the local Whisper
+    // model. No Apple recogniser or voice to fall through to (`audio::linux`).
+    #[cfg(target_os = "linux")]
+    if !opts.no_device {
+        core.stt_settings
+            .store(Arc::new(crate::stt::Settings::from_config(&opts.config)));
+        let whisper = Arc::new(crate::audio::whisper::WhisperStt::new(
+            core.stt_settings.clone(),
+            opts.paths.stt.clone(),
+            Arc::new(crate::audio::linux::NoStt),
+        ));
+        whisper.ensure_loaded();
+        core.whisper = Some(whisper.clone());
+        core.set_audio(crate::audio::linux::spawn(&crate::audio::AudioConfig {
+            transport: opts.config.voice.transport,
+            device_uid: opts.config.voice.device_uid.clone(),
+            fallback_output: opts.config.voice.fallback_output.clone(),
+            fallback_input: opts.config.voice.fallback_input.clone(),
+            link: voice_link,
+            tts_engine: opts.config.voice.tts.engine.clone(),
+            sidecar: None,
+            cloud: None,
+            stt: Some(whisper),
+            local_tts: None,
             companion: Some(core.transcribe.clone()),
         }));
     }

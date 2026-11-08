@@ -41,6 +41,8 @@
 pub mod codec;
 
 pub mod attach;
+#[cfg(target_os = "linux")]
+mod bluez;
 #[cfg(target_os = "macos")]
 mod cb;
 #[cfg(target_os = "macos")]

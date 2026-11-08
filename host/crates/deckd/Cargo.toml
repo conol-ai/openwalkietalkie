@@ -52,9 +52,6 @@ security-framework = { workspace = true }
 # `security-framework` above — CoreAudio, AVFoundation and Speech.framework
 # exist on no other platform, and the workspace still has to `cargo check` on
 # one.
-cpal = { workspace = true }
-rubato = { workspace = true }
-rtrb = { workspace = true }
 objc2 = { workspace = true }
 block2 = { workspace = true }
 objc2-foundation = { workspace = true }
@@ -74,6 +71,20 @@ dispatch2 = { workspace = true }
 # The Info.plist a launchd-started bare `deckd` needs for CoreBluetooth's
 # usage string (src/main.rs).
 embed_plist = { workspace = true }
+
+# The voice engine's own pieces, shared by macOS and Linux (`audio::lanes`, `audio::ble`).
+[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
+cpal = { workspace = true }
+rubato = { workspace = true }
+rtrb = { workspace = true }
+
+# The deck's BLE audio service on Linux: BlueZ over D-Bus (`ble::bluez`).
+[target.'cfg(target_os = "linux")'.dependencies]
+bluer = { version = "0.17", features = ["bluetoothd"] }
+futures = "0.3"
+uuid = "1"
+# The local recogniser on Linux: whisper.cpp on the CPU (macOS builds it with Metal).
+whisper-rs = "=0.16.0"
 
 [dev-dependencies]
 deck-wrap = { path = "../deck-wrap" }

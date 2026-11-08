@@ -32,7 +32,9 @@
 //! and speaker over its BLE audio service — `[voice] transport = "ble"`, the
 //! default since the Rev A firmware stopped being a Classic audio device —
 //! behind the same two seams the CoreAudio devices sit behind.
-#[cfg(target_os = "macos")]
+#[cfg(target_os = "linux")]
+pub mod linux;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod ble;
 pub mod fakes;
 // The engine's own modules are macOS-gated exactly like the crates they are
@@ -47,9 +49,9 @@ pub mod apple;
 mod apple_transcript;
 #[cfg(target_os = "macos")]
 pub mod coreaudio;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod engine;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod lanes;
 #[cfg(target_os = "macos")]
 pub mod mainloop;
@@ -57,18 +59,18 @@ pub mod companion;
 pub mod route;
 pub mod cloud;
 pub mod sidecar;
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
 mod speaker_eq;
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
 mod adpcm;
-#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", test))]
 mod speech_level;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod whisper;
 #[cfg(target_os = "macos")]
 pub mod kokoro;
 pub mod traits;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub mod tts;
 
 use crossbeam_channel::{Receiver, Sender, TrySendError};

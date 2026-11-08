@@ -186,6 +186,8 @@ struct Inner {
 enum Backend {
     #[cfg(target_os = "macos")]
     CoreBluetooth(super::central::Backend),
+    #[cfg(target_os = "linux")]
+    BlueZ(super::bluez::Backend),
     /// Nothing drives the Bluetooth port from here: a platform without
     /// CoreBluetooth, or a [`FakeDeck`] that a test drives by hand.
     Manual,
@@ -226,7 +228,13 @@ impl BleAudio {
         #[cfg(target_os = "macos")]
         let backend =
             Backend::CoreBluetooth(super::central::Backend::spawn(shared.clone(), name, reach));
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "linux")]
+        let backend = {
+            // BlueZ never scans or pairs here: `reach` only matters to CoreBluetooth.
+            let _ = reach;
+            Backend::BlueZ(super::bluez::Backend::spawn(shared.clone(), name))
+        };
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         let backend = {
             let _ = (name, reach);
             shared.set_problem(
@@ -299,6 +307,8 @@ impl BleAudio {
             _ => match &self.inner.backend {
                 #[cfg(target_os = "macos")]
                 Backend::CoreBluetooth(backend) => backend.kick(),
+                #[cfg(target_os = "linux")]
+                Backend::BlueZ(backend) => backend.kick(),
                 Backend::Manual => {}
             },
         }
