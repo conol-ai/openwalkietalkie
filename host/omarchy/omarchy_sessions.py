@@ -31,7 +31,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 PROC = '/proc'
-CLI_NAMES = {'claude': 'claude', 'codex': 'codex'}
+CLI_NAMES = {'claude': 'claude', 'codex': 'codex', 'kimi': 'kimi'}
+# The agent kinds deckd knows; any other CLI registers as 'other'.
+DECK_KINDS = {'claude', 'codex'}
 MAX_HOOK_LINE = 64 * 1024
 MAX_ORDER = 2000
 TITLE_MAX = 64
@@ -269,7 +271,7 @@ class Bridge:
         self.dirty.discard(s.key)
 
     def register(self, s: Session) -> None:
-        params = {'kind': s.cli, 'name': s.name, 'key': s.key, 'cwd': s.cwd,
+        params = {'kind': s.cli if s.cli in DECK_KINDS else 'other', 'name': s.name, 'key': s.key, 'cwd': s.cwd,
                   'caps': {'answer': 'none', 'order': 'push', 'focus': True}, 'lease_ttl_s': 30}
         try:
             result = self.call('agent.register', params)

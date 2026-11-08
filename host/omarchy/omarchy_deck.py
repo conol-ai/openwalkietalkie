@@ -41,6 +41,7 @@ import time
 
 from omarchy_hypr import Hypr, dispatch, focus_slot, focus_window, hyprctl_json  # noqa: E402,F401
 
+from omarchy_kimi import KimiWatcher  # noqa: E402
 from omarchy_sessions import Bridge, ControlServer, control_socket_path  # noqa: E402
 
 EVENTS = ['device.ws', 'device.key', 'device.link', 'agent.order', 'focus.changed']
@@ -49,6 +50,7 @@ MAX_CHIPS = 9
 TITLE_MAX = 48
 SLOTS = 10  # Omarchy gives every monitor its own workspaces 1-10 (a block of ten)
 REPUSH_S = 30.0
+KIMI_POLL_S = 1.0
 # Hyprland events that can change what the face shows.
 HYPR_EVENTS = (
     'workspace', 'workspacev2', 'createworkspace', 'createworkspacev2',
@@ -216,6 +218,8 @@ class Remote:
         self.dirty = threading.Event()
         self.hooks: queue.Queue = queue.Queue()
         self.bridge = Bridge(self.call, Hypr())
+        self.kimi = KimiWatcher()
+        self.kimi_polled = 0.0
 
     def call(self, method: str, params: dict | None = None):
         if self.rpc is None:
@@ -283,7 +287,12 @@ class Remote:
                     self.handle(self.rpc.events.popleft())
                 while not self.hooks.empty():
                     self.bridge.on_hook(self.hooks.get_nowait())
-                self.bridge.tick(time.monotonic())
+                now = time.monotonic()
+                if now - self.kimi_polled >= KIMI_POLL_S:
+                    self.kimi_polled = now
+                    for message in self.kimi.poll():
+                        self.bridge.on_hook(message)
+                self.bridge.tick(now)
                 if self.dirty.is_set():
                     self.dirty.clear()
                     time.sleep(0.05)  # let a burst of Hyprland events settle
