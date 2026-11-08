@@ -14,8 +14,8 @@ the same Lua-first, legacy-fallback calls as Omarchy's own scripts.
 
 Deck controls on the Omarchy face (the face's own grammar, docs/agent-command-deck.md):
   wheel CCW / CW        next / previous window (Alt+Tab)
-  LEFT / RIGHT          focus the window to the left / right
-  SHIFT+LEFT / RIGHT    previous / next workspace
+  LEFT / RIGHT          previous / next workspace
+  SHIFT+LEFT / RIGHT    focus the window to the left / right
   ENTER                 toggle fullscreen
   tap a workspace chip  go to that workspace slot (Omarchy's per-monitor 1-10)
   tap a window row      focus that window
@@ -66,10 +66,10 @@ LEGACY = 'legacy'
 KEYMAP = {
     ('ccw', 0): ('hl.dsp.window.cycle_next()', ['cyclenext']),
     ('cw', 0): ('hl.dsp.window.cycle_next({ next = false })', ['cyclenext', 'prev']),
-    ('left', 0): ('hl.dsp.focus({ direction = "l" })', ['movefocus', 'l']),
-    ('right', 0): ('hl.dsp.focus({ direction = "r" })', ['movefocus', 'r']),
-    ('left', 1): ('hl.dsp.focus({ workspace = "m-1" })', ['workspace', 'm-1']),
-    ('right', 1): ('hl.dsp.focus({ workspace = "m+1" })', ['workspace', 'm+1']),
+    ('left', 0): ('hl.dsp.focus({ workspace = "m-1" })', ['workspace', 'm-1']),
+    ('right', 0): ('hl.dsp.focus({ workspace = "m+1" })', ['workspace', 'm+1']),
+    ('left', 1): ('hl.dsp.focus({ direction = "l" })', ['movefocus', 'l']),
+    ('right', 1): ('hl.dsp.focus({ direction = "r" })', ['movefocus', 'r']),
     ('enter', 0): ('hl.dsp.window.fullscreen({ mode = "fullscreen" })', ['fullscreen', '0']),
 }
 

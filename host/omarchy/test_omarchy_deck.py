@@ -75,10 +75,13 @@ class Keys(unittest.TestCase):
             self.remote().on_key({'k': 'enter', 'act': 0, 'shift': 0})
         d.assert_called_once_with('hl.dsp.window.cycle_next()', ['cyclenext'])
 
-    def test_shift_left_is_the_previous_workspace(self):
+    def test_left_is_the_previous_workspace_and_shift_left_the_window_to_the_left(self):
+        with mock.patch.object(o, 'dispatch') as d:
+            self.remote().on_key({'k': 'left', 'act': 1, 'shift': 0})
+        d.assert_called_once_with('hl.dsp.focus({ workspace = "m-1" })', ['workspace', 'm-1'])
         with mock.patch.object(o, 'dispatch') as d:
             self.remote().on_key({'k': 'left', 'act': 1, 'shift': 1})
-        d.assert_called_once_with('hl.dsp.focus({ workspace = "m-1" })', ['workspace', 'm-1'])
+        d.assert_called_once_with('hl.dsp.focus({ direction = "l" })', ['movefocus', 'l'])
 
     def test_unmapped_keys_are_ignored(self):
         with mock.patch.object(o, 'dispatch') as d:

@@ -154,6 +154,7 @@ class BridgeSessions(unittest.TestCase):
             bridge = make_bridge(deck)
             bridge.on_hook({**hook('Stop'), 'cli': 'kimi'})
             bridge.on_hook({**hook('Stop'), 'cli': 'kimi'})
+            self.assertEqual(dict(deck.calls)['agent.register']['name'], 'Kimi: proj')
             replies = [p for m, p in deck.calls if m == 'agent.reply']
             self.assertEqual(replies, [{'agent': 'ag_1', 'text': 'It is done.', 'speak': False}])
             other = FakeDeck()

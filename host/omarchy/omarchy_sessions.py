@@ -234,6 +234,8 @@ class Bridge:
             if msg['event'] == 'SessionEnd':
                 return
             name = clip(os.path.basename(cwd.rstrip('/')) or cli, 24)
+            if cli == 'kimi':  # no Kimi icon on the deck: the name says which program it is
+                name = clip(f'Kimi: {name}', 24)
             session = self.sessions[key] = Session(key, cli, sid, cwd, msg['pid'], name)
         session.pid, session.cwd = msg['pid'], cwd or session.cwd
         if msg['event'] == 'SessionEnd':

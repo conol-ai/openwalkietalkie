@@ -54,6 +54,13 @@ const FINISH_FIXED: Duration = Duration::from_secs(10);
 const FINISH_PER_SECOND: Duration = Duration::from_secs(1);
 const FINISH_MAX: Duration = Duration::from_secs(90);
 
+/// The encoder positions covering `samples` of 16 kHz audio, with room to
+/// spare, between a floor Whisper still decodes well from and the full window.
+fn audio_ctx(samples: usize) -> i32 {
+    let positions = samples / 320 + 128;
+    i32::try_from(positions.next_multiple_of(64).clamp(512, 1500)).unwrap_or(1500)
+}
+
 fn final_budget(fed: Duration) -> Duration {
     (FINISH_FIXED + FINISH_PER_SECOND.mul_f64(fed.as_secs_f64()))
         .clamp(super::engine::FINISH_BUDGET, FINISH_MAX)
@@ -565,6 +572,12 @@ fn run(
     } else {
         audio
     };
+    // One pass only: a press is short, and the default retries at higher
+    // temperatures re-decode the whole window several times on a CPU.
+    params.set_temperature_inc(0.0);
+    // The encoder costs the same for 2 s as for 30 s unless it is told how
+    // much of its 30 s window is audio (50 positions per second).
+    params.set_audio_ctx(audio_ctx(audio.len()));
     state.full(params, audio).map_err(|e| e.to_string())?;
     let mut text = String::new();
     for segment in state.as_iter() {
@@ -607,6 +620,13 @@ pub fn engine_info(settings: &Settings, present: bool, apple: &EngineInfo) -> En
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_encoder_window_follows_the_audio_between_a_floor_and_the_full_30_seconds() {
+        assert_eq!(super::audio_ctx(17_600), 512);
+        assert_eq!(super::audio_ctx(16_000 * 12), 768);
+        assert_eq!(super::audio_ctx(16_000 * 40), 1500);
+    }
+
     use super::*;
     use crate::audio::fakes::FakeStt;
 
