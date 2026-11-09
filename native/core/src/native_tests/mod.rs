@@ -10,6 +10,7 @@ use std::sync::{
 mod deck;
 mod io;
 mod power_battery;
+mod preferences;
 
 static CORE_LOCK: Mutex<()> = Mutex::new(());
 static REPLIES: AtomicUsize = AtomicUsize::new(0);
@@ -29,6 +30,8 @@ static BATTERY_MV: AtomicUsize = AtomicUsize::new(4200);
 static CHARGER_STATUS: AtomicUsize = AtomicUsize::new(0);
 static BATTERY_READS: AtomicUsize = AtomicUsize::new(0);
 static WATCHDOG_FEEDS: AtomicUsize = AtomicUsize::new(0);
+static UI_PREFS: Mutex<Option<[u8; bond_record::SIZE]>> = Mutex::new(None);
+static UI_PREFS_WRITES: AtomicUsize = AtomicUsize::new(0);
 
 /// One failed test must not bury the others under PoisonError panics.
 fn lock<T>(mutex: &'static Mutex<T>) -> std::sync::MutexGuard<'static, T> {
@@ -43,6 +46,8 @@ fn reset() {
     CHARGER_STATUS.store(0, Ordering::Relaxed);
     BATTERY_READS.store(0, Ordering::Relaxed);
     WATCHDOG_FEEDS.store(0, Ordering::Relaxed);
+    *lock(&UI_PREFS) = None;
+    UI_PREFS_WRITES.store(0, Ordering::Relaxed);
     unsafe {
         *core::ptr::addr_of_mut!(CORE) = Core::new();
         (*core::ptr::addr_of_mut!(CORE)).ui.reset();
@@ -250,6 +255,20 @@ unsafe extern "C" fn owt_i2c_transfer(
 }
 #[no_mangle]
 extern "C" fn owt_delay_ms(_: u32) {}
+#[no_mangle]
+unsafe extern "C" fn owt_ui_prefs_read(bytes: *mut u8, length: usize) -> bool {
+    let Some(saved) = *lock(&UI_PREFS) else { return false };
+    assert_eq!(length, saved.len());
+    core::slice::from_raw_parts_mut(bytes, length).copy_from_slice(&saved);
+    true
+}
+#[no_mangle]
+unsafe extern "C" fn owt_ui_prefs_write(bytes: *const u8, length: usize) -> bool {
+    assert_eq!(length, bond_record::SIZE);
+    *lock(&UI_PREFS) = Some(core::slice::from_raw_parts(bytes, length).try_into().unwrap());
+    UI_PREFS_WRITES.fetch_add(1, Ordering::Relaxed);
+    true
+}
 #[no_mangle]
 unsafe extern "C" fn owt_hid_notify(data: *const u8, length: usize) -> i32 {
     REPLIES.fetch_add(1, Ordering::Relaxed);

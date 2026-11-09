@@ -98,6 +98,13 @@ impl DeckPane {
 }
 
 impl Shell {
+    pub(crate) fn localize_order_input(&self, window: &mut Window, cx: &mut Context<Self>) {
+        let placeholder = self.deck.selected.as_ref()
+            .and_then(|id| self.state.mirror().agents.get(id))
+            .map(|agent| self.fmt("Send an order to {0}…", &[&agent.name]))
+            .unwrap_or_else(|| self.tr("Send an order to the selected agent…").to_owned());
+        self.deck.order.update(cx, |input, cx| input.set_placeholder(placeholder, window, cx));
+    }
     /// The whole Deck screen: roster, detail and the composer.
     pub(crate) fn render_deck(&self, dim: bool, cx: &Context<Self>) -> Div {
         let p = *palette(cx);
@@ -159,7 +166,7 @@ impl Shell {
                     div()
                         .min_w_0()
                         .truncate()
-                        .child(group.label.clone()),
+                        .child(if group.cwd.is_none() && group.label == present::NO_PROJECT { self.tr(present::NO_PROJECT).to_owned() } else { group.label.clone() }),
                 )
                 .child(div().flex_none().text_color(p.faint).child(count))
                 .when_some(path, |this, path| this.tooltip(ui::tip(path)));
@@ -182,7 +189,7 @@ impl Shell {
                     .h(px(30.))
                     .px(px(18.))
                     .gap(px(8.))
-                    .child(div().ts(13., 17.).medium().child("Agents"))
+                    .child(div().ts(13., 17.).medium().child(self.tr("Agents")))
                     .child(
                         div()
                             .ts(12., 16.)
@@ -198,7 +205,7 @@ impl Shell {
                             .text_color(p.faint)
                             .child(format!("rev {}", self.state.mirror().rev))
                             .tooltip(ui::tip(
-                                "The mirror's revision: it moves when anything on the deck does",
+                                self.tr("The mirror's revision: it moves when anything on the deck does"),
                             )),
                     ),
             )
@@ -215,9 +222,8 @@ impl Shell {
                     .when(empty, |this| {
                         this.child(ui::empty_state(
                             ic::BOT,
-                            "No agents yet",
-                            "Start a Claude, Codex or Gemini session in a terminal and it \
-                             appears here.",
+                            self.tr("No agents yet"),
+                            self.tr("Start a Claude, Codex or Gemini session in a terminal and it appears here."),
                             &p,
                         ))
                     })
@@ -240,7 +246,7 @@ impl Shell {
         let p = *palette(cx);
         let id = agent.id.clone();
         let name = agent.name.clone();
-        let shown = present::row_name(agent, project);
+        let shown = present::row_name_localized(agent, project, self.language());
         let selected = self.deck.selected.as_ref() == Some(&agent.id);
         // The active-channel bar (§8.2): which agent the deck's channel view
         // is on right now, which is not the same thing as the row the
@@ -249,8 +255,8 @@ impl Shell {
         let stale = dim || present::stale(agent);
         let tone = present::state_tone(agent.state, stale);
         let (mark, mark_color) = ui::kind_mark(agent.kind, &p);
-        let title = present::row_title(agent, project);
-        let age = present::state_age(agent, now);
+        let title = present::row_title_localized(agent, project, self.language());
+        let age = present::state_age_localized(agent, now, self.language());
         div()
             .id(SharedString::from(format!("row-{}", agent.id)))
             .relative()
@@ -271,7 +277,7 @@ impl Shell {
             .on_click(cx.listener(move |this, _, window, cx| {
                 this.deck.selected = Some(id.clone());
                 this.refresh_images(window, cx);
-                let placeholder = format!("Send an order to {name}\u{2026}");
+                let placeholder = this.fmt("Send an order to {0}…", &[&name]);
                 this.deck.order.update(cx, |input, cx| {
                     input.set_placeholder(placeholder, window, cx);
                 });
@@ -324,19 +330,19 @@ impl Shell {
                     .child(
                         div()
                             .text_color(p.tone_text(tone))
-                            .child(present::state_word(agent.state)),
+                            .child(self.tr(present::state_word(agent.state))),
                     )
                     .child(div().text_color(p.faint).child("\u{b7}"))
                     .child(
                         div()
                             .text_color(p.muted)
-                            .child(present::slot_badge(agent.slot)),
+                            .child(present::slot_badge_localized(agent.slot, self.language())),
                     )
                     .child(div().text_color(p.faint).child("\u{b7}"))
                     .child(
                         div()
                             .text_color(p.muted)
-                            .child(present::owner_source(agent)),
+                            .child(self.tr(present::owner_source(agent))),
                     ),
             )
             .when(!title.is_empty(), |this| {
@@ -365,8 +371,8 @@ impl Shell {
         else {
             return pane.child(div().pt(px(80.)).child(ui::empty_state(
                 ic::DIAL,
-                "No agent selected",
-                "Pick an agent to see its card, where it runs and what it was told.",
+                self.tr("No agent selected"),
+                self.tr("Pick an agent to see its card, where it runs and what it was told."),
                 &p,
             )));
         };
@@ -390,12 +396,12 @@ impl Shell {
                 .when(agent.workflow.is_some() || !agent.workflow_runs.is_empty() || agent.messages.iter().any(|m| m.message.role == deck_model::ChatRole::Tool), |this| this.child(self.render_workflow(agent, dim, cx)))
                 .children(agent.reply.as_ref().map(|reply| {
                     ui::section(
-                        "Reply",
+                        self.tr("Reply"),
                         ui::panel(&p)
                             .ts(13.5, 21.)
                             .child(match (&reply.text, reply.redacted) {
                                 (Some(text), _) => text.clone(),
-                                (None, true) => present::REDACTED.to_string(),
+                                (None, true) => self.tr(present::REDACTED).to_string(),
                                 (None, false) => String::new(),
                             }),
                         &p,
@@ -414,8 +420,8 @@ impl Shell {
         let (mark, mark_color) = ui::kind_mark(agent.kind, &p);
         let stale = present::stale(agent);
         let tone = present::state_tone(agent.state, stale || dim);
-        let age = present::state_age(agent, present::now());
-        let title = present::live_title(agent).to_string();
+        let age = present::state_age_localized(agent, present::now(), self.language());
+        let title = present::live_title_localized(agent, self.language()).to_string();
         let id = agent.id.clone();
         let card = agent.card.as_ref().map(|c| c.id);
         // `op.ack` is the GUI-only clear of a Ready card (§4.7); a question
@@ -425,8 +431,8 @@ impl Shell {
             .as_ref()
             .is_some_and(|c| matches!(c.kind, CardKind::R));
         let state = match age {
-            Some(age) => format!("{} {age}", present::state_word(agent.state)),
-            None => present::state_word(agent.state).to_string(),
+            Some(age) => format!("{} {age}", self.tr(present::state_word(agent.state))),
+            None => self.tr(present::state_word(agent.state)).to_string(),
         };
         // Below this the name, the meta line and three buttons do not fit on
         // one line beside the tile.
@@ -435,7 +441,7 @@ impl Shell {
         if let Some(card) = card.filter(|_| ackable) {
             let id = id.clone();
             actions.push(
-                Btn::new("ack", "Acknowledge")
+                Btn::new("ack", self.tr("Acknowledge"))
                     .small()
                     .icon(ic::CHECK)
                     .disabled(dim)
@@ -455,11 +461,11 @@ impl Shell {
         if let Some(card) = card {
             let id = id.clone();
             actions.push(
-                Btn::new("snooze", "Snooze")
+                Btn::new("snooze", self.tr("Snooze"))
                     .small()
                     .icon(ic::CLOCK)
                     .disabled(dim)
-                    .tooltip("Put the card back on the deck later")
+                    .tooltip(self.tr("Put the card back on the deck later"))
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.act(
                             UiAction::Snooze {
@@ -474,7 +480,7 @@ impl Shell {
             );
         }
         actions.push(
-            Btn::new("focus", "Focus terminal")
+            Btn::new("focus", self.tr("Focus terminal"))
                 .small()
                 .outlined()
                 .icon(ic::TERMINAL)
@@ -522,15 +528,15 @@ impl Shell {
                                             .child(agent.name.clone()),
                                     )
                                     .when(stale, |this| {
-                                        this.child(ui::badge("session gone", Tint::Neutral, &p))
+                                        this.child(ui::badge(self.tr("session gone"), Tint::Neutral, &p))
                                     }),
                             )
                             .child(ui::meta_line(
                                 vec![
                                     word(state, p.tone_text(tone)),
-                                    frag(present::kind_label(agent.kind)),
-                                    frag(present::slot_badge(agent.slot)),
-                                    frag(present::owner_source(agent)),
+                                    frag(self.tr(present::kind_label(agent.kind))),
+                                    frag(present::slot_badge_localized(agent.slot, self.language())),
+                                    frag(self.tr(present::owner_source(agent))),
                                 ],
                                 &p,
                             )),
@@ -564,7 +570,7 @@ impl Shell {
             CardKind::Q => "Waiting on you",
             CardKind::R => "Ready",
         };
-        let countdown = present::hold_countdown(card, now).map(|left| {
+        let countdown = present::hold_countdown_localized(card, now, self.language()).map(|left| {
             h_flex()
                 .gap(px(5.))
                 .ts(12., 16.)
@@ -579,13 +585,13 @@ impl Shell {
                 .text_color(p.text)
                 .child(present::card_ref(card))
                 .into_any_element(),
-            ui::badge(card.status.name(), status_tint(&card.status), &p).into_any_element(),
-            ui::badge(present::route(card.deliver), Tint::Neutral, &p).into_any_element(),
+            ui::badge(self.tr(card.status.name()), status_tint(&card.status), &p).into_any_element(),
+            ui::badge(self.tr(present::route(card.deliver)), Tint::Neutral, &p).into_any_element(),
         ];
         if let Some(custom) = present::custom_badge(&card.origin) {
-            badges.push(ui::badge(custom, Tint::Accent, &p).into_any_element());
+            badges.push(ui::badge(self.tr(custom), Tint::Accent, &p).into_any_element());
         }
-        badges.push(frag(present::origin_line(&card.origin)));
+        badges.push(frag(present::origin_line_localized(&card.origin, self.language())));
         let body = ui::panel(&p)
             .gap(px(12.))
             .child(ui::meta_line(badges, &p))
@@ -595,28 +601,28 @@ impl Shell {
                 div()
                     .ts(14., 22.)
                     .text_color(p.text)
-                    .child(present::card_text(card).to_string()),
+                    .child(present::card_text_localized(card, self.language()).to_string()),
             )
-            .children(present::answering(card).map(|what| {
+            .children(present::answering_localized(card, self.language()).map(|what| {
                 h_flex()
                     .gap(px(6.))
                     .ts(12., 16.)
                     .text_color(p.muted)
                     .child(ui::spinner(12., p.muted))
-                    .child(format!("Sent: {what}"))
+                    .child(self.fmt("Sent: {0}", &[&what]))
             }))
             .children(present::degraded_at(card).map(|at| {
                 ui::hint(
                     match at {
-                        Some(at) => format!("Degraded \u{b7} focused at {at}"),
-                        None => "Degraded \u{b7} not focused yet".to_string(),
+                        Some(at) => self.fmt("Degraded · focused at {0}", &[&at]),
+                        None => self.tr("Degraded · not focused yet").to_string(),
                     },
                     &p,
                 )
             }))
             .child(self.render_choices(agent, card, dim, cx))
             .children(self.render_failed(agent, card, dim, cx));
-        ui::section_with(label, countdown.into_iter().collect(), body, &p)
+        ui::section_with(self.tr(label), countdown.into_iter().collect(), body, &p)
     }
 
     /// Every choice, flat, however the deck had to page them (§8.2).
@@ -678,7 +684,7 @@ impl Shell {
                             .flex_1()
                             .min_w_0()
                             .child(div().ts(13.5, 19.).child(if choice.label.is_empty() {
-                                present::REDACTED.to_string()
+                                self.tr(present::REDACTED).to_string()
                             } else {
                                 choice.label.clone()
                             }))
@@ -690,10 +696,10 @@ impl Shell {
                         div()
                             .ts(11., 14.)
                             .text_color(p.faint)
-                            .child(format!("sent as {sent}"))
+                            .child(self.fmt("sent as {0}", &[&sent.to_string()]))
                     }))
                     .when(recommended, |this| {
-                        this.child(ui::badge("Recommended", Tint::Accent, &p))
+                        this.child(ui::badge(self.tr("Recommended"), Tint::Accent, &p))
                     })
             })
             .collect();
@@ -704,7 +710,7 @@ impl Shell {
             // empty choice list under a non-zero count is not "no choices".
             .when(card.choices.is_empty() && card.choices_n > 0, |this| {
                 this.child(ui::hint(
-                    format!("{} choices, hidden by this reader's scope", card.choices_n),
+                    self.fmt("{0} choices, hidden by this reader's scope", &[&card.choices_n.to_string()]),
                     &p,
                 ))
             })
@@ -731,7 +737,7 @@ impl Shell {
         if let Some((choice, text)) = retry {
             let id = id.clone();
             actions.push(
-                Btn::new("retry", "Retry")
+                Btn::new("retry", self.tr("Retry"))
                     .small()
                     .solid()
                     .disabled(dim)
@@ -756,7 +762,7 @@ impl Shell {
             // card, which is exactly what "release to terminal" means on the
             // device.
             actions.push(
-                Btn::new("release", "Release to terminal")
+                Btn::new("release", self.tr("Release to terminal"))
                     .small()
                     .disabled(dim)
                     .on_click(cx.listener(move |this, _, window, cx| {
@@ -774,7 +780,7 @@ impl Shell {
         }
         Some(ui::strip(
             ui::Severity::Danger,
-            Some("The answer did not get through".into()),
+            Some(self.tr("The answer did not get through").into()),
             Some(div().child(why.to_string()).into_any_element()),
             actions,
             &p,
@@ -788,10 +794,9 @@ impl Shell {
         let orders = self.state.orders(&agent.id);
         if orders.is_empty() {
             return ui::section(
-                "Orders",
+                self.tr("Orders"),
                 ui::panel(&p).child(ui::hint(
-                    "Nothing typed or pushed yet. What you send below shows here before it is \
-                     typed.",
+                    self.tr("Nothing typed or pushed yet. What you send below shows here before it is typed."),
                     &p,
                 )),
                 &p,
@@ -801,21 +806,21 @@ impl Shell {
             .iter()
             .enumerate()
             .rev()
-            .map(|(n, entry)| render_order(n, entry, &p).into_any_element())
+            .map(|(n, entry)| render_order(n, entry, &p, self.language()).into_any_element())
             .collect();
-        ui::section("Orders", ui::card(rows, &p), &p)
+        ui::section(self.tr("Orders"), ui::card(rows, &p), &p)
     }
 
     /// Where the agent runs and what it can be asked to do.
     fn render_about(&self, agent: &Agent, p: &Palette) -> Div {
         ui::section(
-            "Session",
+            self.tr("Session"),
             ui::panel(p)
                 .gap(px(8.))
-                .child(ui::kv("Source", present::source_line(&agent.session), p))
-                .child(ui::kv("Can", present::caps_line(&agent.caps), p))
+                .child(ui::kv(self.tr("Source"), present::source_line_localized(&agent.session, self.language()), p))
+                .child(ui::kv(self.tr("Can"), present::caps_line_localized(&agent.caps, self.language()), p))
                 .child(ui::kv(
-                    "Agent",
+                    self.tr("Agent"),
                     div().mono().ts(12., 18.).child(agent.id.to_string()),
                     p,
                 )),
@@ -835,8 +840,8 @@ impl Shell {
             .and_then(|id| self.state.mirror().agents.get(id));
         let can_send = !dim && target.is_some();
         let note = match target {
-            Some(agent) => format!("Typed into {}'s terminal \u{b7} Return sends", agent.name),
-            None => "Select an agent first".to_string(),
+            Some(agent) => self.fmt("Typed into {0}'s terminal · Return sends", &[&agent.name]),
+            None => self.tr("Select an agent first").to_string(),
         };
         let width = (self.detail_room() - 48.).min(DETAIL_MAX - 16.);
         div()
@@ -891,7 +896,7 @@ impl Shell {
                                             this.opacity(0.35)
                                         }
                                     })
-                                    .tooltip(ui::tip("Send the order"))
+                                    .tooltip(ui::tip(self.tr("Send the order")))
                                     .child(ui::icon(ic::ARROW_UP, 16., p.on_solid)),
                             ),
                     )
@@ -938,23 +943,23 @@ fn status_tint(status: &CardStatus) -> Tint {
 }
 
 /// One line of the order history, with §8.2's Copy on a failure.
-fn render_order(n: usize, entry: &OrderEntry, p: &Palette) -> Row {
+fn render_order(n: usize, entry: &OrderEntry, p: &Palette, language: deck_gui_core::i18n::Language) -> Row {
     let failed = entry.reason.is_some();
     let text = match &entry.text {
         Some(text) => div().mono().ts(12.5, 18.).child(text.clone()),
         // `order.failed` carries no text (§4.12): an order refused before it
         // was ever dispatched never had one to keep.
-        None => div().text_color(p.faint).child("(no text)"),
+        None => div().text_color(p.faint).child(language.text("(no text)")),
     };
     let mut meta: Vec<AnyElement> = Vec::new();
     if let Some(via) = &entry.via {
         meta.push(frag(via.clone()));
     }
     if let Some(reason) = &entry.reason {
-        meta.push(word(format!("failed: {reason}"), p.danger_muted));
+        meta.push(word(language.format("failed: {0}", &[reason]), p.danger_muted));
     }
     if meta.is_empty() {
-        meta.push(frag("sent"));
+        meta.push(frag(language.text("sent")));
     }
     let row = Row::new()
         .title_el(text.when(failed, |this| this.text_color(p.danger_muted)))
@@ -966,7 +971,7 @@ fn render_order(n: usize, entry: &OrderEntry, p: &Palette) -> Row {
         Some(text) => row.trailing(
             Btn::icon_only(SharedString::from(format!("copy-{n}")), ic::COPY)
                 .small()
-                .tooltip("Copy the order")
+                .tooltip(language.text("Copy the order"))
                 .on_click(move |_, _, cx: &mut App| {
                     cx.write_to_clipboard(ClipboardItem::new_string(text.clone()));
                 }),

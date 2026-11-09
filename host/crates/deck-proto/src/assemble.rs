@@ -248,6 +248,7 @@ pub fn parse_device_line(bytes: &[u8]) -> Result<DeviceLine, DecodeError> {
     let o = Obj(&map);
     let m = o.need_str("m")?;
     Ok(match m {
+        "language" => DeviceLine::Language { value: o.need_u8("v", 3)?, revision: o.need_uint("rev", u32::MAX as u64)? as u32 },
         "hello" => DeviceLine::Hello {
             v: o.need_u8("v", u8::MAX)?,
             fw: o.need_str("fw")?.to_string(),
@@ -255,6 +256,8 @@ pub fn parse_device_line(bytes: &[u8]) -> Result<DeviceLine, DecodeError> {
             boot: o.flag("boot")?,
             rx: o.need_u16("rx")?,
             agents: o.u8("agents", u8::MAX)?,
+            lang: o.u8("lang", 3)?,
+            lang_rev: o.uint("lang_rev", u32::MAX as u64)?.map(|revision| revision as u32),
             faces: faces(o.array("faces")?.map_or(&[][..], |a| a.as_slice()))?,
         },
         "key" => DeviceLine::Key {
@@ -407,6 +410,7 @@ pub fn parse_host_line(bytes: &[u8]) -> Result<HostLine, DecodeError> {
             }
         }
         "synced" => HostLine::Synced,
+        "language" => HostLine::Language { value: o.need_u8("v", 3)?, revision: o.need_uint("rev", u32::MAX as u64)? as u32 },
         "agent" => {
             let slot = slot_field(o.need_u8("id", MAX_SLOT)?, "id")?;
             if o.flag("gone")? {
@@ -682,6 +686,8 @@ mod tests {
                 boot: true,
                 rx: 1024,
                 agents: None,
+                lang: None,
+                lang_rev: None,
                 faces: vec![
                     FaceEntry { f: 1, t: Template::Agents, n: "Agents".into() },
                     FaceEntry { f: 6, t: Template::Settings, n: "Settings".into() },
@@ -700,6 +706,8 @@ mod tests {
                 boot: false,
                 rx: 1024,
                 agents: None,
+                lang: None,
+                lang_rev: None,
                 faces: vec![]
             }
         );

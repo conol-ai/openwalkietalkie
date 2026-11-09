@@ -25,6 +25,7 @@
 //! [`deny_choice`]) are answered with `deck_model::guard`'s own vocabulary,
 //! so the GUI's idea of "allow" is the daemon's.
 use deck_gui_core::admin::{ApiConfig, Change, Detected, Hijack, Info, Status, TokenRow, Verb};
+use deck_gui_core::i18n::Language;
 use deck_gui_core::voice::{Engine, Prompt, TestReport};
 use deck_gui_core::{Level, OrderEntry, Transcript};
 use deck_model::{
@@ -35,8 +36,10 @@ use deck_model::{
 use std::time::Duration;
 
 /// Custom Channels still require Claude's interactive preview opt-in.
-pub const CLAUDE_CHANNEL_COMMAND: &str = "claude --dangerously-load-development-channels plugin:openwalkietalkie@openwalkietalkie";
-pub const CLAUDE_CHANNEL_DOCS: &str = "https://code.claude.com/docs/en/channels-reference#test-during-the-research-preview";
+pub const CLAUDE_CHANNEL_COMMAND: &str =
+    "claude --dangerously-load-development-channels plugin:openwalkietalkie@openwalkietalkie";
+pub const CLAUDE_CHANNEL_DOCS: &str =
+    "https://code.claude.com/docs/en/channels-reference#test-during-the-research-preview";
 
 /// The slot badge of an agent the daemon has not put on the deck (§8.2).
 pub const NOT_ON_DECK: &str = "not on deck";
@@ -117,19 +120,12 @@ pub const fn kind_label(kind: Kind) -> &'static str {
 
 /// `Slot 3`, or "not on deck" for an agent the slot policy left off (§8.2).
 pub fn slot_badge(slot: Option<Slot>) -> String {
-    match slot {
-        Some(slot) => format!("Slot {slot}"),
-        None => NOT_ON_DECK.to_string(),
-    }
+    slot_badge_localized(slot, Language::English)
 }
 
 /// The live title (§8.2), which is content and may have been nulled.
 pub fn live_title(agent: &Agent) -> &str {
-    match agent.title.as_deref() {
-        Some(title) => title,
-        None if agent.redacted => REDACTED,
-        None => "",
-    }
+    live_title_localized(agent, Language::English)
 }
 
 /// `now`, `2m`, `3h`, `12d` — the firmware's granularity, so a row that
@@ -137,23 +133,14 @@ pub fn live_title(agent: &Agent) -> &str {
 /// from the future (a clock that stepped back, a `since` the daemon rounded
 /// up) is "now" and never a negative age.
 pub fn age(now: Ts, since: Ts) -> String {
-    let minutes = now.millis().saturating_sub(since.millis()) / 60_000;
-    match minutes {
-        0 => "now".to_string(),
-        1..=59 => format!("{minutes}m"),
-        60..=1439 => format!("{}h", minutes / 60),
-        _ => format!("{}d", minutes / 1440),
-    }
+    age_localized(now, since, Language::English)
 }
 
 /// The state age of a row: how long the agent has been in this state. `None`
 /// for an idle or stale agent, where the deck shows nothing either — the age
 /// of "nothing is happening" is not news.
 pub fn state_age(agent: &Agent, now: Ts) -> Option<String> {
-    if agent.state == AgentState::Idle || stale(agent) {
-        return None;
-    }
-    Some(age(now, agent.since))
+    state_age_localized(agent, now, Language::English)
 }
 
 /// The owner/source badge and §8.2's four words for it. `source` says which
@@ -189,11 +176,7 @@ pub fn card_ref(card: &Card) -> String {
 
 /// The card text, which is content and may have been nulled (§4.3).
 pub fn card_text(card: &Card) -> &str {
-    match card.text.as_deref() {
-        Some(text) => text,
-        None if card.redacted => REDACTED,
-        None => "",
-    }
+    card_text_localized(card, Language::English)
 }
 
 /// One choice, with the recommendation marked. `choice_map` is B10's
@@ -201,22 +184,7 @@ pub fn card_text(card: &Card) -> &str {
 /// can draw, the index the *agent* knows is not the index of this row, and
 /// an operator reading a log next to this window needs both.
 pub fn choice_label(card: &Card, shown: u8) -> String {
-    let index = usize::from(shown);
-    let label = card
-        .choices
-        .get(index)
-        .map(|c| c.label.as_str())
-        .unwrap_or(REDACTED);
-    let mut out = format!("{}. {label}", shown.saturating_add(1));
-    if card.rec == Some(shown) {
-        out.push_str(" \u{b7} recommended");
-    }
-    if let Some(sent) = card.choice_map.get(index) {
-        if *sent != shown {
-            out.push_str(&format!(" \u{b7} sent as {sent}"));
-        }
-    }
-    out
+    choice_label_localized(card, shown, Language::English)
 }
 
 /// How this card's answer gets home (§4.8), for the detail pane's route line.
@@ -233,16 +201,7 @@ pub const fn route(deliver: Deliver) -> &'static str {
 /// The hold countdown (§8.2): how long before the parked hook is released
 /// with no decision. `None` when the card does not expire.
 pub fn hold_countdown(card: &Card, now: Ts) -> Option<String> {
-    let expires = card.expires?;
-    let left = expires.millis().saturating_sub(now.millis()) / 1000;
-    if expires.millis() <= now.millis() {
-        return Some("expired".to_string());
-    }
-    Some(if left >= 60 {
-        format!("{}m {:02}s left", left / 60, left % 60)
-    } else {
-        format!("{left}s left")
-    })
+    hold_countdown_localized(card, now, Language::English)
 }
 
 /// The `failed` reason (§8.2), `None` on every other status.
@@ -276,19 +235,7 @@ pub fn clock(ts: Ts) -> String {
 
 /// What the answering operator chose, for a card mid-flight.
 pub fn answering(card: &Card) -> Option<String> {
-    let CardStatus::Answering { choice, text } = &card.status else {
-        return None;
-    };
-    if let Some(text) = text {
-        return Some(format!("\u{201c}{text}\u{201d}"));
-    }
-    let choice = (*choice)?;
-    Some(
-        card.choices
-            .get(usize::from(choice))
-            .map(|c| c.label.clone())
-            .unwrap_or_else(|| format!("choice {choice}")),
-    )
+    answering_localized(card, Language::English)
 }
 
 /// The `custom`-origin badge (§8.2). Only `custom` gets one: every other
@@ -304,60 +251,13 @@ pub const fn custom_badge(origin: &Origin) -> Option<&'static str> {
 
 /// The origin, for the detail pane's own line (`permission \u{b7} Bash`).
 pub fn origin_line(origin: &Origin) -> String {
-    let kind = match origin.kind {
-        OriginKind::Permission => "permission",
-        OriginKind::Question => "question",
-        OriginKind::Elicitation => "elicitation",
-        OriginKind::Custom => "custom",
-        OriginKind::Ready => "ready",
-    };
-    let mut out = kind.to_string();
-    if let Some(tool) = &origin.tool {
-        out.push_str(" \u{b7} ");
-        out.push_str(tool);
-    }
-    if let Some(group) = origin.group {
-        out.push_str(&format!(
-            " \u{b7} {} of {}",
-            group.index.saturating_add(1),
-            group.count
-        ));
-    }
-    out
+    origin_line_localized(origin, Language::English)
 }
 
 /// Where the agent runs (§8.2's "source (cwd, pid, terminal)"). Content, so
 /// every part of it can be absent.
 pub fn source_line(session: &SessionInfo) -> String {
-    let mut parts: Vec<String> = Vec::new();
-    if let Some(cwd) = &session.cwd {
-        parts.push(cwd.clone());
-    }
-    if let Some(pid) = session.pid {
-        parts.push(match session.pid_kind {
-            Some(kind) => format!("pid {pid} ({})", pid_kind(kind)),
-            None => format!("pid {pid}"),
-        });
-    }
-    if let Some(terminal) = &session.terminal {
-        let mut term: Vec<&str> = Vec::new();
-        if let Some(program) = &terminal.program {
-            term.push(program.as_str());
-        }
-        if let Some(tty) = &terminal.tty {
-            term.push(tty.as_str());
-        }
-        if let Some(pane) = &terminal.tmux_pane {
-            term.push(pane.as_str());
-        }
-        if !term.is_empty() {
-            parts.push(term.join(" "));
-        }
-    }
-    if parts.is_empty() {
-        return "no source reported".to_string();
-    }
-    parts.join(" \u{b7} ")
+    source_line_localized(session, Language::English)
 }
 
 const fn pid_kind(kind: deck_model::PidKind) -> &'static str {
@@ -373,22 +273,7 @@ const fn pid_kind(kind: deck_model::PidKind) -> &'static str {
 /// alone, and an operator whose Focus button does nothing should be able to
 /// see why before clicking it.
 pub fn caps_line(caps: &Caps) -> String {
-    let answer = match caps.answer {
-        deck_model::AnswerCap::Hold => "hold",
-        deck_model::AnswerCap::Push => "push",
-        deck_model::AnswerCap::Poll => "poll",
-        deck_model::AnswerCap::None => "none",
-    };
-    let order = match caps.order {
-        deck_model::OrderCap::Inject => "inject",
-        deck_model::OrderCap::Push => "push",
-        deck_model::OrderCap::Poll => "poll",
-        deck_model::OrderCap::None => "none",
-    };
-    format!(
-        "answer {answer} \u{b7} order {order} \u{b7} {}",
-        if caps.focus { "focus" } else { "no focus" }
-    )
+    caps_line_localized(caps, Language::English)
 }
 
 /// One line of the order history (§8.2): "the exact string typed or pushed,
@@ -396,19 +281,7 @@ pub fn caps_line(caps: &Caps) -> String {
 /// `order.dispatched{text}` *before* it types, so this is the string that is
 /// about to be typed and not a report of what was.
 pub fn order_line(entry: &OrderEntry) -> String {
-    let mut out = match &entry.text {
-        Some(text) => format!("\u{201c}{text}\u{201d}"),
-        // `order.failed` carries no text (§4.12): an order refused before it
-        // was ever dispatched never had one to keep.
-        None => "(no text)".to_string(),
-    };
-    if let Some(via) = &entry.via {
-        out.push_str(&format!(" \u{b7} {via}"));
-    }
-    if let Some(reason) = &entry.reason {
-        out.push_str(&format!(" \u{b7} failed: {reason}"));
-    }
-    out
+    order_line_localized(entry, Language::English)
 }
 
 /// Whether Copy has anything to copy (§8.2's "Copy on `order.failed`").
@@ -521,17 +394,26 @@ pub fn projects(snapshot: &Snapshot) -> Vec<Project<'_>> {
             .map(str::to_string);
         let (label, cwd) = if let Some(profile) = &agent.companion {
             (profile.group_label.clone(), None)
-        } else if agent.kind == Kind::Conol { ("Conol".to_string(), None) } else { match cwd.as_deref().and_then(deck_model::project_label) {
-            Some(label) => (label, cwd),
-            None => (NO_PROJECT.to_string(), None),
-        }};
-        match groups.iter_mut().find(|g| g.cwd == cwd && g.agents.first().is_some_and(|a| {
-            match (&a.companion, &agent.companion) {
-                (Some(left), Some(right)) => left.app_id == right.app_id && left.group_id == right.group_id,
-                (None, None) => (a.kind == Kind::Conol) == (agent.kind == Kind::Conol),
-                _ => false,
+        } else if agent.kind == Kind::Conol {
+            ("Conol".to_string(), None)
+        } else {
+            match cwd.as_deref().and_then(deck_model::project_label) {
+                Some(label) => (label, cwd),
+                None => (NO_PROJECT.to_string(), None),
             }
-        })) {
+        };
+        match groups.iter_mut().find(|g| {
+            g.cwd == cwd
+                && g.agents
+                    .first()
+                    .is_some_and(|a| match (&a.companion, &agent.companion) {
+                        (Some(left), Some(right)) => {
+                            left.app_id == right.app_id && left.group_id == right.group_id
+                        }
+                        (None, None) => (a.kind == Kind::Conol) == (agent.kind == Kind::Conol),
+                        _ => false,
+                    })
+        }) {
             Some(group) => group.agents.push(agent),
             None => groups.push(Project {
                 label,
@@ -566,23 +448,14 @@ pub fn projects(snapshot: &Snapshot) -> Vec<Project<'_>> {
 /// after its directory, which the header already says. The deck's roster
 /// rows follow the same rule.
 pub fn row_name(agent: &Agent, project: &Project) -> String {
-    if project.cwd.is_some() && agent.name == project.label {
-        kind_label(agent.kind).to_string()
-    } else {
-        agent.name.clone()
-    }
+    row_name_localized(agent, project, Language::English)
 }
 
 /// A row's title line under its project's header: the live title, unless it
 /// is the project's own name — a session with no prompt title yet is titled
 /// after its directory, which the header already says.
 pub fn row_title(agent: &Agent, project: &Project) -> String {
-    let title = live_title(agent);
-    if project.cwd.is_some() && title == project.label {
-        String::new()
-    } else {
-        title.to_string()
-    }
+    row_title_localized(agent, project, Language::English)
 }
 
 /// The directory a project header's tooltip shows: the home directory as
@@ -700,17 +573,7 @@ pub fn status_tone(status: &Status) -> Tone {
 /// none — which for `claude-desktop` is normal, since it is not a CLI on
 /// `PATH`.
 pub fn detected_line(target: &str, detected: Option<&Detected>) -> String {
-    match detected {
-        Some(d) if !d.version.is_empty() => format!("{} \u{b7} {}", d.version, d.path),
-        Some(d) => d.path.clone(),
-        None if target == "claude-desktop" => {
-            "no CLI to detect: this target is a file, not a binary".to_string()
-        }
-        None if target == "codex-desktop" => {
-            "Codex.app was not detected in Applications".to_string()
-        }
-        None => "not found on PATH".to_string(),
-    }
+    detected_line_localized(target, detected, Language::English)
 }
 
 /// §8.2's "last event time".
@@ -719,10 +582,7 @@ pub fn detected_line(target: &str, detected: Option<&Detected>) -> String {
 /// never fills it in — so this says which of the two it is instead of
 /// drawing an empty line and letting the operator read "never" into it.
 pub fn last_event_line(last_event_at: Option<&str>) -> String {
-    match last_event_at {
-        Some(at) => format!("last hook event {at}"),
-        None => "last hook event: not reported by this daemon".to_string(),
-    }
+    last_event_line_localized(last_event_at, Language::English)
 }
 
 /// A backup's own name, for the Restore list. The installer writes
@@ -738,33 +598,17 @@ pub fn backup_label(path: &str) -> &str {
 /// answers on the port, and nothing tells it whether a hook has been sent
 /// there yet.
 pub fn hijack_line(hijack: &Hijack) -> String {
-    let who = match (&hijack.command, hijack.pid) {
-        (Some(command), Some(pid)) => format!("pid {pid} ({command})"),
-        (Some(command), None) => command.clone(),
-        (None, Some(pid)) => format!("pid {pid}"),
-        (None, None) => "another process".to_string(),
-    };
-    format!(
-        "Port {} is held by {who}, and it answers. Claude's installed http hooks POST prompts, \
-         tool inputs and the hooks bearer token to whoever holds it, and each held hook blocks \
-         Claude for its timeout.",
-        hijack.port
-    )
+    hijack_line_localized(hijack, Language::English)
 }
 
 /// The heading of the "What this writes" sheet.
 pub fn plan_headline(verb: Verb, target: &str) -> String {
-    let what = match verb {
-        Verb::Install => "Install",
-        Verb::Uninstall => "Remove",
-        Verb::Repair => "Repair",
-    };
-    format!("{what} \u{2014} {}", party_name(target))
+    plan_headline_localized(verb, target, Language::English)
 }
 
 /// One line of the diff: `update ~/.claude/settings.json`.
 pub fn change_line(change: &Change) -> String {
-    format!("{} {}", change.action, change.path)
+    change_line_localized(change, Language::English)
 }
 
 /// What a plan that writes nothing says. `install` is idempotent by content,
@@ -821,23 +665,12 @@ pub fn scope_words() -> Vec<String> {
 /// A token row's scopes, or the fact that it has none — which is a token
 /// that can do nothing and is worth seeing as such.
 pub fn token_scopes_line(token: &TokenRow) -> String {
-    if token.scopes.is_empty() {
-        return "no scopes".to_string();
-    }
-    token.scopes.join(", ")
+    token_scopes_line_localized(token, Language::English)
 }
 
 /// When the token was made and when it stops working.
 pub fn token_life_line(token: &TokenRow) -> String {
-    let created = token
-        .created
-        .as_deref()
-        .map(|at| format!("created {at}"))
-        .unwrap_or_else(|| "created at an unrecorded time".to_string());
-    match token.expires.as_deref() {
-        Some(at) => format!("{created} \u{b7} expires {at}"),
-        None => format!("{created} \u{b7} no expiry"),
-    }
+    token_life_line_localized(token, Language::English)
 }
 
 /// What Revoke on this token would break. The `hooks` token's plaintext is
@@ -845,13 +678,7 @@ pub fn token_life_line(token: &TokenRow) -> String {
 /// `repair` re-embeds the new one — and the operator should read that on
 /// the button and not in the log afterwards.
 pub fn token_embedded_line(token: &TokenRow) -> Option<String> {
-    if token.embedded_in.is_empty() {
-        return None;
-    }
-    Some(format!(
-        "embedded in {} \u{2014} revoking it stops those hooks until Repair re-embeds a new one",
-        token.embedded_in.join(", ")
-    ))
+    token_embedded_line_localized(token, Language::English)
 }
 
 /// The sentence over the one-time plaintext (§4.11).
@@ -865,7 +692,7 @@ pub const TOKEN_SHOWN_ONCE: &str = "Copy this now. The daemon keeps only a hash 
 /// screen-share away from being read out loud; the value only ever leaves
 /// [`Secret::reveal`](deck_gui_core::Secret::reveal), inside its dialog.
 pub fn token_made_toast(verb: &str, name: &str) -> String {
-    format!("{verb} the token \u{201c}{name}\u{201d}. Copy its value now: it is shown once.")
+    token_made_toast_localized(verb, name, Language::English)
 }
 
 // ---------------------------------------------------------------------
@@ -874,58 +701,25 @@ pub fn token_made_toast(verb: &str, name: &str) -> String {
 
 /// The one-line answer to "is the service up, and which one is it".
 pub fn service_headline(connected: bool, info: &Info) -> String {
-    if !connected {
-        return "Not running \u{2014} nothing is answering on the socket".to_string();
-    }
-    let daemon = info.daemon.as_deref().unwrap_or("an unknown version");
-    match info.sessions {
-        Some(1) => format!("Running \u{b7} deckd {daemon} \u{b7} 1 session"),
-        Some(n) => format!("Running \u{b7} deckd {daemon} \u{b7} {n} sessions"),
-        None => format!("Running \u{b7} deckd {daemon}"),
-    }
+    service_headline_localized(connected, info, Language::English)
 }
 
 /// The port line. §4.1 makes the daemon answer **no port at all** while the
 /// port is somebody else's, so an absent port here is a fact about the
 /// machine and not a missing field.
 pub fn port_line(info: &Info, config: &ApiConfig) -> String {
-    match (info.port, config.port) {
-        (Some(port), _) => format!("http://127.0.0.1:{port} \u{b7} listening"),
-        (None, Some(configured)) => {
-            format!("{configured} is configured and not held: the daemon is on the socket only")
-        }
-        (None, None) => "no TCP port: the daemon is on the socket only".to_string(),
-    }
+    port_line_localized(info, config, Language::English)
 }
 
 /// §8.2's degraded banner, from the mirror's own `service.degraded`.
 pub fn degraded_banner(service: &deck_model::ServiceState) -> Option<String> {
-    let reason = service.degraded.as_deref()?;
-    Some(match reason {
-        deck_gui_core::admin::HIJACK_RISK => {
-            format!(
-                "Port {} is held by a process that answers, and Claude's http hooks are still \
-                 pointed at it. Change the port and re-install the hooks.",
-                service.port
-            )
-        }
-        deck_gui_core::admin::PORT_IN_USE => format!(
-            "Port {} is already bound, so the daemon is on the socket only. http hooks and curl \
-             cannot reach it until the port is free or changed.",
-            service.port
-        ),
-        "shutdown" => "The service is shutting down.".to_string(),
-        other => format!("The service is degraded: {other}."),
-    })
+    degraded_banner_localized(service, Language::English)
 }
 
 /// §4.1's allowed origins. An empty list is the default and means "no
 /// browser origin is allowed", which is a policy and not a gap.
 pub fn origins_line(origins: &[String]) -> String {
-    if origins.is_empty() {
-        return "none \u{2014} a browser Origin header is refused 403 (the default)".to_string();
-    }
-    origins.join(", ")
+    origins_line_localized(origins, Language::English)
 }
 
 /// §8.2's `curl` example, for the port the daemon actually holds.
@@ -1050,10 +844,7 @@ fn mask_fields(line: &str) -> String {
 /// is the one sentence that says which method is missing and that nothing
 /// was done.
 pub fn missing_method_line(method: &str) -> String {
-    format!(
-        "This daemon has no `{method}`: it is not in its method table, so nothing happened. The \
-         method is week 6's daemon-side work; a daemon that has it will answer this button."
-    )
+    missing_method_line_localized(method, Language::English)
 }
 
 /// What `launchctl print` says about the daemon's own agent.
@@ -1098,15 +889,7 @@ pub fn launchd_state(output: &str) -> Launchd {
 
 /// The Service screen's line for [`Launchd`].
 pub fn launchd_line(state: &Launchd) -> String {
-    match state {
-        Launchd::Running(Some(pid)) => format!("launchd agent: running, pid {pid}"),
-        Launchd::Running(None) => "launchd agent: running".to_string(),
-        Launchd::Loaded => "launchd agent: loaded, not running".to_string(),
-        Launchd::NotLoaded => {
-            "launchd agent: not registered with launchd on this account".to_string()
-        }
-        Launchd::Unknown => "launchd agent: launchctl said nothing this app can read".to_string(),
-    }
+    launchd_line_localized(state, Language::English)
 }
 
 /// The two objects the Service screen shows side by side, and why they are
@@ -1270,10 +1053,7 @@ pub const fn route_help(route: Route, transport: Option<VoiceTransport>) -> &'st
 
 /// One of the two device UIDs, or the one honest sentence for not having it.
 pub fn uid_line(what: &str, uid: Option<&str>) -> String {
-    match uid {
-        Some(uid) => format!("{what}: {uid}"),
-        None => format!("{what}: none selected"),
-    }
+    uid_line_localized(what, uid, Language::English)
 }
 
 /// How long a `voice.level` stays on the meter before the meter goes idle.
@@ -1303,15 +1083,7 @@ pub fn meter_level(rms: f32) -> f32 {
 /// exact digital zero for about a second, so a meter that said "no signal"
 /// would be guessing at hardware from a number that cannot tell.
 pub fn meter_line(level: Option<Level>, now: Ts) -> String {
-    let Some(level) = level.filter(|l| fresh(l.at, now)) else {
-        return "No capture running. The meter moves while PTT is held.".to_string();
-    };
-    if level.rms <= 0.0 {
-        return "Capturing \u{b7} silence (a warming link and a dead microphone read the same \
-                here)"
-            .to_string();
-    }
-    format!("Capturing \u{b7} {:.0} dBFS", 20.0 * level.rms.log10())
+    meter_line_localized(level, now, Language::English)
 }
 
 /// Is this level still the live one?
@@ -1321,12 +1093,7 @@ pub fn fresh(at: Ts, now: Ts) -> bool {
 
 /// The STT or TTS badge: which engine, and whether it runs here.
 pub fn engine_badge(engine: &Engine) -> String {
-    let where_ = if engine.on_device {
-        "on-device"
-    } else {
-        "server"
-    };
-    format!("{} \u{b7} {where_}", engine.id)
+    engine_badge_localized(engine, Language::English)
 }
 
 /// The locales an engine will accept, shortened. `voice.engines` reports
@@ -1334,33 +1101,13 @@ pub fn engine_badge(engine: &Engine) -> String {
 /// `[voice.voices] default_pool` plus `state.json`, and it is not in this
 /// reply at all.
 pub fn locales_line(locales: &[String], selected: Option<&str>) -> String {
-    if locales.is_empty() {
-        return "no locales reported".to_string();
-    }
-    let head: Vec<&str> = locales.iter().take(4).map(String::as_str).collect();
-    let rest = locales.len().saturating_sub(head.len());
-    let mut line = head.join(", ");
-    if rest > 0 {
-        line.push_str(&format!(" and {rest} more"));
-    }
-    match selected {
-        Some(locale) if locales.iter().any(|l| l == locale) => format!("{line} (using {locale})"),
-        // A configured locale the engine did not report is worth saying:
-        // `voice.listen` refuses one without on-device support before
-        // anything opens (§7.6), and this is where that shows up first.
-        Some(locale) => format!("{line} \u{b7} configured {locale} is not in this list"),
-        None => line,
-    }
+    locales_line_localized(locales, selected, Language::English)
 }
 
 /// Why there are no engine badges, in the daemon's own terms. A `-32013`
 /// here is a daemon with no audio engine and not a call that failed.
 pub fn engines_missing_line(error: &str) -> String {
-    format!(
-        "No engine report: {error}. `voice.engines` answers from the one report the audio side \
-         sends when its engines come up, so this is a daemon started with --no-device, a build \
-         without an engine, or the moment before that report lands."
-    )
+    engines_missing_line_localized(error, Language::English)
 }
 
 /// §7.8's four permission states, spelled the way the daemon spells them.
@@ -1443,65 +1190,18 @@ pub const PERMISSION_CAVEAT: &str =
 /// failure and must not read as one: it is §7.8's own word for a prompt that
 /// did not surface, and the sentences under it are the daemon's.
 pub fn prompt_line(prompt: &Prompt) -> String {
-    if prompt.not_shown() {
-        return format!(
-            "macOS was not asked for the {}: this build cannot show that prompt yet, so nothing \
-             changed.",
-            prompt.which
-        );
-    }
-    format!("{}: {}", prompt.which, prompt.status)
+    prompt_line_localized(prompt, Language::English)
 }
 
 /// The headline of a `voice.test` result — what was checked and what came of
 /// it, with no claim the reply does not make.
 pub fn test_headline(report: &TestReport) -> String {
-    match report.what.as_str() {
-        "speaker" => match report.played {
-            Some(true) => "Chime queued on the audio thread".to_string(),
-            Some(false) => "The audio thread refused the chime".to_string(),
-            None => "The daemon answered without saying whether it queued anything".to_string(),
-        },
-        "mic" => "Input as the route machine sees it".to_string(),
-        "stt" => "The recogniser, as it reported itself at start-up".to_string(),
-        "tts" => "The synthesiser, as it reported itself at start-up".to_string(),
-        // A `what` from a newer daemon: named, and nothing claimed for it.
-        other => format!("{other}: the daemon answered"),
-    }
+    test_headline_localized(report, Language::English)
 }
 
 /// The body of a `voice.test` result: only fields the reply carried.
 pub fn test_lines(report: &TestReport) -> Vec<String> {
-    let mut lines = Vec::new();
-    if let Some(transport) = report.transport.as_deref() {
-        lines.push(format!("transport: {transport}"));
-    }
-    if let Some(route) = report.route.as_deref() {
-        lines.push(format!("route: {route}"));
-    }
-    if let Some(uid) = report.output_uid.as_deref() {
-        lines.push(format!("output: {uid}"));
-    }
-    if let Some(uid) = report.input_uid.as_deref() {
-        lines.push(format!("input: {uid}"));
-    }
-    if let Some(chime) = report.chime.as_deref() {
-        lines.push(format!("chime: {chime}"));
-    }
-    if let Some(warm) = report.mic_warm.as_deref() {
-        lines.push(format!("mic_warm: {warm}"));
-    }
-    if let Some(warm) = report.mic_warm_effective.as_deref() {
-        lines.push(format!("mic_warm_effective: {warm}"));
-    }
-    if let Some(engine) = report.engine.as_ref() {
-        lines.push(format!("engine: {}", engine_badge(engine)));
-        lines.push(format!("locales: {}", locales_line(&engine.locales, None)));
-    }
-    if report.listening {
-        lines.push("a capture is running right now".to_string());
-    }
-    lines
+    test_lines_localized(report, Language::English)
 }
 
 /// The **Test** row's own standing note. The daemon puts its caveats in each
@@ -1573,25 +1273,7 @@ impl LoginItem {
 /// What the login item's status says, in the status's own terms and never in
 /// the return value's.
 pub fn login_item_line(status: LoginItem) -> String {
-    match status {
-        LoginItem::Enabled => {
-            "Open at login: on. macOS reports this app as an enabled login item.".to_string()
-        }
-        LoginItem::RequiresApproval => {
-            "Open at login: waiting for your approval in System Settings \u{203a} General \
-             \u{203a} Login Items."
-                .to_string()
-        }
-        LoginItem::NotRegistered => "Open at login: off.".to_string(),
-        LoginItem::NotFound => {
-            "macOS answered `notFound`: it has no record of this login item, so nothing is \
-             registered whatever the last attempt returned."
-                .to_string()
-        }
-        LoginItem::Unknown(code) => {
-            format!("macOS answered status {code}, which this build has no name for.")
-        }
-    }
+    login_item_line_localized(status, Language::English)
 }
 
 /// System Settings › General › Login Items, verified against the extension
@@ -1665,6 +1347,20 @@ impl Step {
         let n = Step::ALL.iter().position(|s| *s == self).unwrap_or(0) + 1;
         format!("{n} of {}", Step::ALL.len())
     }
+
+    pub fn title_localized(self, language: Language) -> &'static str {
+        language.text(self.title())
+    }
+    pub fn blurb_localized(self, language: Language) -> &'static str {
+        language.text(self.blurb())
+    }
+    pub fn counter_localized(self, language: Language) -> String {
+        let n = Step::ALL.iter().position(|s| *s == self).unwrap_or(0) + 1;
+        language.format(
+            "{0} of {1}",
+            &[&n.to_string(), &Step::ALL.len().to_string()],
+        )
+    }
 }
 
 /// The deck, as step 2 reports it: the link, the firmware and the strip.
@@ -1675,23 +1371,7 @@ impl Step {
 /// a step that called that "connected" would send the operator on to hold
 /// PTT at a deck that cannot answer.
 pub fn deck_line(device: &deck_model::DeviceState) -> String {
-    match device.link {
-        Link::Offline => "No deck yet. The service reports one the moment it links.".to_string(),
-        link => {
-            let fw = device.fw.as_deref().unwrap_or("firmware not reported");
-            let faces = device.faces.len();
-            let what = if link == Link::Degraded {
-                "Deck linked, degraded"
-            } else {
-                "Deck connected"
-            };
-            let session = match device.session {
-                SessionState::Live => String::new(),
-                other => format!(" \u{b7} session {other:?}"),
-            };
-            format!("{what} \u{b7} {fw} \u{b7} {faces} faces adopted{session}")
-        }
-    }
+    deck_line_localized(device, Language::English)
 }
 
 /// Whether step 2's "waiting for `device.link`" is over: a deck that is
@@ -1716,34 +1396,7 @@ pub fn doctor_lines(
     device: &deck_model::DeviceState,
     service: &deck_model::ServiceState,
 ) -> Vec<String> {
-    let mut lines = vec![
-        if connected {
-            format!(
-                "service: answering on the socket{}",
-                info.daemon
-                    .as_deref()
-                    .map(|v| format!(" (deckd {v})"))
-                    .unwrap_or_default()
-            )
-        } else {
-            "service: not answering on the socket".to_string()
-        },
-        launchd_line(launchd.unwrap_or(&Launchd::Unknown)),
-        match info.port {
-            Some(port) => format!("http door: listening on {port}"),
-            None => "http door: not held \u{2014} the hooks have nowhere to POST".to_string(),
-        },
-        deck_line(device),
-    ];
-    if let Some(reason) = service.degraded.as_deref() {
-        lines.push(format!("degraded: {reason}"));
-    }
-    lines.push(
-        "`deckd doctor` checks more than this window can see \u{2014} the data dir, the tokens \
-         file and both launchd labels."
-            .to_string(),
-    );
-    lines
+    doctor_lines_localized(connected, info, launchd, device, service, Language::English)
 }
 
 /// Step 3's closing line: the exit test, in the words the operator has to
@@ -1758,23 +1411,7 @@ pub const NO_TRANSCRIPT: &str = "Nothing heard yet.";
 /// apart by their label, because a partial that looked final would have the
 /// operator believe the recogniser had settled when it had not.
 pub fn transcript_line(transcript: Option<&Transcript>) -> String {
-    let Some(transcript) = transcript else {
-        return NO_TRANSCRIPT.to_string();
-    };
-    let text = if transcript.text.is_empty() {
-        "\u{2026}"
-    } else {
-        &transcript.text
-    };
-    let label = if transcript.final_ {
-        "final"
-    } else {
-        "hearing"
-    };
-    match transcript.intent.as_deref() {
-        Some(intent) => format!("{label}: {text} \u{b7} matched {intent}"),
-        None => format!("{label}: {text}"),
-    }
+    transcript_line_localized(transcript, Language::English)
 }
 
 // ---------------------------------------------------------------------------
@@ -1829,13 +1466,23 @@ fn tray_badge_cutout(tone: Tone, x: f32, y: f32, radius: f32) -> f32 {
     let point = |cy: f32| coverage(1.1 - x.hypot(y - cy * radius));
     match tone {
         Tone::Red => {
-            let hook = [(-0.30, -0.26), (-0.24, -0.42), (0.16, -0.42),
-                (0.32, -0.24), (0.24, -0.04), (0.0, 0.10), (0.0, 0.18)];
-            hook.windows(2).fold(point(0.48), |alpha, pair| alpha.max(stroke(pair[0], pair[1])))
+            let hook = [
+                (-0.30, -0.26),
+                (-0.24, -0.42),
+                (0.16, -0.42),
+                (0.32, -0.24),
+                (0.24, -0.04),
+                (0.0, 0.10),
+                (0.0, 0.18),
+            ];
+            hook.windows(2).fold(point(0.48), |alpha, pair| {
+                alpha.max(stroke(pair[0], pair[1]))
+            })
         }
         Tone::Amber => stroke((0.0, -0.44), (0.0, 0.12)).max(point(0.48)),
-        Tone::Green => stroke((-0.45, 0.0), (-0.12, 0.33))
-            .max(stroke((-0.12, 0.33), (0.48, -0.34))),
+        Tone::Green => {
+            stroke((-0.45, 0.0), (-0.12, 0.33)).max(stroke((-0.12, 0.33), (0.48, -0.34)))
+        }
         Tone::Blue => 0.0,
         Tone::Gray => coverage(radius - 2.0 - x.hypot(y)),
     }
@@ -1844,6 +1491,735 @@ fn tray_badge_cutout(tone: Tone, x: f32, y: f32, radius: f32) -> f32 {
 /// Anti-aliasing: a signed distance in pixels to a coverage in 0.0..=1.0.
 fn coverage(distance: f32) -> f32 {
     (distance + 0.5).clamp(0.0, 1.0)
+}
+
+// Explicitly localized presentation. Values from the host remain template arguments.
+pub fn state_word_localized(state: AgentState, language: Language) -> &'static str {
+    language.text(state_word(state))
+}
+pub fn kind_label_localized(kind: Kind, language: Language) -> &'static str {
+    language.text(kind_label(kind))
+}
+pub fn owner_source_localized(agent: &Agent, language: Language) -> &'static str {
+    language.text(owner_source(agent))
+}
+pub fn route_localized(deliver: Deliver, language: Language) -> &'static str {
+    language.text(route(deliver))
+}
+pub fn custom_badge_localized(origin: &Origin, language: Language) -> Option<&'static str> {
+    custom_badge(origin).map(|text| language.text(text))
+}
+pub fn backup_label_localized(path: &str, _language: Language) -> &str {
+    backup_label(path)
+}
+pub fn party_what_localized(target: &str, language: Language) -> &'static str {
+    language.text(party_what(target))
+}
+pub fn status_word_localized(status: &Status, language: Language) -> &str {
+    match status {
+        Status::Unknown(word) => word,
+        _ => language.text(status_word(status)),
+    }
+}
+pub fn status_help_localized(status: &Status, language: Language) -> &'static str {
+    language.text(status_help(status))
+}
+pub fn automation_line_localized(
+    ghostty: Option<&str>,
+    language: Language,
+) -> (&'static str, Tone, &'static str) {
+    let (word, tone, note) = automation_line(ghostty);
+    (language.text(word), tone, language.text(note))
+}
+pub fn transport_line_localized(
+    transport: Option<VoiceTransport>,
+    language: Language,
+) -> &'static str {
+    language.text(transport_line(transport))
+}
+pub fn route_word_localized(route: Route, language: Language) -> &'static str {
+    language.text(route_word(route))
+}
+pub fn route_help_localized(
+    route: Route,
+    transport: Option<VoiceTransport>,
+    language: Language,
+) -> &'static str {
+    language.text(route_help(route, transport))
+}
+pub fn permission_word_localized(permission: Permission, language: Language) -> &'static str {
+    language.text(permission_word(permission))
+}
+pub fn permission_help_localized(permission: Permission, language: Language) -> &'static str {
+    language.text(permission_help(permission))
+}
+pub fn permission_title_localized(
+    which: &str,
+    transport: Option<VoiceTransport>,
+    language: Language,
+) -> &'static str {
+    language.text(permission_title(which, transport))
+}
+pub fn permission_note_localized(
+    which: &str,
+    transport: Option<VoiceTransport>,
+    language: Language,
+) -> Option<&'static str> {
+    permission_note(which, transport).map(|text| language.text(text))
+}
+pub fn slot_badge_localized(slot: Option<Slot>, language: Language) -> String {
+    match slot {
+        Some(slot) => language.format("Slot {0}", &[&(slot).to_string()]),
+        None => language.text(NOT_ON_DECK).to_string(),
+    }
+}
+
+pub fn live_title_localized(agent: &Agent, language: Language) -> &str {
+    match agent.title.as_deref() {
+        Some(title) => title,
+        None if agent.redacted => language.text(REDACTED),
+        None => "",
+    }
+}
+
+pub fn age_localized(now: Ts, since: Ts, language: Language) -> String {
+    let minutes = now.millis().saturating_sub(since.millis()) / 60_000;
+    match minutes {
+        0 => language.text("now").to_string(),
+        1..=59 => language.format("{0}m", &[&(minutes).to_string()]),
+        60..=1439 => language.format("{0}h", &[&(minutes / 60).to_string()]),
+        _ => language.format("{0}d", &[&(minutes / 1440).to_string()]),
+    }
+}
+
+pub fn state_age_localized(agent: &Agent, now: Ts, language: Language) -> Option<String> {
+    if agent.state == AgentState::Idle || stale(agent) {
+        return None;
+    }
+    Some(age_localized(now, agent.since, language))
+}
+
+pub fn card_text_localized(card: &Card, language: Language) -> &str {
+    match card.text.as_deref() {
+        Some(text) => text,
+        None if card.redacted => language.text(REDACTED),
+        None => "",
+    }
+}
+
+pub fn choice_label_localized(card: &Card, shown: u8, language: Language) -> String {
+    let index = usize::from(shown);
+    let label = card
+        .choices
+        .get(index)
+        .map(|c| c.label.as_str())
+        .unwrap_or(language.text(REDACTED));
+    let mut out = language.format(
+        "{0}. {1}",
+        &[&(shown.saturating_add(1)).to_string(), (label)],
+    );
+    if card.rec == Some(shown) {
+        out.push_str(language.text(" \u{b7} recommended"));
+    }
+    if let Some(sent) = card.choice_map.get(index) {
+        if *sent != shown {
+            out.push_str(&language.format(" · sent as {0}", &[&(sent).to_string()]));
+        }
+    }
+    out
+}
+
+pub fn hold_countdown_localized(card: &Card, now: Ts, language: Language) -> Option<String> {
+    let expires = card.expires?;
+    let left = expires.millis().saturating_sub(now.millis()) / 1000;
+    if expires.millis() <= now.millis() {
+        return Some(language.text("expired").to_string());
+    }
+    Some(if left >= 60 {
+        language.format(
+            "{0}m {1}s left",
+            &[&(left / 60).to_string(), &format!("{:02}", left % 60)],
+        )
+    } else {
+        language.format("{0}s left", &[&(left).to_string()])
+    })
+}
+
+pub fn answering_localized(card: &Card, language: Language) -> Option<String> {
+    let CardStatus::Answering { choice, text } = &card.status else {
+        return None;
+    };
+    if let Some(text) = text {
+        return Some(language.format("“{0}”", &[&(text).to_string()]));
+    }
+    let choice = (*choice)?;
+    Some(
+        card.choices
+            .get(usize::from(choice))
+            .map(|c| c.label.clone())
+            .unwrap_or_else(|| language.format("choice {0}", &[&(choice).to_string()])),
+    )
+}
+
+pub fn origin_line_localized(origin: &Origin, language: Language) -> String {
+    let kind = match origin.kind {
+        OriginKind::Permission => language.text("permission"),
+        OriginKind::Question => language.text("question"),
+        OriginKind::Elicitation => language.text("elicitation"),
+        OriginKind::Custom => language.text("custom"),
+        OriginKind::Ready => language.text("ready"),
+    };
+    let mut out = kind.to_string();
+    if let Some(tool) = &origin.tool {
+        out.push_str(" \u{b7} ");
+        out.push_str(tool);
+    }
+    if let Some(group) = origin.group {
+        out.push_str(&language.format(
+            " · {0} of {1}",
+            &[
+                &(group.index.saturating_add(1)).to_string(),
+                &(group.count).to_string(),
+            ],
+        ));
+    }
+    out
+}
+
+pub fn source_line_localized(session: &SessionInfo, language: Language) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(cwd) = &session.cwd {
+        parts.push(cwd.clone());
+    }
+    if let Some(pid) = session.pid {
+        parts.push(match session.pid_kind {
+            Some(kind) => language.format(
+                "pid {0} ({1})",
+                &[&(pid).to_string(), (language.text(pid_kind(kind)))],
+            ),
+            None => language.format("pid {0}", &[&(pid).to_string()]),
+        });
+    }
+    if let Some(terminal) = &session.terminal {
+        let mut term: Vec<&str> = Vec::new();
+        if let Some(program) = &terminal.program {
+            term.push(program.as_str());
+        }
+        if let Some(tty) = &terminal.tty {
+            term.push(tty.as_str());
+        }
+        if let Some(pane) = &terminal.tmux_pane {
+            term.push(pane.as_str());
+        }
+        if !term.is_empty() {
+            parts.push(term.join(" "));
+        }
+    }
+    if parts.is_empty() {
+        return language.text("no source reported").to_string();
+    }
+    parts.join(" \u{b7} ")
+}
+
+pub fn caps_line_localized(caps: &Caps, language: Language) -> String {
+    let answer = match caps.answer {
+        deck_model::AnswerCap::Hold => language.text("hold"),
+        deck_model::AnswerCap::Push => language.text("push"),
+        deck_model::AnswerCap::Poll => language.text("poll"),
+        deck_model::AnswerCap::None => language.text("none"),
+    };
+    let order = match caps.order {
+        deck_model::OrderCap::Inject => language.text("inject"),
+        deck_model::OrderCap::Push => language.text("push"),
+        deck_model::OrderCap::Poll => language.text("poll"),
+        deck_model::OrderCap::None => language.text("none"),
+    };
+    language.format(
+        "answer {0} · order {1} · {2}",
+        &[
+            (answer),
+            (order),
+            (if caps.focus {
+                language.text("focus")
+            } else {
+                language.text("no focus")
+            }),
+        ],
+    )
+}
+
+pub fn order_line_localized(entry: &OrderEntry, language: Language) -> String {
+    let mut out = match &entry.text {
+        Some(text) => language.format("“{0}”", &[&(text).to_string()]),
+        // `order.failed` carries no text (§4.12): an order refused before it
+        // was ever dispatched never had one to keep.
+        None => language.text("(no text)").to_string(),
+    };
+    if let Some(via) = &entry.via {
+        out.push_str(&language.format(" · {0}", &[&(via).to_string()]));
+    }
+    if let Some(reason) = &entry.reason {
+        out.push_str(&language.format(" · failed: {0}", &[&(reason).to_string()]));
+    }
+    out
+}
+
+pub fn row_name_localized(agent: &Agent, project: &Project, language: Language) -> String {
+    if project.cwd.is_some() && agent.name == project.label {
+        language.text(kind_label(agent.kind)).to_string()
+    } else {
+        agent.name.clone()
+    }
+}
+
+pub fn row_title_localized(agent: &Agent, project: &Project, language: Language) -> String {
+    let title = live_title_localized(agent, language);
+    if project.cwd.is_some() && title == project.label {
+        String::new()
+    } else {
+        title.to_string()
+    }
+}
+
+pub fn detected_line_localized(
+    target: &str,
+    detected: Option<&Detected>,
+    language: Language,
+) -> String {
+    match detected {
+        Some(d) if !d.version.is_empty() => language.format(
+            "{0} · {1}",
+            &[&(d.version).to_string(), &(d.path).to_string()],
+        ),
+        Some(d) => d.path.clone(),
+        None if target == "claude-desktop" => language
+            .text("no CLI to detect: this target is a file, not a binary")
+            .to_string(),
+        None if target == "codex-desktop" => language
+            .text("Codex.app was not detected in Applications")
+            .to_string(),
+        None => language.text("not found on PATH").to_string(),
+    }
+}
+
+pub fn last_event_line_localized(last_event_at: Option<&str>, language: Language) -> String {
+    match last_event_at {
+        Some(at) => language.format("last hook event {0}", &[(at)]),
+        None => language
+            .text("last hook event: not reported by this daemon")
+            .to_string(),
+    }
+}
+
+pub fn hijack_line_localized(hijack: &Hijack, language: Language) -> String {
+    let who = match (&hijack.command, hijack.pid) {
+        (Some(command), Some(pid)) => language.format(
+            "pid {0} ({1})",
+            &[&(pid).to_string(), &(command).to_string()],
+        ),
+        (Some(command), None) => command.clone(),
+        (None, Some(pid)) => language.format("pid {0}", &[&(pid).to_string()]),
+        (None, None) => language.text("another process").to_string(),
+    };
+    language.format("Port {0} is held by {1}, and it answers. Claude's installed http hooks POST prompts, tool inputs and the hooks bearer token to whoever holds it, and each held hook blocks Claude for its timeout.", &[&(hijack.port).to_string(), &(who).to_string()])
+}
+
+pub fn plan_headline_localized(verb: Verb, target: &str, language: Language) -> String {
+    let what = match verb {
+        Verb::Install => language.text("Install"),
+        Verb::Uninstall => language.text("Remove"),
+        Verb::Repair => language.text("Repair"),
+    };
+    language.format("{0} — {1}", &[(what), (party_name(target))])
+}
+
+pub fn change_line_localized(change: &Change, language: Language) -> String {
+    let action = match change.action.as_str() {
+        "create" | "update" | "remove" | "restore" => language.text(&change.action),
+        other => other,
+    };
+    language.format("{0} {1}", &[action, &change.path])
+}
+
+pub fn token_scopes_line_localized(token: &TokenRow, language: Language) -> String {
+    if token.scopes.is_empty() {
+        return language.text("no scopes").to_string();
+    }
+    token.scopes.join(", ")
+}
+
+pub fn token_life_line_localized(token: &TokenRow, language: Language) -> String {
+    let created = token
+        .created
+        .as_deref()
+        .map(|at| language.format("created {0}", &[(at)]))
+        .unwrap_or_else(|| language.text("created at an unrecorded time").to_string());
+    match token.expires.as_deref() {
+        Some(at) => language.format("{0} · expires {1}", &[&(created).to_string(), (at)]),
+        None => language.format("{0} · no expiry", &[&(created).to_string()]),
+    }
+}
+
+pub fn token_embedded_line_localized(token: &TokenRow, language: Language) -> Option<String> {
+    if token.embedded_in.is_empty() {
+        return None;
+    }
+    Some(language.format(
+        "embedded in {0} — revoking it stops those hooks until Repair re-embeds a new one",
+        &[&(token.embedded_in.join(", ")).to_string()],
+    ))
+}
+
+pub fn token_made_toast_localized(verb: &str, name: &str, language: Language) -> String {
+    let verb = language.text(verb);
+    language.format(
+        "{0} the token “{1}”. Copy its value now: it is shown once.",
+        &[(verb), (name)],
+    )
+}
+
+pub fn service_headline_localized(connected: bool, info: &Info, language: Language) -> String {
+    if !connected {
+        return language
+            .text("Not running \u{2014} nothing is answering on the socket")
+            .to_string();
+    }
+    let daemon = info
+        .daemon
+        .as_deref()
+        .unwrap_or(language.text("an unknown version"));
+    match info.sessions {
+        Some(1) => language.format("Running · deckd {0} · 1 session", &[(daemon)]),
+        Some(n) => language.format(
+            "Running · deckd {0} · {1} sessions",
+            &[(daemon), &(n).to_string()],
+        ),
+        None => language.format("Running · deckd {0}", &[(daemon)]),
+    }
+}
+
+pub fn port_line_localized(info: &Info, config: &ApiConfig, language: Language) -> String {
+    match (info.port, config.port) {
+        (Some(port), _) => {
+            language.format("http://127.0.0.1:{0} · listening", &[&(port).to_string()])
+        }
+        (None, Some(configured)) => language.format(
+            "{0} is configured and not held: the daemon is on the socket only",
+            &[&(configured).to_string()],
+        ),
+        (None, None) => language
+            .text("no TCP port: the daemon is on the socket only")
+            .to_string(),
+    }
+}
+
+pub fn degraded_banner_localized(
+    service: &deck_model::ServiceState,
+    language: Language,
+) -> Option<String> {
+    let reason = service.degraded.as_deref()?;
+    Some(match reason {
+        deck_gui_core::admin::HIJACK_RISK => {
+            language.format("Port {0} is held by a process that answers, and Claude's http hooks are still pointed at it. Change the port and re-install the hooks.", &[&(service.port).to_string()])
+        }
+        deck_gui_core::admin::PORT_IN_USE => language.format("Port {0} is already bound, so the daemon is on the socket only. http hooks and curl cannot reach it until the port is free or changed.", &[&(service.port).to_string()]),
+        "shutdown" => language.text("The service is shutting down.").to_string(),
+        other => language.format("The service is degraded: {0}.", &[(other)]),
+    })
+}
+
+pub fn origins_line_localized(origins: &[String], language: Language) -> String {
+    if origins.is_empty() {
+        return language
+            .text("none \u{2014} a browser Origin header is refused 403 (the default)")
+            .to_string();
+    }
+    origins.join(", ")
+}
+
+pub fn missing_method_line_localized(method: &str, language: Language) -> String {
+    language.format("This daemon has no `{0}`: it is not in its method table, so nothing happened. The method is week 6's daemon-side work; a daemon that has it will answer this button.", &[(method)])
+}
+
+pub fn launchd_line_localized(state: &Launchd, language: Language) -> String {
+    match state {
+        Launchd::Running(Some(pid)) => {
+            language.format("launchd agent: running, pid {0}", &[&(pid).to_string()])
+        }
+        Launchd::Running(None) => language.text("launchd agent: running").to_string(),
+        Launchd::Loaded => language
+            .text("launchd agent: loaded, not running")
+            .to_string(),
+        Launchd::NotLoaded => language
+            .text("launchd agent: not registered with launchd on this account")
+            .to_string(),
+        Launchd::Unknown => language
+            .text("launchd agent: launchctl said nothing this app can read")
+            .to_string(),
+    }
+}
+
+pub fn uid_line_localized(what: &str, uid: Option<&str>, language: Language) -> String {
+    let what = language.text(what);
+    match uid {
+        Some(uid) => language.format("{0}: {1}", &[(what), (uid)]),
+        None => language.format("{0}: none selected", &[(what)]),
+    }
+}
+
+pub fn meter_line_localized(level: Option<Level>, now: Ts, language: Language) -> String {
+    let Some(level) = level.filter(|l| fresh(l.at, now)) else {
+        return language
+            .text("No capture running. The meter moves while PTT is held.")
+            .to_string();
+    };
+    if level.rms <= 0.0 {
+        return language
+            .text(
+                "Capturing \u{b7} silence (a warming link and a dead microphone read the same \
+                here)",
+            )
+            .to_string();
+    }
+    language.format(
+        "Capturing · {0} dBFS",
+        &[&format!("{:.0}", 20.0 * level.rms.log10())],
+    )
+}
+
+pub fn engine_badge_localized(engine: &Engine, language: Language) -> String {
+    let where_ = if engine.on_device {
+        language.text("on-device")
+    } else {
+        language.text("server")
+    };
+    language.format("{0} · {1}", &[&(engine.id).to_string(), (where_)])
+}
+
+pub fn locales_line_localized(
+    locales: &[String],
+    selected: Option<&str>,
+    language: Language,
+) -> String {
+    if locales.is_empty() {
+        return language.text("no locales reported").to_string();
+    }
+    let head: Vec<&str> = locales.iter().take(4).map(String::as_str).collect();
+    let rest = locales.len().saturating_sub(head.len());
+    let mut line = head.join(", ");
+    if rest > 0 {
+        line.push_str(&language.format(" and {0} more", &[&(rest).to_string()]));
+    }
+    match selected {
+        Some(locale) if locales.iter().any(|l| l == locale) => {
+            language.format("{0} (using {1})", &[&(line).to_string(), (locale)])
+        }
+        // A configured locale the engine did not report is worth saying:
+        // `voice.listen` refuses one without on-device support before
+        // anything opens (§7.6), and this is where that shows up first.
+        Some(locale) => language.format(
+            "{0} · configured {1} is not in this list",
+            &[&(line).to_string(), (locale)],
+        ),
+        None => line,
+    }
+}
+
+pub fn engines_missing_line_localized(error: &str, language: Language) -> String {
+    language.format("No engine report: {0}. `voice.engines` answers from the one report the audio side sends when its engines come up, so this is a daemon started with --no-device, a build without an engine, or the moment before that report lands.", &[(error)])
+}
+
+pub fn prompt_line_localized(prompt: &Prompt, language: Language) -> String {
+    if prompt.not_shown() {
+        return language.format("macOS was not asked for the {0}: this build cannot show that prompt yet, so nothing changed.", &[language.text(&prompt.which)]);
+    }
+    language.format(
+        "{0}: {1}",
+        &[language.text(&prompt.which), language.text(&prompt.status)],
+    )
+}
+
+pub fn test_headline_localized(report: &TestReport, language: Language) -> String {
+    match report.what.as_str() {
+        "speaker" => match report.played {
+            Some(true) => language
+                .text("Chime queued on the audio thread")
+                .to_string(),
+            Some(false) => language
+                .text("The audio thread refused the chime")
+                .to_string(),
+            None => language
+                .text("The daemon answered without saying whether it queued anything")
+                .to_string(),
+        },
+        "mic" => language
+            .text("Input as the route machine sees it")
+            .to_string(),
+        "stt" => language
+            .text("The recogniser, as it reported itself at start-up")
+            .to_string(),
+        "tts" => language
+            .text("The synthesiser, as it reported itself at start-up")
+            .to_string(),
+        // A `what` from a newer daemon: named, and nothing claimed for it.
+        other => language.format("{0}: the daemon answered", &[(other)]),
+    }
+}
+
+pub fn test_lines_localized(report: &TestReport, language: Language) -> Vec<String> {
+    let mut lines = Vec::new();
+    if let Some(transport) = report.transport.as_deref() {
+        lines.push(language.format("transport: {0}", &[(transport)]));
+    }
+    if let Some(route) = report.route.as_deref() {
+        lines.push(language.format("route: {0}", &[(route)]));
+    }
+    if let Some(uid) = report.output_uid.as_deref() {
+        lines.push(language.format("output: {0}", &[(uid)]));
+    }
+    if let Some(uid) = report.input_uid.as_deref() {
+        lines.push(language.format("input: {0}", &[(uid)]));
+    }
+    if let Some(chime) = report.chime.as_deref() {
+        lines.push(language.format("chime: {0}", &[(chime)]));
+    }
+    if let Some(warm) = report.mic_warm.as_deref() {
+        lines.push(language.format("mic_warm: {0}", &[(warm)]));
+    }
+    if let Some(warm) = report.mic_warm_effective.as_deref() {
+        lines.push(language.format("mic_warm_effective: {0}", &[(warm)]));
+    }
+    if let Some(engine) = report.engine.as_ref() {
+        lines.push(language.format(
+            "engine: {0}",
+            &[&(engine_badge_localized(engine, language)).to_string()],
+        ));
+        lines.push(language.format(
+            "locales: {0}",
+            &[&(locales_line_localized(&engine.locales, None, language)).to_string()],
+        ));
+    }
+    if report.listening {
+        lines.push(language.text("a capture is running right now").to_string());
+    }
+    lines
+}
+
+pub fn login_item_line_localized(status: LoginItem, language: Language) -> String {
+    match status {
+        LoginItem::Enabled => language
+            .text("Open at login: on. macOS reports this app as an enabled login item.")
+            .to_string(),
+        LoginItem::RequiresApproval => language
+            .text(
+                "Open at login: waiting for your approval in System Settings \u{203a} General \
+             \u{203a} Login Items.",
+            )
+            .to_string(),
+        LoginItem::NotRegistered => language.text("Open at login: off.").to_string(),
+        LoginItem::NotFound => language
+            .text(
+                "macOS answered `notFound`: it has no record of this login item, so nothing is \
+             registered whatever the last attempt returned.",
+            )
+            .to_string(),
+        LoginItem::Unknown(code) => language.format(
+            "macOS answered status {0}, which this build has no name for.",
+            &[&(code).to_string()],
+        ),
+    }
+}
+
+pub fn deck_line_localized(device: &deck_model::DeviceState, language: Language) -> String {
+    match device.link {
+        Link::Offline => language
+            .text("No deck yet. The service reports one the moment it links.")
+            .to_string(),
+        link => {
+            let fw = device
+                .fw
+                .as_deref()
+                .unwrap_or(language.text("firmware not reported"));
+            let faces = device.faces.len();
+            let what = if link == Link::Degraded {
+                language.text("Deck linked, degraded")
+            } else {
+                language.text("Deck connected")
+            };
+            let session = match device.session {
+                SessionState::Live => String::new(),
+                other => language.format(" · session {0}", &[&format!("{:?}", other)]),
+            };
+            language.format(
+                "{0} · {1} · {2} faces adopted{3}",
+                &[(what), (fw), &(faces).to_string(), &(session).to_string()],
+            )
+        }
+    }
+}
+
+pub fn doctor_lines_localized(
+    connected: bool,
+    info: &Info,
+    launchd: Option<&Launchd>,
+    device: &deck_model::DeviceState,
+    service: &deck_model::ServiceState,
+    language: Language,
+) -> Vec<String> {
+    let mut lines = vec![
+        if connected {
+            language.format(
+                "service: answering on the socket{0}",
+                &[&(info
+                    .daemon
+                    .as_deref()
+                    .map(|v| language.format(" (deckd {0})", &[(v)]))
+                    .unwrap_or_default())
+                .to_string()],
+            )
+        } else {
+            language
+                .text("service: not answering on the socket")
+                .to_string()
+        },
+        launchd_line_localized(launchd.unwrap_or(&Launchd::Unknown), language),
+        match info.port {
+            Some(port) => language.format("http door: listening on {0}", &[&(port).to_string()]),
+            None => language
+                .text("http door: not held \u{2014} the hooks have nowhere to POST")
+                .to_string(),
+        },
+        deck_line_localized(device, language),
+    ];
+    if let Some(reason) = service.degraded.as_deref() {
+        lines.push(language.format("degraded: {0}", &[(reason)]));
+    }
+    lines.push(
+        language.text("`deckd doctor` checks more than this window can see \u{2014} the data dir, the tokens \
+         file and both launchd labels.")
+            .to_string(),
+    );
+    lines
+}
+
+pub fn transcript_line_localized(transcript: Option<&Transcript>, language: Language) -> String {
+    let Some(transcript) = transcript else {
+        return language.text(NO_TRANSCRIPT).to_string();
+    };
+    let text = if transcript.text.is_empty() {
+        "\u{2026}"
+    } else {
+        &transcript.text
+    };
+    let label = if transcript.final_ {
+        language.text("final")
+    } else {
+        language.text("hearing")
+    };
+    match transcript.intent.as_deref() {
+        Some(intent) => language.format("{0}: {1} · matched {2}", &[(label), (text), (intent)]),
+        None => language.format("{0}: {1}", &[(label), (text)]),
+    }
 }
 
 #[cfg(test)]
@@ -1873,7 +2249,11 @@ mod tests {
             card: None,
             reply: None,
             messages: Vec::new(),
-            workflow_runs: Vec::new(), task: None, task_source: None, subagents: 0, workflow: None,
+            workflow_runs: Vec::new(),
+            task: None,
+            task_source: None,
+            subagents: 0,
+            workflow: None,
             chat_rev: 0,
             reply_rev: 0,
             voice: None,
@@ -1918,6 +2298,96 @@ mod tests {
             created: Ts::from_millis(1_000_000),
             expires: None,
             redacted: false,
+        }
+    }
+
+    #[test]
+    fn localized_presentation_preserves_catalog_keys_in_host_content() {
+        let supplied = "Ready {0} Settings";
+        let mut agent = agent();
+        agent.title = Some(supplied.into());
+        let mut card = card();
+        card.text = Some(supplied.into());
+        card.choices[0].label = supplied.into();
+        card.origin.tool = Some(supplied.into());
+        let entry = OrderEntry {
+            text: Some(supplied.into()),
+            via: Some("inject".into()),
+            reason: Some(supplied.into()),
+            at: Ts::from_millis(0),
+        };
+        let transcript = Transcript {
+            agent: None,
+            utterance: "1".into(),
+            text: supplied.into(),
+            intent: Some(supplied.into()),
+            final_: true,
+        };
+        let engine = Engine {
+            id: supplied.into(),
+            on_device: true,
+            locales: vec![supplied.into()],
+        };
+        for language in Language::ALL {
+            assert_eq!(live_title_localized(&agent, language), supplied);
+            assert_eq!(card_text_localized(&card, language), supplied);
+            assert!(choice_label_localized(&card, 0, language).contains(supplied));
+            assert!(origin_line_localized(&card.origin, language).contains(supplied));
+            assert_eq!(
+                order_line_localized(&entry, language)
+                    .matches(supplied)
+                    .count(),
+                2
+            );
+            assert_eq!(
+                transcript_line_localized(Some(&transcript), language)
+                    .matches(supplied)
+                    .count(),
+                2
+            );
+            assert!(engine_badge_localized(&engine, language).starts_with(supplied));
+            assert!(
+                locales_line_localized(&engine.locales, Some(supplied), language)
+                    .contains(supplied)
+            );
+            assert!(token_made_toast_localized("Created", supplied, language).contains(supplied));
+            assert_eq!(
+                status_word_localized(&Status::Unknown("Settings".into()), language),
+                "Settings"
+            );
+            assert_eq!(
+                backup_label_localized("/tmp/Settings", language),
+                "Settings"
+            );
+        }
+    }
+
+    #[test]
+    fn localized_setup_and_dynamic_statuses_have_translated_copy() {
+        for language in Language::ALL
+            .into_iter()
+            .filter(|language| *language != Language::English)
+        {
+            assert_ne!(slot_badge_localized(None, language), NOT_ON_DECK);
+            assert_ne!(
+                age_localized(Ts::from_millis(120_000), Ts::from_millis(0), language),
+                "2m"
+            );
+            assert_ne!(Step::Deck.title_localized(language), Step::Deck.title());
+            assert_ne!(Step::Deck.blurb_localized(language), Step::Deck.blurb());
+            assert_ne!(Step::Deck.counter_localized(language), Step::Deck.counter());
+            assert_ne!(
+                permission_help_localized(Permission::Denied, language),
+                permission_help(Permission::Denied)
+            );
+            assert_ne!(
+                transport_line_localized(Some(VoiceTransport::Ble), language),
+                transport_line(Some(VoiceTransport::Ble))
+            );
+            assert_ne!(
+                route_help_localized(Route::Ble, Some(VoiceTransport::Ble), language),
+                route_help(Route::Ble, Some(VoiceTransport::Ble))
+            );
         }
     }
 
@@ -2256,15 +2726,26 @@ mod tests {
     #[test]
     fn conol_is_its_own_group_even_beside_a_directory_named_conol() {
         let mut snapshot = Snapshot::default();
-        for (id, kind, cwd) in [("ag_native", Kind::Conol, None), ("ag_native2", Kind::Conol, Some("/ignored")),
-            ("ag_terminal", Kind::Claude, Some("/projects/Conol")), ("ag_other", Kind::Other, None)] {
-            let mut a = agent(); a.id = deck_model::AgentId(id.into()); a.kind = kind;
-            a.session.cwd = cwd.map(String::from); snapshot.agents.insert(a.id.clone(), a);
+        for (id, kind, cwd) in [
+            ("ag_native", Kind::Conol, None),
+            ("ag_native2", Kind::Conol, Some("/ignored")),
+            ("ag_terminal", Kind::Claude, Some("/projects/Conol")),
+            ("ag_other", Kind::Other, None),
+        ] {
+            let mut a = agent();
+            a.id = deck_model::AgentId(id.into());
+            a.kind = kind;
+            a.session.cwd = cwd.map(String::from);
+            snapshot.agents.insert(a.id.clone(), a);
         }
         let groups = projects(&snapshot);
         assert_eq!(groups.len(), 3);
-        let native = groups.iter().find(|g| g.agents[0].kind == Kind::Conol).unwrap();
-        assert_eq!(native.label, "Conol"); assert_eq!(native.agents.len(), 2);
+        let native = groups
+            .iter()
+            .find(|g| g.agents[0].kind == Kind::Conol)
+            .unwrap();
+        assert_eq!(native.label, "Conol");
+        assert_eq!(native.agents.len(), 2);
         assert!(native.cwd.is_none());
     }
 
@@ -2279,23 +2760,40 @@ mod tests {
             ("ag_4", "different", "personal", Kind::Other),
         ] {
             let mut a = agent();
-            a.id = deck_model::AgentId(id.into()); a.kind = kind;
-            a.companion = Some(CompanionProfile { app_id: app.into(), group_id: account.into(),
-                group_label: "Example".into(), role: CompanionRole::Session });
+            a.id = deck_model::AgentId(id.into());
+            a.kind = kind;
+            a.companion = Some(CompanionProfile {
+                app_id: app.into(),
+                group_id: account.into(),
+                group_label: "Example".into(),
+                role: CompanionRole::Session,
+            });
             snapshot.agents.insert(a.id.clone(), a);
         }
         let groups = projects(&snapshot);
         assert_eq!(groups.len(), 3);
         assert!(groups.iter().any(|g| g.agents.len() == 2));
-        assert!(groups.iter().all(|g| g.label == "Example" && g.cwd.is_none()));
+        assert!(groups
+            .iter()
+            .all(|g| g.label == "Example" && g.cwd.is_none()));
     }
 
     #[test]
     fn the_roster_is_grouped_by_project_each_in_slot_order_then_its_overflow() {
         let mut snapshot = Snapshot::default();
         for (id, slot, since, cwd) in [
-            ("ag_deck2", Some(Slot(2)), 10, Some("/Users/t/projects/cohdl/")),
-            ("ag_deck1", Some(Slot(1)), 20, Some("/Users/t/projects/cohdl")),
+            (
+                "ag_deck2",
+                Some(Slot(2)),
+                10,
+                Some("/Users/t/projects/cohdl/"),
+            ),
+            (
+                "ag_deck1",
+                Some(Slot(1)),
+                20,
+                Some("/Users/t/projects/cohdl"),
+            ),
             ("ag_over_old", None, 30, Some("/Users/t/projects/cohdl")),
             ("ag_over_new", None, 40, Some("/Users/t/projects/cohdl")),
             ("ag_alpha", Some(Slot(3)), 50, Some("/srv/Alpha")),
@@ -2311,9 +2809,8 @@ mod tests {
             snapshot.agents.insert(a.id.clone(), a);
         }
         let groups = projects(&snapshot);
-        let ids = |agents: &[&Agent]| -> Vec<String> {
-            agents.iter().map(|a| a.id.0.clone()).collect()
-        };
+        let ids =
+            |agents: &[&Agent]| -> Vec<String> { agents.iter().map(|a| a.id.0.clone()).collect() };
         let labels: Vec<(&str, Option<&str>)> = groups
             .iter()
             .map(|g| (g.label.as_str(), g.cwd.as_deref()))
@@ -2359,7 +2856,11 @@ mod tests {
             agents: Vec::new(),
         };
         a.name = NO_PROJECT.into();
-        assert_eq!(row_name(&a, &unlabelled), NO_PROJECT, "only a real project hides a name");
+        assert_eq!(
+            row_name(&a, &unlabelled),
+            NO_PROJECT,
+            "only a real project hides a name"
+        );
         // The same for a title that is just the directory's name.
         assert_eq!(row_title(&a, &group), "waiting on psql");
         a.title = Some("cohdl".into());
@@ -2370,9 +2871,15 @@ mod tests {
         a.title = None;
         a.redacted = true;
         assert_eq!(row_title(&a, &group), REDACTED);
-        assert_eq!(project_path("/Users/t/projects/cohdl", Some("/Users/t")), "~/projects/cohdl");
+        assert_eq!(
+            project_path("/Users/t/projects/cohdl", Some("/Users/t")),
+            "~/projects/cohdl"
+        );
         assert_eq!(project_path("/Users/t", Some("/Users/t/")), "~");
-        assert_eq!(project_path("/Users/tony/x", Some("/Users/t")), "/Users/tony/x");
+        assert_eq!(
+            project_path("/Users/tony/x", Some("/Users/t")),
+            "/Users/tony/x"
+        );
         assert_eq!(project_path("/srv/x", None), "/srv/x");
     }
 

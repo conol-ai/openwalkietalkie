@@ -191,8 +191,12 @@ pub const fn kind(kind: AgentKind) -> &'static str {
 
 /// "Codex · cohdl-api".
 pub fn kind_name(agent: &Agent) -> Text<40> {
+    kind_name_localized(agent, crate::ui::i18n::Language::English)
+}
+
+pub fn kind_name_localized(agent: &Agent, language: crate::ui::i18n::Language) -> Text<40> {
     let mut out = Text::new();
-    out.push_str(kind(agent.kind));
+    out.push_str(language.text(kind(agent.kind)));
     out.push_str(" \u{b7} ");
     out.push_str(agent.name.as_str());
     out
@@ -228,12 +232,12 @@ pub fn row_title(agent: &Agent) -> &str {
 pub fn roster_header(ui: &UiState, out: &mut Text<40>) {
     out.clear();
     if ui.deck.order_len == 0 {
-        out.push_str("AGENTS");
+        out.push_str(ui.tr("AGENTS"));
         return;
     }
     let label = ui.agents.project.as_str();
     if label.is_empty() {
-        out.push_str("OTHER");
+        out.push_str(ui.tr("OTHER"));
     } else {
         for c in label.chars() {
             out.push_char(c.to_ascii_uppercase());
@@ -245,7 +249,7 @@ pub fn roster_header(ui: &UiState, out: &mut Text<40>) {
     if len > 1 {
         out.push_str(" \u{b7} ");
         push_count(out, row + 1);
-        out.push_str(" OF ");
+        out.push_str(ui.tr(" OF "));
         push_count(out, len);
     }
 }
@@ -271,7 +275,7 @@ fn age_text<const N: usize>(ui: &UiState, agent: &Agent, prefix: &str, out: &mut
         return;
     }
     let mut label = Text::<8>::new();
-    kit::age_label(ui.now_ms, agent.state_since_ms, &mut label);
+    kit::age_label_localized(ui.now_ms, agent.state_since_ms, &mut label, ui.language);
     out.push_str(prefix);
     out.push_str(label.as_str());
 }
@@ -293,7 +297,7 @@ fn card_tag<'a>(ui: &UiState, agent: &Agent, card: &Card, out: &'a mut Text<16>)
         CardKind::Question => "blocked",
         CardKind::Ready => "ready",
     };
-    out.set(word);
+    out.set(ui.tr(word));
     let mut age = Text::<12>::new();
     age_text(ui, agent, " ", &mut age);
     out.push_str(age.as_str());
@@ -325,7 +329,7 @@ fn header_with_dot(band: &mut Band, ui: &UiState, agent: &Agent, right: HeaderRi
     let (cx, cy, r) = layout::HEADER_DOT;
     kit::dot(band, cx, cy, r, dot_color(ui, agent));
     let max_w = theme::TEXT_RIGHT - TAG_ROOM - layout::HEADER_NAME_X;
-    let name = kind_name(agent);
+    let name = kind_name_localized(agent, ui.language);
     text(band, Font::Name, layout::HEADER_NAME_X, theme::HEADER_BASELINE, name.as_str(), theme::TEXT_PRIMARY, theme::CANVAS, max_w, Align::Left);
     kit::header_tag(band, kit::header_right(ui, right));
 }
@@ -336,7 +340,7 @@ fn hash_header(h: &mut Hasher, ui: &UiState, agent: &Agent, right: HeaderRight) 
 }
 
 /// "↑ 1 more · 2 more ↓" centred in `lane`.
-fn draw_more(band: &mut Band, lane: Rect, viewport: &Viewport) {
+fn draw_more(band: &mut Band, ui: &UiState, lane: Rect, viewport: &Viewport) {
     let (above, below) = more(viewport);
     if (above == 0 && below == 0) || !kit::visible(band, lane) {
         return;
@@ -345,14 +349,15 @@ fn draw_more(band: &mut Band, lane: Rect, viewport: &Viewport) {
     if above > 0 {
         line.push_str("\u{2191} ");
         push_count(&mut line, above);
-        line.push_str(" more");
+        line.push_str(ui.tr(" more"));
     }
     if above > 0 && below > 0 {
         line.push_str(" \u{b7} ");
     }
     if below > 0 {
         push_count(&mut line, below);
-        line.push_str(" more \u{2193}");
+        line.push_str(ui.tr(" more"));
+        line.push_str(" \u{2193}");
     }
     let (cx, _) = lane.center();
     text(band, Font::Small, cx, lane.top() + 22, line.as_str(), theme::TEXT_FAINT, theme::CANVAS, lane.width(), Align::Center);
@@ -456,7 +461,7 @@ fn draw_roster(band: &mut Band, ui: &UiState) {
     if let Some(agent) = carousel_agent(ui, 1) {
         draw_card(band, ui, agent);
     }
-    kit::hint_bar(band, roster_hints(ui));
+    kit::hint_bar_localized(band, roster_hints(ui), ui.language);
 }
 
 /// The shown project's page and the page count, when there is more than
@@ -521,6 +526,18 @@ pub fn row_task(agent: &Agent) -> Text<64> {
     if agent.task.is_empty() { Text::from_str(row_title(agent)) } else { agent.task }
 }
 
+fn row_task_localized(ui: &UiState, agent: &Agent) -> Text<64> {
+    if agent.kind == AgentKind::Other && agent.task.is_empty() && row_title(agent).is_empty() {
+        if !agent.project.is_empty() && agent.name == agent.project {
+            Text::from_str(ui.tr("Agent"))
+        } else {
+            Text::from_str(kind_name_localized(agent, ui.language).as_str())
+        }
+    } else {
+        row_task(agent)
+    }
+}
+
 /// The status dot on a session's mark.
 pub fn row_dot(agent: &Agent) -> Presence {
     match agent.state {
@@ -564,16 +581,16 @@ fn draw_badge(band: &mut Band, agent: &Agent, right: i32, cy: i32, h: i32, font:
 pub fn card_status(ui: &UiState, agent: &Agent) -> Text<40> {
     let mut out = Text::new();
     if agent.stale || offline(ui) {
-        out.push_str("Offline");
+        out.push_str(ui.tr("Offline"));
         return out;
     }
-    out.push_str(match agent.state {
+    out.push_str(ui.tr(match agent.state {
         AgentState::Working => "Working",
         AgentState::Question => "Waiting for you",
         AgentState::Error => "Failed",
         AgentState::Ready => "Ready",
         AgentState::Idle => "Idle",
-    });
+    }));
     let mut age = Text::<12>::new();
     age_text(ui, agent, " \u{b7} ", &mut age);
     out.push_str(age.as_str());
@@ -627,7 +644,7 @@ fn draw_peek(band: &mut Band, ui: &UiState, place: u8, agent: &Agent) {
     marks::draw_with_dot(band, agent.kind, marks::Size::Small, x, cy - mark / 2, row_dot(agent), bg, dim);
     let right = draw_badge(band, agent, rect.right() - PEEK_INSET, cy, 24, Font::Small, theme::CHIP_FILL);
     let tx = x + mark + 14;
-    let task = row_task(agent);
+    let task = row_task_localized(ui, agent);
     text(band, Font::Row, tx, cy + font::ascent(Font::Row) * 9 / 20, task.as_str(),
         if dim { theme::TEXT_FAINT } else { theme::TEXT_SECONDARY }, bg, right - 10 - tx, Align::Left);
 }
@@ -674,7 +691,7 @@ fn draw_card(band: &mut Band, ui: &UiState, agent: &Agent) {
     text(band, Font::Body, sx, cy + font::ascent(Font::Body) * 9 / 20, card_status(ui, agent).as_str(),
         status_color, bg, right - 12 - sx, Align::Left);
     // The task, at most two lines (the second cut with an ellipsis).
-    let task = row_task(agent);
+    let task = row_task_localized(ui, agent);
     let lh = font::line_height(CARD_TASK) - 2;
     let first = rect.top() + CARD_TASK_TOP + font::ascent(CARD_TASK);
     let mut lines = 0;
@@ -761,7 +778,7 @@ fn draw_channel(band: &mut Band, ui: &UiState, agent: &Agent) {
     if let Some(card) = card {
         draw_card_block(band, ui, card);
     }
-    kit::hint_bar(band, reading_hints(ui, agent, card));
+    kit::hint_bar_localized(band, reading_hints(ui, agent, card), ui.language);
 }
 
 /// "Question · blocked 2m" in the state colour, then secondary text.
@@ -772,7 +789,7 @@ fn draw_state_line(band: &mut Band, ui: &UiState, agent: &Agent) {
     }
     let bg = surface(band, WORKFLOW_TOGGLE, false, ui.agents.pressed == Some(2), true);
     text(band, Font::Body, WORKFLOW_TOGGLE.center().0, CHANNEL_STATE_BASELINE,
-        if agent.reply_kind == DocKind::Workflow { "Chat" } else { "Workflow" },
+        ui.tr(if agent.reply_kind == DocKind::Workflow { "Chat" } else { "Workflow" }),
         theme::TEXT_PRIMARY, bg, WORKFLOW_TOGGLE.width() - 12, Align::Center);
     let label = crate::ui::session::label(ui);
     text(band, Font::Hint, lane.left(), CHANNEL_STATE_BASELINE, label.as_str(),
@@ -870,11 +887,11 @@ fn draw_reply(band: &mut Band, ui: &UiState, agent: &Agent) {
     let lh = font::line_height(face);
     let first = lane.top() + font::ascent(face);
     if !agent.reply.windowed() && agent.reply_kind == DocKind::Workflow {
-        text(band, face, lane.left(), first, "Waiting for workflow…", theme::TEXT_FAINT, theme::CANVAS, lane.width(), Align::Left);
+        text(band, face, lane.left(), first, ui.tr("Waiting for workflow…"), theme::TEXT_FAINT, theme::CANVAS, lane.width(), Align::Left);
         return;
     }
     if agent.last_reply.is_empty() && !agent.reply.windowed() {
-        text(band, face, lane.left(), first, "No reply yet", theme::TEXT_FAINT, theme::CANVAS, lane.width(), Align::Left);
+        text(band, face, lane.left(), first, ui.tr("No reply yet"), theme::TEXT_FAINT, theme::CANVAS, lane.width(), Align::Left);
         return;
     }
     let top = reply_clamp(ui, agent, ui.agents.reply_top) as usize;
@@ -915,16 +932,20 @@ fn two_buttons(card: &Card) -> bool {
 }
 
 fn button_label(card: &Card, out: &mut Text<32>) {
+    button_label_localized(card, out, crate::ui::i18n::Language::English);
+}
+
+fn button_label_localized(card: &Card, out: &mut Text<32>, language: crate::ui::i18n::Language) {
     out.clear();
     match card.kind {
-        CardKind::Ready => out.push_str("Ready summary"),
-        CardKind::Question if card.pending_answer.is_some() => out.push_str("Answer sent"),
+        CardKind::Ready => out.push_str(language.text("Ready summary")),
+        CardKind::Question if card.pending_answer.is_some() => out.push_str(language.text("Answer sent")),
         CardKind::Question => {
-            out.push_str("Answer");
+            out.push_str(language.text("Answer"));
             if card.choice_count > 0 {
                 out.push_str(" \u{b7} ");
                 push_count(out, card.choice_count.min(4));
-                out.push_str(if card.choice_count == 1 { " choice" } else { " choices" });
+                out.push_str(language.text(if card.choice_count == 1 { " choice" } else { " choices" }));
             }
         }
     }
@@ -951,7 +972,7 @@ fn draw_card_block(band: &mut Band, ui: &UiState, card: &Card) {
         let rect = layout::CHANNEL_BUTTON;
         let bg = surface(band, rect, false, ui.agents.pressed == Some(0), true);
         let mut label = Text::<32>::new();
-        button_label(card, &mut label);
+        button_label_localized(card, &mut label, ui.language);
         text(band, Font::Row, rect.center().0, baseline, label.as_str(), theme::TEXT_PRIMARY, bg, rect.width() - 2 * ROW_PAD, Align::Center);
     }
 }
@@ -1169,7 +1190,7 @@ fn draw_choice(band: &mut Band, ui: &UiState, card: &Card, rect: Rect, index: u8
     let tag_w = if label.is_empty() {
         0
     } else {
-        text(band, Font::Small, tag_right, baseline, label, color, bg, 140, Align::Right) + ROW_PAD
+        text(band, Font::Small, tag_right, baseline, ui.tr(label), color, bg, 140, Align::Right) + ROW_PAD
     };
     let x = rect.left() + layout::CHOICE_TEXT_X;
     let fg = if dimmed {
@@ -1202,8 +1223,8 @@ fn draw_question(band: &mut Band, ui: &UiState, agent: &Agent, card: &Card) {
     for (slot, index) in viewport.slots() {
         draw_choice(band, ui, card, layout::card_choice(slot), index);
     }
-    draw_more(band, CARD_MORE, &viewport);
-    kit::hint_bar(band, question_hints(ui, card));
+    draw_more(band, ui, CARD_MORE, &viewport);
+    kit::hint_bar_localized(band, question_hints(ui, card), ui.language);
 }
 
 fn ready_hints(ui: &UiState, card: &Card) -> &'static [Hint<'static>] {
@@ -1253,8 +1274,8 @@ fn draw_ready(band: &mut Band, ui: &UiState, agent: &Agent, card: &Card) {
     for (slot, index) in viewport.slots() {
         draw_choice(band, ui, card, layout::ready_row(slot), index);
     }
-    draw_more(band, CARD_MORE, &viewport);
-    kit::hint_bar(band, ready_hints(ui, card));
+    draw_more(band, ui, CARD_MORE, &viewport);
+    kit::hint_bar_localized(band, ready_hints(ui, card), ui.language);
 }
 
 fn card_signature(ui: &UiState, agent: &Agent, card: &Card, sig: &mut SigBuilder) {
@@ -1308,11 +1329,11 @@ fn card_signature(ui: &UiState, agent: &Agent, card: &Card, sig: &mut SigBuilder
 fn draw_empty(band: &mut Band, ui: &UiState, agent: Option<&Agent>, message: &str) {
     match agent {
         Some(agent) => header_with_dot(band, ui, agent, kit::status_tag(ui)),
-        None => kit::header(band, "AGENTS", kit::header_right(ui, kit::status_tag(ui))),
+        None => kit::header(band, ui.tr("AGENTS"), kit::header_right(ui, kit::status_tag(ui))),
     }
     let (cx, cy) = layout::BODY.center();
-    text(band, Font::Row, cx, centred(Font::Row, cy), message, theme::TEXT_FAINT, theme::CANVAS, layout::BODY.width() - 2 * theme::MARGIN, Align::Center);
-    kit::hint_bar(band, &EMPTY_HINTS);
+    text(band, Font::Row, cx, centred(Font::Row, cy), ui.tr(message), theme::TEXT_FAINT, theme::CANVAS, layout::BODY.width() - 2 * theme::MARGIN, Align::Center);
+    kit::hint_bar_localized(band, &EMPTY_HINTS, ui.language);
 }
 
 fn empty_signature(ui: &UiState, agent: Option<&Agent>, sig: &mut SigBuilder) {

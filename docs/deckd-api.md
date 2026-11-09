@@ -412,6 +412,7 @@ One of: `session`, `launcher`.
 | `faces` | [`FaceEntry`](#faceentry)[] | yes |  | The strip as the device reports it. |
 | `fw` | string? | no |  |  |
 | `host_online` | boolean | yes |  |  |
+| `language_supported` | boolean | no | `false` |  |
 | `link` | [`Link`](#link) | yes |  |  |
 | `outbox_depth` | uint32 | yes |  |  |
 | `pace_ms` | uint16 | yes |  |  |
@@ -745,6 +746,7 @@ One of: `absent`, `linked`, `await_hello`, `syncing`, `live`, `degraded`.
 ### `SetKey`
 
 - string
+- string — API setting; its device transport is the versioned `language` message.
 - string — How big the deck draws a document it was sent: 0 small, 1 medium, 2 large. The **host** has to know it, because the host is what wraps the text — a size the two sides disagreed about would break every line in a different place.
 
 
@@ -761,6 +763,8 @@ The `set` keys the host persists and restores on `boot:1`.
 | `chime` | uint16 | no | `1` |  |
 | `demo` | uint16 | no | `1` |  |
 | `idlehome` | uint16 | no | `120` |  |
+| `language` | uint16 | no | `0` | UI language shared with capable decks: en, zh-Hans, zh-Hant, ja. |
+| `language_revision` | uint32 | no | `0` |  |
 | `mic` | uint16 | no | `6` |  |
 | `speaker` | uint16 | no | `6` |  |
 | `textsize` | uint16 | no | `1` | 0 small, 1 medium, 2 large. The **host** wraps documents with the face this picks, so it is not just a device preference. |

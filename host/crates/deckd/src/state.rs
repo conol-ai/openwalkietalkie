@@ -52,7 +52,10 @@ impl State {
             Err(_) => return (State::default(), Loaded::Absent),
         };
         match serde_json::from_slice::<State>(&bytes) {
-            Ok(state) => (state, Loaded::Read),
+            Ok(mut state) => {
+                state.settings.normalize_language();
+                (state, Loaded::Read)
+            }
             Err(_) => {
                 let corrupt = path.with_extension("json.corrupt");
                 // Best effort; a failed rename only costs the next start the same detour.
@@ -103,6 +106,12 @@ impl State {
     pub fn apply(&mut self, patch: &deck_model::StatePatch) -> bool {
         use deck_model::StatePatch;
         match patch {
+            StatePatch::Language { value, revision } => {
+                let changed = self.settings.language != *value || self.settings.language_revision != *revision;
+                self.settings.language = *value;
+                self.settings.language_revision = *revision;
+                changed
+            }
             StatePatch::Faces(list) => {
                 let changed = self.faces != *list;
                 self.faces = list.clone();
@@ -215,6 +224,25 @@ mod tests {
         assert_eq!(state, State::default());
         assert!(!path.exists());
         assert!(d.join("state.json.corrupt").exists());
+        std::fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn language_and_revision_are_persisted_together_and_old_state_migrates() {
+        let d = dir("language");
+        let path = d.join("state.json");
+        let mut state = State::default();
+        assert!(state.apply(&StatePatch::Language { value: 3, revision: 12 }));
+        state.save(&path).unwrap();
+        let (loaded, status) = State::load(&path);
+        assert_eq!(status, Loaded::Read);
+        assert_eq!((loaded.settings.language, loaded.settings.language_revision), (3, 12));
+        std::fs::write(&path, r#"{"settings":{"language":2}}"#).unwrap();
+        let (loaded, _) = State::load(&path);
+        assert_eq!((loaded.settings.language, loaded.settings.language_revision), (2, 1));
+        std::fs::write(&path, r#"{"settings":{"language":99}}"#).unwrap();
+        let (loaded, _) = State::load(&path);
+        assert_eq!((loaded.settings.language, loaded.settings.language_revision), (0, 0));
         std::fs::remove_dir_all(d).unwrap();
     }
 

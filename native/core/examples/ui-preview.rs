@@ -1,6 +1,6 @@
 //! Render the exact embedded scene to PPM without a board or a window server.
 //!
-//!   ui-preview <out.ppm> [scene]      one scene (default: `default`)
+//!   ui-preview <out.ppm> [scene] [en|zh-Hans|zh-Hant|ja]
 //!   ui-preview --list                 every scene name, one per line
 //!
 //! Scenes are built only through the public `UiState` / `Deck` API, `on_face`
@@ -31,7 +31,7 @@ const BASE_SCENES: [&str; 2] = ["default", "splash"];
 
 /// Deck scenes; the first eight are the mockups (`tools/preview-all.py` knows
 /// which `mock/*.png` each one reproduces).
-const DECK_SCENES: [&str; 113] = [
+const DECK_SCENES: [&str; 115] = [
     "screen-locked",
     "screen-unlocking",
     "question-answer",
@@ -116,6 +116,8 @@ const DECK_SCENES: [&str; 113] = [
     "settings-speech",
     "settings-alerts",
     "settings-display",
+    "settings-language",
+    "settings-tutorial",
     "settings-host",
     "settings-about",
     "settings-adjust",
@@ -711,6 +713,12 @@ fn deck_scene(ui: &mut UiState, scene: &str) {
             .position(|name| *name == scene)
             .unwrap_or(0) as u8;
         }
+        "settings-language" | "settings-tutorial" => {
+            ui.on_face(Template::Settings);
+            ui.settings.panel = 3;
+            ui.settings.row = if scene == "settings-language" { 3 } else { 4 };
+            ui.settings.adjusting = scene == "settings-language";
+        }
         "settings-adjust" => {
             ui.on_face(Template::Settings);
             ui.settings.panel = 3;
@@ -822,6 +830,12 @@ fn main() {
         .map(String::as_str)
         .unwrap_or("/tmp/openwalkietalkie-ui.ppm");
     let scene_name = args.get(2).map(String::as_str).unwrap_or("default");
+    let language_code = args.get(3).map(String::as_str).unwrap_or("en");
+    let language = ui::i18n::Language::ALL.into_iter().find(|language| language.code() == language_code)
+        .unwrap_or_else(|| {
+            eprintln!("ui-preview: unknown language '{language_code}'");
+            std::process::exit(2);
+        });
     // Boxed: a `UiState` is never moved by value, here as on the device.
     let mut ui = Box::new(UiState::new());
     ui.reset();
@@ -836,6 +850,7 @@ fn main() {
         eprintln!("ui-preview: unknown scene '{scene_name}' (try --list)");
         std::process::exit(2);
     }
+    ui.language = language;
     let mut output = std::io::BufWriter::new(std::fs::File::create(path).unwrap());
     writeln!(output, "P6\n480 480\n255").unwrap();
     let mut band = display::Band::new();

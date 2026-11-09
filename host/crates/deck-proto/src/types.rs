@@ -215,6 +215,8 @@ pub struct FaceEntry {
 )]
 #[serde(rename_all = "lowercase")]
 pub enum SetKey {
+    /// API setting; its device transport is the versioned `language` message.
+    Language,
     Speaker,
     Mic,
     Announce,
@@ -232,7 +234,8 @@ pub enum SetKey {
 }
 
 impl SetKey {
-    /// Every key, in the order a `boot:1` sync pushes them.
+    /// Ordinary wire settings, in boot push order. Language negotiates and
+    /// synchronizes independently, including boot:0; never push its default.
     pub const ALL: [SetKey; 10] = [
         SetKey::Speaker,
         SetKey::Mic,
@@ -248,6 +251,7 @@ impl SetKey {
 
     pub const fn name(self) -> &'static str {
         match self {
+            SetKey::Language => "language",
             SetKey::Speaker => "speaker",
             SetKey::Mic => "mic",
             SetKey::Announce => "announce",
@@ -265,6 +269,7 @@ impl SetKey {
     /// `idlehome` accepts anything (the device rounds up).
     pub const fn accepts(self, value: u16) -> bool {
         match self {
+            SetKey::Language => value <= 3,
             SetKey::Speaker | SetKey::Mic => value <= 10,
             SetKey::Announce | SetKey::Chime | SetKey::Autojump | SetKey::Demo => value <= 1,
             SetKey::Brightness => value >= 1 && value <= 5,
@@ -334,6 +339,7 @@ pub struct SessionMenu {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "m", rename_all = "snake_case")]
 pub enum HostLine {
+    Language { value: u8, revision: u32 },
     Image { slot: u8, rev: u16, index: u8, offset: u16, total: u16, width: u16, height: u16, data: String },
     SessionMenu(SessionMenu),
     Hello {
@@ -453,6 +459,7 @@ impl HostLine {
     /// The wire's `m` value.
     pub const fn m(&self) -> &'static str {
         match self {
+            HostLine::Language { .. } => "language",
             HostLine::Image { .. } => "image",
             HostLine::SessionMenu(_) => "session",
             HostLine::Hello { .. } => "hello",
@@ -481,6 +488,7 @@ impl HostLine {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "m", rename_all = "snake_case")]
 pub enum DeviceLine {
+    Language { value: u8, revision: u32 },
     Image { slot: u8, rev: u16, index: u8, offset: u16 },
     /// choice 255 requests a page; other choices require the displayed revision.
     Session { slot: u8, field: u8, page: u8, rev: u16, choice: u8 },
@@ -494,6 +502,11 @@ pub enum DeviceLine {
         /// The sessions the deck holds (`agents`); `None` from a deck that
         /// predates the field, which holds 8.
         agents: Option<u8>,
+        /// Both fields present advertise versioned UI-language support.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        lang: Option<u8>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        lang_rev: Option<u32>,
         faces: Vec<FaceEntry>,
     },
     Key {
@@ -579,6 +592,7 @@ impl DeviceLine {
     /// The wire's `m` value.
     pub const fn m(&self) -> &'static str {
         match self {
+            DeviceLine::Language { .. } => "language",
             DeviceLine::Image { .. } => "image",
             DeviceLine::Session { .. } => "session",
             DeviceLine::Hello { .. } => "hello",

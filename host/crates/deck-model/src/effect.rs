@@ -292,6 +292,7 @@ pub enum DesktopCmd {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "patch", rename_all = "snake_case")]
 pub enum StatePatch {
+    Language { value: u16, revision: u32 },
     Faces(Vec<FaceEntry>),
     Setting {
         key: SetKey,

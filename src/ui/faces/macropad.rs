@@ -18,6 +18,7 @@ use crate::display::Band;
 use crate::ui::layout::Rect;
 use crate::ui::signature::SigBuilder;
 use crate::ui::state::UiState;
+use crate::ui::i18n::Language;
 use crate::ui::{font, font::Align, font::Font, kit, layout, theme};
 
 /// `layout::HEADER` with room for glyph overhang.
@@ -64,13 +65,17 @@ fn pressed(ui: &UiState, instance: u8, index: u8) -> bool {
     ui.macropad.face == instance && ui.macropad.down & (1 << (index & 15)) != 0
 }
 
-fn draw_key(band: &mut Band, index: u8, key: &MacroKey, pressed: bool, cursor: bool) {
-    draw_key_in(band, layout::macro_key(index), key, pressed, cursor);
+fn draw_key(band: &mut Band, index: u8, key: &MacroKey, pressed: bool, cursor: bool, language: Language) {
+    draw_key_in_localized(band, layout::macro_key(index), key, pressed, cursor, language);
 }
 
 /// One key card in `rect`, as the grid draws it; the editor previews a
 /// draft with it.
 pub fn draw_key_in(band: &mut Band, rect: Rect, key: &MacroKey, pressed: bool, cursor: bool) {
+    draw_key_in_localized(band, rect, key, pressed, cursor, Language::English);
+}
+
+pub fn draw_key_in_localized(band: &mut Band, rect: Rect, key: &MacroKey, pressed: bool, cursor: bool, language: Language) {
     if !kit::visible(band, rect) {
         return;
     }
@@ -91,7 +96,7 @@ pub fn draw_key_in(band: &mut Band, rect: Rect, key: &MacroKey, pressed: bool, c
     }
     let sink = if pressed { SINK } else { 0 };
     let (cx, cy) = rect.center();
-    let label = if key.present { key.label.as_str() } else { "+ assign" };
+    let label = if key.present { key.label.as_str() } else { language.text("+ assign") };
     let fg = if bound { theme::TEXT_BRIGHT } else { theme::TEXT_LABEL };
     let baseline = cy + font::ascent(Font::Macro) * 9 / 20 + sink;
     font::draw(band, Font::Macro, cx, baseline, label, fg, Some(bg), rect.width() - 16, Align::Center);
@@ -127,11 +132,11 @@ fn hints(ui: &UiState, instance: u8) -> &'static [kit::Hint<'static>] {
 /// and selects the `MacroSet`.
 pub fn draw(band: &mut Band, ui: &UiState, instance: u8) {
     band.fill(kit::rgb(theme::CANVAS));
-    kit::header(band, "MACROPAD", tag(ui, instance));
+    kit::header(band, ui.tr("MACROPAD"), tag(ui, instance));
     for index in 0..9u8 {
-        draw_key(band, index, &key(ui, instance, index), pressed(ui, instance, index), cursor_at(ui, instance, index));
+        draw_key(band, index, &key(ui, instance, index), pressed(ui, instance, index), cursor_at(ui, instance, index), ui.language);
     }
-    kit::hint_bar(band, hints(ui, instance));
+    kit::hint_bar_localized(band, hints(ui, instance), ui.language);
 }
 
 // Plain text, as the mockup's bar: no keycaps.

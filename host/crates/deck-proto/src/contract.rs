@@ -34,6 +34,22 @@ fn ui() -> Box<UiState> {
     ui
 }
 
+#[test]
+fn language_preferences_are_versioned_and_use_the_dedicated_message() {
+    let line = HostLine::Language { value: 3, revision: u32::MAX };
+    assert_eq!(*fw_parse(&encode(&line).unwrap()).unwrap(), HostMsg::Language { value: 3, revision: u32::MAX });
+    let mut state = ui();
+    state.language = 3;
+    state.language_revision = u32::MAX;
+    assert_eq!(parse_device_line(&fw_encode(Event::Language, &state)).unwrap(), DeviceLine::Language { value: 3, revision: u32::MAX });
+    assert!(matches!(parse_device_line(&fw_encode(Event::Hello, &state)).unwrap(), DeviceLine::Hello { lang: Some(3), lang_rev: Some(u32::MAX), .. }));
+    assert!(encode(&HostLine::Set { key: SetKey::Language, value: 3 }).is_err());
+    for text in [r#"{"m":"language","v":4,"rev":1}"#, r#"{"m":"language","v":1}"#, r#"{"m":"language","v":1,"rev":4294967296}"#] {
+        assert!(parse_device_line(text.as_bytes()).is_err());
+        assert!(fw_parse(text.as_bytes()).is_err());
+    }
+}
+
 /// `line` (its LF included) as report bodies of `chunk` payload bytes, zero
 /// padded to 64 like a real HID report.
 fn reports(line: &[u8], chunk: usize) -> Vec<Vec<u8>> {
@@ -143,6 +159,7 @@ fn fw_binding(b: Option<Binding>) -> msg::Binding {
 
 fn fw_set_key(k: SetKey) -> msg::SettingKey {
     match k {
+        SetKey::Language => unreachable!("language uses a dedicated versioned message"),
         SetKey::Speaker => msg::SettingKey::Speaker,
         SetKey::Mic => msg::SettingKey::Mic,
         SetKey::Announce => msg::SettingKey::Announce,
@@ -443,6 +460,10 @@ fn assert_same(mine: &HostLine, fw: &HostMsg) {
                 assert_eq!(fw_face.name.as_str(), laundered(&face.n));
             }
         }
+        (HostLine::Language { value, revision }, HostMsg::Language { value: fw_value, revision: fw_revision }) => {
+            assert_eq!(value, fw_value);
+            assert_eq!(revision, fw_revision);
+        }
         (HostLine::Name { text }, HostMsg::Name { text: fw_text }) => {
             assert_eq!(fw_text.as_str(), laundered(text));
         }
@@ -495,6 +516,7 @@ fn default_faces() -> Vec<FaceEntry> {
 fn corpus() -> Vec<HostLine> {
     let long = "é…😀 ".repeat(60);
     let mut lines = vec![
+        HostLine::Language { value: 3, revision: u32::MAX },
         HostLine::Hello {
             sid: 314159,
             hm: Some("19:42".into()),
@@ -857,10 +879,13 @@ fn device_corpus(ui: &UiState) -> Vec<(Vec<u8>, DeviceLine)> {
             boot: ui.still_default(),
             rx: LINE_MAX as u16,
             agents: Some(255),
+            lang: Some(0),
+            lang_rev: Some(0),
             faces: faces.clone(),
         },
     ));
     cases.push((Event::Faces, DeviceLine::Faces { list: faces }));
+    cases.push((Event::Language, DeviceLine::Language { value: ui.language, revision: ui.language_revision }));
     cases
         .into_iter()
         .map(|(event, line)| (fw_encode(event, ui), line))

@@ -423,6 +423,18 @@ pub fn hint_bar(band: &mut Band, hints: &[Hint]) {
     }
 }
 
+/// Localize interface actions while retaining the physical keycap names.
+pub fn hint_bar_localized(band: &mut Band, hints: &[Hint], language: super::i18n::Language) {
+    // The deck's bars have at most five hints. Eight also bounds stack use
+    // when the clipped bar is drawn once per display band.
+    let mut translated = [Hint { key: "", label: "" }; 8];
+    let count = hints.len().min(translated.len());
+    for (out, hint) in translated.iter_mut().zip(hints) {
+        *out = Hint { key: hint.key, label: language.text(hint.label) };
+    }
+    hint_bar(band, &translated[..count]);
+}
+
 /// Right side of the header.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum HeaderRight<'a> {
@@ -458,9 +470,9 @@ pub fn face_tag<'a>(ui: &UiState, own: HeaderRight<'a>) -> HeaderRight<'a> {
 /// The deck-wide status tag: "demo", "offline", else the clock.
 pub fn status_tag(ui: &UiState) -> HeaderRight<'static> {
     if ui.deck.demo_active() {
-        HeaderRight::Text("demo")
+        HeaderRight::Text(ui.tr("demo"))
     } else if !ui.deck.host_present {
-        HeaderRight::Text("offline")
+        HeaderRight::Text(ui.tr("offline"))
     } else if ui.deck.clock_valid {
         HeaderRight::Clock(ui.deck.clock_minute)
     } else {
@@ -486,22 +498,26 @@ pub fn age_step(now_ms: u32, since_ms: u32) -> u32 {
 /// "now", "2m", "3h", "12d". The 32-bit clock wraps after 49 days, so an age
 /// past 24 days reads as a stamp from the future: "now".
 pub fn age_label(now_ms: u32, since_ms: u32, out: &mut Text<8>) {
+    age_label_localized(now_ms, since_ms, out, super::i18n::Language::English);
+}
+
+pub fn age_label_localized<const N: usize>(now_ms: u32, since_ms: u32, out: &mut Text<N>, language: super::i18n::Language) {
     let minutes = age_step(now_ms, since_ms);
     let (value, unit) = match minutes {
         0 => {
-            out.set("now");
+            out.set(language.text("now"));
             return;
         }
-        1..=59 => (minutes, 'm'),
-        60..=1439 => (minutes / 60, 'h'),
-        _ => (minutes / 1440, 'd'),
+        1..=59 => (minutes, "m"),
+        60..=1439 => (minutes / 60, "h"),
+        _ => (minutes / 1440, "d"),
     };
     out.clear();
     if value >= 10 {
         out.push_char((b'0' + (value / 10 % 10) as u8) as char);
     }
     out.push_char((b'0' + (value % 10) as u8) as char);
-    out.push_char(unit);
+    out.push_str(language.text(unit));
 }
 
 /// Header: tracked caps label on the left, tag on the right. Does not clear.

@@ -54,10 +54,10 @@ impl Shell {
                     let announce = status["available"].as_bool() == Some(true) && this.firmware.status["available"].as_bool() != Some(true);
                     let previous = confirmation_target(&this.firmware.status);
                     this.firmware.status = status;
-                    if announce { this.toast("A firmware update is available in Service → Updates.", window, cx); }
+                    if announce { this.toast(this.tr("A firmware update is available in Service → Updates."), window, cx); }
                     if previous != confirmation_target(&this.firmware.status) { this.firmware.confirm = false; this.firmware.selected_board = None; }
                 }
-                Err(error) => { this.firmware.status = serde_json::json!({"phase":"error","error":failure_text(&error),"message":"Firmware updates are unavailable from this service."}); }
+                Err(error) => { this.firmware.status = serde_json::json!({"phase":"error","error":failure_text(&error),"message":this.tr("Firmware updates are unavailable from this service.")}); }
             }
             this.schedule_update_poll(window, cx);
             cx.notify();
@@ -150,7 +150,7 @@ impl Shell {
         } else if !text(status, "message").is_empty() {
             text(status, "message").to_string()
         } else {
-            "Check for firmware updates with your deck connected by USB.".into()
+            self.tr("Check for firmware updates with your deck connected by USB.").into()
         };
         let mut body =
             v_flex()
@@ -158,23 +158,23 @@ impl Shell {
                 .child(
                     h_flex()
                         .gap_2()
-                        .child(div().flex_1().child("App updates"))
+                        .child(div().flex_1().child(self.tr("App updates")))
                         .child(
-                            Btn::new("app-check-updates", "Check for app updates").on_click(
+                            Btn::new("app-check-updates", self.tr("Check for app updates")).on_click(
                                 cx.listener(|this, _, window, cx| this.check_updates(window, cx)),
                             ),
                         ),
                 )
                 .child(div().text_color(p.muted).child(
-                    "Release builds automatically check for new app versions every six hours.",
+                    self.tr("Release builds automatically check for new app versions every six hours."),
                 ))
                 .child(
                     h_flex()
                         .gap_2()
                         .child(ui::brand_mark(28.))
-                        .child(div().flex_1().child("OpenWalkieTalkie firmware"))
+                        .child(div().flex_1().child(self.tr("OpenWalkieTalkie firmware")))
                         .child(
-                            Btn::new("firmware-check", "Check firmware")
+                            Btn::new("firmware-check", self.tr("Check firmware"))
                                 .disabled(dim || active)
                                 .on_click(cx.listener(|this, _, window, cx| {
                                     this.refresh_firmware(true, window, cx)
@@ -183,25 +183,19 @@ impl Shell {
                 )
                 .child(div().child(label));
         if !serial.is_empty() {
-            body = body.child(div().child(format!(
-                "{} · USB {} · Installed {} · Available {}",
-                if board.is_empty() {
-                    "Select your board below"
+            body = body.child(div().child(self.fmt("{0} · USB {1} · Installed {2} · Available {3}", &[(if board.is_empty() {
+                    self.tr("Select your board below")
                 } else if board == "hw-a" {
                     "Rev A"
                 } else {
                     "Rev B"
-                },
-                serial,
-                if device["recovery"].as_bool() == Some(true) {
-                    "Recovery mode"
+                }), (serial), (if device["recovery"].as_bool() == Some(true) {
+                    self.tr("Recovery mode")
                 } else {
                     text(device, "version")
-                },
-                version
-            )));
+                }), (version)])));
             if text(device, "board").is_empty() {
-                body = body.child(div().child("The device cannot report its board. Choose the revision printed on your board."))
+                body = body.child(div().child(self.tr("The device cannot report its board. Choose the revision printed on your board.")))
                     .child(h_flex().gap_2()
                         .child(Btn::new("firmware-rev-a", "Rev A").disabled(active).on_click(cx.listener(|this, _, _, cx| { this.firmware.selected_board = Some("hw-a".into()); this.firmware.confirm = false; cx.notify(); })))
                         .child(Btn::new("firmware-rev-b", "Rev B").disabled(active).on_click(cx.listener(|this, _, _, cx| { this.firmware.selected_board = Some("hw-b".into()); this.firmware.confirm = false; cx.notify(); }))));
@@ -218,15 +212,13 @@ impl Shell {
                         .child(
                             div()
                                 .font_weight(gpui::FontWeight::BOLD)
-                                .child("Bootloader update — power must stay connected"),
+                                .child(self.tr("Bootloader update — power must stay connected")),
                         )
-                        .child(div().child(BOOTLOADER_WARNING)),
+                        .child(div().child(self.tr(BOOTLOADER_WARNING))),
                 );
             }
             body = body
-                .child(div().child(format!(
-                    "Install firmware {version}? Keep USB connected until your deck restarts."
-                )))
+                .child(div().child(self.fmt("Install firmware {0}? Keep USB connected until your deck restarts.", &[(version)])))
                 .child(
                     h_flex()
                         .gap_2()
@@ -234,9 +226,9 @@ impl Shell {
                             Btn::new(
                                 "firmware-confirm",
                                 if bootloader_warning {
-                                    "I understand — update device"
+                                    self.tr("I understand — update device")
                                 } else {
-                                    "Install firmware"
+                                    self.tr("Install firmware")
                                 },
                             )
                             .solid()
@@ -247,7 +239,7 @@ impl Shell {
                                 }),
                             ),
                         )
-                        .child(Btn::new("firmware-cancel", "Cancel").on_click(cx.listener(
+                        .child(Btn::new("firmware-cancel", self.tr("Cancel")).on_click(cx.listener(
                             |this, _, _, cx| {
                                 this.firmware.confirm = false;
                                 cx.notify();
@@ -259,9 +251,9 @@ impl Shell {
                 Btn::new(
                     "firmware-review",
                     if device["maintenance"] == true || device["recovery"] == true {
-                        "Resume update…"
+                        self.tr("Resume update…")
                     } else {
-                        "Update firmware…"
+                        self.tr("Update firmware…")
                     },
                 )
                 .disabled(!can_install)
@@ -271,7 +263,7 @@ impl Shell {
                 })),
             );
         }
-        ui::section("Updates", body, &p)
+        ui::section(self.tr("Updates"), body, &p)
     }
 
     fn install_firmware(&mut self, window: &mut Window, cx: &mut Context<Self>) {

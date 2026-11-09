@@ -35,6 +35,17 @@ impl Store {
         if !key.accepts(value) {
             return Err(ApiError::invalid("v", "range"));
         }
+        if key == SetKey::Language {
+            let revision = self.snapshot.settings.language_revision.saturating_add(1);
+            self.snapshot.settings.language = value;
+            self.snapshot.settings.language_revision = revision;
+            self.snapshot.device.settings.language = value;
+            self.snapshot.device.settings.language_revision = revision;
+            self.effects.push(Effect::Persist(StatePatch::Language { value, revision }));
+            self.device_op(DeviceOp::Put(Key::Set(key), HostLine::Language { value: value as u8, revision }));
+            self.emit(EventKind::DeviceSet, principal, serde_json::json!({"k": key, "v": value, "rev": revision}));
+            return Ok(self.rev());
+        }
         let changed = self.snapshot.settings.set(key, value);
         let dev_changed = self.snapshot.device.settings.set(key, value);
         if changed || dev_changed {
@@ -49,6 +60,24 @@ impl Store {
             );
         }
         Ok(self.rev())
+    }
+
+    /// Newer deck choices win; equal-revision conflicts resolve to the app.
+    /// The desired line also acknowledges support without a mirrored event.
+    pub(crate) fn receive_language(&mut self, value: u8, revision: u32) {
+        if value > 3 || !self.snapshot.device.language_supported { return; }
+        self.snapshot.device.settings.language = value as u16;
+        self.snapshot.device.settings.language_revision = revision;
+        if revision > self.snapshot.settings.language_revision {
+            self.snapshot.settings.language = value as u16;
+            self.snapshot.settings.language_revision = revision;
+            self.effects.push(Effect::Persist(StatePatch::Language { value: value as u16, revision }));
+            self.emit(EventKind::DeviceSet, Principal::Device, serde_json::json!({"k": SetKey::Language, "v": value, "rev": revision}));
+        }
+        self.device_op(DeviceOp::Put(Key::Set(SetKey::Language), HostLine::Language {
+            value: self.snapshot.settings.language as u8,
+            revision: self.snapshot.settings.language_revision,
+        }));
     }
 
     /// Sent, not adopted: the next device `faces` event is the truth.

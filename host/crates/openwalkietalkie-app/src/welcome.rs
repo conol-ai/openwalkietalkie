@@ -107,11 +107,11 @@ impl Shell {
                 // Even the happy path reports the status and not the call:
                 // `Ok` with a `notFound` status is the M2 case, and it reads
                 // as the failure it is rather than as a success.
-                self.toast(present::login_item_line(status), window, cx);
+                self.toast(present::login_item_line_localized(status, self.language()), window, cx);
             }
             Err(why) => {
                 self.welcome.login = Some(login_item::status());
-                self.toast(format!("macOS refused that: {why}"), window, cx);
+                self.toast(self.fmt("macOS refused that: {0}", &[&(why).to_string()]), window, cx);
             }
         }
         cx.notify();
@@ -132,7 +132,7 @@ impl Shell {
             640.,
             v_flex()
                 .pt(px(8.))
-                .child(div().mb(px(22.)).child(ui::brand_lockup(&p)))
+                .child(div().mb(px(22.)).child(ui::brand_lockup_localized(&p, self.language())))
                 .child(
                     h_flex()
                         .gap(px(12.))
@@ -140,7 +140,7 @@ impl Shell {
                             div()
                                 .ts(12., 16.)
                                 .text_color(p.muted)
-                                .child(format!("Step {}", step.counter())),
+                                .child(self.fmt("Step {0}", &[&(step.counter()).to_string()])),
                         )
                         .child(div().w(px(120.)).child(ui::progress(fraction, &p))),
                 )
@@ -165,12 +165,12 @@ impl Shell {
                                 .flex_1()
                                 .min_w_0()
                                 .gap(px(6.))
-                                .child(div().ts(20., 26.).medium().child(step.title()))
+                                .child(div().ts(20., 26.).medium().child(self.tr(step.title())))
                                 .child(
                                     div()
                                         .ts(13., 19.)
                                         .text_color(p.muted)
-                                        .child(ui::para(step.blurb())),
+                                        .child(ui::para(self.tr(step.blurb()))),
                                 ),
                         ),
                 )
@@ -189,7 +189,7 @@ impl Shell {
             .mt(px(28.))
             .gap(px(8.))
             .children(step.back().map(|back| {
-                Btn::new("welcome-back", "Back")
+                Btn::new("welcome-back", self.tr("Back"))
                     .quiet()
                     .icon(ic::CHEVRON_LEFT)
                     .on_click(cx.listener(move |this, _, window, cx| {
@@ -198,14 +198,14 @@ impl Shell {
             }))
             .child(div().flex_1())
             .children(step.next().map(|next| {
-                Btn::new("welcome-next", "Next")
+                Btn::new("welcome-next", self.tr("Next"))
                     .solid()
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.go_step(next, window, cx);
                     }))
             }))
             .when(step.next().is_none(), |this| {
-                this.child(Btn::new("welcome-done", "Go to the Deck").solid().on_click(
+                this.child(Btn::new("welcome-done", self.tr("Go to the Deck")).solid().on_click(
                     cx.listener(|this, _, window, cx| {
                         this.go(crate::shell::Screen::Deck, window, cx);
                     }),
@@ -223,32 +223,31 @@ impl Shell {
         let p = *palette(cx);
         let connected = self.state.connected();
         let login = self.welcome.login.unwrap_or(LoginItem::Unknown(-1));
-        let launchd = present::launchd_line(
+        let launchd = present::launchd_line_localized(
             self.service
                 .launchd()
-                .unwrap_or(&crate::present::Launchd::Unknown),
-        );
+                .unwrap_or(&crate::present::Launchd::Unknown), self.language());
         let service = Row::new()
             .tile(ui::tile(
                 ic::SERVER,
                 if connected { p.success_muted } else { p.muted },
                 &p,
             ))
-            .title("The service")
+            .title(self.tr("The service"))
             .meta_el(
                 v_flex()
                     .gap(px(2.))
                     .child(if connected {
-                        "Running. The deck, the audio and every agent belong to it."
+                        self.tr("Running. The deck, the audio and every agent belong to it.")
                     } else {
-                        "Not running. Start it, and this window connects on its own."
+                        self.tr("Not running. Start it, and this window connects on its own.")
                     })
                     .child(div().text_color(p.faint).child(launchd)),
             )
             .trailing(if connected {
-                ui::badge("running", Tint::Success, &p).into_any_element()
+                ui::badge(self.tr("running"), Tint::Success, &p).into_any_element()
             } else {
-                Btn::new("welcome-start", "Start")
+                Btn::new("welcome-start", self.tr("Start"))
                     .solid()
                     .small()
                     .on_click(cx.listener(|this, _, window, cx| this.start_service(window, cx)))
@@ -257,8 +256,8 @@ impl Shell {
         let registered = login.registered();
         let login_row = Row::new()
             .tile(ui::tile(ic::MONITOR, p.muted, &p))
-            .title("Open this window at login")
-            .meta(present::login_item_line(login))
+            .title(self.tr("Open this window at login"))
+            .meta(present::login_item_line_localized(login, self.language()))
             // Never disabled by a dropped socket: the login item is this
             // app's own and has nothing to do with the daemon.
             .trailing(Switch::new("welcome-login", registered).on_toggle(
@@ -268,12 +267,12 @@ impl Shell {
                 h_flex()
                     .gap(px(10.))
                     .child(div().flex_1().min_w_0().child(ui::hint(
-                        "This is the window, not the service: the service is a launchd agent \
-                         and runs whether this app is open or not.",
+                        self.tr("This is the window, not the service: the service is a launchd agent \
+                         and runs whether this app is open or not."),
                         &p,
                     )))
                     .child(
-                        Btn::new("welcome-login-items", "Login Items")
+                        Btn::new("welcome-login-items", self.tr("Login Items"))
                             .small()
                             .quiet()
                             .icon(ic::EXTERNAL)
@@ -301,15 +300,15 @@ impl Shell {
                 if ready { p.success_muted } else { p.muted },
                 &p,
             ))
-            .title("The deck")
-            .meta(present::deck_line(device))
+            .title(self.tr("The deck"))
+            .meta(present::deck_line_localized(device, self.language()))
             .trailing(ui::badge(
-                if ready { "connected" } else { "waiting" },
+                if ready { self.tr("connected") } else { self.tr("waiting") },
                 if ready { Tint::Success } else { Tint::Neutral },
                 &p,
             ))
             .trailing(
-                Btn::new("welcome-troubleshoot", "Not seeing it?")
+                Btn::new("welcome-troubleshoot", self.tr("Not seeing it?"))
                     .small()
                     .quiet()
                     .on_click(cx.listener(|this, _, _window, cx| {
@@ -324,10 +323,10 @@ impl Shell {
         rows.extend(self.voice_permission_rows(dim, cx));
         let mut chime = Row::new()
             .tile(ui::tile(ic::VOLUME, p.muted, &p))
-            .title("Play the ready chime")
-            .meta(format!("Route now: {}", present::route_word(voice.route)))
+            .title(self.tr("Play the ready chime"))
+            .meta(self.fmt("Route now: {0}", &[(self.tr(present::route_word(voice.route)))]))
             .trailing(
-                Btn::new("welcome-test", "Play")
+                Btn::new("welcome-test", self.tr("Play"))
                     .solid()
                     .small()
                     .icon(ic::PLAY)
@@ -335,7 +334,7 @@ impl Shell {
                     .on_click(cx.listener(|this, _, window, cx| this.speaker_test(window, cx))),
             );
         if let Some(report) = self.voice_report() {
-            chime = chime.detail(crate::voice::test_result(report, false, &p));
+            chime = chime.detail(crate::voice::test_result_localized(report, false, &p, self.language()));
         }
         rows.push(chime.into_any_element());
         v_flex()
@@ -345,20 +344,19 @@ impl Shell {
             .child(
                 div()
                     .px(px(4.))
-                    .child(ui::hint(present::PERMISSION_CAVEAT, &p)),
+                    .child(ui::hint(self.tr(present::PERMISSION_CAVEAT), &p)),
             )
     }
 
     /// "Not seeing it?": the Bluetooth pane, and what this window can see.
     fn render_troubleshooting(&self, cx: &Context<Self>) -> Div {
         let p = *palette(cx);
-        let lines = present::doctor_lines(
+        let lines = present::doctor_lines_localized(
             self.state.connected(),
             &self.service.info().cloned().unwrap_or_default(),
             self.service.launchd(),
             &self.state.mirror().device,
-            &self.state.mirror().service,
-        );
+            &self.state.mirror().service, self.language());
         v_flex()
             .gap(px(8.))
             .p(px(12.))
@@ -371,7 +369,7 @@ impl Shell {
             )
             .child(
                 h_flex().child(
-                    Btn::new("welcome-bluetooth", "Bluetooth settings")
+                    Btn::new("welcome-bluetooth", self.tr("Bluetooth settings"))
                         .small()
                         .outlined()
                         .icon(ic::EXTERNAL)
@@ -396,7 +394,7 @@ impl Shell {
                 let (mark, color) = ui::target_mark(target, &p);
                 let install = Btn::new(
                     SharedString::from(format!("welcome-install-{target}")),
-                    if installed { "Re-install" } else { "Install" },
+                    if installed { self.tr("Re-install") } else { self.tr("Install") },
                 )
                 .small()
                 .disabled(dim)
@@ -411,10 +409,10 @@ impl Shell {
                                 .gap(px(8.))
                                 .child(present::party_name(target).to_string())
                                 .when(installed, |this| {
-                                    this.child(ui::badge("installed", Tint::Success, &p))
+                                    this.child(ui::badge(self.tr("installed"), Tint::Success, &p))
                                 }),
                         )
-                        .meta(present::detected_line(target, Some(detected)))
+                        .meta(present::detected_line_localized(target, Some(detected), self.language()))
                         .trailing(if installed { install } else { install.solid() })
                         .into_any_element(),
                 )
@@ -424,30 +422,30 @@ impl Shell {
             rows.push(
                 Row::new()
                     .tile(ui::tile(ic::PLUG, p.faint, &p))
-                    .title("No supported CLI found")
+                    .title(self.tr("No supported CLI found"))
                     .meta(
-                        "None of the supported CLIs was found on PATH. The Integrations screen \
-                         shows every party and what it would write.",
+                        self.tr("None of the supported CLIs was found on PATH. The Integrations screen \
+                         shows every party and what it would write."),
                     )
                     .into_any_element(),
             );
         }
-        let transcript = present::transcript_line(self.state.transcript());
+        let transcript = present::transcript_line_localized(self.state.transcript(), self.language());
         let heard = self.state.transcript().is_some();
         v_flex()
             .mt(px(24.))
             .gap(px(10.))
             .child(ui::card(rows, &p))
             .child(div().px(px(4.)).child(ui::hint(
-                "Install shows what it would write before it writes anything \u{2014} the same \
-                 diff the Integrations screen shows.",
+                self.tr("Install shows what it would write before it writes anything \u{2014} the same \
+                 diff the Integrations screen shows."),
                 &p,
             )))
             .child(ui::section(
-                "Say something",
+                self.tr("Say something"),
                 ui::panel(&p)
                     .gap(px(12.))
-                    .child(div().ts(13., 19.).child(ui::para(present::SAY_HELLO)))
+                    .child(div().ts(13., 19.).child(ui::para(self.tr(present::SAY_HELLO))))
                     .child(
                         h_flex()
                             .gap(px(10.))

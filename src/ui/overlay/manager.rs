@@ -42,7 +42,7 @@ fn card_at(ui: &UiState, slot: u8) -> Option<Option<FaceEntry>> {
     Some(ui.face_at(index))
 }
 
-fn caps(name: &str, out: &mut Text<16>) {
+fn caps<const N: usize>(name: &str, out: &mut Text<N>) {
     out.clear();
     for c in name.chars() {
         if !out.push_char(c.to_ascii_uppercase()) {
@@ -129,17 +129,17 @@ fn draw_more(band: &mut Band, ui: &UiState) {
         return;
     }
     let baseline = lane.top() + 20;
-    let mut line = Text::<12>::new();
+    let mut line = Text::<24>::new();
     if before > 0 {
         line.push_str("\u{2039} ");
         line.push_char((b'0' + before % 10) as char);
-        line.push_str(" more");
+        line.push_str(ui.tr(" more"));
         font::draw(band, Font::Small, lane.left(), baseline, line.as_str(), theme::TEXT_FAINT, Some(theme::CANVAS), lane.width() / 2, Align::Left);
     }
     if after > 0 {
         line.clear();
         line.push_char((b'0' + after % 10) as char);
-        line.push_str(" more \u{203a}");
+        line.push_str(ui.tr(" more \u{203a}"));
         font::draw(band, Font::Small, lane.right(), baseline, line.as_str(), theme::TEXT_FAINT, Some(theme::CANVAS), lane.width() / 2, Align::Right);
     }
 }
@@ -174,10 +174,13 @@ fn draw_card(band: &mut Band, ui: &UiState, slot: u8) {
     } else {
         kit::outline(band, rect, THUMB_R, theme::OUTLINE_THUMB, 1);
     }
-    let mut name = Text::<16>::new();
-    caps(face.name.as_str(), &mut name);
+    let mut name = Text::<48>::new();
+    caps(ui.face_name(&face), &mut name);
     let (lx, ly) = layout::THUMB_LABEL;
-    font::draw(band, Font::Keycap, rect.left() + lx, rect.top() + ly, name.as_str(), label, Some(fill), layout::THUMB_SKETCH.width(), Align::Left);
+    // Six Japanese glyphs need 78 px at the smallest face. The label may
+    // use the space up to the card's 8 px right inset, beyond the sketch.
+    let label_width = rect.width() - lx - 8;
+    font::draw(band, Font::Keycap, rect.left() + lx, rect.top() + ly, name.as_str(), label, Some(fill), label_width, Align::Left);
     sketch(band, rect, face.template, bar);
 }
 
@@ -210,9 +213,9 @@ fn manager_hints(ui: &UiState) -> [kit::Hint<'static>; 4] {
     }
 }
 
-fn hint_bar(band: &mut Band, hints: &[kit::Hint]) {
+fn hint_bar(band: &mut Band, hints: &[kit::Hint], language: crate::ui::i18n::Language) {
     let count = hints.iter().take_while(|hint| !hint.key.is_empty() || !hint.label.is_empty()).count();
-    kit::hint_bar(band, hints.get(..count).unwrap_or(&[]));
+    kit::hint_bar_localized(band, hints.get(..count).unwrap_or(&[]), language);
 }
 
 fn macropads(ui: &UiState) -> usize {
@@ -253,7 +256,7 @@ const fn gallery_blurb(template: Template) -> &'static str {
 }
 
 fn draw_gallery(band: &mut Band, ui: &UiState) {
-    font::draw(band, Font::Text, layout::GALLERY_TITLE.left(), layout::GALLERY_TITLE.top() + 28, "Pick a template", theme::TEXT_ROW, Some(theme::CANVAS), layout::GALLERY_TITLE.width(), Align::Left);
+    font::draw(band, Font::Text, layout::GALLERY_TITLE.left(), layout::GALLERY_TITLE.top() + 28, ui.tr("Pick a template"), theme::TEXT_ROW, Some(theme::CANVAS), layout::GALLERY_TITLE.width(), Align::Left);
     for (row, template) in GALLERY.iter().enumerate() {
         let rect = layout::gallery_row(row as u8);
         if !kit::visible(band, rect) {
@@ -272,21 +275,21 @@ fn draw_gallery(band: &mut Band, ui: &UiState) {
         };
         let label = if refused { theme::TEXT_FAINT } else if selected || pressed { theme::TEXT_PRIMARY } else { theme::TEXT_ROW };
         let baseline = rect.top() + layout::GALLERY_BASELINE;
-        font::draw(band, Font::Row, rect.left() + layout::SETTING_LABEL_X, baseline, template.label(), label, Some(fill), 160, Align::Left);
+        font::draw(band, Font::Row, rect.left() + layout::SETTING_LABEL_X, baseline, ui.tr(template.label()), label, Some(fill), 160, Align::Left);
         let blurb = if refused { refused_blurb(*template) } else { gallery_blurb(*template) };
-        font::draw(band, Font::Small, rect.left() + layout::SETTING_VALUE_RIGHT, baseline, blurb, theme::TEXT_LABEL, Some(fill), 220, Align::Right);
+        font::draw(band, Font::Small, rect.left() + layout::SETTING_VALUE_RIGHT, baseline, ui.tr(blurb), theme::TEXT_LABEL, Some(fill), 220, Align::Right);
     }
-    kit::hint_bar(band, &[
+    kit::hint_bar_localized(band, &[
         kit::Hint { key: "SCROLL", label: "pick" },
         kit::Hint { key: "ENTER", label: "add" },
         kit::Hint { key: "CANCEL", label: "back" },
-    ]);
+    ], ui.language);
 }
 
 fn draw_naming(band: &mut Band, ui: &UiState) {
-    let template = ui.manager.naming_template.label();
+    let template = ui.tr(ui.manager.naming_template.label());
     let title = layout::NAMING_TITLE;
-    let used = font::draw(band, Font::Text, title.left(), title.top() + 28, "Name this ", theme::TEXT_ROW, Some(theme::CANVAS), title.width(), Align::Left);
+    let used = font::draw(band, Font::Text, title.left(), title.top() + 28, ui.tr("Name this "), theme::TEXT_ROW, Some(theme::CANVAS), title.width(), Align::Left);
     font::draw(band, Font::Text, title.left() + used, title.top() + 28, template, theme::TEXT_PRIMARY, Some(theme::CANVAS), title.width() - used, Align::Left);
     let field = layout::NAMING_FIELD;
     kit::card(band, field, true, false);
@@ -297,14 +300,14 @@ fn draw_naming(band: &mut Band, ui: &UiState) {
     let help = layout::NAMING_HELP;
     let lh = font::line_height(Font::Body);
     let (hx, _) = help.center();
-    font::draw(band, Font::Body, hx, help.top() + 22, "Hold PTT and say a name", theme::TEXT_SECONDARY, Some(theme::CANVAS), help.width(), Align::Center);
+    font::draw(band, Font::Body, hx, help.top() + 22, ui.tr("Hold PTT and say a name"), theme::TEXT_SECONDARY, Some(theme::CANVAS), help.width(), Align::Center);
     let keep = if typed { "ENTER keeps what you said" } else { "ENTER keeps the template name" };
-    font::draw(band, Font::Body, hx, help.top() + 22 + lh, keep, theme::TEXT_LABEL, Some(theme::CANVAS), help.width(), Align::Center);
-    kit::hint_bar(band, &[
+    font::draw(band, Font::Body, hx, help.top() + 22 + lh, ui.tr(keep), theme::TEXT_LABEL, Some(theme::CANVAS), help.width(), Align::Center);
+    kit::hint_bar_localized(band, &[
         kit::Hint { key: "PTT", label: "say it" },
         kit::Hint { key: "ENTER", label: "accept" },
         kit::Hint { key: "CANCEL", label: "back" },
-    ]);
+    ], ui.language);
 }
 
 fn confirm_face(ui: &UiState) -> Option<FaceEntry> {
@@ -313,16 +316,16 @@ fn confirm_face(ui: &UiState) -> Option<FaceEntry> {
 
 /// "Remove <name>?" and "<Template> face"; a face that is already gone
 /// (a host `faces` push under the dialog) asks about "this face".
-fn confirm_lines(ui: &UiState, question: &mut Text<32>, what: &mut Text<24>) {
-    question.set("Remove ");
+fn confirm_lines(ui: &UiState, question: &mut Text<80>, what: &mut Text<48>) {
+    question.set(ui.tr("Remove "));
     match confirm_face(ui) {
         Some(face) => {
-            question.push_str(face.name.as_str());
-            what.set(face.template.label());
-            what.push_str(" face");
+            question.push_str(ui.face_name(&face));
+            what.set(ui.tr(face.template.label()));
+            what.push_str(ui.tr(" face"));
         }
         None => {
-            question.push_str("this face");
+            question.push_str(ui.tr("this face"));
             what.clear();
         }
     }
@@ -332,10 +335,10 @@ fn confirm_lines(ui: &UiState, question: &mut Text<32>, what: &mut Text<24>) {
 const CONFIRM_LABELS: [&str; 2] = ["Keep", "Remove"];
 
 fn draw_confirm(band: &mut Band, ui: &UiState) {
-    kit::hint_bar(band, &[
+    kit::hint_bar_localized(band, &[
         kit::Hint { key: "ENTER", label: "remove" },
         kit::Hint { key: "CANCEL", label: "keep" },
-    ]);
+    ], ui.language);
     let bx = layout::CONFIRM_BOX;
     if !kit::visible(band, bx) {
         return;
@@ -366,7 +369,7 @@ fn draw_confirm(band: &mut Band, ui: &UiState) {
             (theme::CARD_FILL, theme::TEXT_ROW)
         };
         let (bx, by) = rect.center();
-        font::draw(band, Font::Name, bx, by + font::ascent(Font::Name) * 9 / 20, label, color, Some(fill), rect.width() - 16, Align::Center);
+        font::draw(band, Font::Name, bx, by + font::ascent(Font::Name) * 9 / 20, ui.tr(label), color, Some(fill), rect.width() - 16, Align::Center);
     }
 }
 
@@ -378,7 +381,7 @@ pub fn draw(band: &mut Band, ui: &UiState) {
         Overlay::ConfirmRemove => ("FACES", "remove"),
         _ => ("FACES", "manage"),
     };
-    kit::header(band, label, kit::header_right(ui, kit::HeaderRight::Text(right)));
+    kit::header(band, ui.tr(label), kit::header_right(ui, kit::HeaderRight::Text(ui.tr(right))));
     match ui.global.overlay {
         Overlay::Gallery => draw_gallery(band, ui),
         Overlay::Naming => draw_naming(band, ui),
@@ -390,7 +393,7 @@ pub fn draw(band: &mut Band, ui: &UiState) {
                 draw_confirm(band, ui);
             } else {
                 draw_more(band, ui);
-                hint_bar(band, &manager_hints(ui));
+                hint_bar(band, &manager_hints(ui), ui.language);
             }
         }
     }
@@ -467,6 +470,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn built_in_face_names_fit_thumbnails_in_every_language() {
+        let width = layout::manager_card(0).width() - layout::THUMB_LABEL.0 - 8;
+        for language in crate::ui::i18n::Language::ALL {
+            for template in Template::ALL {
+                let mut name = Text::<48>::new();
+                caps(language.text(template.label()), &mut name);
+                assert!(font::measure(Font::Keycap, name.as_str()) <= width, "{} {:?}: {}", language.code(), template, name.as_str());
+            }
+        }
+    }
+
+    #[test]
     fn the_plus_card_follows_the_strip_and_hides_at_eight_faces() {
         let mut ui = std::boxed::Box::new(UiState::new());
         ui.reset();
@@ -501,7 +516,7 @@ mod tests {
         }
         assert_eq!(macropads(&ui), 3);
         assert!(gallery_refused(&ui, Template::Macropad) && !gallery_refused(&ui, Template::Usage));
-        let mut name = Text::new();
+        let mut name = Text::<16>::new();
         caps("cohdl \u{e9}x", &mut name);
         assert_eq!(name.as_str(), "COHDL \u{e9}X");
         caps("a very long face name indeed", &mut name);

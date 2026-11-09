@@ -33,16 +33,24 @@ pub fn brand_mark(size: f32) -> Div {
 }
 
 pub fn project_credit(p: &Palette) -> Div {
+    project_credit_localized(p, deck_gui_core::i18n::Language::English)
+}
+
+pub fn project_credit_localized(p: &Palette, language: deck_gui_core::i18n::Language) -> Div {
     h_flex().gap(px(6.)).text_color(p.muted).ts(11., 16.)
         .child(icon("icons/cohdl-mark.svg", 17., p.muted))
-        .child("A COHDL project")
+        .child(language.text("A COHDL project"))
 }
 
 pub fn brand_lockup(p: &Palette) -> Div {
+    brand_lockup_localized(p, deck_gui_core::i18n::Language::English)
+}
+
+pub fn brand_lockup_localized(p: &Palette, language: deck_gui_core::i18n::Language) -> Div {
     h_flex().gap(px(12.)).child(brand_mark(44.)).child(
         v_flex().gap(px(4.))
             .child(div().ts(17., 22.).medium().child("OpenWalkieTalkie"))
-            .child(project_credit(p)),
+            .child(project_credit_localized(p, language)),
     )
 }
 
@@ -983,6 +991,16 @@ pub fn code_block(
     copy: bool,
     p: &Palette,
 ) -> Stateful<Div> {
+    code_block_localized(id, text, copy, p, deck_gui_core::i18n::Language::English)
+}
+
+pub fn code_block_localized(
+    id: impl Into<ElementId>,
+    text: impl Into<SharedString>,
+    copy: bool,
+    p: &Palette,
+    language: deck_gui_core::i18n::Language,
+) -> Stateful<Div> {
     let text: SharedString = text.into();
     let copied = text.clone();
     div()
@@ -1004,7 +1022,7 @@ pub fn code_block(
                 div().absolute().top(px(6.)).right(px(6.)).child(
                     Btn::icon_only("copy", ic::COPY)
                         .small()
-                        .tooltip("Copy")
+                        .tooltip(language.text("Copy"))
                         .on_click(move |_, _, cx| {
                             cx.write_to_clipboard(gpui::ClipboardItem::new_string(
                                 copied.to_string(),

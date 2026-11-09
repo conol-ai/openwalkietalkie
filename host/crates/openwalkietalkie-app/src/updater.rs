@@ -42,6 +42,10 @@ impl MacOsUpdater {
         self.started && platform::session_in_progress()
     }
 
+    pub fn check_for_updates_localized(&self, language: deck_gui_core::i18n::Language) -> Result<UpdateCheck, &'static str> {
+        self.check_for_updates().map_err(|error| language.text(error))
+    }
+
     /// Present Sparkle's standard check/download/install/relaunch flow.
     pub fn check_for_updates(&self) -> Result<UpdateCheck, &'static str> {
         if !self.signed_release {

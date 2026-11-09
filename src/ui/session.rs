@@ -283,7 +283,7 @@ pub fn label(ui: &UiState) -> Text<80> {
             text.push_str(menu.effort.as_str());
         }
     } else {
-        text.push_str("Model · Thinking effort");
+        text.push_str(ui.tr("Model · Thinking effort"));
     }
     text
 }
@@ -318,14 +318,14 @@ pub fn draw(band: &mut Band, ui: &UiState) {
         2 => "Thinking effort",
         _ => "Session settings",
     };
-    kit::header(band, title, kit::header_right(ui, kit::HeaderRight::None));
+    kit::header(band, ui.tr(title), kit::header_right(ui, kit::HeaderRight::None));
     if let Some(agent) = ui.deck.agent(ui.agents.agent) {
         text(
             band,
             Font::Hint,
             38,
             87,
-            crate::ui::faces::agents::kind_name(agent).as_str(),
+            crate::ui::faces::agents::kind_name_localized(agent, ui.language).as_str(),
             theme::TEXT_SECONDARY,
             404,
         );
@@ -355,7 +355,7 @@ pub fn draw(band: &mut Band, ui: &UiState) {
                 Font::Hint,
                 46,
                 rect.top() + 25,
-                heading,
+                ui.tr(heading),
                 theme::TEXT_SECONDARY,
                 388,
             );
@@ -365,7 +365,7 @@ pub fn draw(band: &mut Band, ui: &UiState) {
                 46,
                 rect.top() + 58,
                 if value.is_empty() {
-                    "Not reported"
+                    ui.tr("Not reported")
                 } else {
                     value
                 },
@@ -405,7 +405,8 @@ pub fn draw(band: &mut Band, ui: &UiState) {
             let mut page = Text::<40>::new();
             let _ = write!(
                 page,
-                "Page {} / {}   ‹  ›",
+                "{} {} / {}   ‹  ›",
+                ui.tr("Page"),
                 u32::from(v.page) + 1,
                 u32::from(menu.total.saturating_sub(1) / 4) + 1
             );
@@ -421,9 +422,11 @@ pub fn draw(band: &mut Band, ui: &UiState) {
         }
     }
     let note = if !online(ui) {
-        "Reconnect the Mac app to change settings."
+        ui.tr("Reconnect the Mac app to change settings.")
     } else if v.waiting {
-        "Loading session settings..."
+        ui.tr("Loading session settings...")
+    } else if menu.note == "No settings response. Update the Mac app, then reopen this menu." {
+        ui.tr("No settings response. Update the Mac app, then reopen this menu.")
     } else {
         menu.note.as_str()
     };
@@ -452,13 +455,14 @@ pub fn draw(band: &mut Band, ui: &UiState) {
             );
         },
     );
-    kit::hint_bar(
+    kit::hint_bar_localized(
         band,
         if matches!(menu.status, 0 | 2) || v.waiting || !online(ui) {
             &READ_ONLY_HINTS
         } else {
             &HINTS
         },
+        ui.language,
     );
 }
 

@@ -196,6 +196,11 @@ fn toggle(expanded: &mut Vec<String>, target: &str) {
 }
 
 impl Shell {
+    pub(crate) fn localize_integration_inputs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let placeholder = self.tr("A name for the new token…");
+        self.integrations.name.update(cx, |input, cx| input.set_placeholder(placeholder, window, cx));
+    }
+
     /// Ask the daemon for everything this screen draws.
     ///
     /// Three calls, not one, because they are three methods; and only on
@@ -208,6 +213,7 @@ impl Shell {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.localize_integration_inputs(window, cx);
         if self.integrations.busy || (self.integrations.asked && !force) {
             return;
         }
@@ -284,14 +290,14 @@ impl Shell {
                 .ts(12.5, 16.)
                 .text_color(p.muted)
                 .child(ui::spinner(14., p.muted))
-                .child("Reading\u{2026}")
+                .child(self.tr("Reading\u{2026}"))
                 .into_any_element()
         } else {
-            Btn::new("integrations-refresh", "Re-read")
+            Btn::new("integrations-refresh", self.tr("Re-read"))
                 .quiet()
                 .icon(ic::REFRESH)
                 .disabled(dim)
-                .tooltip("Ask the service again; this runs each CLI's version check")
+                .tooltip(self.tr("Ask the service again; this runs each CLI's version check"))
                 .on_click(cx.listener(|this, _, window, cx| {
                     this.refresh_integrations(true, window, cx);
                 }))
@@ -305,13 +311,13 @@ impl Shell {
             v_flex()
                 .when(dim, |this| this.opacity(0.55))
                 .child(ui::page_header(
-                    "Integrations",
+                    self.tr("Integrations"),
                     Some(
                         div()
                             .child(
-                                "The hooks each agent CLI reaches the deck through, and the \
+                                self.tr("The hooks each agent CLI reaches the deck through, and the \
                                  tokens scripts use. Nothing is written without showing you the \
-                                 diff first.",
+                                 diff first."),
                             )
                             .into_any_element(),
                     ),
@@ -326,9 +332,9 @@ impl Shell {
                 .children(self.integrations.error.as_ref().map(|why| {
                     div().mt(px(20.)).child(ui::strip(
                         Severity::Danger,
-                        Some("Could not read the integrations".into()),
+                        Some(self.tr("Could not read the integrations").into()),
                         Some(div().child(why.clone()).into_any_element()),
-                        vec![Btn::new("integrations-retry", "Try again")
+                        vec![Btn::new("integrations-retry", self.tr("Try again"))
                             .small()
                             .disabled(dim)
                             .on_click(cx.listener(|this, _, window, cx| {
@@ -347,10 +353,10 @@ impl Shell {
                         &p,
                     ))
                 }))
-                .child(ui::section("Agent CLIs", ui::card(parties, &p), &p))
+                .child(ui::section(self.tr("Agent CLIs"), ui::card(parties, &p), &p))
                 .child(self.render_claude_channels(dim, cx))
                 .child(ui::section(
-                    "Grants",
+                    self.tr("Grants"),
                     ui::card(vec![self.render_automation(dim, cx)], &p),
                     &p,
                 ))
@@ -368,38 +374,38 @@ impl Shell {
             .filter(|(_, ready)| *ready)
             .count();
         let status = if !self.integrations.asked {
-            "Connection status has not been read yet.".to_string()
+            self.tr("Connection status has not been read yet.").to_string()
         } else if ready > 0 {
-            format!("Channels ready in {ready} session(s). Other sessions use the cross-session inbox.")
+            self.fmt("Channels ready in {0} session(s). Other sessions use the cross-session inbox.", &[&(ready).to_string()])
         } else {
-            "Cross-session inbox active. No session has confirmed a Channels connection yet."
+            self.tr("Cross-session inbox active. No session has confirmed a Channels connection yet.")
                 .to_string()
         };
         let steps = [
-            "1. Use an up-to-date Claude Code, then Install or Repair its integration above.",
-            "2. Run the command below in your project's terminal. To keep an existing conversation, exit it first and add --resume followed by its session ID.",
-            "3. Accept Claude's local development confirmation. Allow the OpenWalkieTalkie MCP server and its acknowledge connection check if prompted.",
-            "4. Press Re-read. Once your session shows Channels ready, select it on the deck and talk.",
+            self.tr("1. Use an up-to-date Claude Code, then Install or Repair its integration above."),
+            self.tr("2. Run the command below in your project's terminal. To keep an existing conversation, exit it first and add --resume followed by its session ID."),
+            self.tr("3. Accept Claude's local development confirmation. Allow the OpenWalkieTalkie MCP server and its acknowledge connection check if prompted."),
+            self.tr("4. Press Re-read. Once your session shows Channels ready, select it on the deck and talk."),
         ];
         let mut body = v_flex().p(px(16.)).gap(px(10.)).ts(12.5, 19.)
             .child(div().text_color(p.muted).child(status))
             .children(steps.into_iter().map(|step| div().child(step)))
             .child(div().mono().ts(11., 17.).child(present::CLAUDE_CHANNEL_COMMAND))
             .child(h_flex().flex_wrap().gap(px(8.))
-                .child(Btn::new("claude-channel-copy", "Copy launch command").small().disabled(dim)
+                .child(Btn::new("claude-channel-copy", self.tr("Copy launch command")).small().disabled(dim)
                     .on_click(cx.listener(|_, _, _, cx| {
                         cx.write_to_clipboard(ClipboardItem::new_string(present::CLAUDE_CHANNEL_COMMAND.to_string()));
                     })))
-                .child(Btn::new("claude-channel-docs", "Channels documentation").small().quiet()
+                .child(Btn::new("claude-channel-docs", self.tr("Channels documentation")).small().quiet()
                     .on_click(cx.listener(|_, _, _, cx| { cx.open_url(present::CLAUDE_CHANNEL_DOCS); })))
-                .child(Btn::new("claude-channel-refresh", "Re-read").small().quiet()
+                .child(Btn::new("claude-channel-refresh", self.tr("Re-read")).small().quiet()
                     .disabled(dim || self.integrations.busy)
                     .on_click(cx.listener(|this, _, window, cx| { this.refresh_integrations(true, window, cx); }))))
             .child(div().text_color(p.muted).child(
-                "Channels are a Claude research preview. The development flag enables this custom plugin for one interactive session; organization policy still applies. If the check stalls, use /mcp to verify the server, then ask Claude to run OpenWalkieTalkie's check_connection tool."
+                self.tr("Channels are a Claude research preview. The development flag enables this custom plugin for one interactive session; organization policy still applies. If the check stalls, use /mcp to verify the server, then ask Claude to run OpenWalkieTalkie's check_connection tool.")
             ))
             .child(div().text_color(p.muted).child(
-                "Until connected, messages use the existing inbox and Claude may label them as coming from another session. To turn Channels off, restart Claude without the flag."
+                self.tr("Until connected, messages use the existing inbox and Claude may label them as coming from another session. To turn Channels off, restart Claude without the flag.")
             ));
         for (session, ready) in &self.integrations.claude_channels {
             body = body.child(
@@ -407,16 +413,16 @@ impl Shell {
                     .title(self.state.mirror().agents.values()
                         .find(|agent| agent.session.key.as_deref() == Some(format!("claude:{session}").as_str()))
                         .map(|agent| agent.name.clone())
-                        .unwrap_or_else(|| format!("Claude · {}", session.chars().take(12).collect::<String>())))
+                        .unwrap_or_else(|| self.fmt("Claude · {0}", &[&(session.chars().take(12).collect::<String>()).to_string()])))
                     .meta(if *ready {
-                        "Channels ready"
+                        self.tr("Channels ready")
                     } else {
-                        "Waiting for connection check · inbox fallback"
+                        self.tr("Waiting for connection check · inbox fallback")
                     }),
             );
         }
         ui::section(
-            "Claude voice messages",
+            self.tr("Claude voice messages"),
             ui::card(vec![body.into_any_element()], &p),
             &p,
         )
@@ -430,9 +436,9 @@ impl Shell {
         let p = *palette(cx);
         div().mt(px(20.)).child(ui::strip(
             Severity::Danger,
-            Some(format!("Port {} is not this service's", hijack.port).into()),
-            Some(div().child(present::hijack_line(hijack)).into_any_element()),
-            vec![Btn::new("hijack-change-port", "Change the port\u{2026}")
+            Some(self.fmt("Port {0} is not this service's", &[&(hijack.port).to_string()]).into()),
+            Some(div().child(present::hijack_line_localized(hijack, self.language())).into_any_element()),
+            vec![Btn::new("hijack-change-port", self.tr("Change the port\u{2026}"))
                 .small()
                 .disabled(dim)
                 .on_click(cx.listener(|this, _, window, cx| {
@@ -461,9 +467,9 @@ impl Shell {
                 .tile(ui::tile(mark, p.faint, &p))
                 .title(present::party_name(target).to_string())
                 .meta(if self.integrations.asked {
-                    "This daemon did not report this target."
+                    self.tr("This daemon did not report this target.")
                 } else {
-                    "Not read yet."
+                    self.tr("Not read yet.")
                 })
                 .into_any_element();
         };
@@ -497,7 +503,7 @@ impl Shell {
                     .gap(px(8.))
                     .child(present::party_name(target).to_string())
                     .child(ui::badge(
-                        present::status_word(&status).to_string(),
+                        present::status_word_localized(&status, self.language()).to_string(),
                         Tint::of(tone),
                         &p,
                     ))
@@ -505,24 +511,24 @@ impl Shell {
                         this.child(ui::badge("hooks_hijack_risk", Tint::Danger, &p))
                     }),
             )
-            .meta(present::detected_line(target, report.detected.as_ref()));
+            .meta(present::detected_line_localized(target, report.detected.as_ref(), self.language()));
         row = if installed {
             row.trailing(
-                Btn::new(id("repair"), "Repair")
+                Btn::new(id("repair"), self.tr("Repair"))
                     .small()
                     .quiet()
                     .disabled(busy)
                     .on_click(plan(Verb::Repair)),
             )
             .trailing(
-                Btn::new(id("update"), "Update")
+                Btn::new(id("update"), self.tr("Update"))
                     .small()
                     .quiet()
                     .disabled(busy)
                     .on_click(plan(Verb::Install)),
             )
             .trailing(
-                Btn::new(id("remove"), "Remove")
+                Btn::new(id("remove"), self.tr("Remove"))
                     .small()
                     .danger_quiet()
                     .disabled(busy)
@@ -530,7 +536,7 @@ impl Shell {
             )
         } else {
             row.trailing(
-                Btn::new(id("install"), "Install")
+                Btn::new(id("install"), self.tr("Install"))
                     .small()
                     .disabled(busy)
                     .on_click(plan(Verb::Install)),
@@ -547,9 +553,9 @@ impl Shell {
             )
             .small()
             .tooltip(if expanded {
-                "Hide the details"
+                self.tr("Hide the details")
             } else {
-                "Show what it writes and keeps"
+                self.tr("Show what it writes and keeps")
             })
             .on_click(cx.listener(move |this, _, _, cx| {
                 toggle(&mut this.integrations.expanded, target);
@@ -562,12 +568,12 @@ impl Shell {
                     div()
                         .ts(12.5, 18.)
                         .text_color(p.text)
-                        .child(present::status_help(&status)),
+                        .child(self.tr(present::status_help(&status))),
                 )
-                .detail(ui::kv("Writes", present::party_what(target), &p))
+                .detail(ui::kv(self.tr("Writes"), self.tr(present::party_what(target)), &p))
                 .detail(ui::kv(
-                    "Last event",
-                    present::last_event_line(report.last_event_at.as_deref()),
+                    self.tr("Last event"),
+                    present::last_event_line_localized(report.last_event_at.as_deref(), self.language()),
                     &p,
                 ));
             if let Some(detail) = &report.detail {
@@ -575,7 +581,7 @@ impl Shell {
             }
             if !report.files.is_empty() {
                 row = row.detail(ui::kv(
-                    "Files",
+                    self.tr("Files"),
                     v_flex().gap(px(2.)).children(
                         report
                             .files
@@ -587,14 +593,14 @@ impl Shell {
             }
             if !report.backups.is_empty() {
                 row = row.detail(ui::kv(
-                    "Backups",
+                    self.tr("Backups"),
                     self.render_backups(target, &report.backups, &p),
                     &p,
                 ));
             }
             if !report.limits.is_empty() {
                 row = row.detail(ui::kv(
-                    "Caveats",
+                    self.tr("Caveats"),
                     v_flex().gap(px(4.)).children(
                         report
                             .limits
@@ -640,7 +646,7 @@ impl Shell {
                             ic::FOLDER,
                         )
                         .small()
-                        .tooltip("Show in Finder")
+                        .tooltip(self.tr("Show in Finder"))
                         .on_click(move |_, _, cx: &mut App| {
                             cx.reveal_path(std::path::Path::new(&reveal));
                         }),
@@ -651,7 +657,7 @@ impl Shell {
                             ic::COPY,
                         )
                         .small()
-                        .tooltip("Copy the path")
+                        .tooltip(self.tr("Copy the path"))
                         .on_click(move |_, _, cx: &mut App| {
                             cx.write_to_clipboard(ClipboardItem::new_string(copy.clone()));
                         }),
@@ -662,8 +668,8 @@ impl Shell {
             .gap(px(2.))
             .children(rows)
             .child(div().mt(px(4.)).child(ui::hint(
-                "Backups are renames, so each one is inode- and mode-exact. This daemon has no \
-             restore method: putting one back is a move on disk, from the folder Finder shows.",
+                self.tr("Backups are renames, so each one is inode- and mode-exact. This daemon has no \
+             restore method: putting one back is a move on disk, from the folder Finder shows."),
                 p,
             )))
     }
@@ -707,8 +713,8 @@ impl Shell {
                             this.integrations.pending = None;
                             this.integrations.plan_open = false;
                             this.toast(
-                                "This daemon answered that call without honouring dry_run; \
-                                 nothing is being previewed.",
+                                this.tr("This daemon answered that call without honouring dry_run; \
+                                 nothing is being previewed."),
                                 window,
                                 cx,
                             );
@@ -728,7 +734,7 @@ impl Shell {
                             this.dialog_opened(window);
                         }
                     }
-                    Err(e) => this.toast(format!("Could not plan that: {e}"), window, cx),
+                    Err(e) => this.toast(this.fmt("Could not plan that: {0}", &[&(e).to_string()]), window, cx),
                 }
             },
         );
@@ -748,7 +754,7 @@ impl Shell {
             return;
         };
         self.integrations.busy = true;
-        let what = present::plan_headline(pending.verb, &pending.target);
+        let what = present::plan_headline_localized(pending.verb, &pending.target, self.language());
         self.ask(
             UiAction::Integrations {
                 verb: pending.verb,
@@ -762,13 +768,13 @@ impl Shell {
                 this.integrations.busy = false;
                 match result {
                     Ok(value) => {
-                        this.toast(receipt_line(&what, &value), window, cx);
+                        this.toast(receipt_line_localized(&what, &value, this.language()), window, cx);
                         // The status the row shows is now stale by
                         // definition: the files it describes were just
                         // rewritten.
                         this.refresh_integrations(true, window, cx);
                     }
-                    Err(e) => this.toast(format!("{what} failed: {e}"), window, cx),
+                    Err(e) => this.toast(this.fmt("{0} failed: {1}", &[&(what).to_string(), &(e).to_string()]), window, cx),
                 }
             },
         );
@@ -824,7 +830,10 @@ impl Shell {
                     .gap(px(10.))
                     .items_start()
                     .child(div().w(px(56.)).flex_none().child(ui::badge(
-                        change.action.clone(),
+                        match change.action.as_str() {
+                            "create" | "update" | "remove" | "modify" => self.tr(&change.action).to_string(),
+                            _ => change.action.clone(),
+                        },
                         tint,
                         &p,
                     )))
@@ -856,13 +865,13 @@ impl Shell {
                             div()
                                 .ts(15., 20.)
                                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .child(present::plan_headline(*verb, target)),
+                                .child(present::plan_headline_localized(*verb, target, self.language())),
                         )
                         .child(
                             div()
                                 .ts(13., 19.)
                                 .text_color(p.muted)
-                                .child("Nothing is written until you press Write these changes."),
+                                .child(self.tr("Nothing is written until you press Write these changes.")),
                         ),
                 )
                 .child(
@@ -880,7 +889,7 @@ impl Shell {
                                 .p(px(12.))
                                 .children(changes)
                                 .when(noop, |this| {
-                                    this.child(ui::hint(present::NOTHING_TO_WRITE, &p))
+                                    this.child(ui::hint(self.tr(present::NOTHING_TO_WRITE), &p))
                                 }),
                         )
                         // The installer's own sentences, verbatim. One of them
@@ -888,7 +897,7 @@ impl Shell {
                         // the daemon's account of what it is about to do would
                         // be writing a second account of it.
                         .when(!plan.notes.is_empty(), |this| {
-                            this.child(heading("What that means")).child(
+                            this.child(heading(self.tr("What that means"))).child(
                                 v_flex().gap(px(6.)).children(
                                     plan.notes
                                         .iter()
@@ -907,7 +916,7 @@ impl Shell {
                                 // The strip draws its own warning glyph.
                                 Some(
                                     div()
-                                        .child(present::ALLOWLIST_NOTE.trim_start_matches('\u{26a0}').trim_start())
+                                        .child(self.tr(present::ALLOWLIST_NOTE).trim_start_matches('\u{26a0}').trim_start())
                                         .into_any_element(),
                                 ),
                                 Vec::new(),
@@ -915,7 +924,7 @@ impl Shell {
                             )))
                         })
                         .when(!plan.conflicts.is_empty(), |this| {
-                            this.child(heading("Left alone, because it is not ours")).child(
+                            this.child(heading(self.tr("Left alone, because it is not ours"))).child(
                                 v_flex().gap(px(4.)).children(
                                     plan.conflicts
                                         .iter()
@@ -924,7 +933,7 @@ impl Shell {
                             )
                         })
                         .when(!plan.next_steps.is_empty(), |this| {
-                            this.child(heading("Then, on your side")).child(
+                            this.child(heading(self.tr("Then, on your side"))).child(
                                 v_flex().gap(px(6.)).children(
                                     plan.next_steps
                                         .iter()
@@ -942,9 +951,9 @@ impl Shell {
                                         v_flex()
                                             .flex_1()
                                             .min_w_0()
-                                            .child(div().ts(13., 17.).medium().child("Record the hook hashes now"))
+                                            .child(div().ts(13., 17.).medium().child(self.tr("Record the hook hashes now")))
                                             .child(ui::hint(
-                                                "Codex's /hooks trust: the hooks run without Codex asking first.",
+                                                self.tr("Codex's /hooks trust: the hooks run without Codex asking first."),
                                                 &p,
                                             )),
                                     )
@@ -971,13 +980,13 @@ impl Shell {
                                     .ts(12., 16.)
                                     .text_color(p.muted)
                                     .child(ui::spinner(13., p.muted))
-                                    .child("Planning\u{2026}"),
+                                    .child(self.tr("Planning\u{2026}")),
                             )
                         })
                         .child(div().flex_1())
-                        .child(Btn::new("plan-cancel", "Cancel").quiet().on_click(on_cancel))
+                        .child(Btn::new("plan-cancel", self.tr("Cancel")).quiet().on_click(on_cancel))
                         .child(
-                            Btn::new("plan-write", "Write these changes")
+                            Btn::new("plan-write", self.tr("Write these changes"))
                                 .solid()
                                 .disabled(noop || busy)
                                 .on_click(on_write),
@@ -997,21 +1006,21 @@ impl Shell {
             .title_el(
                 h_flex()
                     .gap(px(8.))
-                    .child("Ghostty Automation")
-                    .child(ui::badge(status, Tint::of(tone), &p)),
+                    .child(self.tr("Ghostty Automation"))
+                    .child(ui::badge(self.tr(status), Tint::of(tone), &p)),
             )
             .meta_el(
                 v_flex()
                     .gap(px(2.))
-                    .child(help)
+                    .child(self.tr(help))
                     .child(div().text_color(p.faint).child(
-                        "Nothing is installed for this one: it is a macOS grant, so there is no \
-                         file to write and no diff to show.",
+                        self.tr("Nothing is installed for this one: it is a macOS grant, so there is no \
+                         file to write and no diff to show."),
                     )),
             )
             .when(denied, |row| {
                 row.trailing(
-                    Btn::new("automation-settings", "Open Settings")
+                    Btn::new("automation-settings", self.tr("Open Settings"))
                         .small()
                         .outlined()
                         .icon(ic::EXTERNAL)
@@ -1039,15 +1048,15 @@ impl Shell {
             rows.push(
                 Row::new()
                     .tile(ui::tile(ic::KEY, p.faint, &p))
-                    .title("No tokens yet")
+                    .title(self.tr("No tokens yet"))
                     .meta(
-                        "The Claude hooks embed one called \u{201c}hooks\u{201d}; installing \
-                         them creates it.",
+                        self.tr("The Claude hooks embed one called \u{201c}hooks\u{201d}; installing \
+                         them creates it."),
                     )
                     .into_any_element(),
             );
         }
-        ui::section("Tokens", ui::card(rows, &p), &p)
+        ui::section(self.tr("Tokens"), ui::card(rows, &p), &p)
     }
 
     fn render_token(
@@ -1060,8 +1069,8 @@ impl Shell {
         let p = *palette(cx);
         let (rotate, revoke) = (token.name.clone(), token.name.clone());
         let mut meta = vec![
-            frag(present::token_scopes_line(token)),
-            frag(present::token_life_line(token)),
+            frag(present::token_scopes_line_localized(token, self.language())),
+            frag(present::token_life_line_localized(token, self.language())),
         ];
         if let Some(client) = &token.client {
             meta.push(frag(client.clone()));
@@ -1074,12 +1083,12 @@ impl Shell {
                     .gap(px(2.))
                     .child(ui::meta_line(meta, &p))
                     .children(
-                        present::token_embedded_line(token)
+                        present::token_embedded_line_localized(token, self.language())
                             .map(|line| div().text_color(p.warning_muted).child(line)),
                     ),
             )
             .trailing(
-                Btn::new(SharedString::from(format!("token-rotate-{n}")), "Rotate")
+                Btn::new(SharedString::from(format!("token-rotate-{n}")), self.tr("Rotate"))
                     .small()
                     .quiet()
                     .disabled(dim)
@@ -1089,14 +1098,14 @@ impl Shell {
                                 name: rotate.clone(),
                             },
                             &rotate,
-                            "Rotated",
+                            this.tr("Rotated"),
                             window,
                             cx,
                         );
                     })),
             )
             .trailing(
-                Btn::new(SharedString::from(format!("token-revoke-{n}")), "Revoke")
+                Btn::new(SharedString::from(format!("token-revoke-{n}")), self.tr("Revoke"))
                     .small()
                     .danger_quiet()
                     .disabled(dim)
@@ -1106,7 +1115,7 @@ impl Shell {
                                 name: revoke.clone(),
                             },
                             &revoke,
-                            "Revoked",
+                            this.tr("Revoked"),
                             window,
                             cx,
                         );
@@ -1138,7 +1147,7 @@ impl Shell {
                 .collect();
         let ready = !dim && !self.integrations.scopes.is_empty();
         ui::section(
-            "New token",
+            self.tr("New token"),
             ui::panel(&p)
                 .gap(px(12.))
                 .child(
@@ -1151,7 +1160,7 @@ impl Shell {
                                 .child(ui::field(&self.integrations.name, &p).disabled(dim)),
                         )
                         .child(
-                            Btn::new("token-create", "Create")
+                            Btn::new("token-create", self.tr("Create"))
                                 .solid()
                                 .icon(ic::KEY)
                                 .disabled(!ready)
@@ -1162,8 +1171,8 @@ impl Shell {
                 )
                 .child(h_flex().flex_wrap().gap(px(6.)).children(chips))
                 .child(ui::hint(
-                    "A token is the whole of what a script can do (\u{a7}4.2). Give it the least \
-                     that works \u{2014} observe:raw is raw hook payloads and is almost never it.",
+                    self.tr("A token is the whole of what a script can do (\u{a7}4.2). Give it the least \
+                     that works \u{2014} observe:raw is raw hook payloads and is almost never it."),
                     &p,
                 )),
             &p,
@@ -1206,21 +1215,20 @@ impl Shell {
                         .mt(px(8.))
                         .ts(13., 19.)
                         .text_color(p.muted)
-                        .child(present::TOKEN_SHOWN_ONCE),
+                        .child(self.tr(present::TOKEN_SHOWN_ONCE)),
                 )
-                .child(div().mt(px(10.)).child(ui::code_block(
+                .child(div().mt(px(10.)).child(ui::code_block_localized(
                     "token-value",
                     plaintext.clone(),
                     false,
-                    &p,
-                )))
+                    &p, self.language())))
                 .child(
                     h_flex()
                         .mt(px(16.))
                         .gap(px(8.))
                         .justify_end()
                         .child(
-                            Btn::new("token-done", "Done \u{2014} I have copied it")
+                            Btn::new("token-done", self.tr("Done \u{2014} I have copied it"))
                                 .quiet()
                                 .on_click(cx.listener(|this, _, _, cx| {
                                     close(&mut this.integrations.shown);
@@ -1228,7 +1236,7 @@ impl Shell {
                                 })),
                         )
                         .child(
-                            Btn::new("token-copy", "Copy token")
+                            Btn::new("token-copy", self.tr("Copy token"))
                                 .solid()
                                 .icon(ic::COPY)
                                 .on_click(move |_, _, cx: &mut App| {
@@ -1244,7 +1252,7 @@ impl Shell {
     fn create_token(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let name = self.integrations.name.read(cx).value().trim().to_string();
         if name.is_empty() {
-            self.toast("A token needs a name.", window, cx);
+            self.toast(self.tr("A token needs a name."), window, cx);
             return;
         }
         let scopes = self.integrations.scopes.clone();
@@ -1258,7 +1266,7 @@ impl Shell {
                 expires: None,
             },
             &name,
-            "Created",
+            self.tr("Created"),
             window,
             cx,
         );
@@ -1289,12 +1297,12 @@ impl Shell {
                             // there is never more than one in this process.
                             this.integrations.shown = Some(Shown::new(&name, verb, secret));
                             this.dialog_opened(window);
-                            this.toast(present::token_made_toast(verb, &name), window, cx);
+                            this.toast(present::token_made_toast_localized(verb, &name, this.language()), window, cx);
                         }
                         // A revoke answers no value, and its toast must not
                         // promise one.
                         None => this.toast(
-                            format!("{verb} the token \u{201c}{name}\u{201d}."),
+                            this.fmt("{0} the token “{1}”.", &[(verb), &(name).to_string()]),
                             window,
                             cx,
                         ),
@@ -1302,7 +1310,7 @@ impl Shell {
                     this.refresh_tokens(window, cx);
                 }
                 Err(e) => this.toast(
-                    format!("{verb} \u{201c}{name}\u{201d} failed: {e}"),
+                    this.fmt("{0} “{1}” failed: {2}", &[(verb), &(name).to_string(), &(e).to_string()]),
                     window,
                     cx,
                 ),
@@ -1312,7 +1320,12 @@ impl Shell {
 }
 
 /// What an applied run says, from the receipt the daemon answered.
+#[cfg(test)]
 fn receipt_line(what: &str, receipt: &Value) -> String {
+    receipt_line_localized(what, receipt, deck_gui_core::i18n::Language::English)
+}
+
+fn receipt_line_localized(what: &str, receipt: &Value, language: deck_gui_core::i18n::Language) -> String {
     let changed = receipt
         .get("changed")
         .and_then(Value::as_array)
@@ -1321,13 +1334,26 @@ fn receipt_line(what: &str, receipt: &Value) -> String {
         .get("backups")
         .and_then(Value::as_array)
         .map_or(0, Vec::len);
-    format!("{what}: {changed} file(s) written, {backups} backed up.")
+    language.format("{0}: {1} file(s) written, {2} backed up.", &[what, &changed.to_string(), &backups.to_string()])
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn localized_receipts_preserve_the_action_description_and_counts() {
+        let receipt = json!({"changed":["one","two"], "backups":["backup"]});
+        for language in deck_gui_core::i18n::Language::ALL {
+            let line = receipt_line_localized("Repair {2}", &receipt, language);
+            assert!(line.contains("Repair {2}"));
+            assert!(line.contains('2') && line.contains('1'));
+            if language != deck_gui_core::i18n::Language::English {
+                assert!(!line.contains("file(s) written"));
+            }
+        }
+    }
 
     const PLAINTEXT: &str = "owt_live_9f3c1b7a55e04d2c";
 

@@ -883,7 +883,7 @@ pub fn host(event: Event, ui: &mut UiState, now_ms: u32, out: &mut HostMsg) -> b
         | Event::Hello
         | Event::Up
         | Event::Session { .. }
-        | Event::Err { .. } => false,
+        | Event::Err { .. } | Event::Language => false,
     }
 }
 

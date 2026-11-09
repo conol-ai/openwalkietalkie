@@ -6,7 +6,7 @@
 //! `state::macropad`; this file only draws what `View::edit` holds.
 use crate::deck::text::Text;
 use crate::display::Band;
-use crate::ui::faces::macropad::draw_key_in;
+use crate::ui::faces::macropad::draw_key_in_localized;
 use crate::ui::kit::{self, HeaderRight, Hint};
 use crate::ui::overlay::notify::header_inputs;
 use crate::ui::signature::SigBuilder;
@@ -19,12 +19,12 @@ const EMPTY_LABEL_HINT: &str = "hold PTT, say it";
 const NEEDS_LABEL: &str = "say a label first";
 
 /// Label text and value text of a row.
-fn row_texts(edit: &Edit, row: u8) -> (&'static str, Text<24>) {
+fn row_texts(edit: &Edit, row: u8, language: crate::ui::i18n::Language) -> (&'static str, Text<48>) {
     let mut value = Text::new();
     let label = match row {
         ROW_LABEL => {
             value.set(if edit.label.is_empty() {
-                if edit.needs_label { NEEDS_LABEL } else { EMPTY_LABEL_HINT }
+                language.text(if edit.needs_label { NEEDS_LABEL } else { EMPTY_LABEL_HINT })
             } else {
                 edit.label.as_str()
             });
@@ -33,18 +33,18 @@ fn row_texts(edit: &Edit, row: u8) -> (&'static str, Text<24>) {
         ROW_MODS => {
             Keystroke { mods: edit.keys.mods, key: 0 }.shown(&mut value);
             if value.is_empty() {
-                value.set("none");
+                value.set(language.text("none"));
             }
             "Modifiers"
         }
         ROW_KEY => {
-            value.set(if edit.keys.is_some() { edit.keys.shown_key() } else { "none" });
+            value.set(if edit.keys.is_some() { edit.keys.shown_key() } else { language.text("none") });
             "Key"
         }
         ROW_SAVE => "Save",
         _ => "Remove key",
     };
-    (label, value)
+    (language.text(label), value)
 }
 
 fn hints(edit: &Edit) -> [Hint<'static>; 3] {
@@ -63,17 +63,17 @@ fn hints(edit: &Edit) -> [Hint<'static>; 3] {
     }
 }
 
-fn hint_bar(band: &mut Band, hints: &[Hint]) {
+fn hint_bar(band: &mut Band, hints: &[Hint], language: crate::ui::i18n::Language) {
     let count = hints.iter().take_while(|hint| !hint.key.is_empty() || !hint.label.is_empty()).count();
-    kit::hint_bar(band, hints.get(..count).unwrap_or(&[]));
+    kit::hint_bar_localized(band, hints.get(..count).unwrap_or(&[]), language);
 }
 
-fn slot_tag(edit: &Edit, out: &mut Text<8>) {
-    out.set("key ");
+fn slot_tag(edit: &Edit, out: &mut Text<16>, language: crate::ui::i18n::Language) {
+    out.set(language.text("key "));
     out.push_char((b'1' + edit.index.min(8)) as char);
 }
 
-fn draw_row(band: &mut Band, rect: Rect, edit: &Edit, row: u8) {
+fn draw_row(band: &mut Band, rect: Rect, edit: &Edit, row: u8, language: crate::ui::i18n::Language) {
     let focused = row == edit.row;
     let adjusting = focused && edit.adjusting;
     let pressed = edit.pressed == Some(row);
@@ -92,7 +92,7 @@ fn draw_row(band: &mut Band, rect: Rect, edit: &Edit, row: u8) {
         kit::card(band, rect, false, false);
         (theme::CANVAS, theme::TEXT_ROW)
     };
-    let (label, value) = row_texts(edit, row);
+    let (label, value) = row_texts(edit, row, language);
     let baseline = rect.top() + 32;
     let label_color = if row == ROW_REMOVE { theme::RED } else { label_color };
     font::draw(band, Font::Row, rect.left() + layout::SETTING_LABEL_X, baseline, label, label_color, Some(fill), 180, Align::Left);
@@ -108,8 +108,8 @@ pub fn draw(band: &mut Band, ui: &UiState) {
     band.fill(kit::rgb(theme::CANVAS));
     let edit = &ui.macropad.edit;
     let mut tag = Text::new();
-    slot_tag(edit, &mut tag);
-    kit::header(band, "EDIT KEY", kit::header_right(ui, HeaderRight::Text(tag.as_str())));
+    slot_tag(edit, &mut tag, ui.language);
+    kit::header(band, ui.tr("EDIT KEY"), kit::header_right(ui, HeaderRight::Text(tag.as_str())));
     // The key as the face will draw it: present once it has a label.
     let key = crate::deck::msg::MacroKey {
         label: edit.label,
@@ -117,14 +117,14 @@ pub fn draw(band: &mut Band, ui: &UiState) {
         keys: edit.keys,
         present: !edit.label.is_empty(),
     };
-    draw_key_in(band, layout::MACRO_EDIT_PREVIEW, &key, false, false);
+    draw_key_in_localized(band, layout::MACRO_EDIT_PREVIEW, &key, false, false, ui.language);
     for row in 0..edit_rows(edit) {
         let rect = layout::macro_edit_row(row);
         if kit::visible(band, rect) {
-            draw_row(band, rect, edit, row);
+            draw_row(band, rect, edit, row, ui.language);
         }
     }
-    hint_bar(band, &hints(edit));
+    hint_bar(band, &hints(edit), ui.language);
 }
 
 pub fn signature(ui: &UiState, sig: &mut SigBuilder) {
@@ -139,7 +139,7 @@ pub fn signature(ui: &UiState, sig: &mut SigBuilder) {
     });
     for row in 0..edit_rows(edit) {
         sig.region_with(layout::macro_edit_row(row), |h| {
-            let (label, value) = row_texts(edit, row);
+            let (label, value) = row_texts(edit, row, ui.language);
             h.str(label)
                 .text(&value)
                 .bool(row == edit.row)
@@ -181,7 +181,7 @@ mod tests {
         let mut edit = Edit::new();
         edit.index = 8;
         let mut tag = Text::new();
-        slot_tag(&edit, &mut tag);
+        slot_tag(&edit, &mut tag, crate::ui::i18n::Language::English);
         assert_eq!(tag.as_str(), "key 9");
         assert_eq!(kit::hints_that_fit(&hints(&edit)).0, 3);
         edit.adjusting = true;

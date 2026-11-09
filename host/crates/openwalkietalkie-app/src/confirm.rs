@@ -92,21 +92,24 @@ pub fn allow_offered(request: &ConfirmRequest, card: Option<&Card>, trusted: boo
 
 /// The sheet's one-line summary: who asked, and for what.
 pub fn summary(request: &ConfirmRequest, card: Option<&Card>) -> String {
+    summary_localized(request, card, deck_gui_core::i18n::Language::English)
+}
+
+pub fn summary_localized(request: &ConfirmRequest, card: Option<&Card>, language: deck_gui_core::i18n::Language) -> String {
     let who = request
         .principal
         .as_ref()
         .map(ToString::to_string)
-        .unwrap_or_else(|| "an untrusted client".to_string());
+        .unwrap_or_else(|| language.text("an untrusted client").to_string());
     if let Some(text) = &request.order {
-        return format!("{who} asked to type \u{201c}{text}\u{201d} into the terminal.");
+        return language.format("{0} asked to type “{1}” into the terminal.", &[&who, text]);
     }
     match card {
-        Some(card) => format!(
-            "{who} asked to allow {} \u{b7} {}.",
-            present::card_ref(card),
-            present::origin_line(&card.origin)
+        Some(card) => language.format(
+            "{0} asked to allow {1} · {2}.",
+            &[&who, &present::card_ref(card), &present::origin_line_localized(&card.origin, language)]
         ),
-        None => format!("{who} asked to allow an operation on this agent."),
+        None => language.format("{0} asked to allow an operation on this agent.", &[&who]),
     }
 }
 
@@ -155,6 +158,20 @@ mod tests {
             card: Some(CardId(17)),
             order: None,
             principal: Some(Principal::Adapter(AdapterKind::Mcp)),
+        }
+    }
+
+    #[test]
+    fn localized_permission_summary_keeps_the_requested_terminal_text_verbatim() {
+        let mut request = request();
+        let order = "echo '{0}' — Ready";
+        request.order = Some(order.into());
+        for language in deck_gui_core::i18n::Language::ALL {
+            let line = summary_localized(&request, None, language);
+            assert!(line.contains(order));
+            if language != deck_gui_core::i18n::Language::English {
+                assert!(!line.contains("asked to type"));
+            }
         }
     }
 

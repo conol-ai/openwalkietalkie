@@ -264,8 +264,9 @@ impl Store {
             usage: cfg.persisted.usage.clone(),
             ..Snapshot::default()
         };
+        snapshot.settings.normalize_language();
         snapshot.device.sid = cfg.sid;
-        snapshot.device.settings = cfg.persisted.settings;
+        snapshot.device.settings = snapshot.settings;
         snapshot.device.pace_ms = 8;
         snapshot.voice.stt.locale.clone_from(&cfg.locale);
         snapshot.service.version = cfg.version.clone();
@@ -750,6 +751,7 @@ impl Store {
             self.emit(EventKind::DeviceLink, Principal::Device, data);
         }
         if matches!(link, LinkEvent::Down) {
+            self.snapshot.device.language_supported = false;
             self.snapshot.device.fw = None;
             self.snapshot.device.face = None;
             // §6.3 Absent: answers in flight cannot be confirmed, the utterance is lost.
@@ -766,6 +768,8 @@ impl Store {
                 faces,
                 rx,
                 agents,
+                lang,
+                lang_rev,
                 ..
             } => {
                 self.set_capacity(agents.unwrap_or(Slot::DEFAULT).max(1));
@@ -773,6 +777,10 @@ impl Store {
                 dev.fw = Some(fw);
                 dev.boot = Some(boot);
                 dev.faces = faces.clone();
+                dev.language_supported = lang.zip(lang_rev).is_some();
+                if let Some((value, revision)) = lang.zip(lang_rev) {
+                    self.receive_language(value, revision);
+                }
                 if rx != crate::LINE_MAX_U16 {
                     self.emit(
                         EventKind::Error,
@@ -797,6 +805,7 @@ impl Store {
                     serde_json::json!({"boot": boot, "fw": self.snapshot.device.fw}),
                 );
             }
+            DeviceLine::Language { value, revision } => self.receive_language(value, revision),
             DeviceLine::Channel { slot, seq } => {
                 let slot = Slot(slot);
                 // The ack is about ordering, not the PC's success: immediate (P:118).
@@ -1564,7 +1573,7 @@ mod tests {
             fw: "0.1.0".into(),
             sid: 0,
             boot,
-            rx: 1024, agents: None,
+            rx: 1024, agents: None, lang: None, lang_rev: None,
             faces: faces.clone(),
         };
         let (events, effects) = s.apply(Command::Device(hello(true)), Instant::now());
@@ -1589,7 +1598,7 @@ mod tests {
                 fw: "x".into(),
                 sid: 0,
                 boot: true,
-                rx: 512, agents: None,
+                rx: 512, agents: None, lang: None, lang_rev: None,
                 faces: vec![],
             }),
             Instant::now(),

@@ -20,7 +20,7 @@ pub fn draw(band: &mut Band, ui: &UiState) {
     let Some(percent) = ui.power_hold() else {
         return;
     };
-    kit::hint_bar(band, &HINTS);
+    kit::hint_bar_localized(band, &HINTS, ui.language);
     let bx = layout::CONFIRM_BOX;
     if !kit::visible(band, bx) {
         return;
@@ -30,8 +30,8 @@ pub fn draw(band: &mut Band, ui: &UiState) {
     let text = layout::CONFIRM_TEXT;
     let (cx, _) = text.center();
     let lh = font::line_height(Font::Title);
-    font::draw(band, Font::Title, cx, text.top() + 32, TITLE, theme::TEXT_PRIMARY, Some(theme::CARD_FILL), text.width(), Align::Center);
-    font::draw(band, Font::Row, cx, text.top() + 32 + lh, HELP, theme::TEXT_SECONDARY, Some(theme::CARD_FILL), text.width(), Align::Center);
+    font::draw(band, Font::Title, cx, text.top() + 32, ui.tr(TITLE), theme::TEXT_PRIMARY, Some(theme::CARD_FILL), text.width(), Align::Center);
+    font::draw(band, Font::Row, cx, text.top() + 32 + lh, ui.tr(HELP), theme::TEXT_SECONDARY, Some(theme::CARD_FILL), text.width(), Align::Center);
     kit::bar(band, BAR, percent, theme::AMBER);
 }
 

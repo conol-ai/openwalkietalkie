@@ -35,6 +35,8 @@ mod tca8418;
 mod touch_state;
 #[path = "../../../src/link/wire.rs"]
 mod wire;
+#[path = "../../../src/link/bond_record.rs"]
+mod bond_record;
 #[path = "../../../src/input/xl9555.rs"]
 mod xl9555;
 
@@ -50,6 +52,8 @@ use embedded_hal::i2c::{ErrorKind, ErrorType, I2c, Operation};
 use ui::{damage, scene, signature::Signature, splash, UiState, Update};
 
 extern "C" {
+    fn owt_ui_prefs_read(bytes: *mut u8, length: usize) -> bool;
+    fn owt_ui_prefs_write(bytes: *const u8, length: usize) -> bool;
     fn owt_i2c_transfer(
         address: u8,
         tx: *const u8,
@@ -104,6 +108,7 @@ impl I2c for Bus {
 
 struct Core {
     ui: UiState,
+    prefs: bond_record::Prefs,
     rssi: ui::bluetooth::RssiFilter,
     contact: touch_state::Contact,
     rx: wire::Reassembler,
@@ -133,6 +138,7 @@ impl Core {
     const fn new() -> Self {
         Self {
             ui: UiState::new(),
+            prefs: bond_record::Prefs { tutorial_done: false, language: 0, language_revision: 0 },
             rssi: ui::bluetooth::RssiFilter::new(),
             contact: touch_state::Contact::new(),
             rx: wire::Reassembler::new(),
@@ -220,6 +226,9 @@ pub unsafe extern "C" fn owt_core_init() -> u32 {
     core.ui.deck.agents.attach(core::ptr::addr_of_mut!(CORE_AGENTS).cast(), deck::model::DEFAULT_SESSIONS);
     (*core::ptr::addr_of_mut!(FRAME)).deck.agents.attach(core::ptr::addr_of_mut!(FRAME_AGENTS).cast(), deck::model::DEFAULT_SESSIONS);
     core.ui.reset();
+    // The Bluetooth SDK's NVDS is not ready until OWT_BLE_READY; its queued
+    // callback loads the persisted language before normal HID traffic.
+    core.prefs = bond_record::Prefs::default();
     if charger::initialize(&mut Bus).is_ok() {
         core.devices |= 1;
     }
@@ -244,6 +253,26 @@ pub unsafe extern "C" fn owt_core_init() -> u32 {
         }
     }
     core.devices
+}
+
+/// NVDS belongs to the Bluetooth SDK and is initialized by BLE_POWER_ON_IND,
+/// after core initialization. This queued callback still runs on the app thread.
+#[no_mangle]
+pub unsafe extern "C" fn owt_core_load_ui_prefs() {
+    let core = &mut *core::ptr::addr_of_mut!(CORE);
+    let mut bytes = [0u8; bond_record::SIZE];
+    core.prefs = if owt_ui_prefs_read(bytes.as_mut_ptr(), bytes.len()) {
+        bond_record::Prefs::decode(&bytes).unwrap_or_default()
+    } else {
+        bond_record::Prefs::default()
+    };
+    let language = ui::i18n::Language::from_id(core.prefs.language);
+    core.ui.language_revision = core.prefs.language_revision;
+    if core.ui.language != language {
+        core.ui.language = language;
+        core.ui.invalidate();
+        core.redraw = true;
+    }
 }
 
 fn send_json(json: &[u8]) {
@@ -325,6 +354,20 @@ fn deck_online(core: &Core) -> bool {
 /// host), and an overflow ends the link after `up` so no release can stay
 /// held on the host.
 fn emit(core: &mut Core, update: &mut Update) {
+    if update.tutorial_done || update.language.is_some() {
+        let mut prefs = core.prefs;
+        prefs.tutorial_done |= update.tutorial_done;
+        if let Some(language) = update.language {
+            prefs.language = language as u8;
+            prefs.language_revision = core.ui.language_revision;
+        }
+        if prefs != core.prefs {
+            let bytes = prefs.encode();
+            if unsafe { owt_ui_prefs_write(bytes.as_ptr(), bytes.len()) } {
+                core.prefs = prefs;
+            }
+        }
+    }
     if update.wake {
         let before = core.power.screen();
         core.power.notify(core.now);

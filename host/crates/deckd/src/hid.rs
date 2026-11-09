@@ -447,6 +447,7 @@ impl Link {
 
     /// The device was opened.
     pub fn link_up(&mut self, now: Instant) {
+        self.view.set_language_supported(false);
         self.linked = true;
         self.drop_handle = false;
         self.assembler.clear();
@@ -466,6 +467,7 @@ impl Link {
 
     /// Bookkeeping shared by every way the link ends.
     fn dropped(&mut self, now: Instant) {
+        self.view.set_language_supported(false);
         self.linked = false;
         self.stats.link_drops += 1;
         self.voice_in_flight = false;
@@ -588,10 +590,12 @@ impl Link {
         self.out.push(FromHid::Line(line.clone()));
         match &line {
             DeviceLine::Hello {
-                sid, boot, faces, ..
+                sid, boot, faces, lang, lang_rev, ..
             } => {
                 self.stats.hello_replies += 1;
                 self.view.set_faces(faces.clone());
+                self.view.set_language_supported(lang.zip(*lang_rev).is_some());
+                if lang.zip(*lang_rev).is_some() { self.outbox.language_hello(&self.view, now); }
                 if !boot {
                     // boot:0 → the device's strip is the truth (P:95-99).
                     let faces_line = HostLine::Faces {
@@ -2222,4 +2226,28 @@ pub(crate) mod tests {
         assert!(matches!(msg, FromHid::Metric(m) if m.session == SessionState::Absent));
         handle.join();
     }
+    #[test]
+    fn language_requires_complete_capability_and_syncs_on_boot_zero_and_reconnect() {
+        let mut link = Link::new(&cfg());
+        let mut now = Instant::now();
+        link.apply(DeviceOp::Put(Key::Set(deck_proto::SetKey::Language), HostLine::Language { value: 3, revision: 2 }), now);
+        link.link_up(now);
+        let opening = written(&mut link, &mut now);
+        assert!(opening.iter().all(|line| !line.contains("language")));
+        feed(&mut link, HELLO_BOOT, now);
+        assert!(written(&mut link, &mut now).iter().all(|line| !line.contains("language")), "legacy firmware rejects this new message");
+        feed(&mut link, r#"{"m":"hello","v":1,"fw":"sync","sid":314159,"boot":0,"rx":1024,"lang":1,"lang_rev":1,"faces":[]}"#, now);
+        assert!(written(&mut link, &mut now).iter().any(|line| line == r#"{"m":"language","v":3,"rev":2}"#));
+        // A same-value hello still acknowledges the protocol after a timeout,
+        // when the device may have cleared its host-support flag.
+        feed(&mut link, r#"{"m":"hello","v":1,"fw":"sync","sid":314159,"boot":0,"rx":1024,"lang":3,"lang_rev":2,"faces":[]}"#, now);
+        assert!(written(&mut link, &mut now).iter().any(|line| line.contains("language")));
+        link.link_down(now, "test");
+        assert!(!link.view().set_allowed(deck_proto::SetKey::Language));
+        link.link_up(now);
+        written(&mut link, &mut now);
+        feed(&mut link, HELLO_BOOT, now);
+        assert!(written(&mut link, &mut now).iter().all(|line| !line.contains("language")), "a previous capable deck must not authorize a legacy replacement");
+    }
+
 }

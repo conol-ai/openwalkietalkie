@@ -141,10 +141,11 @@ lower; the PTT pill is wider). `tools/generate-ui-fonts.py --check`
 regenerates into a temporary directory and diffs; the atlases depend on the
 local FreeType build, so a check on another machine may differ.
 
-Chinese text falls back to Noto Sans CJK SC: 28,491 glyphs covering simplified
-and traditional Chinese, Extension A, Chinese punctuation and fullwidth
-forms. A shared 26 px, 2-bit atlas is filtered to each text size, keeping the
-firmware inside the board's application partition. The host uses the same
+Chinese and Japanese text fall back to Noto Sans CJK SC: 28,759 glyphs covering
+simplified and traditional Chinese, Japanese kana and kanji, Extension A,
+CJK punctuation, and fullwidth and halfwidth forms. A shared 26 px, 2-bit atlas
+is filtered to each text size, keeping the firmware inside the board's
+application partition. The host uses the same
 metrics when wrapping messages. Regenerate it with
 `python3 tools/generate-cjk-font.py` (or verify with `--check`); source,
 license and coverage details are in `assets/fonts/gen/README.md`.
@@ -220,6 +221,21 @@ the retained readings are gray and marked **STALE**; a lost host is **OFFLINE**.
 The Mac app has no additional page. System follows Usage in a fresh default strip;
 for a saved layout, double-tap Shift → **+** → **System** to add it. Matching
 firmware and `deckd` are required; telemetry is not sent to older decks.
+
+### Interface language
+
+Choose **Service → Language** in the Mac app, or **Settings → Display →
+Language** on the deck, to switch between **English**, **简体中文** (Simplified
+Chinese), **繁體中文** (Traditional Chinese), and **日本語** (Japanese). On the
+deck, press Enter on Language, turn the wheel, then press Enter to finish.
+The interface changes immediately on both sides and remembers the choice
+across restarts. English is the default.
+
+Menus, controls, notifications, and the tutorial follow this choice. Agent
+messages, custom names, and speech recognition keep their own language.
+Choices made while the deck is disconnected sync when it reconnects. The
+newer saved version wins; the app wins a tie. Language sync needs matching
+updated firmware; the app keeps its own language choice with older decks.
 
 ### Timer and Pomodoro
 

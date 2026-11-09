@@ -393,7 +393,7 @@ void owt_bluetooth_message(const struct owt_message *message)
     if (message->type != OWT_BLE_READY && message->type != OWT_BT_EVENT &&
         message->epoch != connection_epoch) return;
     switch (message->type) {
-    case OWT_BLE_READY: start_hid(); break;
+    case OWT_BLE_READY: owt_core_load_ui_prefs(); start_hid(); break;
     case OWT_CONNECTED:
         cccd[0] = battery_cccd[0] = 0; subscription_key[0] = 0; persisted_cccd = 0xff;
         rssi_pending = false;

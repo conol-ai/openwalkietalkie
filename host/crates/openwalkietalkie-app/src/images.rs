@@ -189,11 +189,11 @@ impl Shell {
                 count += 1;
                 let id = image.id.clone();
                 let aid = agent.id.clone();
-                let who = match message.message.role {
+                let who = self.tr(match message.message.role {
                     ChatRole::User => "You",
                     ChatRole::Assistant => "Assistant",
                     ChatRole::Tool => "Tool",
-                };
+                });
                 let label = format!(
                     "{who} · {} · {} × {}",
                     image.label, image.width, image.height
@@ -228,13 +228,13 @@ impl Shell {
                     row = row.child(
                         Btn::new(
                             SharedString::from(format!("load-{id}")),
-                            if failed {
+                            self.tr(if failed {
                                 "Preview unavailable · retry"
                             } else if loading {
                                 "Loading image…"
                             } else {
                                 "Load image"
-                            },
+                            }),
                         )
                         .disabled(loading)
                         .on_click(cx.listener(
@@ -250,7 +250,7 @@ impl Shell {
         if count == 0 {
             div()
         } else {
-            ui::section("Images", body, &p)
+            ui::section(self.tr("Images"), body, &p)
         }
     }
     pub(crate) fn expanded_image(&self, cx: &Context<Self>) -> Option<AnyElement> {
@@ -264,7 +264,7 @@ impl Shell {
                 .gap(px(12.))
                 .p(px(24.))
                 .child(
-                    Btn::new("close-image", "Back to chat").on_click(cx.listener(
+                    Btn::new("close-image", self.tr("Back to chat")).on_click(cx.listener(
                         |this, _, _, cx| {
                             this.deck.images.expanded = None;
                             cx.notify();

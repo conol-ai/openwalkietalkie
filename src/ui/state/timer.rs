@@ -18,6 +18,12 @@
 //!   it is restarted or reset.
 //! - Pomodoro alternates 25 min of focus and 5 min breaks, with a 15 min
 //!   break after four focus sessions. Each completed phase waits for Next.
+//! - A finished timer or Pomodoro phase also rings through the deck's speaker
+//!   (`Alarm`): four quick beeps a second for the timer, a rising chime when
+//!   focus ends and a falling one when a break ends, at the speaker volume.
+//!   It rings for up to `RING_MS`, and stops on any touch of the deck (a
+//!   press, a detent or a tap, also the one that wakes the screen) and on
+//!   Restart, Reset or Next.
 //! - Idle-home leaves a running clock on this face alone (`keeps_face`).
 use super::{global, notify, Target, TouchAct, UiState, Update};
 use crate::control::{Button, Control, Edge, Wheel};
@@ -34,6 +40,17 @@ pub const DEFAULT_S: u32 = 5 * 60;
 pub const PRESETS_S: [u32; layout::TIMER_PRESETS as usize] = [60, 3 * 60, 5 * 60, 10 * 60, 25 * 60];
 /// Laps the stopwatch remembers (and shows), newest first.
 pub const LAPS: usize = 3;
+/// How long an alarm rings when nobody touches the deck.
+pub const RING_MS: u32 = 30_000;
+
+/// A finished clock ringing through the speaker.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Alarm {
+    pub sound: super::arcade::sound::Effect,
+    pub since_ms: u32,
+    /// Counts alarms, so the synthesizer starts each one afresh.
+    pub serial: u16,
+}
 
 /// Touch target ids, = `View::pressed`.
 pub const TAB_ID: u16 = 0; // + mode index
@@ -207,6 +224,9 @@ pub struct View {
     /// The timer ran out and nobody has restarted or reset it.
     pub done: bool,
     pub pomodoro: Pomodoro,
+    /// A finished clock ringing, until a touch, an action or `RING_MS`.
+    pub alarm: Option<Alarm>,
+    alarms: u16,
     /// What a latched touch shows pressed, = the latched `Target::id`.
     pub pressed: Option<u8>,
     /// `shown_step` when the face was last marked dirty.
@@ -225,9 +245,16 @@ impl View {
             countdown: Run::new(),
             done: false,
             pomodoro: Pomodoro::new(),
+            alarm: None,
+            alarms: 0,
             pressed: None,
             shown: 0,
         }
+    }
+
+    fn ring(&mut self, sound: super::arcade::sound::Effect, now_ms: u32) {
+        self.alarms = self.alarms.wrapping_add(1);
+        self.alarm = Some(Alarm { sound, since_ms: now_ms, serial: self.alarms });
     }
 
     pub fn stopwatch_ms(&self, now_ms: u32) -> u32 {
@@ -285,11 +312,11 @@ impl View {
         }
     }
 
-    /// The displayed value of the current clock, in its own unit: tenths for
-    /// the stopwatch, whole seconds (rounded up) for the timer.
+    /// The displayed value of the current clock, in its own unit: hundredths
+    /// for the stopwatch, whole seconds (rounded up) for the timer.
     pub fn shown_step(&self, now_ms: u32) -> u32 {
         match self.mode {
-            Mode::Stopwatch => self.stopwatch_ms(now_ms) / 100,
+            Mode::Stopwatch => self.stopwatch_ms(now_ms) / 10,
             Mode::Countdown => self.remaining_ms(now_ms).div_ceil(1000),
             Mode::Pomodoro => self.pomodoro.remaining_ms(now_ms).div_ceil(1000),
         }
@@ -333,6 +360,9 @@ fn act(ui: &mut UiState, action: Action, at_ms: u32, out: &mut Update) {
         return;
     }
     let view = &mut ui.timer;
+    if matches!(action, Action::Restart | Action::Reset | Action::Next) && view.mode != Mode::Stopwatch {
+        view.alarm = None;
+    }
     match (view.mode, action) {
         (Mode::Stopwatch, Action::Start | Action::Resume) => view.stopwatch.start(at_ms),
         (Mode::Stopwatch, Action::Pause) => view.stopwatch.pause(at_ms),
@@ -497,6 +527,7 @@ pub(super) fn on_tick(ui: &mut UiState, now_ms: u32, out: &mut Update) {
     if view.countdown.running() && view.countdown.elapsed(now_ms) >= view.length_ms {
         view.countdown = Run { banked_ms: view.length_ms, since_ms: None };
         view.done = true;
+        view.ring(super::arcade::sound::Effect::Alarm, now_ms);
         out.dirty = true;
         let face = (0..ui.global.strip_len)
             .filter_map(|index| ui.face_at(index))
@@ -505,6 +536,9 @@ pub(super) fn on_tick(ui: &mut UiState, now_ms: u32, out: &mut Update) {
         notify::raise_timer(ui, face, now_ms, out);
     }
     finish_pomodoro(ui, now_ms, out);
+    if ui.timer.alarm.is_some_and(|alarm| now_ms.wrapping_sub(alarm.since_ms) >= RING_MS) {
+        ui.timer.alarm = None;
+    }
     let step = ui.timer.shown_step(now_ms);
     if step != ui.timer.shown {
         ui.timer.shown = step;
@@ -522,6 +556,12 @@ fn finish_pomodoro(ui: &mut UiState, now_ms: u32, out: &mut Update) -> bool {
         if focus {
             pomodoro.completed = (pomodoro.completed + 1).min(4);
         }
+        let sound = if focus {
+            super::arcade::sound::Effect::FocusDone
+        } else {
+            super::arcade::sound::Effect::BreakDone
+        };
+        ui.timer.ring(sound, now_ms);
         out.dirty = true;
         let face = (0..ui.global.strip_len)
             .filter_map(|index| ui.face_at(index))
@@ -531,6 +571,24 @@ fn finish_pomodoro(ui: &mut UiState, now_ms: u32, out: &mut Update) -> bool {
         return true;
     }
     false
+}
+
+/// Any touch of the deck silences a ringing alarm: a press, a detent or a
+/// tap, including the one that only wakes the screen (the caller asks
+/// before deciding whether the control is delivered). `true` = it rang.
+pub fn hush(ui: &mut UiState, control: Control) -> bool {
+    let touched = match control {
+        Control::Button(_, Edge::Press) | Control::Wheel(_) => true,
+        Control::Touch(touch) => touch.phase == crate::control::TouchPhase::Down,
+        _ => false,
+    };
+    touched && ui.timer.alarm.take().is_some()
+}
+
+/// The speaker command of a ringing alarm, at the speaker volume.
+pub fn alarm_command(ui: &UiState) -> Option<u32> {
+    let alarm = ui.timer.alarm?;
+    Some(super::arcade::sound::command(0, 1, alarm.sound, alarm.serial, ui.deck.settings.speaker))
 }
 
 /// A running clock on the panel repaints at the animation rate.
@@ -565,6 +623,79 @@ mod tests {
         let mut out = Update::new();
         ui.tick(now_ms, 0, true, &mut out);
         out
+    }
+
+    fn sound(ui: &UiState) -> Option<crate::ui::state::arcade::sound::Effect> {
+        ui.timer.alarm.map(|alarm| alarm.sound)
+    }
+
+    #[test]
+    fn a_finished_timer_rings_until_touched_or_for_thirty_seconds() {
+        use crate::ui::state::arcade::sound::{self as synth, Effect};
+        let mut ui = on_timer();
+        press(&mut ui, Button::Right, 0);
+        set_length(&mut ui, MIN_S, &mut Update::new());
+        press(&mut ui, Button::Enter, 1000);
+        assert_eq!((sound(&ui), crate::ui::state::sound_command(&ui)), (None, 0), "quiet while it runs");
+        tick(&mut ui, 11_000);
+        assert_eq!(sound(&ui), Some(Effect::Alarm));
+        let word = crate::ui::state::sound_command(&ui);
+        assert!(synth::enabled(word), "at the speaker volume: {word:#x}");
+        assert_eq!((word >> 24) & 15, u32::from(ui.deck.settings.speaker));
+        // Nobody comes: it stops by itself.
+        tick(&mut ui, 11_000 + RING_MS - 1);
+        assert!(ui.timer.alarm.is_some());
+        tick(&mut ui, 11_000 + RING_MS);
+        assert_eq!((sound(&ui), crate::ui::state::sound_command(&ui)), (None, 0));
+        // Restarted and finished again: a new alarm, ended by any detent.
+        press(&mut ui, Button::Enter, 50_000);
+        tick(&mut ui, 60_000);
+        let first = ui.timer.alarm.expect("rings again");
+        assert!(hush(&mut ui, Control::Wheel(Wheel::Cw)));
+        assert_eq!(ui.timer.alarm, None);
+        assert!(!hush(&mut ui, Control::Wheel(Wheel::Cw)), "nothing left to hush");
+        // A release or a drag is not a touch of the deck; a tap is.
+        press(&mut ui, Button::Enter, 70_000);
+        tick(&mut ui, 80_000);
+        assert_ne!(ui.timer.alarm.map(|a| a.serial), Some(first.serial), "each alarm starts afresh");
+        assert!(!hush(&mut ui, Control::Button(Button::Enter, Edge::Release)));
+        let at = |phase| Control::Touch(crate::control::Touch { phase, x: 240, y: 240 });
+        assert!(!hush(&mut ui, at(crate::control::TouchPhase::Move)));
+        assert!(hush(&mut ui, at(crate::control::TouchPhase::Down)));
+    }
+
+    #[test]
+    fn restart_and_reset_stop_the_alarm_and_the_stopwatch_never_rings() {
+        let mut ui = on_timer();
+        press(&mut ui, Button::Enter, 0);
+        tick(&mut ui, 5 * 3_600_000);
+        assert_eq!(ui.timer.alarm, None, "a stopwatch has no end");
+        press(&mut ui, Button::Right, 10);
+        set_length(&mut ui, MIN_S, &mut Update::new());
+        press(&mut ui, Button::Enter, 1000);
+        tick(&mut ui, 11_000);
+        assert!(ui.timer.alarm.is_some());
+        // Restart (here without a press, as a tap on the button acts)
+        // ends the alarm as well.
+        act(&mut ui, Action::Restart, 12_000, &mut Update::new());
+        assert_eq!(ui.timer.alarm, None);
+    }
+
+    #[test]
+    fn pomodoro_chimes_rise_after_focus_and_fall_after_a_break() {
+        use crate::ui::state::arcade::sound::Effect;
+        let mut ui = on_timer();
+        press(&mut ui, Button::Right, 0);
+        press(&mut ui, Button::Right, 1);
+        assert_eq!(ui.timer.mode, Mode::Pomodoro);
+        press(&mut ui, Button::Enter, 1000);
+        tick(&mut ui, 1000 + Phase::Focus.duration_ms());
+        assert_eq!(sound(&ui), Some(Effect::FocusDone));
+        // Next both silences and starts the break.
+        press(&mut ui, Button::Enter, 2_000_000);
+        assert_eq!(sound(&ui), None);
+        tick(&mut ui, 2_000_000 + Phase::ShortBreak.duration_ms());
+        assert_eq!(sound(&ui), Some(Effect::BreakDone));
     }
 
     #[test]
@@ -605,12 +736,12 @@ mod tests {
     }
 
     #[test]
-    fn the_readout_repaints_once_per_tenth_and_only_when_visible() {
+    fn the_readout_repaints_once_per_hundredth_and_only_when_visible() {
         let mut ui = on_timer();
         press(&mut ui, Button::Enter, 1000);
-        assert!(tick(&mut ui, 1100).dirty);
-        assert!(!tick(&mut ui, 1150).dirty);
-        assert!(tick(&mut ui, 1200).dirty);
+        assert!(tick(&mut ui, 1010).dirty);
+        assert!(!tick(&mut ui, 1015).dirty);
+        assert!(tick(&mut ui, 1020).dirty);
         ui.on_face(Template::Usage);
         assert!(!tick(&mut ui, 1500).dirty && !animating(&ui));
         assert!(ui.timer.stopwatch.running());

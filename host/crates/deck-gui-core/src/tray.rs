@@ -14,6 +14,7 @@
 //! same path a button on a screen takes. A tray that flipped its own
 //! checkmark on click would be showing the operator a setting the daemon had
 //! refused.
+use crate::i18n::Language;
 use crate::{ConfigValue, UiAction};
 use deck_model::{AgentState, SetKey, Snapshot, Tone, DISCONNECTED};
 
@@ -88,6 +89,10 @@ impl TrayCommand {
         }
     }
 
+    pub fn label_localized(self, language: Language) -> &'static str {
+        language.text(self.label())
+    }
+
     /// Whether the item is drawn with a tick rather than as a plain row.
     /// Both toggles show what the **daemon** last reported, never what was
     /// last clicked.
@@ -103,6 +108,10 @@ impl TrayCommand {
 pub const QUIT_TOOLTIP: &str =
     "Quits this window only. The service keeps running and the deck keeps working \u{2014} use \
      Stop service to stop that too.";
+
+pub fn quit_tooltip(language: Language) -> &'static str {
+    language.text(QUIT_TOOLTIP)
+}
 
 /// What the tray shows, as a pure function of the mirror.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -136,6 +145,15 @@ impl Summary {
     /// is not there. So a dropped socket is grey, whatever the last roster
     /// said.
     pub fn of(snapshot: &Snapshot, connected: bool, hooks_enabled: Option<bool>) -> Summary {
+        Self::of_localized(snapshot, connected, hooks_enabled, Language::English)
+    }
+
+    pub fn of_localized(
+        snapshot: &Snapshot,
+        connected: bool,
+        hooks_enabled: Option<bool>,
+        language: Language,
+    ) -> Summary {
         let degraded = snapshot.service.degraded.clone();
         let squatter = snapshot
             .service
@@ -146,8 +164,12 @@ impl Summary {
         if !connected {
             return Summary {
                 dot: Tone::Gray,
-                headline: "Service not running".into(),
-                detail: Some("The deck is not being served. Open to start it.".into()),
+                headline: language.text("Service not running").into(),
+                detail: Some(
+                    language
+                        .text("The deck is not being served. Open to start it.")
+                        .into(),
+                ),
                 muted,
                 hooks_enabled,
                 // A degraded reason from before the socket dropped is about
@@ -170,17 +192,17 @@ impl Summary {
         };
         Summary {
             dot,
-            headline: headline(questions, working, ready),
+            headline: headline_localized(questions, working, ready, language),
             detail: degraded.as_deref().map(|reason| match (reason, &squatter) {
-                ("hooks_hijack_risk", Some(who)) => format!(
-                    "Port {} is held by {who}; Claude hooks may stall",
-                    snapshot.service.port
+                ("hooks_hijack_risk", Some(who)) => language.format(
+                    "Port {0} is held by {1}; Claude hooks may stall",
+                    &[&snapshot.service.port.to_string(), who],
                 ),
-                ("hooks_hijack_risk", None) => format!(
-                    "Port {} is held by another process; Claude hooks may stall",
-                    snapshot.service.port
+                ("hooks_hijack_risk", None) => language.format(
+                    "Port {0} is held by another process; Claude hooks may stall",
+                    &[&snapshot.service.port.to_string()],
                 ),
-                (other, _) => format!("Service degraded: {other}"),
+                (other, _) => language.format("Service degraded: {0}", &[other]),
             }),
             muted,
             hooks_enabled,
@@ -245,21 +267,31 @@ fn counts(snapshot: &Snapshot) -> (usize, usize, usize) {
     counts
 }
 
+#[cfg(test)]
 fn headline(questions: usize, working: usize, ready: usize) -> String {
+    headline_localized(questions, working, ready, Language::English)
+}
+
+fn headline_localized(
+    questions: usize,
+    working: usize,
+    ready: usize,
+    language: Language,
+) -> String {
     let mut parts = Vec::new();
     for (n, one, many) in [
-        (questions, "1 question", "questions"),
-        (working, "1 working", "working"),
-        (ready, "1 ready", "ready"),
+        (questions, "1 question", "{0} questions"),
+        (working, "1 working", "{0} working"),
+        (ready, "1 ready", "{0} ready"),
     ] {
         match n {
             0 => {}
-            1 => parts.push(one.to_string()),
-            n => parts.push(format!("{n} {many}")),
+            1 => parts.push(language.text(one).to_string()),
+            n => parts.push(language.format(many, &[&n.to_string()])),
         }
     }
     if parts.is_empty() {
-        return "Nothing waiting".to_string();
+        return language.text("Nothing waiting").to_string();
     }
     parts.join(" \u{b7} ")
 }
@@ -300,7 +332,11 @@ mod tests {
             card: None,
             reply: None,
             messages: Vec::new(),
-            workflow_runs: Vec::new(), task: None, task_source: None, subagents: 0, workflow: None,
+            workflow_runs: Vec::new(),
+            task: None,
+            task_source: None,
+            subagents: 0,
+            workflow: None,
             chat_rev: 0,
             reply_rev: 0,
             voice: None,
@@ -474,5 +510,49 @@ mod tests {
         assert_eq!(headline(1, 0, 0), "1 question");
         assert_eq!(headline(2, 1, 0), "2 questions \u{b7} 1 working");
         assert_eq!(headline(0, 0, 3), "3 ready");
+    }
+
+    #[test]
+    fn all_localized_menus_keep_command_ids_and_product_names() {
+        for language in Language::ALL {
+            for command in TrayCommand::ALL {
+                assert_eq!(TrayCommand::parse(command.id()), Some(command));
+                let label = command.label_localized(language);
+                assert!(!label.is_empty());
+                if matches!(command, TrayCommand::Open | TrayCommand::Quit) {
+                    assert!(label.contains("OpenWalkieTalkie"));
+                }
+                if language != Language::English {
+                    assert_ne!(label, command.label(), "{language:?}: {command:?}");
+                }
+            }
+            assert!(!quit_tooltip(language).is_empty());
+        }
+    }
+
+    #[test]
+    fn localized_summary_keeps_process_names_and_actions_verbatim() {
+        let mut state = snapshot(&[
+            ("Ready", AgentState::Question),
+            ("Settings", AgentState::Working),
+        ]);
+        state.service.degraded = Some("hooks_hijack_risk".into());
+        state.service.listener = Some(Listener {
+            pid: 9,
+            command: Some("Ready {0} Settings".into()),
+        });
+        let english = Summary::of(&state, true, Some(false));
+        for language in Language::ALL {
+            let summary = Summary::of_localized(&state, true, Some(false), language);
+            assert_eq!(summary.dot, english.dot);
+            assert_eq!(summary.mute_action(), english.mute_action());
+            assert_eq!(summary.pause_hooks_action(), english.pause_hooks_action());
+            let detail = summary.detail.as_deref().unwrap();
+            assert!(detail.contains("Ready {0} Settings") && detail.contains("47201"));
+            if language != Language::English {
+                assert_ne!(summary.headline, english.headline);
+                assert_ne!(detail, english.detail.as_deref().unwrap());
+            }
+        }
     }
 }

@@ -13,16 +13,16 @@ impl Shell {
         let p = *palette(cx);
         let usage = self.state.mirror().usage.as_ref();
         let subtitle = if dim {
-            "Disconnected · showing the last readings".to_string()
+            self.tr("Disconnected · showing the last readings").to_string()
         } else if let Some(at) = usage.and_then(|u| u.at) {
             let age = present::age(present::now(), at);
-            if age == "now" { "Updates automatically · received just now".into() }
-            else { format!("Updates automatically · received {age} ago") }
+            if age == "now" { self.tr("Updates automatically · received just now").into() }
+            else { self.fmt("Updates automatically · received {0} ago", &[&(age).to_string()]) }
         } else {
-            "Limits for the active Claude and Codex accounts".into()
+            self.tr("Limits for the active Claude and Codex accounts").into()
         };
         let mut body = v_flex().gap(px(16.)).child(ui::page_header(
-            "Usage",
+            self.tr("Usage"),
             Some(div().child(subtitle).into_any_element()),
             Vec::new(),
             &p,
@@ -51,14 +51,14 @@ impl Shell {
                                     div()
                                         .ts(14., 20.)
                                         .text_color(color)
-                                        .child(format!("{percent}% used")),
+                                        .child(self.fmt("{0}% used", &[&(percent).to_string()])),
                                 ),
                         )
                         .child(
                             div().ts(12., 18.).text_color(p.muted).child(
                                 item.account
                                     .clone()
-                                    .unwrap_or_else(|| "Account unavailable".into()),
+                                    .unwrap_or_else(|| self.tr("Account unavailable").into()),
                             ),
                         )
                         .child(
@@ -72,7 +72,7 @@ impl Shell {
                         )
                         .child(div().ts(12., 18.).text_color(p.muted).child(
                             if item.reset.is_empty() {
-                                "Reset time unavailable".into()
+                                self.tr("Reset time unavailable").into()
                             } else {
                                 item.reset.clone()
                             },
@@ -87,7 +87,7 @@ impl Shell {
                 ui::panel(&p).child(
                     div()
                         .text_color(p.muted)
-                        .child("Waiting for usage data from your signed-in accounts."),
+                        .child(self.tr("Waiting for usage data from your signed-in accounts.")),
                 ),
             );
         }

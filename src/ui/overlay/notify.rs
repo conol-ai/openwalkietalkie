@@ -50,10 +50,10 @@ const fn card_color(kind: CardKind) -> u32 {
 }
 
 /// "Kind · name" of an agent; empty when it is not on the roster.
-pub fn agent_line(ui: &UiState, agent: u8, out: &mut Text<40>) {
+pub fn agent_line(ui: &UiState, agent: u8, out: &mut Text<64>) {
     out.clear();
     if let Some(agent) = ui.deck.agent(agent) {
-        out.push_str(kind_label(agent.kind));
+        out.push_str(ui.tr(kind_label(agent.kind)));
         out.push_str(" \u{b7} ");
         out.push_str(agent.name.as_str());
     }
@@ -63,7 +63,7 @@ pub fn agent_line(ui: &UiState, agent: u8, out: &mut Text<40>) {
 fn card_text(ui: &UiState, agent: u8, card: u16, kind: CardKind) -> &str {
     match ui.deck.card(agent) {
         Some(pending) if pending.id == card && !pending.text.is_empty() => pending.text.as_str(),
-        _ => card_label(kind),
+        _ => ui.tr(card_label(kind)),
     }
 }
 
@@ -120,17 +120,17 @@ pub fn draw(band: &mut Band, ui: &UiState) {
         ToastKind::PomodoroFocusDone | ToastKind::PomodoroBreakDone => theme::GREEN,
     };
     kit::dot(band, rect.left() + dx, rect.top() + dy, r, color);
-    let mut line = Text::<40>::new();
+    let mut line = Text::<64>::new();
     agent_line(ui, toast.agent, &mut line);
     let (name, text): (&str, &str) = match toast.kind {
         ToastKind::Card(kind) => (line.as_str(), card_text(ui, toast.agent, toast.card, kind)),
-        ToastKind::NoChannel => ("No channel", "pick an agent on the roster first"),
-        ToastKind::NotDelivered => ("Not delivered", line.as_str()),
-        ToastKind::TranscriptionFailed => ("Transcription failed", "Nothing was sent. Try again."),
-        ToastKind::TranscriptionUnavailable => ("Transcription unavailable", "Check the host and try again."),
-        ToastKind::TimerDone => ("Timer done", "tap to see the timer"),
-        ToastKind::PomodoroFocusDone => ("Focus complete", "time for a break; tap to open"),
-        ToastKind::PomodoroBreakDone => ("Break complete", "tap to return to Pomodoro"),
+        ToastKind::NoChannel => (ui.tr("No channel"), ui.tr("pick an agent on the roster first")),
+        ToastKind::NotDelivered => (ui.tr("Not delivered"), line.as_str()),
+        ToastKind::TranscriptionFailed => (ui.tr("Transcription failed"), ui.tr("Nothing was sent. Try again.")),
+        ToastKind::TranscriptionUnavailable => (ui.tr("Transcription unavailable"), ui.tr("Check the host and try again.")),
+        ToastKind::TimerDone => (ui.tr("Timer done"), ui.tr("tap to see the timer")),
+        ToastKind::PomodoroFocusDone => (ui.tr("Focus complete"), ui.tr("time for a break; tap to open")),
+        ToastKind::PomodoroBreakDone => (ui.tr("Break complete"), ui.tr("tap to return to Pomodoro")),
     };
     let x = rect.left() + layout::TOAST_TEXT_X;
     let max_w = rect.right() - 12 - x;
@@ -164,7 +164,7 @@ const DRAWER_HINTS: [kit::Hint<'static>; 4] = [
 /// the band first.
 pub fn draw_drawer(band: &mut Band, ui: &UiState) {
     band.fill(kit::rgb(theme::CANVAS));
-    kit::header(band, "NOTICES", kit::header_right(ui, kit::status_tag(ui)));
+    kit::header(band, ui.tr("NOTICES"), kit::header_right(ui, kit::status_tag(ui)));
     let viewport = drawer_viewport(ui);
     let top = viewport.top as usize;
     for (slot, notice) in drawer_rows(&ui.deck).skip(top).take(layout::DRAWER_VISIBLE as usize).enumerate() {
@@ -177,9 +177,9 @@ pub fn draw_drawer(band: &mut Band, ui: &UiState) {
         let bg = Some(if selected { theme::CARD_FILL } else { theme::CANVAS });
         let (dx, dy, r) = DRAWER_DOT;
         kit::dot(band, rect.left() + dx, rect.top() + dy, r, card_color(notice.kind));
-        let mut line = Text::<40>::new();
+        let mut line = Text::<64>::new();
         agent_line(ui, notice.agent, &mut line);
-        let name = if line.is_empty() { card_label(notice.kind) } else { line.as_str() };
+        let name = if line.is_empty() { ui.tr(card_label(notice.kind)) } else { line.as_str() };
         let x = rect.left() + layout::TOAST_TEXT_X;
         let max_w = rect.right() - 12 - x;
         font::draw(band, Font::Body, x, rect.top() + DRAWER_NAME_BASELINE, name, theme::TEXT_PRIMARY, bg, max_w, Align::Left);
@@ -188,10 +188,10 @@ pub fn draw_drawer(band: &mut Band, ui: &UiState) {
     }
     if viewport.count == 0 && kit::visible(band, DRAWER_EMPTY) {
         let (cx, _) = DRAWER_EMPTY.center();
-        font::draw(band, Font::Text, cx, DRAWER_EMPTY.top() + 30, "No notices", theme::TEXT_ROW, Some(theme::CANVAS), DRAWER_EMPTY.width(), Align::Center);
-        font::draw(band, Font::Small, cx, DRAWER_EMPTY.top() + 62, "missed questions and ready cards collect here", theme::TEXT_LABEL, Some(theme::CANVAS), DRAWER_EMPTY.width(), Align::Center);
+        font::draw(band, Font::Text, cx, DRAWER_EMPTY.top() + 30, ui.tr("No notices"), theme::TEXT_ROW, Some(theme::CANVAS), DRAWER_EMPTY.width(), Align::Center);
+        font::draw(band, Font::Small, cx, DRAWER_EMPTY.top() + 62, ui.tr("missed questions and ready cards collect here"), theme::TEXT_LABEL, Some(theme::CANVAS), DRAWER_EMPTY.width(), Align::Center);
     }
-    kit::hint_bar(band, &DRAWER_HINTS);
+    kit::hint_bar_localized(band, &DRAWER_HINTS, ui.language);
 }
 
 /// What `kit::header_right(ui, kit::status_tag(ui))` and its label read.
@@ -230,7 +230,7 @@ pub fn signature(ui: &UiState, sig: &mut SigBuilder) {
             .u8(kind)
             .u8(toast.agent)
             .u16(toast.card);
-        let mut line = Text::<40>::new();
+        let mut line = Text::<64>::new();
         agent_line(ui, toast.agent, &mut line);
         h.text(&line);
         if let ToastKind::Card(kind) = toast.kind {
@@ -255,7 +255,7 @@ pub fn signature_drawer(ui: &UiState, sig: &mut SigBuilder) {
                 .u16(notice.card)
                 .u8(notice.kind as u8)
                 .bool((notice.agent, notice.card) == ui.notify.drawer_sel);
-            let mut line = Text::<40>::new();
+            let mut line = Text::<64>::new();
             agent_line(ui, notice.agent, &mut line);
             h.text(&line).str(card_text(ui, notice.agent, notice.card, notice.kind));
         });
@@ -269,6 +269,27 @@ pub fn signature_drawer(ui: &UiState, sig: &mut SigBuilder) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn localized_notices_preserve_agent_names_and_host_card_text() {
+        let mut ui = std::boxed::Box::new(UiState::new());
+        ui.reset();
+        ui.load_demo();
+        let name = "ABCDEFGHIJKLMNOPQRSTUVWX";
+        ui.deck.agent_mut(1).unwrap().name.set(name);
+        ui.deck.agent_mut(1).unwrap().kind = AgentKind::Other;
+        ui.deck.agent_mut(1).unwrap().card.text.set("Ready");
+        let card = ui.deck.agent(1).unwrap().card.id;
+        for language in crate::ui::i18n::Language::ALL {
+            ui.language = language;
+            let mut line = Text::new();
+            agent_line(&ui, 1, &mut line);
+            assert!(line.as_str().starts_with(language.text("Agent")));
+            assert!(line.as_str().ends_with(name));
+            assert_eq!(card_text(&ui, 1, card, CardKind::Question), "Ready");
+            assert_eq!(card_text(&ui, 7, 65535, CardKind::Question), language.text("Question"));
+        }
+    }
 
     #[test]
     fn the_slide_eases_from_hidden_to_rest_in_whole_pixels() {

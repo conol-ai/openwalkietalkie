@@ -46,6 +46,11 @@ pub enum SessionState {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct Settings {
+    /// UI language shared with capable decks: en, zh-Hans, zh-Hant, ja.
+    #[serde(default)]
+    pub language: u16,
+    #[serde(default)]
+    pub language_revision: u32,
     /// 0 off, 1 effects only, 2 music and effects; changed in the Arcade menu.
     #[serde(default)]
     pub arcadesound: u16,
@@ -71,6 +76,8 @@ impl Default for Settings {
     /// The firmware's power-on defaults (`src/deck/model.rs`).
     fn default() -> Self {
         Settings {
+            language: 0,
+            language_revision: 0,
             speaker: 6,
             mic: 6,
             announce: 1,
@@ -88,6 +95,7 @@ impl Default for Settings {
 impl Settings {
     pub const fn get(&self, key: SetKey) -> u16 {
         match key {
+            SetKey::Language => self.language,
             SetKey::Speaker => self.speaker,
             SetKey::Mic => self.mic,
             SetKey::Announce => self.announce,
@@ -107,6 +115,7 @@ impl Settings {
             return false;
         }
         let slot = match key {
+            SetKey::Language => &mut self.language,
             SetKey::Speaker => &mut self.speaker,
             SetKey::Mic => &mut self.mic,
             SetKey::Announce => &mut self.announce,
@@ -127,6 +136,11 @@ impl Settings {
     pub fn iter(&self) -> impl Iterator<Item = (SetKey, u16)> + '_ {
         SetKey::ALL.into_iter().map(move |k| (k, self.get(k)))
     }
+
+    pub fn normalize_language(&mut self) {
+        if self.language > 3 { self.language = 0; }
+        self.language_revision = self.language_revision.max(u32::from(self.language != 0));
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -139,6 +153,8 @@ pub struct ErrCounts {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct DeviceState {
+    #[serde(default)]
+    pub language_supported: bool,
     pub link: Link,
     pub session: SessionState,
     /// This daemon's session id (0 until `Store::new` is told one).

@@ -76,6 +76,7 @@ def main():
     parser.add_argument("--out", default=str(ROOT / "target/preview"))
     parser.add_argument("--mock", default=os.environ.get("OWT_MOCK_DIR", str(ROOT / "docs" / "mockups")))
     parser.add_argument("--board", choices=["lilygo", "hw-a", "hw-b"], default="lilygo")
+    parser.add_argument("--language", choices=["en", "zh-Hans", "zh-Hant", "ja"], default="en")
     parser.add_argument("scenes", nargs="*")
     args = parser.parse_args()
 
@@ -95,7 +96,7 @@ def main():
     sheets = 0
     for scene in scenes:
         ppm = out / f"{scene}.ppm"
-        result = subprocess.run([preview, ppm, scene], capture_output=True, text=True)
+        result = subprocess.run([preview, ppm, scene, args.language], capture_output=True, text=True)
         if result.returncode != 0:
             failed.append(scene)
             print(f"FAIL  {scene}: {result.stderr.strip().splitlines()[-1:]}")

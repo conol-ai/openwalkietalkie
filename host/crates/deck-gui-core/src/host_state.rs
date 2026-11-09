@@ -491,6 +491,9 @@ impl std::fmt::Debug for HostState {
 }
 
 impl HostState {
+    fn ui_language(&self) -> crate::i18n::Language {
+        crate::i18n::Language::from_id(self.mirror.settings.language.min(255) as u8)
+    }
     /// With a client behind it: the app's one `HostState`.
     pub fn new(client: ApiClient) -> HostState {
         HostState {
@@ -622,7 +625,7 @@ impl HostState {
         self.backoff.reset();
         self.seen = true;
         if reconnected {
-            vec![HostEffect::Toast("Service reconnected".into())]
+            vec![HostEffect::Toast(self.ui_language().text("Service reconnected").into())]
         } else {
             Vec::new()
         }
@@ -634,6 +637,11 @@ impl HostState {
     /// a reply that raced a drop must not un-grey a window whose service has
     /// gone away.
     fn on_snapshot(&mut self, snapshot: Snapshot) -> Vec<HostEffect> {
+        // A state.get reply can cross a newer live event on the UI bus.
+        // Preserve that event's language (and the rest of the newer mirror).
+        if snapshot.rev < self.mirror.rev {
+            return if self.resyncing { vec![HostEffect::StateGet] } else { Vec::new() };
+        }
         self.mirror = snapshot;
         self.resyncing = false;
         Vec::new()
@@ -844,7 +852,7 @@ impl HostState {
                         history.drain(..len - ORDER_HISTORY);
                     }
                 }
-                return vec![HostEffect::Toast(format!("Order not delivered: {reason}"))];
+                return vec![HostEffect::Toast(self.ui_language().format("Order not delivered: {0}", &[&reason]))];
             }
             EventKind::OpConfirmRequested => {
                 return vec![
@@ -977,6 +985,12 @@ impl HostState {
                 if let (Ok(key), Some(value)) = (key, value) {
                     self.mirror.device.settings.set(key, value);
                     self.mirror.settings.set(key, value);
+                    if key == SetKey::Language && key.accepts(value) {
+                        if let Some(revision) = data.get("rev").and_then(Value::as_u64).and_then(|rev| u32::try_from(rev).ok()) {
+                            self.mirror.device.settings.language_revision = revision;
+                            self.mirror.settings.language_revision = revision;
+                        }
+                    }
                 }
             }
             EventKind::FocusChanged => {
@@ -1002,7 +1016,7 @@ impl HostState {
             EventKind::ServiceDegraded => return self.fold_degraded(data),
             EventKind::ServiceShutdown => {
                 self.mirror.service.degraded = Some("shutdown".into());
-                return vec![HostEffect::Toast("The service is shutting down".into())];
+                return vec![HostEffect::Toast(self.ui_language().text("The service is shutting down").into())];
             }
             // Owner-only events (the GUI owns no agent), opt-in device edges,
             // the raw hook stream, and the kinds whose whole content is
@@ -1131,7 +1145,7 @@ impl HostState {
             return Vec::new();
         }
         let Some(reason) = reason else {
-            return vec![HostEffect::Toast("The service recovered".into())];
+            return vec![HostEffect::Toast(self.ui_language().text("The service recovered").into())];
         };
         // §4.1: the installed Claude http hooks keep POSTing prompts, tool
         // inputs and the `hooks` bearer token to whoever holds the port, and
@@ -1144,13 +1158,13 @@ impl HostState {
                 .listener
                 .as_ref()
                 .and_then(|l| l.command.clone())
-                .unwrap_or_else(|| "another process".into());
+                .unwrap_or_else(|| self.ui_language().text("another process").into());
             let port = self.mirror.service.port;
-            return vec![HostEffect::Toast(format!(
-                "Port {port} is held by {who}; Claude hooks may stall"
+            return vec![HostEffect::Toast(self.ui_language().format(
+                "Port {0} is held by {1}; Claude hooks may stall", &[&port.to_string(), &who]
             ))];
         }
-        vec![HostEffect::Toast(format!("Service degraded: {reason}"))]
+        vec![HostEffect::Toast(self.ui_language().format("Service degraded: {0}", &[&reason]))]
     }
 
     /// Run `f` on the named agent's current card, and only when the event's

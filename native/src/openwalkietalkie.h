@@ -6,6 +6,8 @@
 
 /* Rust entry points: application thread only. */
 uint32_t owt_core_init(void);
+/* Reload preferences after BLE_POWER_ON_IND initializes the SDK's NVDS. */
+void owt_core_load_ui_prefs(void);
 bool owt_core_poll(uint32_t now_ms);
 struct owt_region { uint16_t x0, y0, x1, y1; }; /* Exclusive, even end coordinates. */
 bool owt_core_begin_frame(bool force);
@@ -54,6 +56,10 @@ void owt_bluetooth_battery(uint8_t percent);
 void owt_bluetooth_poll(uint32_t now);
 int owt_hid_notify(const uint8_t *data, size_t length);
 void owt_hid_disconnect(void);
+/* Device-owned UI preferences, a shared versioned/checksummed 64-byte record.
+ * Application thread only. Missing/corrupt storage falls back to English. */
+bool owt_ui_prefs_read(uint8_t *bytes, size_t length);
+bool owt_ui_prefs_write(const uint8_t *bytes, size_t length);
 void owt_board_start(void);
 /* Rev A's six buttons and wheel on GPIOs: an edge since the last call, and the
  * raw levels as src/input/direct.rs expects them (bit 0 PTT PA24, 1 ENTER
