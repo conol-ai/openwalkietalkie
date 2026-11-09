@@ -361,6 +361,21 @@ class Bridge:
             if window:
                 self.hypr.focus(window['address'])
 
+    def herdr_pane_of(self, binary: str, env: dict, pid: int):
+        """The herdr pane whose processes include `pid` now, else None."""
+        def ask(*args):
+            done = self.run([binary, *args], capture_output=True, text=True, timeout=5, env=env)
+            return json.loads(done.stdout)['result'] if done.returncode == 0 else {}
+        try:
+            for pane in ask('pane', 'list').get('panes', []):
+                info = ask('pane', 'process-info', '--pane', pane['pane_id']).get('process_info', {})
+                pids = [p.get('pid') for p in info.get('foreground_processes', [])]
+                if pid in pids or info.get('shell_pid') == pid:
+                    return pane['pane_id']
+        except (ValueError, KeyError, TypeError, subprocess.SubprocessError, OSError):
+            pass
+        return None
+
     def deliver_order(self, s: Session, text: str) -> str | None:
         """Type a voice order into the session's terminal; None on success, else why not.
 
@@ -380,6 +395,11 @@ class Bridge:
         if target:
             binary, pane, env = target
             sent = self.run([binary, 'pane', 'run', pane, text], capture_output=True, timeout=5, env=env)
+            if sent.returncode != 0:
+                # The pane id was fixed when the session started; panes get moved.
+                found = self.herdr_pane_of(binary, env, s.pid)
+                if found and found != pane:
+                    sent = self.run([binary, 'pane', 'run', found, text], capture_output=True, timeout=5, env=env)
             return None if sent.returncode == 0 else 'herdr_failed'
         window = window_for(s.pid, self.hypr.clients(), s.cwd, self.proc)
         if window is None:

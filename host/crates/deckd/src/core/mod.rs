@@ -2648,7 +2648,10 @@ pub fn run(opts: RunOptions) -> Result<i32, CoreError> {
             sidecar: None,
             cloud: None,
             stt: Some(whisper),
-            local_tts: None,
+            local_tts: Some(Arc::new(crate::audio::command::CommandTts::new(
+                &opts.config.voice.tts.command,
+                &opts.config.voice.tts.voices,
+            ))),
             companion: Some(core.transcribe.clone()),
         }));
     }

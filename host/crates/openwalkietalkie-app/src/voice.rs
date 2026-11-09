@@ -193,7 +193,7 @@ pub(crate) fn replies_line(tts: &TtsConfig, voice: Option<&TtsStatus>, engine: O
         );
     }
     if tts.engine == "apple" {
-        return "Apple's synthesiser speaks, on this Mac.".to_string();
+        return format!("Apple's synthesiser speaks, on this {}.", deck_gui_core::voice::HOST);
     }
     if !tts.cloud_selected() {
         return format!(
@@ -202,7 +202,7 @@ pub(crate) fn replies_line(tts: &TtsConfig, voice: Option<&TtsStatus>, engine: O
         );
     }
     if !tts.has_key() {
-        return "No key: Apple's synthesiser speaks, on this Mac.".to_string();
+        return format!("No key: Apple's synthesiser speaks, on this {}.", deck_gui_core::voice::HOST);
     }
     let model = tts
         .effective_model()
@@ -587,7 +587,7 @@ impl Shell {
                         div()
                             .ts(15., 20.)
                             .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .child("Recognise and speak on this Mac with local models?"),
+                            .child(format!("Recognise and speak on this {} with local models?", deck_gui_core::voice::HOST)),
                     ),
             )
             .child(
@@ -600,10 +600,11 @@ impl Shell {
                          which handles English and needs no download, and the replies are spoken by \
                          Apple's synthesiser. A Whisper model ({model}, {}) recognises Chinese and \
                          English in one utterance, and a Kokoro voice ({}) speaks both, each entirely \
-                         on this Mac. Nothing leaves the machine either way. You can change this any \
+                         on this {}. Nothing leaves the machine either way. You can change this any \
                          time on the Voice screen.",
                         size_text(bytes),
-                        size_text(voice_bytes)
+                        size_text(voice_bytes),
+                        deck_gui_core::voice::HOST
                     ))),
             )
             .child(

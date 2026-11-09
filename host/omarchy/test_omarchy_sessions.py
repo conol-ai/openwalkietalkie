@@ -287,6 +287,30 @@ class BridgeOrders(unittest.TestCase):
         bridge.run = lambda cmd, **kw: SimpleNamespace(returncode=1)
         self.assertEqual(bridge.deliver_order(session, 'x'), 'herdr_failed')
 
+    def test_a_moved_herdr_pane_is_found_again_by_the_session_pid(self):
+        pid = os.getpid()
+        runs = []
+
+        def run(cmd, **kw):
+            runs.append(cmd[1:])
+            if cmd[1:3] == ['pane', 'run']:
+                return SimpleNamespace(returncode=0 if cmd[3] == 'w2:p9' else 1, stdout='')
+            if cmd[1:3] == ['pane', 'list']:
+                out = {'result': {'panes': [{'pane_id': 'w1:p1'}, {'pane_id': 'w2:p9'}]}}
+            else:
+                mine = cmd[-1] == 'w2:p9'
+                out = {'result': {'process_info': {'foreground_processes': [{'pid': pid if mine else 7}]}}}
+            return SimpleNamespace(returncode=0, stdout=json.dumps(out))
+
+        proc = fake_proc({pid: ('kimi', 1, ['kimi'])})
+        env = {'HERDR_ENV': '1', 'HERDR_PANE_ID': 'w1:p1', 'HERDR_BIN_PATH': '/h/herdr'}
+        (Path(proc) / str(pid) / 'environ').write_bytes(b'\0'.join(f'{k}={v}'.encode() for k, v in env.items()) + b'\0')
+        bridge = make_bridge(hypr=FakeHypr(), run=run, proc=proc)
+        bridge.on_hook({**hook('Stop'), 'cli': 'kimi'})
+        session = next(iter(bridge.sessions.values()))
+        self.assertIsNone(bridge.deliver_order(session, 'go'))
+        self.assertEqual(runs[-1], ['pane', 'run', 'w2:p9', 'go'])
+
     def test_a_failed_wtype_reports_it(self):
         bridge, session = self.bridge()
         bridge.run = lambda cmd, **kw: SimpleNamespace(returncode=1)

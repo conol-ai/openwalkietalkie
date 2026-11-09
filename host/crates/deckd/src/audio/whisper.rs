@@ -582,6 +582,12 @@ fn run(
     {
         params.set_temperature_inc(0.0);
         params.set_audio_ctx(audio_ctx(audio.len()));
+        // The multilingual models write Mandarin in traditional characters
+        // unless the context is simplified; language detection runs before
+        // the prompt, so English is not pulled toward Chinese.
+        if decode.prompt.is_none() {
+            params.set_initial_prompt("以下是普通话的句子，使用简体中文。");
+        }
     }
     state.full(params, audio).map_err(|e| e.to_string())?;
     let mut text = String::new();

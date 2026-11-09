@@ -58,6 +58,8 @@ pub mod mainloop;
 pub mod companion;
 pub mod route;
 pub mod cloud;
+#[cfg(any(target_os = "linux", test))]
+pub mod command;
 pub mod sidecar;
 #[cfg(any(target_os = "macos", target_os = "linux", test))]
 mod speaker_eq;

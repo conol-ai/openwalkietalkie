@@ -800,6 +800,9 @@ pub struct Tts {
     pub interval_s: f32,
     /// `"kokoro"`: decoder threads; `0` is a sensible default.
     pub threads: u16,
+    /// Linux: the speech program, text on stdin and a WAV on stdout
+    /// (`audio::command`); empty is `espeak-ng --stdout -v {voice}`.
+    pub command: String,
 }
 
 impl Default for Tts {
@@ -816,6 +819,7 @@ impl Default for Tts {
             python: None,
             interval_s: 0.32,
             threads: 0,
+            command: String::new(),
         }
     }
 }
