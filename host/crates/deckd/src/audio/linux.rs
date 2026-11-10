@@ -5,8 +5,10 @@
 //! [`ble`]); what is different is what stands where Apple's frameworks do.
 //! There is no recogniser to fall back on (Whisper is the engine, and until
 //! its model is on disk a press says so), no local microphone to fall back
-//! to (the deck's is the only one), and no synthesiser yet: replies are not
-//! spoken here, [`NoTts`] says so when asked.
+//! to (the deck's is the only one), and no system synthesiser: replies are
+//! spoken by a program the operator has installed ([`super::command`],
+//! `espeak-ng` unless `[voice.tts] command` says otherwise), and [`NoTts`] is
+//! what stands there when none is wired.
 use super::traits::{
     AudioError, CaptureOpen, CaptureOpened, CaptureSink, CaptureSource, EngineInfo, OnDevice, SttEngine,
     SttSession, SttStart, TtsEngine, TtsJob, TtsRequest, VoiceInfo,
@@ -47,7 +49,7 @@ impl SttEngine for NoStt {
     }
 }
 
-/// No synthesiser on Linux yet.
+/// No synthesiser: the placeholder when none is wired.
 pub struct NoTts;
 
 impl TtsEngine for NoTts {

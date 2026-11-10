@@ -222,6 +222,47 @@ class BridgeSessions(unittest.TestCase):
         self.assertEqual(next(iter(bridge.sessions.values())).agent, 'ag_1')
 
 
+class Refusals(unittest.TestCase):
+    def test_a_refused_update_registers_the_session_afresh_on_the_next_beat(self):
+        deck = FakeDeck()
+        bridge = make_bridge(deck)
+        bridge.on_hook(hook('Stop'))
+        session = next(iter(bridge.sessions.values()))
+        deck.fail, deck.calls = RuntimeError('lease lapsed'), []
+        bridge.on_hook(hook('UserPromptSubmit'))
+        self.assertIsNone(session.agent)
+        deck.fail = None
+        bridge.tick(bridge.last_beat + s.HEARTBEAT_EVERY_S + 1)
+        self.assertEqual(session.agent, 'ag_1')
+        self.assertIn('agent.register', [m for m, _ in deck.calls])
+
+    def test_a_refused_heartbeat_drops_the_agents_and_registers_them_again(self):
+        deck = FakeDeck()
+        bridge = make_bridge(deck)
+        bridge.on_hook(hook('Stop'))
+        session = next(iter(bridge.sessions.values()))
+        real = deck.__class__.__call__
+
+        def call(method, params=None):
+            if method == 'agent.heartbeat':
+                raise RuntimeError('unknown agent')
+            return real(deck, method, params)
+        bridge.call = call
+        bridge.tick(bridge.last_beat + s.HEARTBEAT_EVERY_S + 1)
+        self.assertEqual(session.agent, 'ag_1')  # registered again within the same tick
+
+    def test_a_dead_session_the_daemon_refuses_to_release_is_still_dropped(self):
+        deck = FakeDeck()
+        bridge = make_bridge(deck)
+        bridge.on_hook(hook('Stop'))
+        session = next(iter(bridge.sessions.values()))
+        session.gone = True
+        bridge.dirty.add(session.key)
+        deck.fail = RuntimeError('no such agent')
+        bridge.flush()
+        self.assertEqual(bridge.sessions, {})
+
+
 class BridgeOrders(unittest.TestCase):
     def setUp(self):
         self.proc = fake_proc({os.getpid(): ('claude', 900, ['claude']), 900: ('kitty', 1, ['kitty'])})

@@ -37,6 +37,7 @@ from pathlib import Path
 import queue
 import select
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -218,6 +219,12 @@ class Rpc:
         self.sock.close()
 
 
+# What a slow or confused hyprctl raises: Hyprland's trouble, not deckd's, so it must
+# neither end the daemon connection nor the bridge.
+HYPR_ERROR_LOG_S = 30.0
+HYPR_ERRORS = (RuntimeError, subprocess.SubprocessError, ValueError)
+
+
 class Remote:
     def __init__(self):
         self.rpc: Rpc | None = None
@@ -229,6 +236,8 @@ class Remote:
         self.bridge = Bridge(self.call, Hypr())
         self.kimi = KimiWatcher()
         self.kimi_polled = 0.0
+        self.last_hypr_error = -HYPR_ERROR_LOG_S
+        self.up = False  # whether the daemon connection got as far as hello
         self.kimi_seeded = False
 
     def kimi_messages(self) -> list[dict]:
@@ -253,6 +262,16 @@ class Remote:
     def snapshot(self):
         return build_ws(hyprctl_json('monitors'), hyprctl_json('workspaces'), hyprctl_json('clients'))
 
+    def try_push(self, force: bool = False) -> None:
+        """push(), surviving Hyprland being slow or not up; the next tick looks again."""
+        try:
+            self.push(force)
+        except HYPR_ERRORS as error:
+            if time.monotonic() - self.last_hypr_error > HYPR_ERROR_LOG_S:
+                print(f'hyprland: {error}; will retry', file=sys.stderr)
+                self.last_hypr_error = time.monotonic()
+            self.last_push = time.monotonic()
+
     def push(self, force: bool = False) -> None:
         built = self.snapshot()
         if built is None:
@@ -270,10 +289,13 @@ class Remote:
         if act not in (1, 2):  # a press, or a wheel step; a release does nothing
             return
         action = KEYMAP.get((k, shift))
-        if action:
-            dispatch(*action)
-        elif k in WORKSPACE_STEP and not shift:
-            self.step_workspace(WORKSPACE_STEP[k])
+        try:
+            if action:
+                dispatch(*action)
+            elif k in WORKSPACE_STEP and not shift:
+                self.step_workspace(WORKSPACE_STEP[k])
+        except HYPR_ERRORS as error:
+            print(f'hyprland: {error}; key {k} dropped', file=sys.stderr)
 
     def step_workspace(self, step: int) -> None:
         monitor = next((m for m in hyprctl_json('monitors') if m.get('focused')), None)
@@ -310,9 +332,10 @@ class Remote:
             self.rpc.call('session.hello', {
                 'client': {'name': 'Omarchy remote', 'version': '1'},
                 'scopes': ['device', 'observe', 'agent'], 'subscribe': EVENTS, 'snapshot': False})
+            self.up = True
             self.last = None
-            self.push(force=True)
-            self.bridge.reregister()
+            self.bridge.reregister()  # first: sessions register whether or not Hyprland answers
+            self.try_push(force=True)
             while True:
                 message = self.rpc.receive(0.25)
                 if message and message.get('method') == 'event':
@@ -330,9 +353,9 @@ class Remote:
                 if self.dirty.is_set():
                     self.dirty.clear()
                     time.sleep(0.05)  # let a burst of Hyprland events settle
-                    self.push()
+                    self.try_push()
                 elif time.monotonic() - self.last_push > REPUSH_S:
-                    self.push(force=True)
+                    self.try_push(force=True)
         finally:
             rpc, self.rpc = self.rpc, None
             rpc.close()
@@ -382,12 +405,13 @@ def main() -> int:
             remote.serve(args.socket)
         except KeyboardInterrupt:
             return 0
-        except (OSError, ConnectionError, TimeoutError, RpcError, RuntimeError) as error:
+        except Exception as error:  # the bridge outlives anything one connection throws
+            if remote.up:  # it was connected: the back-off starts over
+                delay = 1.0
+            remote.up = False
             print(f'{error}; reconnecting in {delay:.0f}s', file=sys.stderr)
             time.sleep(delay)
             delay = min(delay * 2, 15.0)
-        else:
-            delay = 1.0
 
 
 if __name__ == '__main__':

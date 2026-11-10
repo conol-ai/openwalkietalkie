@@ -71,6 +71,37 @@ class KimiInstall(unittest.TestCase):
         self.assertEqual(msg['pid'], 500)
 
 
+class Robust(unittest.TestCase):
+    def test_the_command_fails_open_when_the_script_is_gone(self):
+        import subprocess
+        command = h.hook_command('claude').replace(str(h.hook_script()), '/nonexistent/omarchy_hook.py')
+        done = subprocess.run(command, shell=True, input=b'{}', capture_output=True)
+        self.assertEqual((done.returncode, done.stdout.strip()), (0, b'{}'))
+
+    def test_the_installed_copy_is_preferred_to_the_checkout(self):
+        with tempfile.TemporaryDirectory() as home, mock.patch.object(Path, 'home', return_value=Path(home)):
+            copy = Path(home) / '.local/share/openwalkietalkie/omarchy'
+            copy.mkdir(parents=True)
+            (copy / 'omarchy_hook.py').write_text('')
+            self.assertEqual(h.hook_script(), copy / 'omarchy_hook.py')
+
+    def test_a_tool_that_finishes_is_a_hook_so_a_question_does_not_outlive_its_answer(self):
+        self.assertIn('PostToolUse', [e for e, _ in h.EVENTS['claude']])
+        self.assertIn('PostToolUse', [e for e, _ in h.EVENTS['codex']])
+
+    def test_a_symlinked_settings_file_stays_a_symlink_and_keeps_its_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            real, link = Path(tmp) / 'dotfiles' / 'settings.json', Path(tmp) / 'settings.json'
+            real.parent.mkdir()
+            real.write_text('{"model": "x"}')
+            os.chmod(real, 0o600)
+            link.symlink_to(real)
+            h.write(link, h.merge(h.load(link), 'claude', h.hook_command('claude')))
+            self.assertTrue(link.is_symlink())
+            self.assertEqual(real.stat().st_mode & 0o777, 0o600)
+            self.assertIn('hooks', json.loads(real.read_text()))
+
+
 class Install(unittest.TestCase):
     def test_install_adds_one_handler_per_event_and_keeps_foreign_hooks_in_place(self):
         mine = h.hook_command('claude')

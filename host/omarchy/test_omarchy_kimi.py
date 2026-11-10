@@ -139,5 +139,13 @@ class Watch(Fixture):
         self.assertEqual(m['event'], 'Stop')
 
 
+class Home(unittest.TestCase):
+    def test_the_watcher_follows_kimi_code_home(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            from unittest import mock
+            with mock.patch.dict(os.environ, {'KIMI_CODE_HOME': tmp}):
+                self.assertEqual(k.KimiWatcher().root, Path(tmp) / 'sessions')
+
+
 if __name__ == '__main__':
     unittest.main()

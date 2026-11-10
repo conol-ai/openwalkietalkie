@@ -284,11 +284,18 @@ class Bridge:
             except Exception as error:  # a refusal for this session only
                 log(f'{session.name}: {error}')
                 self.dirty.discard(key)
+                if not session.gone:
+                    session.agent, session.synced, session.replied = None, {}, ''  # register afresh on the next beat
 
     def sync(self, s: Session) -> None:
         if s.gone:
             if s.agent:
-                self.call('agent.release', {'agent': s.agent, 'reason': 'session_end'})
+                try:
+                    self.call('agent.release', {'agent': s.agent, 'reason': 'session_end'})
+                except (ConnectionError, TimeoutError, OSError):
+                    raise
+                except Exception as error:  # the daemon no longer knows it: nothing to release
+                    log(f'{s.name}: release: {error}')
             self.sessions.pop(s.key, None)
             self.dirty.discard(s.key)
             return
@@ -333,14 +340,21 @@ class Bridge:
                     self.dirty.add(s.key)
         if now - self.last_beat >= HEARTBEAT_EVERY_S:
             self.last_beat = now
+            for s in self.sessions.values():
+                if s.agent is None and not s.gone:  # a registration that was refused: try again
+                    self.dirty.add(s.key)
             agents = [s.agent for s in self.sessions.values() if s.agent and not s.gone]
             if agents:
                 try:
                     self.call('agent.heartbeat', {'agents': agents})
                 except (ConnectionError, TimeoutError, OSError):
                     return
-                except Exception as error:
+                except Exception as error:  # a lapsed lease: the daemon dropped them, register afresh
                     log(f'heartbeat: {error}')
+                    for s in self.sessions.values():
+                        if s.agent and not s.gone:
+                            s.agent, s.synced, s.replied = None, {}, ''
+                            self.dirty.add(s.key)
         self.flush()
 
     # deck -> Omarchy ---------------------------------------------------------

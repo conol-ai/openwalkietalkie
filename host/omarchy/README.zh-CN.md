@@ -1,36 +1,46 @@
 # Omarchy 适配器
 
-让对讲机遥控 Omarchy（Hyprland）笔记本：窗口和工作区、Claude Code / Codex 会话、语音指令。
+让对讲机遥控 Omarchy（Hyprland）笔记本：窗口和工作区、scratchpad、Claude Code / Codex / Kimi Code 会话、语音指令。
 
-对讲机继续只连这台 Mac（设备同一时刻只存一份蓝牙配对，Omarchy 笔记本没有 Type-C）。Omarchy 上跑一个小守护进程，通过 SSH 转发 Mac `deckd` 的 Unix socket 接进来。不需要 Linux 版 `deckd`。
+**推荐方案：Linux 版 `deckd` 直接装在 Omarchy 上。** 对讲机用蓝牙直连 Omarchy：BlueZ 把它的 HID 服务暴露成 `/dev/hidraw*`，由 `hid.rs` 驱动；语音走对讲机的音频 GATT 服务（BlueZ），用本机 Whisper 识别。Omarchy 上跑两个 systemd 用户服务：`deckd.service`（Linux 版 `deckd`）和 `omarchy-deck.service`（本目录的 Python 适配器）。
 
 ```
-对讲机 ──蓝牙/USB── Mac (deckd) ══SSH 转发 socket══ Omarchy 笔记本
-                                                   ├─ omarchy_deck.py   守护进程（Hyprland ⇄ deckd）
-                                                   └─ omarchy_hook.py   Claude Code / Codex 的 hook
+对讲机 ──蓝牙── Omarchy ─┬─ deckd（Linux 版）
+                        ├─ omarchy_deck.py   适配器（Hyprland ⇄ deckd）
+                        └─ omarchy_hook.py   Claude Code / Codex / Kimi Code 的 hook
 ```
 
-> **当前推荐方案：Linux 版 `deckd` 直接装在 Omarchy 上。** 对讲机用蓝牙直连 Omarchy（BlueZ 的 HID 服务会把它暴露成 `/dev/hidraw*`，现有的 `hid.rs` 直接驱动），不再需要 Mac 和 SSH 转发。下面“部署”里的 SSH 转发方案只在对讲机连着 Mac 时用。
->
-> ```sh
-> # 在 Omarchy 上：构建 Linux 版 deckd，再装成 systemd 用户服务
-> cd host && cargo build --release --target x86_64-unknown-linux-gnu -p deckd
-> sh omarchy/install.sh target/x86_64-unknown-linux-gnu/release/deckd
-> python3 omarchy/omarchy_hook.py install kimi     # Kimi Code；claude / codex 同理
-> ```
->
-> 服务是 `deckd.service` 和 `omarchy-deck.service`（`systemctl --user status ...`）。适配器会自动找到正在运行的 Hyprland 实例和 Wayland 显示，不用写环境变量。**语音（PTT）** 已支持：`deckd` 的 Linux 版通过 BlueZ 连对讲机的音频 GATT 服务，用本机 Whisper 识别，没有本地麦克风、也没有语音合成（回复不会被朗读）。先下载模型再用：
+对讲机连着 Mac 时也能用：见下面“备选：对讲机连在 Mac 上”，那时 Omarchy 上不跑 `deckd`。
 
-> ```sh
-> echo '[voice.stt]
-> engine = "whisper"
-> model = "large-v3-turbo-q5_0"
-> language = "auto"' >> ~/.local/share/openwalkietalkie/config.toml
-> DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd stt install --model large-v3-turbo-q5_0
-> ```
->
-> `stt install` 走 HuggingFace；连不上时用镜像下载同名文件（`https://hf-mirror.com/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin`）放到 `~/.local/share/openwalkietalkie/caches/stt/`。
-> Kimi Code 有 hook（`config.toml` 里的 `[[hooks]]`），`omarchy_hook.py install kimi` 会写入一个带标记的块，先备份，卸载时原样还原。没装 hook 时，适配器会退回去读 `~/.kimi-code/sessions/*/agents/main/wire.jsonl` 判断状态。
+```sh
+# 在 Omarchy 上：构建 Linux 版 deckd，再装成 systemd 用户服务
+cd host && cargo build --release --target x86_64-unknown-linux-gnu -p deckd
+sh omarchy/install.sh target/x86_64-unknown-linux-gnu/release/deckd
+python3 omarchy/omarchy_hook.py install kimi     # Kimi Code；claude / codex 同理
+```
+
+`install.sh` 会把适配器复制到 `~/.local/share/openwalkietalkie/omarchy/`，`install` 写进各 CLI 设置的 hook 命令指向这份副本，并且脚本不存在时放行（不会因为挪了仓库而拦住你的会话）。适配器自动找到正在运行的 Hyprland 实例和 Wayland 显示，不用写环境变量。
+
+### 语音（PTT）
+
+- **识别**：本机 Whisper，没有本地麦克风（对讲机的麦克风是唯一输入）。先下载模型再用。CPU 上 `large-v3-turbo` 每次约 20 秒，建议用 `small`（约 2–4 秒）：
+
+```sh
+echo '[voice.stt]
+engine = "whisper"
+model = "small"
+language = "auto"' >> ~/.local/share/openwalkietalkie/config.toml
+DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd stt install --model small
+```
+
+`stt install` 走 HuggingFace；连不上时用镜像下载同名文件（`https://hf-mirror.com/ggerganov/whisper.cpp/resolve/main/ggml-small.bin`）放到 `~/.local/share/openwalkietalkie/caches/stt/`。中文会被识别为简体（Linux 上识别出中文时会用简体提示词再解码一次）。
+
+- **播报**：回复由本机一个语音程序朗读（文本走 stdin，WAV 走 stdout）。默认是 `espeak-ng`（`sudo pacman -S espeak-ng`），可以在 `[voice.tts] command` 里换成 piper 等；没装时每次播报会在日志里报错，其他功能不受影响。声音取 `[voice.tts] voices` 的第一项，没配置时按文本含不含中文选 `cmn` / `en-us`。
+- **输入到会话**：识别出的文字被输入选中会话的终端并回车。会话在 herdr 窗格里时用 `herdr pane run`（窗格被移动后会按会话 pid 重新查找），否则聚焦它的窗口再用 `wtype`。
+
+### Kimi Code
+
+Kimi Code 有 hook（`config.toml` 里的 `[[hooks]]`），`omarchy_hook.py install kimi` 会写入一个带标记的块，先备份，卸载时原样还原。没装 hook 时，适配器退回去读 `~/.kimi-code/sessions/*/agents/main/wire.jsonl` 判断状态（尊重 `KIMI_CODE_HOME`）。每次回复结束，回复摘要会推到对讲机上。
 
 ## 能做什么
 
@@ -38,10 +48,11 @@
 |---|---|
 | **Omarchy 页** | 显示当前聚焦显示器的工作区（Omarchy 每个显示器各自 1 到 10）和当前工作区最多 6 个窗口，聚焦的窗口高亮 |
 | 切换窗口 | 滚轮逆时针 / 顺时针 = 下一个 / 上一个窗口（`cycle_next`）；点窗口行聚焦它 |
-| 切换工作区 | 点工作区格子；SHIFT+LEFT / SHIFT+RIGHT = 上一个 / 下一个工作区 |
-| 焦点移动 | LEFT / RIGHT = 聚焦左 / 右边窗口 |
+| 切换工作区 | 点工作区格子；LEFT / RIGHT = 上一个 / 下一个工作区（按固定的 1–10 槽位轮转，空工作区也会去） |
+| 焦点移动 | SHIFT+LEFT / SHIFT+RIGHT = 聚焦左 / 右边窗口（SHIFT 就是右侧最下面那个键 HOME，按住它再按方向键） |
 | 全屏 | ENTER = 切换全屏 |
-| **名册里的 Omarchy 会话** | Omarchy 上每个 Claude Code / Codex 会话出现在 Agents 名册，状态是 working / ready / question / error |
+| scratchpad | SHIFT+CANCEL = 打开 / 收起 scratchpad；SHIFT+ENTER = 把当前窗口收进 scratchpad（相当于 Super+S / Super+Alt+S） |
+| **名册里的 Omarchy 会话** | Omarchy 上每个 Claude Code / Codex / Kimi Code 会话出现在 Agents 名册，状态是 working / ready / question / error |
 | 选中会话 | 在对讲机上选中某个会话，Omarchy 上它所在的终端窗口会被拉到前台 |
 | **语音指令** | 对选中的 Omarchy 会话按 PTT 说话，识别出的文字会被输入到它的终端并回车（用 `wtype`） |
 
@@ -50,13 +61,13 @@
 ## 刻意不做的事
 
 - **不在对讲机上回答权限提示。** 权限对话框留在终端里，会话进入 `question` 状态时，语音指令会被拒绝（`dialog_open`），避免你说的话被当成权限回答。
-- **不转发内容。** 只发事件名、状态、项目名，以及 Claude 自己显示的那行通知（用作 question 的标题）。提示词、工具输入、回复都不会离开 Omarchy。
-- **不把 Linux 的 pid 或终端信息发给 Mac。** Mac 上的 `deckd` 会把 pid 当成本机进程去检查，所以注册时只发名字、项目目录和能力。
+- **少转发内容。** 只发事件名、状态、项目名，以及 Claude 自己显示的那行通知（用作 question 的标题）。提示词和工具输入不会离开 Omarchy；Kimi Code 的回复只发一段摘要（最多 600 字）到对讲机。
+- **不把 pid 或终端信息发给 deckd。** `deckd` 会把 pid 当成本机进程去检查，所以注册时只发名字、项目目录和能力。
 - **hook 一律放行。** 无论守护进程在不在、数据对不对，hook 都输出 `{}` 并以 0 退出，永远不会拦住你的工具调用。
 
-## 部署
+## 备选：对讲机连在 Mac 上
 
-文件都在 `host/omarchy/`，只用 Python 3.10+ 标准库，不需要 `pip install`。
+设备同一时刻只存一份蓝牙配对。如果对讲机连着 Mac，就让 Omarchy 上的适配器通过 SSH 转发 Mac `deckd` 的 Unix socket 接进来（这时 Omarchy 上不跑 `deckd`，也没有语音）。文件都在 `host/omarchy/`，只用 Python 3.10+ 标准库，不需要 `pip install`。
 
 ### 1. Mac 上准备 SSH 转发用的 socket 路径
 
@@ -121,53 +132,22 @@ python3 omarchy_hook.py uninstall all     # 随时撤销，只删我们加的，
 
 ```sh
 cd host/omarchy
-for t in test_omarchy_deck test_omarchy_sessions test_omarchy_hook test_omarchy_integration; do python3 -B $t.py; done
+for t in test_omarchy_deck test_omarchy_sessions test_omarchy_hook test_omarchy_kimi test_omarchy_integration; do python3 -B $t.py; done
 ```
 
 覆盖：Hyprland 数据到 `ws` 行的转换、按键映射、进程树和窗口匹配、会话注册和释放、守护进程离线重连、语音指令的各种拒绝条件、hook 放行、安装和卸载，以及对假 `deckd` 的端到端流程。**这些都是在 macOS 上用伪造的 `/proc` 和 Hyprland 跑的，没有在真实 Omarchy 上跑过。**
 
 ---
 
-# 需要你配合的 Checklist
-
-**这些都不阻塞代码**，代码和测试已经完成。以下是只有你能在真机上做的验证，按顺序做，遇到问题把输出发给我。
-
-## A. 必做，一次性
-
-- [ ] 1. 把 `host/omarchy/` 放到 Omarchy 笔记本（`git clone` 或 `scp -r`）。
-- [ ] 2. 确认 Omarchy 上有 `wtype`（`command -v wtype`，Omarchy 基础包自带）和 `python3 --version` ≥ 3.10。
-- [ ] 3. Mac：打开「远程登录」，建软链接（见上面第 1 步）。
-- [ ] 4. Omarchy：手动跑一次 SSH 转发，确认 `ls -l $XDG_RUNTIME_DIR/deckd.sock` 存在。
-- [ ] 5. Omarchy：`python3 omarchy_deck.py`，看日志有没有报错。它用 `device` 和 `agent` 权限通过 socket 连 `deckd`。我从源码核对过：Mac 上 `[api] uds_max_scope` 默认是 `admin`，转发进来的连接的对端是 sshd 的子进程，祖先链里没有 `claude`、`codex`、`gemini`、`node`，不会被"agent 祖先"上限卡住，所以理论上能通过。**但没有真机验证过。** 如果日志报 `forbidden`：先看 Mac 的 `config.toml` 里有没有改过 `[api] uds_max_scope`；再不行，把报错发给我，我改成走 HTTP 加 token。
-- [ ] 6. 把 `deckd-tunnel` 做成 systemd 用户服务，适配器加进 `autostart.lua`（见上面部署第 2、3 步）。
-
-## B. Omarchy 页（窗口切换）验证
-
-- [ ] 7. 对讲机切到 Omarchy 页：应该能看到工作区格子和当前窗口列表，聚焦的窗口高亮。
-- [ ] 8. 滚轮转一格：焦点应该切到下一个窗口。如果没动，在 Omarchy 上手动试：
-  `hyprctl dispatch 'hl.dsp.window.cycle_next()'`，再试 `hyprctl dispatch cyclenext`，告诉我哪个有效。
-- [ ] 9. 点一个工作区格子、点一个窗口行、按 LEFT / RIGHT / SHIFT+LEFT / ENTER，看是否符合上面表格。**ENTER = 全屏**是我选的，不合适就告诉我换成什么。
-- [ ] 10. 如果你用多个显示器，看看格子数和窗口列表是不是对应当前聚焦的那个显示器。
-
-## C. 会话与语音验证
-
-- [ ] 11. `python3 omarchy_hook.py install claude`，然后在 Omarchy 上**新开**一个 Claude Code 会话，发一句话：对讲机的 Agents 名册里应该出现一个以项目目录命名的行，状态跟着变化。
-- [ ] 12. 在对讲机上选中这一行：Omarchy 上对应的终端窗口应该被拉到前台。
-  **注意：** 如果你的终端是单实例 kitty 之类（多个窗口共用一个进程），窗口匹配靠标题里的项目名，匹配不到时选最近聚焦的，可能选错。出现了告诉我你用的终端。
-- [ ] 13. 对这个会话按 PTT 说一句话：文字应该出现在终端并回车。先在一个**空闲、没有对话框**的会话上试。
-- [ ] 14. 让 Claude 弹一个权限对话框，这时在对讲机上说话：应该被拒绝（日志 `dialog_open`），文字不会被输入。
-- [ ] 15. 可选：`python3 omarchy_hook.py install codex`，然后在 Codex 里用它自己的 hook 信任界面（`/hooks`）信任这些 hook。**Codex 的 hook 载荷格式我是按 deckd 里已有的实现推断的，没有实机验证。**
-
-## D. 需要你拍板的
-
-- [ ] 16. 语音识别在 Mac 上做，目前是 Apple 本机识别，`locale = "zh-TW"`（中文，繁体输出），英文会变差。要不要下载系统的简体中文听写模型，或者换 Whisper 的量化小模型？
-- [ ] 17. Codex 会话要不要和 Claude 一样支持语音输入（现在代码支持，但没验证过）？
-- [ ] 18. 要不要提交这批文件，提交到哪个分支，要不要提 PR？（我没有提交。）
-
-## E. 已知限制（不用处理，知道就行）
+## 已知限制
 
 - 权限提示不能在对讲机上回答，只能在终端里答。
 - 一个工作区最多显示 6 个窗口；工作区格子最多 9 个，Omarchy 的第 10 个工作区在对讲机上不显示。
 - 会话只能通过 hook 发现，hook 安装之前就开着的会话不会出现，要重开。
-- 不转发 Claude 的回复文字，所以对讲机上看不到 Omarchy 会话的回复内容，只有状态。
+- 只有 Kimi Code 的回复摘要会推到对讲机；Claude / Codex 的回复文字不转发，只有状态。
+- 装 hook 时，Claude / Codex 需要重新运行一次 `install`，才会带上 `PostToolUse`（否则授权后状态会一直停在 question，直到本轮结束）。
 - 隧道断开期间，Omarchy 页和名册会停在最后的状态，恢复后自动同步。
+
+## 还没验证的
+
+见 issue ZhangHanDong/openwalkietalkie#1：对讲机上的实际播报、Claude / Codex 真实会话、USB、macOS 真机。

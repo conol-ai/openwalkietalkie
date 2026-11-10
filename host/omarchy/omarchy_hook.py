@@ -36,10 +36,10 @@ MARKER = 'omarchy_hook.py'
 STDIN_MAX = 1024 * 1024
 CONNECT_TIMEOUT = 0.3
 EVENTS = {
-    'claude': [('SessionStart', 5), ('UserPromptSubmit', 5), ('PreToolUse', 5), ('PermissionRequest', 5),
-               ('Notification', 5), ('Stop', 5), ('StopFailure', 5), ('SessionEnd', 5)],
-    'codex': [('SessionStart', 5), ('UserPromptSubmit', 5), ('PreToolUse', 5), ('PermissionRequest', 5),
-              ('Stop', 5), ('Interrupt', 5), ('SessionEnd', 5)],
+    'claude': [('SessionStart', 5), ('UserPromptSubmit', 5), ('PreToolUse', 5), ('PostToolUse', 5),
+               ('PermissionRequest', 5), ('Notification', 5), ('Stop', 5), ('StopFailure', 5), ('SessionEnd', 5)],
+    'codex': [('SessionStart', 5), ('UserPromptSubmit', 5), ('PreToolUse', 5), ('PostToolUse', 5),
+              ('PermissionRequest', 5), ('Stop', 5), ('Interrupt', 5), ('SessionEnd', 5)],
     'kimi': [('SessionStart', 5), ('UserPromptSubmit', 5), ('PermissionRequest', 5), ('PermissionResult', 5),
              ('Stop', 5), ('StopFailure', 5), ('Interrupt', 5), ('SessionEnd', 5)],
 }
@@ -56,8 +56,18 @@ def settings_path(cli: str, home: Path | None = None) -> Path:
     return Path(os.environ.get('CODEX_HOME') or home / '.codex') / 'hooks.json'
 
 
+def hook_script() -> Path:
+    """The copy install.sh puts under ~/.local/share when there is one (it survives the
+    checkout being moved or switched to a branch without this directory), else this file."""
+    installed = Path.home() / '.local/share/openwalkietalkie/omarchy' / Path(__file__).name
+    return installed if installed.is_file() else Path(__file__).resolve()
+
+
 def hook_command(cli: str) -> str:
-    return f'{shlex.quote(sys.executable)} {shlex.quote(str(Path(__file__).resolve()))} hook {cli}'
+    """Fails open when the script is gone: a non-zero exit would be a deny for Claude Code and
+    Codex, and `python3 missing.py` exits 2."""
+    script = shlex.quote(str(hook_script()))
+    return f"test -f {script} && {shlex.quote(sys.executable)} {script} hook {cli} || echo '{{}}'"
 
 
 # --- the hook ---------------------------------------------------------------
@@ -166,11 +176,18 @@ def kimi_strip(text: str) -> str:
 
 
 def write_text(path: Path, text: str) -> None:
+    """Back the file up, then replace it atomically *through* a symlink (a dotfiles repo
+    links settings files) and with the mode it had."""
+    path = path.resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
+    mode = None
     if path.exists():
         shutil.copy2(path, path.with_name(f'{path.name}.omarchy-deck.{int(time.time())}.bak'))
+        mode = path.stat().st_mode & 0o7777
     tmp = path.with_name(path.name + '.tmp')
     tmp.write_text(text)
+    if mode is not None:
+        os.chmod(tmp, mode)
     os.replace(tmp, path)
 
 
@@ -184,12 +201,7 @@ def load(path: Path) -> dict:
 
 
 def write(path: Path, settings: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists():
-        shutil.copy2(path, path.with_name(f'{path.name}.omarchy-deck.{int(time.time())}.bak'))
-    tmp = path.with_name(path.name + '.tmp')
-    tmp.write_text(json.dumps(settings, indent=2, ensure_ascii=False) + '\n')
-    os.replace(tmp, path)
+    write_text(path, json.dumps(settings, indent=2, ensure_ascii=False) + '\n')
 
 
 def targets(which: str) -> list[str]:

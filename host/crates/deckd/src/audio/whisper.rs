@@ -527,10 +527,61 @@ unsafe extern "C" fn abort_requested(user_data: *mut std::ffi::c_void) -> bool {
     unsafe { &*user_data.cast::<AtomicBool>() }.load(Ordering::SeqCst)
 }
 
+/// The context that makes the multilingual models write Mandarin in
+/// simplified characters (they default to traditional).
+#[cfg(target_os = "linux")]
+const SIMPLIFIED_PROMPT: &str = "以下是普通话的句子，使用简体中文。";
+
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn has_han(text: &str) -> bool {
+    text.chars().any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c))
+}
+
+/// Whisper can answer a near-silent press with its own prompt.
+#[cfg(target_os = "linux")]
+fn echoes_prompt(text: &str) -> bool {
+    let text = text.trim();
+    !text.is_empty() && SIMPLIFIED_PROMPT.contains(text)
+}
+
+/// One decode, and on Linux a second in simplified characters when the
+/// speech turned out to be Chinese. The prompt is only ever given to a
+/// decode of Chinese (configured, or heard in the first pass), so English
+/// is never pulled toward it, and an answer that is just the prompt is
+/// dropped.
+fn run(
+    state: &mut WhisperState,
+    audio: &[f32],
+    decode: &Decode,
+    abort: Option<&Arc<AtomicBool>>,
+) -> Result<String, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let zh = decode.language.as_deref().is_some_and(|l| l == "zh" || l.starts_with("zh-"));
+        let auto = decode.language.as_deref().is_none_or(|l| l == "auto");
+        if decode.prompt.is_none() && zh {
+            let simplified = Decode { prompt: Some(SIMPLIFIED_PROMPT.into()), ..decode.clone() };
+            let text = decode_once(state, audio, &simplified, abort)?;
+            return Ok(if echoes_prompt(&text) { String::new() } else { text });
+        }
+        let text = decode_once(state, audio, decode, abort)?;
+        if decode.prompt.is_none() && auto && has_han(&text) {
+            let simplified = Decode { prompt: Some(SIMPLIFIED_PROMPT.into()), language: Some("zh".into()), ..decode.clone() };
+            let again = decode_once(state, audio, &simplified, abort)?;
+            if !again.is_empty() && !echoes_prompt(&again) {
+                return Ok(again);
+            }
+        }
+        Ok(text)
+    }
+    #[cfg(not(target_os = "linux"))]
+    decode_once(state, audio, decode, abort)
+}
+
 /// One decode of `audio` (16 kHz mono): the segments' text, joined.
 /// `abort`, when given, is checked between decoder steps and ends the
 /// decode early once set (a partial that the release has overtaken).
-fn run(
+fn decode_once(
     state: &mut WhisperState,
     audio: &[f32],
     decode: &Decode,
@@ -582,12 +633,6 @@ fn run(
     {
         params.set_temperature_inc(0.0);
         params.set_audio_ctx(audio_ctx(audio.len()));
-        // The multilingual models write Mandarin in traditional characters
-        // unless the context is simplified; language detection runs before
-        // the prompt, so English is not pulled toward Chinese.
-        if decode.prompt.is_none() {
-            params.set_initial_prompt("以下是普通话的句子，使用简体中文。");
-        }
     }
     state.full(params, audio).map_err(|e| e.to_string())?;
     let mut text = String::new();
@@ -631,6 +676,21 @@ pub fn engine_info(settings: &Settings, present: bool, apple: &EngineInfo) -> En
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn only_chinese_text_asks_for_the_simplified_second_pass() {
+        assert!(has_han("你好 hello"));
+        assert!(!has_han("hello world"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn an_answer_that_is_only_the_prompt_is_recognised_as_an_echo() {
+        assert!(echoes_prompt("以下是普通话的句子，使用简体中文。"));
+        assert!(echoes_prompt("使用简体中文"));
+        assert!(!echoes_prompt("打开浏览器"));
+        assert!(!echoes_prompt(""));
+    }
+
     #[test]
     fn the_encoder_window_follows_the_audio_between_a_floor_and_the_full_30_seconds() {
         assert_eq!(super::audio_ctx(17_600), 512);

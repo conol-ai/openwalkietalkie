@@ -142,7 +142,7 @@ def hooks_installed(home: str | None = None) -> bool:
 
 class KimiWatcher:
     def __init__(self, home: str | None = None, proc: str = PROC):
-        self.root = Path(home or os.path.expanduser('~/.kimi-code')) / 'sessions'
+        self.root = Path(home or os.environ.get('KIMI_CODE_HOME') or os.path.expanduser('~/.kimi-code')) / 'sessions'
         self.proc = proc
         self.bound: dict[int, str] = {}      # pid -> session id
         self.cwd_of: dict[str, str] = {}     # session id -> cwd

@@ -117,6 +117,23 @@ class Keys(unittest.TestCase):
         f.assert_called_once_with(4)
 
 
+class Resilience(unittest.TestCase):
+    def test_a_hyprctl_that_times_out_does_not_stop_the_bridge(self):
+        import subprocess
+        remote = o.Remote()
+        remote.push = lambda force=False: (_ for _ in ()).throw(subprocess.TimeoutExpired('hyprctl', 2))
+        remote.try_push(force=True)  # must not raise
+        remote.push = lambda force=False: (_ for _ in ()).throw(RuntimeError('hyprctl failed'))
+        remote.try_push()
+        remote.push = lambda force=False: (_ for _ in ()).throw(ValueError('bad json'))
+        remote.try_push()
+
+    def test_a_key_pressed_while_hyprland_is_away_is_dropped_not_fatal(self):
+        remote = o.Remote()
+        with mock.patch.object(o, 'dispatch', side_effect=RuntimeError('down')):
+            remote.on_key({'k': 'enter', 'act': 1, 'shift': 0})
+
+
 class KimiSeed(unittest.TestCase):
     def test_with_hooks_the_log_reader_runs_once_and_without_them_always(self):
         remote = o.Remote.__new__(o.Remote)
