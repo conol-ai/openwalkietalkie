@@ -87,12 +87,13 @@ struct Entry {
 #[derive(Debug, Default)]
 pub struct Hub {
     entries: Mutex<BTreeMap<Identity, Entry>>,
-    /// Helpers from another install of deckd, last refused at. They retry
-    /// every 2 s, so a short window is a live count.
+    /// Same-user `deckd` helpers this daemon refused (a different or missing
+    /// executable), last refused at. A helper retries every 2 s, then every
+    /// 30 s once it has backed off, so the window covers a slow retry.
     stale: Mutex<BTreeMap<u32, Instant>>,
 }
 
-const STALE_WINDOW: Duration = Duration::from_secs(10);
+const STALE_WINDOW: Duration = Duration::from_secs(45);
 
 impl Hub {
     #[cfg(test)]
@@ -150,11 +151,18 @@ impl Hub {
         self.stale.lock().expect("channel hub").insert(pid, Instant::now());
     }
 
-    /// Channel helpers refused because they run a different deckd executable,
-    /// e.g. left over from before an update. Restarting their sessions fixes it.
+    fn clear_stale(&self, pid: u32) {
+        self.stale.lock().expect("channel hub").remove(&pid);
+    }
+
+    /// Channel helpers refused because they run a different (or vanished)
+    /// `deckd` executable than this daemon, e.g. left over from before an
+    /// update, or this daemon being the odd one out. Entries age out, and a
+    /// helper whose process has exited stops counting at once, so the number
+    /// follows restarted sessions instead of freezing.
     pub fn stale_count(&self) -> usize {
         let mut stale = self.stale.lock().expect("channel hub");
-        stale.retain(|_, seen| seen.elapsed() < STALE_WINDOW);
+        stale.retain(|pid, seen| seen.elapsed() < STALE_WINDOW && process_alive(*pid));
         stale.len()
     }
 
@@ -243,33 +251,59 @@ fn finish_delivery(
     }
 }
 
+fn process_alive(pid: u32) -> bool {
+    let Ok(pid) = libc::pid_t::try_from(pid) else { return false };
+    // SAFETY: signal 0 only checks that the process exists.
+    unsafe { libc::kill(pid, 0) == 0 || io::Error::last_os_error().raw_os_error() == Some(libc::EPERM) }
+}
+
 fn socket(data: &Path) -> PathBuf {
     data.join("claude-channel.sock")
 }
 
-/// The pid of a same-user process running a different copy of `deckd`.
-fn stale_helper(stream: &UnixStream) -> Option<u32> {
-    let (uid, pid) = crate::api::uds::peer_of(stream).ok()?;
-    let pid = pid?;
-    let own = std::env::current_exe().ok()?;
-    let theirs = crate::trust::exe_path(pid)?;
-    (uid == unsafe { libc::geteuid() } && theirs != own && theirs.file_name() == own.file_name())
-        .then_some(pid)
+/// Why [`peer`] said no.
+#[derive(Debug)]
+enum PeerError {
+    /// Not a same-user process, no pid, or unreadable credentials.
+    Rejected(io::Error),
+    /// A same-user process that is not running this executable: `exe` is what
+    /// `proc_pidpath` resolved, or `None` when it could not (a deleted or
+    /// replaced binary).
+    OtherExecutable { pid: u32, exe: Option<PathBuf> },
 }
 
-fn peer(stream: &UnixStream) -> io::Result<u32> {
-    let (uid, pid) = crate::api::uds::peer_of(stream)?;
-    let pid = pid.ok_or_else(|| io::Error::other("missing peer pid"))?;
+impl PeerError {
+    /// Is the refused peer plausibly another copy of `deckd` (as opposed to
+    /// some unrelated same-user program)? An unresolvable path counts: that
+    /// is what a helper whose binary was deleted by an update looks like.
+    fn other_deckd(&self, own: &Path) -> Option<u32> {
+        match self {
+            PeerError::OtherExecutable { pid, exe: None } => Some(*pid),
+            PeerError::OtherExecutable { pid, exe: Some(exe) }
+                if exe.file_name() == own.file_name() =>
+            {
+                Some(*pid)
+            }
+            _ => None,
+        }
+    }
+}
+
+fn peer(stream: &UnixStream) -> Result<u32, PeerError> {
+    let (uid, pid) = crate::api::uds::peer_of(stream).map_err(PeerError::Rejected)?;
+    let pid = pid.ok_or_else(|| PeerError::Rejected(io::Error::other("missing peer pid")))?;
     // No script or general API client can impersonate either end of this door.
     // The same deckd executable implements both the daemon and MCP helper.
-    let own_executable = std::env::current_exe()?;
-    if uid != unsafe { libc::geteuid() }
-        || crate::trust::exe_path(pid) != Some(own_executable)
-    {
-        return Err(io::Error::new(
+    let own_executable = std::env::current_exe().map_err(PeerError::Rejected)?;
+    if uid != unsafe { libc::geteuid() } {
+        return Err(PeerError::Rejected(io::Error::new(
             io::ErrorKind::PermissionDenied,
             "channel peer",
-        ));
+        )));
+    }
+    let exe = crate::trust::exe_path(pid);
+    if exe.as_ref() != Some(&own_executable) {
+        return Err(PeerError::OtherExecutable { pid, exe });
     }
     Ok(pid)
 }
@@ -339,9 +373,13 @@ pub async fn serve(data: PathBuf, hub: Arc<Hub>, mut stop: watch::Receiver<bool>
             accepted = listener.accept() => {
                 let Ok((stream, _)) = accepted else { break };
                 if connections.len() >= 64 { continue; }
-                let Ok(pid) = peer(&stream) else {
-                    if let Some(pid) = stale_helper(&stream) { hub.note_stale(pid); }
-                    continue;
+                let pid = match peer(&stream) {
+                    Ok(pid) => { hub.clear_stale(pid); pid }
+                    Err(refusal) => {
+                        if let Some(pid) = std::env::current_exe().ok()
+                            .and_then(|own| refusal.other_deckd(&own)) { hub.note_stale(pid); }
+                        continue;
+                    }
                 };
                 let cli_pid = crate::hook::walk::resolve(pid, &crate::hook::walk::MacProcs,
                     crate::hook::walk::MAX_HOPS).cli_pid;
@@ -429,6 +467,31 @@ pub fn main(data: &Path) -> Result<i32, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn refused_peers_count_as_stale_when_they_may_be_another_deckd() {
+        let own = Path::new("/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd");
+        let refused = |exe: Option<&str>| PeerError::OtherExecutable { pid: 7, exe: exe.map(PathBuf::from) };
+        // A different copy of deckd, and a vanished one (path unresolvable).
+        assert_eq!(refused(Some("/var/folders/x/Sparkle/deckd")).other_deckd(own), Some(7));
+        assert_eq!(refused(None).other_deckd(own), Some(7));
+        // An unrelated same-user program, or a rejected peer, is not.
+        assert_eq!(refused(Some("/usr/bin/python3")).other_deckd(own), None);
+        assert_eq!(PeerError::Rejected(io::Error::other("x")).other_deckd(own), None);
+    }
+
+    #[test]
+    fn stale_count_forgets_exited_helpers_and_accepted_ones() {
+        let hub = Hub::default();
+        let mut child = std::process::Command::new("/usr/bin/true").spawn().unwrap();
+        let dead = child.id();
+        child.wait().unwrap();
+        hub.note_stale(std::process::id());
+        hub.note_stale(dead);
+        assert_eq!(hub.stale_count(), 1);
+        hub.clear_stale(std::process::id());
+        assert_eq!(hub.stale_count(), 0);
+    }
 
     #[test]
     fn uncertain_delivery_never_retries_inbox() {

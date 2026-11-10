@@ -349,6 +349,10 @@ pub enum Launchctl {
 pub struct Env {
     /// The absolute path hook files embed: `current_exe()`, validated.
     pub exe: PathBuf,
+    /// What `.mcp.json` launches the Claude channel helper from: `exe`,
+    /// unless that is a transient path and pinning the installed bundle is
+    /// safe (see `claude::channel_exe`).
+    pub channel_exe: PathBuf,
     /// deckd's data directory (`backups/`, `integrations.json`).
     pub data: PathBuf,
     /// `tokens.toml` — where the `hooks` token's hash lives.
@@ -440,8 +444,10 @@ impl Env {
             ));
         }
         let home = home_dir()?;
+        let channel_exe = claude::resolve_channel_exe(&exe, &paths.data, true);
         Ok(Env {
             exe,
+            channel_exe,
             data: paths.data.clone(),
             tokens: paths.tokens.clone(),
             port: bound_port(&paths.port, config.api.port)?,
@@ -1166,6 +1172,7 @@ pub fn test_env(dir: &testdir::TestDir) -> Env {
     }
     let data = dir.sub("data");
     Env {
+        channel_exe: exe.clone(),
         exe,
         tokens: data.join("tokens.toml"),
         data,

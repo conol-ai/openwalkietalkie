@@ -102,7 +102,8 @@ pub struct Pending {
 pub struct IntegrationsPane {
     reports: Vec<Report>,
     claude_channels: Vec<(String, bool)>,
-    /// Helpers from a previous install that the daemon keeps refusing.
+    /// Same-user `deckd` channel helpers the daemon refused for running a
+    /// different or missing executable.
     claude_channels_stale: usize,
     warnings: Vec<String>,
     /// `perm.status`'s `automation.ghostty`: `granted`, `denied`, `unknown`.
@@ -198,6 +199,17 @@ fn toggle(expanded: &mut Vec<String>, target: &str) {
     }
 }
 
+fn channel_rows(value: &serde_json::Value) -> Vec<(String, bool)> {
+    value["claude_channels"].as_array()
+        .into_iter().flatten().filter_map(|row| Some((
+            row["session"].as_str()?.to_owned(), row["state"] == "ready"
+        ))).collect()
+}
+
+fn stale_helpers(value: &serde_json::Value) -> usize {
+    value["claude_channels_stale"].as_u64().unwrap_or(0) as usize
+}
+
 impl Shell {
     /// Ask the daemon for everything this screen draws.
     ///
@@ -225,12 +237,8 @@ impl Shell {
                 match result {
                     Ok(value) => {
                         let (reports, warnings) = Report::list(&value);
-                        this.integrations.claude_channels = value["claude_channels"].as_array()
-                            .into_iter().flatten().filter_map(|row| Some((
-                                row["session"].as_str()?.to_owned(), row["state"] == "ready"
-                            ))).collect();
-                        this.integrations.claude_channels_stale =
-                            value["claude_channels_stale"].as_u64().unwrap_or(0) as usize;
+                        this.integrations.claude_channels = channel_rows(&value);
+                        this.integrations.claude_channels_stale = stale_helpers(&value);
                         this.integrations.reports = reports;
                         this.integrations.warnings = warnings;
                         // Only an answer counts as having asked, so opening
@@ -256,6 +264,25 @@ impl Shell {
             },
         );
         self.refresh_tokens(window, cx);
+    }
+
+    /// Re-read only the Claude channel rows and the stale-helper count
+    /// (`detect:false`: no CLI is spawned), once the screen has been read.
+    pub(crate) fn poll_claude_channels(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.screen != crate::shell::Screen::Integrations || !self.integrations.asked || self.integrations.busy {
+            return;
+        }
+        self.ask(
+            UiAction::IntegrationsStatus { detect: false },
+            window,
+            cx,
+            |this, result, _window, _cx| {
+                if let Ok(value) = result {
+                    this.integrations.claude_channels = channel_rows(&value);
+                    this.integrations.claude_channels_stale = stale_helpers(&value);
+                }
+            },
+        );
     }
 
     fn refresh_tokens(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -408,7 +435,7 @@ impl Shell {
             ));
         if self.integrations.claude_channels_stale > 0 {
             body = body.child(div().text_color(p.muted).child(format!(
-                "{} Claude session(s) are running a channel helper from an older OpenWalkieTalkie install and cannot connect. Restart those sessions to reconnect.",
+                "{} Claude channel helper(s) run a different or missing deckd executable than the running OpenWalkieTalkie daemon, so the daemon refuses them. If you updated the app, restart those Claude sessions. If the daemon is the one out of place (for example a development build or a second app copy), restarting does not help: quit it and open the OpenWalkieTalkie app you want to use.",
                 self.integrations.claude_channels_stale
             )));
         }

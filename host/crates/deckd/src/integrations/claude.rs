@@ -170,26 +170,91 @@ pub fn mcp_json_path(env: &Env) -> PathBuf {
     plugin_dir(env).join(".mcp.json")
 }
 
+/// Where the installed bundle's deckd lives.
+pub const INSTALLED_EXE: &str = "/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd";
+
+/// A path that will not exist after an update: a per-user temp directory
+/// (`/var/folders`, which `/private/var/folders` also names) or a Sparkle
+/// staging directory. App Translocation never reaches here: `Env::with_exe`
+/// refuses it first.
+fn transient(exe: &Path) -> bool {
+    use std::path::Component;
+    exe.starts_with("/var/folders")
+        || exe.starts_with("/private/var/folders")
+        || exe.components().any(|part| {
+            matches!(part, Component::Normal(name)
+                if name == "Sparkle" || name == "org.sparkle-project.Sparkle")
+        })
+}
+
+/// The executable behind the daemon currently answering the channel door.
+/// A helper is only accepted when it runs that same executable path, so this
+/// is what a pinned `.mcp.json` has to match.
+#[cfg(target_os = "macos")]
+fn live_daemon_exe(data: &Path) -> Option<PathBuf> {
+    use std::os::fd::AsRawFd;
+    let stream = std::os::unix::net::UnixStream::connect(data.join("claude-channel.sock")).ok()?;
+    let mut pid: libc::pid_t = 0;
+    let mut len = std::mem::size_of::<libc::pid_t>() as libc::socklen_t;
+    // SAFETY: `pid` and `len` are valid for the size passed; LOCAL_PEERPID
+    // writes one pid_t.
+    let rc = unsafe {
+        libc::getsockopt(
+            stream.as_raw_fd(),
+            libc::SOL_LOCAL,
+            libc::LOCAL_PEERPID,
+            (&mut pid as *mut libc::pid_t).cast(),
+            &mut len,
+        )
+    };
+    if rc != 0 || pid <= 0 {
+        return None;
+    }
+    crate::trust::exe_path(pid as u32)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn live_daemon_exe(_data: &Path) -> Option<PathBuf> {
+    None
+}
+
 /// The path the long-lived MCP helper is launched from. A copy running from a
 /// temporary location (a Sparkle staging directory, `/var/folders`) is gone
-/// after the update, and every later Claude session would name a dead path, so
-/// prefer the installed bundle's executable when it exists.
-fn channel_exe(exe: &Path) -> PathBuf {
-    let text = exe.to_string_lossy();
-    let transient = ["/var/folders/", "/private/var/", "/Sparkle", "/AppTranslocation/"]
-        .iter()
-        .any(|marker| text.contains(marker));
-    let installed = Path::new("/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd");
-    if transient && installed.is_file() {
+/// after the update, so a later Claude session would name a dead path. Pin the
+/// installed bundle instead, but only when that is provably safe: the daemon
+/// refuses any helper whose executable differs from its own, so the pin is
+/// used only when the live daemon already runs from `installed` (which also
+/// makes it the same build), and it answers `hook --help` like any binary
+/// this installer names. Otherwise keep `exe`.
+pub fn channel_exe(
+    exe: &Path,
+    installed: &Path,
+    daemon_exe: Option<&Path>,
+    verify: bool,
+) -> PathBuf {
+    let safe = transient(exe)
+        && daemon_exe == Some(installed)
+        && installed.is_file()
+        && (!verify || super::hook_subcommand_check(installed).is_ok());
+    if safe {
         installed.to_path_buf()
     } else {
         exe.to_path_buf()
     }
 }
 
+/// [`channel_exe`] against this machine, for `Env::with_exe`. Does nothing
+/// (and probes nothing) unless `exe` is transient.
+pub fn resolve_channel_exe(exe: &Path, data: &Path, verify: bool) -> PathBuf {
+    if !transient(exe) {
+        return exe.to_path_buf();
+    }
+    channel_exe(exe, Path::new(INSTALLED_EXE), live_daemon_exe(data).as_deref(), verify)
+}
+
 pub fn mcp_json(env: &Env) -> serde_json::Value {
     serde_json::json!({"mcpServers": {"openwalkietalkie": {
-        "command": channel_exe(&env.exe),
+        "command": env.channel_exe,
         "args": ["--data-dir", env.data.to_string_lossy(), "claude-channel"]
     }}})
 }
@@ -647,16 +712,42 @@ mod tests {
     }
 
     #[test]
-    fn channel_exe_replaces_only_transient_paths() {
-        let stable = Path::new("/Users/x/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd");
-        assert_eq!(channel_exe(stable), stable);
+    fn transient_paths_are_matched_by_prefix_or_component() {
+        let t = |p: &str| transient(Path::new(p));
+        assert!(t("/var/folders/x/T/OpenWalkieTalkie.app/Contents/MacOS/deckd"));
+        assert!(t("/private/var/folders/x/T/Sparkle/a/deckd"));
+        assert!(t("/Users/x/Library/Caches/id/org.sparkle-project.Sparkle/Installation/a/deckd"));
+        assert!(t("/Users/x/Sparkle/a/deckd"));
+        assert!(!t("/Users/x/SparkleFork/target/debug/deckd"));
+        assert!(!t("/private/var/tmp/build/deckd"));
+        assert!(!t("/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd"));
+    }
+
+    #[test]
+    fn channel_exe_is_pinned_only_when_the_live_daemon_runs_the_installed_copy() {
+        let dir = TestDir::new("channel-exe");
+        let installed = dir.path().join("Applications/deckd");
+        std::fs::create_dir_all(installed.parent().unwrap()).unwrap();
+        std::fs::write(&installed, b"#!/bin/sh\nexit 0\n").unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&installed, std::fs::Permissions::from_mode(0o755)).unwrap();
         let staged = Path::new("/private/var/folders/x/T/Sparkle/OpenWalkieTalkie.app/Contents/MacOS/deckd");
-        let installed =
-            Path::new("/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd");
-        assert_eq!(
-            channel_exe(staged),
-            if installed.is_file() { installed } else { staged }
-        );
+        let stable = Path::new("/Users/x/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd");
+        // Replacement branch: transient exe, daemon on the installed copy.
+        assert_eq!(channel_exe(staged, &installed, Some(&installed), true), installed);
+        // Not transient: untouched.
+        assert_eq!(channel_exe(stable, &installed, Some(&installed), true), stable);
+        // Daemon elsewhere (staged, ~/Applications) or unknown: keep exe.
+        assert_eq!(channel_exe(staged, &installed, Some(staged), true), staged);
+        assert_eq!(channel_exe(staged, &installed, Some(stable), true), staged);
+        assert_eq!(channel_exe(staged, &installed, None, true), staged);
+        // Missing installed binary: keep exe.
+        let missing = dir.path().join("Applications/none");
+        assert_eq!(channel_exe(staged, &missing, Some(&missing), false), staged);
+        // Installed binary that fails the hook check: keep exe.
+        std::fs::write(&installed, b"#!/bin/sh\nexit 2\n").unwrap();
+        assert_eq!(channel_exe(staged, &installed, Some(&installed), true), staged);
+        assert_eq!(channel_exe(staged, &installed, Some(&installed), false), installed);
     }
 
     #[test]
@@ -667,7 +758,7 @@ mod tests {
         let mcp = json_at(&mcp_json_path(&env));
         assert_eq!(
             mcp["mcpServers"]["openwalkietalkie"]["command"],
-            channel_exe(&env.exe).to_string_lossy().as_ref()
+            env.exe.to_string_lossy().as_ref()
         );
         assert_eq!(
             mcp["mcpServers"]["openwalkietalkie"]["args"],
