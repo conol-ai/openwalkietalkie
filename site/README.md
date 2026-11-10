@@ -149,3 +149,24 @@ Site code uses the repository's MIT license. The bundled Press Start 2P and
 VT323 fonts keep their SIL Open Font License notices in `public/fonts/`.
 Hardware renders come from the repository's CERN-OHL-P-2.0 hardware designs;
 the corresponding notice is included as `public/assets/HARDWARE-LICENSE.txt`.
+
+## V9.3B website design preview
+
+The homepage uses matching white/orange day and black/mint night pixel
+illustrations of the V9.3B enclosure. CSS aligns their visible device bounds
+so theme changes preserve size and position. The navigation's GitHub link
+opens the on-page Blueprint section.
+
+Try It exposes Agents, Omarchy, Macropad, Usage, System and Arcade. Workspace
+selection and macro editing operate on sample data. Arcade provides browser
+adaptations of Flappy Bird, Snake and Raiden; it does not run firmware code.
+The preview never accesses the microphone, posts OS shortcuts or connects
+to deckd. Timer and Settings are omitted. Shared description rows keep the
+activity display stationary when changing faces.
+
+The Faces is an indexed screen atlas, separate from the existing hardware
+photo carousel. Its eighth image is the supplied 1920px Snake firmware
+screenshot. The hardware carousel and both colourway cards are preserved.
+
+Use the static server command above to review front-end interactions. Waitlist
+submission still requires the Worker/D1 development server.

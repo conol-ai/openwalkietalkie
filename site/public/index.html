@@ -76,16 +76,12 @@
     </a>
 
     <nav class="nav__links" aria-label="Sections">
-      <a href="#waitlist">Join the waitlist</a>
-      <a href="#features">Features</a>
+      <a href="#waitlist">Waitlist</a>
       <a href="#demo">Try It</a>
-      <a href="#faces">Faces</a>
-      <a href="#blueprint">Blueprint</a>
-      <a href="#real">Hardware</a>
       <a href="#download">Download</a>
       <a href="/docs/">Docs</a>
       <a href="/blog/">Blog</a>
-      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <a href="#blueprint">GitHub</a>
     </nav>
 
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle day and night theme" aria-pressed="false">
@@ -147,14 +143,10 @@
       </ul>
     </div>
 
-    <!-- The hero art is a photo of the two colourways, framed like the stack cards
-         so it sits on both skies. tools/photos.sh crops it from ../ref/OpenWalkieTalkie. -->
     <div class="hero__art" id="heroArt">
-      <div class="hero__art-frame">
-        <figure class="hero__photo">
-          <img class="hero__photo-img" src="/assets/photos/hero-pair.webp" alt="A white and orange OpenWalkieTalkie standing on a white table, its screen following a Codex session, with a black and green one out of focus in the corner and spare keycaps scattered in front" width="1045" height="1306" fetchpriority="high" />
-          <figcaption class="hero__photo-cap">TWO COLOURWAYS · ONE DECK</figcaption>
-        </figure>
+      <div class="hero__art-frame hero-product">
+        <img class="swap-img swap-img--day" src="/assets/hero-radio-v93b-day.png" alt="Pixel illustration of the white and orange V9.3B OpenWalkieTalkie" width="1254" height="1254" fetchpriority="high" />
+        <img class="swap-img swap-img--night" src="/assets/hero-radio-v93b-night.png" alt="Pixel illustration of the black and mint V9.3B OpenWalkieTalkie" width="1254" height="1254" />
       </div>
     </div>
   </div>
@@ -242,7 +234,7 @@
       <div class="ptt-copy">
         <div class="feat__icon icon-voice" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
         <h3 class="feat__title">Push to Talk</h3>
-        <p class="feat__body">Hold the key from any face and the screen becomes a LISTENING overlay. Release it and the transcript stays visible while recognition finishes. The deck's microphone streams to your Mac, the words land in the active agent as its next prompt, and the reply can be spoken back through the deck's speaker.</p>
+        <p class="feat__body">Hold the key from a work face and the screen becomes a LISTENING overlay. Release it and the transcript stays visible while recognition finishes. The deck's microphone streams to your Mac, the words land in the active agent as its next prompt, and the reply can be spoken back through the deck's speaker.</p>
         <p class="ptt-readout" id="featPttReadout" role="status">At rest. Hold the key to open a session.</p>
       </div>
 
@@ -275,7 +267,7 @@
       <article class="feat reveal" tabindex="0">
         <div class="feat__icon icon-wheel" aria-hidden="true"><i class="drum"></i></div>
         <h3 class="feat__title">The Wheel</h3>
-        <p class="feat__body">One detent, one row. Hold SHIFT and the same wheel slides between faces: Agents, Omarchy, Macropad, Usage, Settings. Double-tap SHIFT to reorder them.</p>
+        <p class="feat__body">One detent, one row. Hold SHIFT and the same wheel slides between faces: Agents, Omarchy, Macropad, Usage, System and Arcade. Double-tap SHIFT to reorder them.</p>
         <p class="feat__meta">SCROLL · SHIFT+SCROLL</p>
       </article>
 
@@ -309,8 +301,18 @@
     <header class="section-head reveal">
       <p class="section-kicker">CHAPTER III</p>
       <h2 class="section-title">TRY IT</h2>
-      <p class="section-lede">The deck's grammar, in miniature. Drag or scroll the wheel, press the keys, or use your keyboard: <kbd>↑</kbd> <kbd>↓</kbd> scroll, <kbd>↵</kbd> enter, <kbd>esc</kbd> cancel, <kbd>←</kbd> <kbd>→</kbd> channels, hold <kbd>shift</kbd> to change faces, hold <kbd>space</kbd> to talk.</p>
+      <p class="section-lede demo-intro"><span>Six faces. One deck.</span><span>Pick a mode. Tap or turn the wheel.</span><span><kbd>↑ ↓</kbd> scroll · <kbd>↵</kbd> open · <kbd>esc</kbd> back</span><span><kbd>shift</kbd> + scroll: faces · <kbd>space</kbd>: talk</span></p>
     </header>
+
+    <div class="demo-tabs reveal" role="group" aria-label="Choose a demo face">
+      <button type="button" class="demo-tab" data-demo-face="0" aria-pressed="true"><span>01</span>Agents</button>
+      <button type="button" class="demo-tab" data-demo-face="1" aria-pressed="false"><span>02</span>Omarchy</button>
+      <button type="button" class="demo-tab" data-demo-face="2" aria-pressed="false"><span>03</span>Macropad</button>
+      <button type="button" class="demo-tab" data-demo-face="3" aria-pressed="false"><span>04</span>Usage</button>
+      <button type="button" class="demo-tab" data-demo-face="4" aria-pressed="false"><span>05</span>System</button>
+      <button type="button" class="demo-tab" data-demo-face="5" aria-pressed="false"><span>06</span>Arcade</button>
+    </div>
+    <p class="demo-disclaimer">INTERACTIVE PREVIEW · Sample data. No microphone access or connection to your computer.</p>
 
     <div class="demo__grid reveal">
       <!-- ---- the handheld replica ---- -->
@@ -342,26 +344,30 @@
                 <!-- face 2: Omarchy -->
                 <div class="face" id="faceOmarchy">
                   <div class="chips" id="wsChips"></div>
-                  <ul class="rows">
-                    <li><span>ghostty · claude</span><span>ws 1</span></li>
-                    <li><span>ghostty · codex</span><span>ws 1</span></li>
-                    <li><span>firefox · docs</span><span>ws 2</span></li>
-                    <li><span>kicad · main-revb</span><span>ws 3</span></li>
-                  </ul>
+                  <ul class="rows" id="wsWindows"></ul>
+                  <p class="workspace-status" id="wsStatus" role="status"></p>
                 </div>
                 <!-- face 3: Macropad -->
                 <div class="face" id="faceMacropad">
                   <div class="mgrid" id="mgrid"></div>
+                  <button class="screen-button macro-edit-toggle" id="macroEditToggle" type="button" aria-pressed="false">EDIT KEYS</button>
                 </div>
                 <!-- face 4: Usage -->
                 <div class="face" id="faceUsage">
                   <div id="usage"></div>
                 </div>
-                <!-- face 5: Settings -->
-                <div class="face" id="faceSettings">
-                  <ul class="rows" id="settings"></ul>
+                <div class="face" id="faceSystem"><div id="systemMeters"></div><button type="button" class="screen-button" id="refreshSystem">Refresh sample</button></div>
+                <div class="face" id="faceArcade">
+                  <div id="arcadeMenu"><button type="button" class="arcade-choice" data-game="flappy"><span>01</span> FLAPPY BIRD <small>PTT to fly</small></button><button type="button" class="arcade-choice" data-game="snake"><span>02</span> SNAKE <small>Turn with the wheel</small></button><button type="button" class="arcade-choice" data-game="raiden"><span>03</span> RAIDEN <small>Move · auto-fire</small></button></div>
+                  <div id="arcadePlay" hidden><canvas id="arcadeCanvas" width="320" height="240" aria-label="Arcade game field"></canvas><div class="arcade-status" id="arcadeStatus" role="status">Ready</div><button type="button" class="screen-button" id="arcadeStart">Start game</button><button type="button" class="screen-button" id="arcadeBack">Games</button></div>
                 </div>
               </div>
+              <form id="macroEditor" class="macro-editor" hidden>
+                <h3 id="macroEditorTitle">EDIT KEY</h3>
+                <label>Label<input id="macroLabel" maxlength="18" required autocomplete="off" /></label>
+                <label>Shortcut<input id="macroShortcut" maxlength="32" placeholder="cmd+shift+4" autocomplete="off" /></label>
+                <div><button type="submit" class="screen-button">Save key</button><button type="button" class="screen-button" id="macroRemove">Remove</button><button type="button" class="screen-button" id="macroCancel">Cancel</button></div>
+              </form>
               <!-- the PTT overlay sits over whatever face is up -->
               <div class="ptt" id="pttOverlay" aria-live="polite">
                 <div class="ptt__head"><span class="ptt__who" id="pttWho">Codex · cohdl-api</span><span class="ptt__pill">LISTENING</span></div>
@@ -393,12 +399,14 @@
       </div>
 
       <!-- ---- the host console: what deckd sees ---- -->
+      <div class="demo-companion">
+        <div class="demo-guide"><p class="demo-guide__eyebrow" id="demoEyebrow">01 / AGENTS</p><h3 id="demoTitle">A direct line to your agents.</h3><p id="demoDescription">Pick a session, open its question card, or hold PTT to send a sample voice prompt.</p><p class="demo-guide__tip" id="demoTip">Try: ENTER twice to answer the first question.</p></div>
       <div class="monitor">
         <div class="monitor__bezel">
           <div class="monitor__screen" id="hostScreen">
             <div class="monitor__bar">
               <span class="monitor__dot"></span>
-              <span class="monitor__title">deckd · HOST LOG · channel 5</span>
+              <span class="monitor__title">DECK ACTIVITY · DEMO</span>
               <span class="monitor__ver">v0.1</span>
             </div>
             <div class="monitor__body">
@@ -412,6 +420,7 @@
           </button>
           <span class="monitor__log" id="lastEvent" role="status">—</span>
         </div>
+      </div>
       </div>
     </div>
   </div>
@@ -449,66 +458,9 @@
 <!-- ============ 7. THE FACES ============ -->
 <section class="section faces" id="faces">
   <div class="wrap">
-    <header class="section-head reveal">
-      <p class="section-kicker">CHAPTER V</p>
-      <h2 class="section-title">THE FACES</h2>
-      <p class="section-lede">Rendered by the firmware itself, pixel for pixel, from the same code that drives the panel. Tap the stack, swipe it, or use the arrows.</p>
-    </header>
-
-    <div class="polaroid-wrap reveal">
-      <div class="shots-col">
-        <div class="shots shots--square" role="group" aria-label="Firmware renders of the deck's faces">
-          <figure class="shot">
-            <div class="shot__win"><img class="shot__img" src="/assets/screens/roster.png" alt="The Agents roster: four agents with coloured state dots, the first one asking a question" width="480" height="480" loading="lazy" /></div>
-            <figcaption class="shot__cap"><span class="shot__cap-title">AGENTS · HOME</span><span class="shot__cap-body">Who needs you first. Questions sort to the top; the bar at the left marks the active channel.</span></figcaption>
-          </figure>
-          <figure class="shot">
-            <div class="shot__win"><img class="shot__img" src="/assets/screens/card-question.png" alt="A question card with three choices, the first one recommended" width="480" height="480" loading="lazy" /></div>
-            <figcaption class="shot__cap"><span class="shot__cap-title">QUESTION CARD</span><span class="shot__cap-body">Scroll, ENTER, or tap. The card locks while the host confirms, then the view goes back to the channel.</span></figcaption>
-          </figure>
-          <figure class="shot">
-            <div class="shot__win"><img class="shot__img" src="/assets/screens/ptt-roster.png" alt="The LISTENING overlay with a waveform and a transcript typing in" width="480" height="480" loading="lazy" /></div>
-            <figcaption class="shot__cap"><span class="shot__cap-title">LISTENING</span><span class="shot__cap-body">Hold PTT from any face. Release to send. The last reply stays at the bottom so you know what you are answering.</span></figcaption>
-          </figure>
-          <figure class="shot">
-            <div class="shot__win"><img class="shot__img" src="/assets/screens/macropad.png" alt="The Macropad face: a 3 by 3 grid of labelled keys with keystroke glyphs" width="480" height="480" loading="lazy" /></div>
-            <figcaption class="shot__cap"><span class="shot__cap-title">MACROPAD</span><span class="shot__cap-body">Nine touch keys, each with a label and a chord. SHIFT+CANCEL opens the key editor on the deck.</span></figcaption>
-          </figure>
-          <figure class="shot">
-            <div class="shot__win"><img class="shot__img" src="/assets/screens/usage.png" alt="The Usage face: provider bars with percentages and reset countdowns" width="480" height="480" loading="lazy" /></div>
-            <figcaption class="shot__cap"><span class="shot__cap-title">USAGE</span><span class="shot__cap-body">One bar per rate-limit window, with the countdown to its reset. ENTER probes both providers at once.</span></figcaption>
-          </figure>
-          <figure class="shot">
-            <div class="shot__win"><img class="shot__img" src="/assets/screens/omarchy.png" alt="The Omarchy face: workspace chips and a window list" width="480" height="480" loading="lazy" /></div>
-            <figcaption class="shot__cap"><span class="shot__cap-title">OMARCHY</span><span class="shot__cap-body">A remote for a Hyprland desktop: workspaces and windows, as the host pushes them.</span></figcaption>
-          </figure>
-          <figure class="shot">
-            <div class="shot__win"><img class="shot__img" src="/assets/screens/manager.png" alt="The face manager: the strip of faces as tiles, ready to reorder" width="480" height="480" loading="lazy" /></div>
-            <figcaption class="shot__cap"><span class="shot__cap-title">THE MANAGER</span><span class="shot__cap-body">Double-tap SHIFT. Reorder, add and remove faces, up to eight. Agents and Settings stay pinned.</span></figcaption>
-          </figure>
-          <figure class="shot">
-            <div class="shot__win"><img class="shot__img" src="/assets/screens/slide-50.png" alt="Two faces mid-slide, caught halfway through a SHIFT+SCROLL" width="480" height="480" loading="lazy" /></div>
-            <figcaption class="shot__cap"><span class="shot__cap-title">MID-SLIDE</span><span class="shot__cap-body">SHIFT+SCROLL, caught halfway. One detent per face, hard ends, no wrap.</span></figcaption>
-          </figure>
-        </div>
-        <div class="shots-bar">
-          <button class="pxbtn shots__nav shots__prev" type="button" aria-label="Previous render">◂ PREV</button>
-          <span class="shots__count" role="status">1 / 8</span>
-          <button class="pxbtn shots__nav shots__next" type="button" aria-label="Next render">NEXT ▸</button>
-        </div>
-      </div>
-
-      <ul class="build-notes">
-        <li><b>PANEL</b><span>480 × 480 on 38.8 mm, about 12 px per mm</span></li>
-        <li><b>TYPE</b><span>Noto Sans, rasterised ahead of time; no font engine on the chip</span></li>
-        <li><b>STRIP</b><span>Up to eight faces, three of them Macropads</span></li>
-        <li><b>NOTICES</b><span>A toast for four seconds, then a drawer; red while a question waits</span></li>
-        <li><b>IDLE</b><span>Back to the roster after 120 s without input</span></li>
-        <li><b>DARK SCREEN</b><span>Only PTT wakes and acts. Everything else just wakes.</span></li>
-        <li><b>FIRST RUN</b><span>A short tutorial, discovered by using it, not by reading</span></li>
-        <li><b>RENDERS</b><span>These images come from <code>tools/preview-all.py</code>, the firmware drawing on the host</span></li>
-      </ul>
-    </div>
+    <header class="section-head reveal"><p class="section-kicker">CHAPTER V · SCREEN ATLAS</p><h2 class="section-title">THE FACES</h2><p class="section-lede">One small screen. A whole desk of possibilities.<br>Explore the actual firmware screens, one face at a time.</p></header>
+    <div class="face-atlas reveal">
+      <div class="face-atlas__index" role="tablist" aria-label="Firmware screens" aria-orientation="vertical"><button class="face-atlas__tab" type="button" role="tab" id="atlasTab0" aria-controls="atlasPanel0" aria-selected="true" tabindex="0"><span>01</span><b>AGENTS · HOME</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab1" aria-controls="atlasPanel1" aria-selected="false" tabindex="-1"><span>02</span><b>QUESTION CARD</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab2" aria-controls="atlasPanel2" aria-selected="false" tabindex="-1"><span>03</span><b>LISTENING</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab3" aria-controls="atlasPanel3" aria-selected="false" tabindex="-1"><span>04</span><b>MACROPAD</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab4" aria-controls="atlasPanel4" aria-selected="false" tabindex="-1"><span>05</span><b>USAGE</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab5" aria-controls="atlasPanel5" aria-selected="false" tabindex="-1"><span>06</span><b>OMARCHY</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab6" aria-controls="atlasPanel6" aria-selected="false" tabindex="-1"><span>07</span><b>THE MANAGER</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab7" aria-controls="atlasPanel7" aria-selected="false" tabindex="-1"><span>08</span><b>ARCADE · SNAKE</b><span aria-hidden="true">↗</span></button></div><div class="face-atlas__stage"><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel0" aria-labelledby="atlasTab0" tabindex="0" ><div class="face-atlas__image"><img src="/assets/screens/roster.png" alt="The Agents roster: four agents with coloured state dots, the first one asking a question" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">01 / 08</span><h3>AGENTS · HOME</h3><p>Who needs you first. Questions sort to the top; the bar at the left marks the active channel.</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel1" aria-labelledby="atlasTab1" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/card-question.png" alt="A question card with three choices, the first one recommended" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">02 / 08</span><h3>QUESTION CARD</h3><p>Scroll, ENTER, or tap. The card locks while the host confirms, then the view goes back to the channel.</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel2" aria-labelledby="atlasTab2" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/ptt-roster.png" alt="The LISTENING overlay with a waveform and a transcript typing in" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">03 / 08</span><h3>LISTENING</h3><p>Hold PTT from a work face. Release to send. The last reply stays at the bottom so you know what you are answering.</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel3" aria-labelledby="atlasTab3" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/macropad.png" alt="The Macropad face: a 3 by 3 grid of labelled keys with keystroke glyphs" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">04 / 08</span><h3>MACROPAD</h3><p>Nine touch keys, each with a label and a chord. SHIFT+CANCEL opens the key editor on the deck.</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel4" aria-labelledby="atlasTab4" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/usage.png" alt="The Usage face: provider bars with percentages and reset countdowns" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">05 / 08</span><h3>USAGE</h3><p>One bar per rate-limit window, with the countdown to its reset. ENTER probes both providers at once.</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel5" aria-labelledby="atlasTab5" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/omarchy.png" alt="The Omarchy face: workspace chips and a window list" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">06 / 08</span><h3>OMARCHY</h3><p>A remote for a Hyprland desktop: workspaces and windows, as the host pushes them.</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel6" aria-labelledby="atlasTab6" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/manager.png" alt="The face manager: the strip of faces as tiles, ready to reorder" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">07 / 08</span><h3>THE MANAGER</h3><p>Double-tap SHIFT. Reorder, add and remove faces, up to eight. Agents and Settings stay pinned.</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel7" aria-labelledby="atlasTab7" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/arcade-snake-1920.png" alt="Snake running on the deck: a green snake and food on its playfield" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">08 / 08</span><h3>ARCADE · SNAKE</h3><p>A little break, built in. Snake, Flappy Bird and Raiden run locally on the deck. PTT becomes a game button.</p></figcaption></figure></div></div><div class="face-atlas__specs"><span><b>480 × 480</b> AMOLED</span><span><b>TOUCH + WHEEL</b> made for your hands</span><span><b>REAL FIRMWARE</b> rendered pixel for pixel</span></div>
   </div>
 </section>
 
@@ -753,6 +705,7 @@
   </div>
 </footer>
 
+<script src="/js/arcade.js"></script>
 <script src="/js/main.js"></script>
 <script src="/js/waitlist.js"></script>
 <script src="/js/privacy.js"></script>
