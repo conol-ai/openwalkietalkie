@@ -304,7 +304,7 @@
 
   /* ------------------------------------------------------------
      8. THE REPLICA — the deck's grammar, in miniature.
-        Faces: Agents · Omarchy · Macropad · Usage · Settings.
+        Faces: Agents · Omarchy · Macropad · Usage · System · Arcade.
         SHIFT+SCROLL moves between faces, SCROLL moves the
         highlight, ENTER opens, CANCEL goes back, PTT talks.
      ------------------------------------------------------------ */
@@ -312,7 +312,7 @@
     var deckEl = $('#deck');
     if (!deckEl) return;
 
-    var FACES = ['AGENTS', 'OMARCHY', 'MACROPAD', 'USAGE', 'SETTINGS'];
+    var FACES = ['AGENTS', 'OMARCHY', 'MACROPAD', 'USAGE', 'SYSTEM', 'ARCADE'];
     var faceEls = $$('.face', deckEl);
     var title = $('#screenTitle');
     var tag = $('#screenTag');
@@ -342,7 +342,7 @@
     var sent = false;
     var shiftHeld = false;
     var pttHeld = false;
-    var settingsHl = 0, usageHl = 0, wsHl = 0;
+    var usageHl = 0, wsHl = 0;
     var timers = [];
     function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
 
@@ -424,25 +424,49 @@
     ];
     var mgrid = $('#mgrid');
     var mkeys = [];
-    if (mgrid) {
+    var editingMacros = false, editingSlot = 0;
+    var editor = $('#macroEditor');
+    function renderMacros() {
+      if (!mgrid) return;
+      mgrid.replaceChildren(); mkeys = [];
       MACROS.forEach(function (m, i) {
-        var d = document.createElement('div');
-        if (!m) { d.className = 'mkey mkey--empty'; d.textContent = '+ assign'; }
-        else { d.className = 'mkey'; d.innerHTML = '<small>' + m[1] + '</small>' + m[0]; }
-        d.addEventListener('pointerdown', function (e) { e.preventDefault(); pressMacro(i, 'touch'); });
+        var d = document.createElement('button'); d.type = 'button';
+        d.className = 'mkey' + (!m ? ' mkey--empty' : '');
+        var small = document.createElement('small'); small.textContent = m ? m[1] : '';
+        var label = document.createElement('span'); label.textContent = m ? m[0] : '+ assign';
+        d.append(small, label);
+        d.addEventListener('click', function () { if (!m || editingMacros || shiftHeld) openEditor(i); else pressMacro(i, 'touch'); });
         mgrid.appendChild(d); mkeys.push(d);
       });
     }
+    function openEditor(i) {
+      editingSlot = i;
+      $('#macroEditorTitle').textContent = 'EDIT KEY ' + (i + 1);
+      $('#macroLabel').value = MACROS[i] ? MACROS[i][0] : '';
+      $('#macroShortcut').value = MACROS[i] ? MACROS[i][1] : '';
+      editor.hidden = false; $('#macroLabel').focus();
+    }
+    function closeEditor() { editor.hidden = true; renderMacros(); mkeys[editingSlot].focus(); }
+    editor.addEventListener('submit', function (e) {
+      e.preventDefault(); var label = $('#macroLabel').value.trim();
+      if (!label) { $('#macroLabel').focus(); return; }
+      MACROS[editingSlot] = [label, $('#macroShortcut').value.trim(), MACROS[editingSlot] ? MACROS[editingSlot][2] : null];
+      log('out', 'Key ' + (editingSlot + 1) + ' saved · ' + label + ' · ' + (MACROS[editingSlot][1] || 'touch only'));
+      closeEditor();
+    });
+    $('#macroRemove').addEventListener('click', function () { MACROS[editingSlot] = null; log('out', 'Key ' + (editingSlot + 1) + ' cleared'); closeEditor(); });
+    $('#macroCancel').addEventListener('click', closeEditor);
+    editor.addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.stopPropagation(); closeEditor(); } });
+    $('#macroEditToggle').addEventListener('click', function () { editingMacros = !editingMacros; this.setAttribute('aria-pressed', String(editingMacros)); this.textContent = editingMacros ? 'PICK A KEY TO EDIT · DONE' : 'EDIT KEYS'; });
     function pressMacro(i, how) {
-      var m = MACROS[i];
-      var el = mkeys[i];
+      var m = MACROS[i], el = mkeys[i];
       if (!el) return;
+      if (!m) { openEditor(i); return; }
       el.classList.add('is-down'); later(function () { el.classList.remove('is-down'); }, 160);
-      if (!m) { log('out', 'macro key ' + (i + 1) + ' · empty slot · opens the key editor', 'dim'); audio.blip(300, 0.05); return; }
-      var posts = /[⌘^⇧]/.test(m[1]) ? ' · host posts ' + m[1] + ' to the desktop' : '';
-      log('out', 'macro { key: ' + (i + 1) + ', act: 1 } ' + m[0] + ' (' + how + ')' + posts);
+      log('out', 'Preview · ' + m[0] + ' → ' + m[1] + ' (' + how + ')');
       audio.blip(600 + i * 40, 0.05);
     }
+    renderMacros();
     function macroFor(binding) {
       for (var i = 0; i < MACROS.length; i++) if (MACROS[i] && MACROS[i][2] === binding) return i;
       return -1;
@@ -467,31 +491,37 @@
 
     /* ---- omarchy ---- */
     var WS = ['1', '2', '3', '4', '5'];
+    var WINDOWS = [['Ghostty · Claude', 'Ghostty · Codex'], ['Firefox · documentation', 'Chromium · preview'], ['KiCad · main-revb', 'FreeCAD · enclosure'], ['Editor · firmware', 'Terminal · build'], ['Music · focus mix']];
     var chipsEl = $('#wsChips');
     function renderWs() {
       if (!chipsEl) return;
-      chipsEl.innerHTML = '';
+      chipsEl.replaceChildren();
       WS.forEach(function (w, i) {
-        var s = document.createElement('span'); s.className = 'chip' + (i === wsHl ? ' is-on' : ''); s.textContent = 'ws ' + w;
-        s.addEventListener('click', function () { wsHl = i; renderWs(); log('out', 'ws go ' + w); audio.blip(540, 0.04); });
-        chipsEl.appendChild(s);
+        var button = document.createElement('button'); button.type = 'button'; button.className = 'chip' + (i === wsHl ? ' is-on' : ''); button.textContent = 'ws ' + w;
+        button.setAttribute('aria-pressed', String(i === wsHl));
+        button.addEventListener('click', function () { wsHl = i; renderWs(); log('out', 'Workspace ' + w + ' selected'); audio.blip(540, 0.04); });
+        chipsEl.appendChild(button);
       });
+      var rows = $('#wsWindows'); rows.replaceChildren();
+      WINDOWS[wsHl].forEach(function (name) {
+        var li = document.createElement('li'), button = document.createElement('button');
+        button.type = 'button'; button.className = 'window-button'; button.textContent = name;
+        button.addEventListener('click', function () { $$('.window-button', rows).forEach(function (b) { b.classList.remove('is-focused'); }); button.classList.add('is-focused'); $('#wsStatus').textContent = 'Focused · ' + name; log('out', 'Window focus · ' + name); });
+        li.appendChild(button); rows.appendChild(li);
+      });
+      $('#wsStatus').textContent = 'Workspace ' + WS[wsHl] + ' · ' + WINDOWS[wsHl].length + ' windows';
     }
 
-    /* ---- settings ---- */
-    var SETTINGS = [['Host · Demo data', ['on', 'off']], ['Display · Idle home', ['120 s', 'off', '30 s', '60 s']], ['Speech · Replies', ['Apple', 'OpenAI', 'ElevenLabs']], ['About · Firmware', ['0.2.0 · Rev A']]];
-    var settingIdx = [0, 0, 0, 0];
-    var settingsEl = $('#settings');
-    function renderSettings() {
-      if (!settingsEl) return;
-      settingsEl.innerHTML = '';
-      SETTINGS.forEach(function (s, i) {
-        var li = document.createElement('li'); li.className = i === settingsHl ? 'is-hl' : '';
-        li.innerHTML = '<span>' + s[0] + '</span><span>' + s[1][settingIdx[i]] + '</span>';
-        li.addEventListener('click', function () { settingsHl = i; enter(); });
-        settingsEl.appendChild(li);
-      });
+    /* System metrics are clearly labelled samples, never browser telemetry. */
+    var systemRefresh = 0;
+    function renderSystem() {
+      var rows = [['CPU', 24 + systemRefresh % 12, 'Total processor load'], ['Memory', 58, '18.6 / 32 GiB used'], ['GPU', 12 + systemRefresh % 8, 'Graphics processor load'], ['Storage', 68, '348 / 512 GiB free']];
+      $('#systemMeters').innerHTML = rows.map(function (m) { return '<div class="system-meter"><span>' + m[0] + '</span><b>' + m[1] + '%</b><progress max="100" value="' + m[1] + '"></progress><small>' + m[2] + '</small></div>'; }).join('');
     }
+    $('#refreshSystem').addEventListener('click', function () { systemRefresh += 3; renderSystem(); log('in', 'Sample metrics refreshed · CPU, memory, GPU and free storage'); });
+    renderSystem();
+
+    var arcade = window.OWTArcade({ log: log, blip: audio.blip });
 
     /* ---- the screen chrome ---- */
     var HINTS = {
@@ -501,15 +531,29 @@
       OMARCHY: '<kbd>‹ ›</kbd> workspace <kbd>ENTER</kbd> go <kbd>CANCEL</kbd> home',
       MACROPAD: 'tap or press · <kbd>SHIFT</kbd>+<kbd>CANCEL</kbd> edits the keys',
       USAGE:   '<kbd>SCROLL</kbd> providers <kbd>ENTER</kbd> refresh',
-      SETTINGS: '<kbd>SCROLL</kbd> rows <kbd>ENTER</kbd> change <kbd>CANCEL</kbd> home'
+      SYSTEM: '<kbd>ENTER</kbd> refresh sample metrics',
+      ARCADE: '<kbd>‹ ›</kbd> move <kbd>PTT</kbd> play <kbd>ESC</kbd> back',
     };
-    var TAGS = { AGENTS: '19:42', OMARCHY: 'remote', MACROPAD: 'deck.toml', USAGE: 'SEP 2026', SETTINGS: 'demo' };
+    var TAGS = { AGENTS: '19:42', OMARCHY: 'remote', MACROPAD: 'deck.toml', USAGE: 'sample', SYSTEM: 'sample', ARCADE: 'local' };
+
+    var GUIDES = [
+      ['A direct line to your agents.', 'Open a session, answer a question, or hold PTT to send a sample prompt.', 'Try: ENTER twice to open the first question.'],
+      ['Your desktop, within reach.', 'Switch workspaces and tap a window to focus your Omarchy desktop.', 'Try: workspace 3, then select KiCad.'],
+      ['Make every key yours.', 'Label nine touch keys and assign shortcuts for your everyday actions.', 'Try: EDIT KEYS, choose a key, then save.'],
+      ['Know how much is left.', 'See Claude and Codex usage windows, with a countdown to each reset.', 'Try: scroll providers; ENTER refreshes.'],
+      ['Your computer, at a glance.', 'Check sample CPU, memory, GPU and free storage readings in one place.', 'Try: ENTER to refresh the sample metrics.'],
+      ['A break between builds.', 'Play Flappy Bird, Snake or Raiden, adapted from the deck’s local games.', 'Try: pick a game; PTT plays, ESC goes back.']
+    ];
+    $$('[data-demo-face]').forEach(function (button) { button.addEventListener('click', function () { setFace(Number(button.dataset.demoFace)); }); });
 
     function paint() {
       faceEls.forEach(function (f, i) { f.classList.toggle('is-active', i === face); });
       var name = FACES[face];
+      $$('[data-demo-face]').forEach(function (b, i) { b.setAttribute('aria-pressed', String(i === face)); });
+      $('#demoEyebrow').textContent = '0' + (face + 1) + ' / ' + name;
+      $('#demoTitle').textContent = GUIDES[face][0]; $('#demoDescription').textContent = GUIDES[face][1]; $('#demoTip').textContent = GUIDES[face][2];
       if (title) title.textContent = name === 'AGENTS' && view !== 'roster' ? (agents[chan].kind + ' · ' + agents[chan].name).toUpperCase() : name;
-      if (tag) { tag.textContent = TAGS[name]; tag.classList.toggle('is-demo', name === 'SETTINGS'); }
+      if (tag) { tag.textContent = TAGS[name]; tag.classList.toggle('is-demo', name === 'SYSTEM' || name === 'USAGE'); }
       if (hint) hint.innerHTML = name === 'AGENTS' ? HINTS[view] : HINTS[name];
       $$('[data-view]', deckEl).forEach(function (v) { v.hidden = v.getAttribute('data-view') !== view; });
       renderRoster();
@@ -523,6 +567,8 @@
     function setFace(n) {
       var next = clamp(n, 0, FACES.length - 1);
       if (next === face) { audio.blip(220, 0.04, 'sawtooth'); return; }   // hard end, one small bounce
+      if (pttHeld) pttUp();
+      arcade.deactivate(); editor.hidden = true;
       face = next; view = 'roster'; sent = false;
       if (FACES[face] === 'USAGE') renderUsage(true);
       paint();
@@ -538,8 +584,8 @@
         if (view === 'roster') { hl = clamp(hl + dir, 0, agents.length - 1); renderRoster(); }
         else if (view === 'card' && !sent) { var n = agents[chan].q ? agents[chan].q.choices.length : agents[chan].ready ? agents[chan].ready.steps.length : 1; choice = clamp(choice + dir, 0, n - 1); renderCard(); }
         else if (view === 'channel') { log('out', 'scroll · reads the long reply', 'dim'); }
-      } else if (name === 'USAGE') { usageHl = clamp(usageHl + dir, 0, USAGE.length - 1); renderUsage(false); }
-      else if (name === 'SETTINGS') { settingsHl = clamp(settingsHl + dir, 0, SETTINGS.length - 1); renderSettings(); }
+      } else if (name === 'ARCADE') { arcade.action(dir < 0 ? 'left' : 'right'); }
+      else if (name === 'USAGE') { usageHl = clamp(usageHl + dir, 0, USAGE.length - 1); renderUsage(false); }
       else if (name === 'OMARCHY') { wsHl = clamp(wsHl + dir, 0, WS.length - 1); renderWs(); log('out', 'key cw/ccw act:2', 'dim'); }
       else if (name === 'MACROPAD') { log('out', 'scroll · no key bound to the wheel', 'dim'); }
       audio.blip(dir > 0 ? 400 : 360, 0.03);
@@ -555,33 +601,37 @@
           else { log('out', 'enter · nothing pending for ' + a.name, 'dim'); audio.blip(300, 0.04); }
         }
         else if (view === 'card') confirmCard();
-      } else if (name === 'MACROPAD') { var i = macroFor(shiftHeld ? 'shift+enter' : 'enter'); if (i >= 0) pressMacro(i, 'ENTER'); }
+      } else if (name === 'ARCADE') { arcade.action('enter'); }
+      else if (name === 'SYSTEM') { $('#refreshSystem').click(); }
+      else if (name === 'MACROPAD') { var i = macroFor(shiftHeld ? 'shift+enter' : 'enter'); if (i >= 0) pressMacro(i, 'ENTER'); }
       else if (name === 'USAGE') { log('out', 'usage probe · Claude + Codex windows', 'dim'); renderUsage(true); audio.blip(640, 0.05); }
-      else if (name === 'SETTINGS') { settingIdx[settingsHl] = (settingIdx[settingsHl] + 1) % SETTINGS[settingsHl][1].length; renderSettings(); log('out', 'settings · ' + SETTINGS[settingsHl][0] + ' = ' + SETTINGS[settingsHl][1][settingIdx[settingsHl]]); audio.blip(600, 0.05); }
-      else if (name === 'OMARCHY') { log('out', 'ws go ' + WS[wsHl]); audio.blip(600, 0.05); }
+      else if (name === 'OMARCHY') { var win = $('.window-button', $('#wsWindows')); if (win) win.click(); log('out', 'ws go ' + WS[wsHl]); audio.blip(600, 0.05); }
     }
 
     function confirmCard() {
       var a = agents[chan];
       if (sent) return;
       sent = true; renderCard();
+      if (!a.q && !a.ready) { sent = false; return; }
       var label = a.q ? a.q.choices[choice] : a.ready.steps[choice];
       log('out', 'answer { agent: ' + (chan + 1) + ', choice: ' + (choice + 1) + ' } "' + label + '"');
       audio.blip(880, 0.08);
       later(function () {
         log('in', 'card cleared · ' + a.kind + ' · ' + a.name + ' is working', 'host');
         a.state = 'w'; a.q = null; a.ready = null; a.age = 0; a.sub = 'Running "' + label.toLowerCase() + '" · 0s';
-        view = 'channel'; sent = false; paint();
+        if (face === 0 && chan === agents.indexOf(a)) view = 'channel'; sent = false; paint();
         audio.blip(520, 0.05);
       }, 900);
     }
 
     function cancel() {
       var name = FACES[face];
+      if (!editor.hidden) { closeEditor(); return; }
+      if (name === 'ARCADE' && arcade.action('cancel')) return;
       if (name === 'AGENTS' && view === 'card') { view = 'channel'; sent = false; paint(); log('out', 'snooze · notice waits in the drawer', 'dim'); }
       else if (name === 'AGENTS' && view === 'channel') { view = 'roster'; paint(); }
-      else if (name === 'MACROPAD' && shiftHeld) { log('out', 'SHIFT+CANCEL · key editor opens on the deck', 'dim'); }
-      else if (face !== 0 || view !== 'roster') { face = 0; view = 'roster'; paint(); log('out', 'home'); }
+      else if (name === 'MACROPAD' && shiftHeld) { openEditor(0); }
+      else if (face !== 0 || view !== 'roster') { setFace(0); log('out', 'home'); }
       audio.blip(340, 0.05);
     }
 
@@ -591,7 +641,8 @@
         if (view === 'roster') { hl = clamp(hl + dir, 0, agents.length - 1); chan = hl; renderRoster(); log('out', 'channel ' + (chan + 1) + ' · ' + agents[chan].kind + ' · ' + agents[chan].name); }
         else if (view === 'channel') { chan = clamp(chan + dir, 0, agents.length - 1); paint(); }
         else if (view === 'card') { log('out', 'walk pending cards · hard ends', 'dim'); }
-      } else if (name === 'MACROPAD') { var i = macroFor((shiftHeld ? 'shift+' : '') + (dir < 0 ? 'left' : 'right')); if (i >= 0) pressMacro(i, dir < 0 ? 'LEFT' : 'RIGHT'); }
+      } else if (name === 'ARCADE') { arcade.action(dir < 0 ? 'left' : 'right'); }
+      else if (name === 'MACROPAD') { var i = macroFor((shiftHeld ? 'shift+' : '') + (dir < 0 ? 'left' : 'right')); if (i >= 0) pressMacro(i, dir < 0 ? 'LEFT' : 'RIGHT'); }
       else if (name === 'OMARCHY') { wsHl = clamp(wsHl + dir, 0, WS.length - 1); renderWs(); log('out', 'key ' + (dir < 0 ? 'left' : 'right') + (shiftHeld ? ' shift' : '')); }
       else { log('out', (dir < 0 ? 'left' : 'right') + ' · nothing on this face', 'dim'); }
       audio.blip(dir < 0 ? 440 : 500, 0.04);
@@ -604,9 +655,11 @@
     if (pttWave) for (var w = 0; w < 24; w++) { var bar = document.createElement('i'); bar.style.animationDelay = (w * 40) + 'ms'; bar.style.animationDuration = (380 + (w % 5) * 90) + 'ms'; pttWave.appendChild(bar); }
 
     function pttDown() {
+      if (FACES[face] === 'ARCADE') { arcade.action('ptt'); return; }
       if (pttHeld) return;
       pttHeld = true; pttT0 = Date.now();
       var a = agents[chan];
+      if (pttTyping) pttTyping.stop();
       if (pttWho) pttWho.textContent = a.kind + ' · ' + a.name;
       if (pttEl) pttEl.classList.add('is-on');
       if (pttText) pttTyping = typer(pttText, LINES[lineIdx]);
@@ -622,8 +675,9 @@
       var a = agents[chan];
       log('out', 'ptt up · ' + secs + ' s · "' + line + '"');
       later(function () {
+        if (pttHeld) return;
         if (pttEl) pttEl.classList.remove('is-on');
-        if (view === 'card') { log('in', 'answered by voice · card cleared', 'host'); a.q = null; a.ready = null; view = 'channel'; }
+        if (face === 0 && view === 'card' && agents[chan] === a) { log('in', 'answered by voice · card cleared', 'host'); a.q = null; a.ready = null; view = 'channel'; }
         else log('in', 'prompt delivered · ' + a.kind + ' · ' + a.name + ' is working', 'host');
         a.state = 'w'; a.age = 0; a.sub = 'Working on your request · 0s';
         paint();
@@ -653,7 +707,7 @@
         k.addEventListener('keydown', function (e) { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); k.classList.add('is-held'); pttDown(); } });
         k.addEventListener('keyup', function (e) { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); k.classList.remove('is-held'); pttUp(); } });
       } else if (name === 'shift') {
-        k.addEventListener('click', function () { shiftHeld = !shiftHeld; k.classList.toggle('is-held', shiftHeld); log('out', shiftHeld ? 'SHIFT held · scroll now moves between faces' : 'SHIFT released', 'dim'); audio.blip(shiftHeld ? 500 : 420, 0.04); });
+        k.addEventListener('click', function () { shiftHeld = !shiftHeld; k.classList.toggle('is-held', shiftHeld); k.setAttribute('aria-pressed', String(shiftHeld)); log('out', shiftHeld ? 'SHIFT held · scroll now moves between faces' : 'SHIFT released', 'dim'); audio.blip(shiftHeld ? 500 : 420, 0.04); });
       } else {
         k.addEventListener('click', function () { press(name); });
       }
@@ -679,15 +733,15 @@
     /* ---- physical keyboard, only while the replica is on screen ---- */
     var MAP = { ArrowDown: 'down', ArrowUp: 'up', Enter: 'enter', Escape: 'cancel', ArrowLeft: 'left', ArrowRight: 'right', ' ': 'ptt', Shift: 'shift' };
     document.addEventListener('keydown', function (e) {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
       var t = (e.target.tagName || '').toLowerCase();
-      if (t === 'input' || t === 'textarea' || e.target.isContentEditable || t === 'button' && e.target.classList.contains('pttbtn')) return;
+      if (t === 'input' || t === 'textarea' || t === 'select' || e.target.isContentEditable || t === 'button' && (e.key === 'Enter' || e.key === ' ') || t === 'button' && e.target.classList.contains('pttbtn')) return;
       var fn = MAP[e.key];
       if (!fn) return;
       var r = deckEl.getBoundingClientRect();
       if (r.bottom < 0 || r.top > window.innerHeight) return;
       e.preventDefault();
-      if (fn === 'shift') { if (!shiftHeld) { shiftHeld = true; keyByName.shift && keyByName.shift.classList.add('is-held'); } return; }
+      if (fn === 'shift') { if (!shiftHeld) { shiftHeld = true; keyByName.shift && keyByName.shift.classList.add('is-held'); if (keyByName.shift) keyByName.shift.setAttribute('aria-pressed', 'true'); } return; }
       if (e.repeat) return;
       if (fn === 'down') detent(1);
       else if (fn === 'up') detent(-1);
@@ -695,15 +749,35 @@
       else press(fn);
     });
     document.addEventListener('keyup', function (e) {
-      if (e.key === 'Shift') { shiftHeld = false; keyByName.shift && keyByName.shift.classList.remove('is-held'); }
-      if (e.key === ' ' && pttHeld) { keyByName.ptt && keyByName.ptt.classList.remove('is-held'); pttUp(); }
+      if (e.key === 'Shift') { shiftHeld = false; keyByName.shift && keyByName.shift.classList.remove('is-held'); if (keyByName.shift) keyByName.shift.setAttribute('aria-pressed', 'false'); }
+      if (e.key === ' ') { keyByName.ptt && keyByName.ptt.classList.remove('is-held'); if (pttHeld) pttUp(); }
     });
 
+    window.addEventListener('blur', function () { if (pttHeld) pttUp(); shiftHeld = false; keys.forEach(function (k) { k.classList.remove('is-held'); }); if (keyByName.shift) keyByName.shift.setAttribute('aria-pressed', 'false'); arcade.deactivate(); });
+
     /* ---- go ---- */
-    renderUsage(false); renderWs(); renderSettings();
+    renderUsage(false); renderWs();
     paint();
     log('in', 'hello · deckd 0.2.0 · 4 agents · usage · macros', 'host');
     log('in', 'card · Codex · cohdl-api asks a question', 'host');
+  })();
+
+  (function faceAtlas() {
+    var tabs = $$('.face-atlas__tab');
+    function select(index, focus) {
+      tabs.forEach(function (tab, i) {
+        tab.setAttribute('aria-selected', String(i === index)); tab.tabIndex = i === index ? 0 : -1;
+        document.getElementById(tab.getAttribute('aria-controls')).hidden = i !== index;
+      });
+      if (focus) tabs[index].focus();
+    }
+    tabs.forEach(function (tab, i) {
+      tab.addEventListener('click', function () { select(i, false); });
+      tab.addEventListener('keydown', function (e) {
+        var next = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : e.key === 'ArrowDown' || e.key === 'ArrowRight' ? (i + 1) % tabs.length : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? (i - 1 + tabs.length) % tabs.length : null;
+        if (next !== null) { e.preventDefault(); select(next, true); }
+      });
+    });
   })();
 
   /* ------------------------------------------------------------
