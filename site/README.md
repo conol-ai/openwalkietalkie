@@ -152,14 +152,15 @@ the corresponding notice is included as `public/assets/HARDWARE-LICENSE.txt`.
 
 ## V9.3B website design preview
 
-The homepage uses matching white/orange day and black/mint night V9.3B
-product renders. The day screen shows the supplied agent roster screenshot;
-the night screen shows the supplied push-to-talk listening screenshot. Both
-screens use the same corner-pin mapping measured from the model's glass
-edges, including the bottom hint row. The original enclosure pixels and alpha
-silhouettes are preserved. Both images share one uniform CSS scale and position
-so theme changes preserve size without stretching the product. The navigation's
-GitHub link opens the on-page Blueprint section.
+The homepage retains the original white/orange day and black/mint night pixel
+illustrations, floating animation, mouse parallax and theme transition. Only the
+screen pixels are replaced: the day screen shows the supplied agent roster and
+the night screen shows the supplied push-to-talk listening view. Each screenshot
+uses a corner-pin mapping aligned with its illustrated glass edges, including
+the bottom hint row, and a nearest-neighbor pixel texture to match the artwork.
+The original enclosure pixels and alpha silhouettes are preserved. The existing
+CSS alignment keeps the visible device size and position consistent across themes.
+The navigation's GitHub link opens the on-page Blueprint section.
 
 Try It exposes Agents, Omarchy, Macropad, Usage, System and Arcade. Workspace
 selection and macro editing operate on sample data. Arcade provides browser

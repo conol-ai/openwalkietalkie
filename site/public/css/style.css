@@ -1813,9 +1813,8 @@ html[data-theme="night"] .waitlist__status[data-state="error"] { color: #ffaaa0;
 }
 
 /* Product hero: the supplied enclosure, illustrated for the pixel landscape. */
-.hero__art { width: 100%; }
-.hero-product { width: 100%; max-width: 570px; margin: auto; aspect-ratio: 1; --hero-offset-x: 0%; }
-.hero-product img { display: block; object-fit: contain; image-rendering: auto; }
+.hero-product { width: 100%; max-width: 570px; margin: auto; }
+.hero-product img { display: block; width: 100%; height: auto; object-fit: contain; image-rendering: pixelated; }
 
 /* Every face is directly discoverable; the companion explains the selected one. */
 .demo-tabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin-bottom: 16px; }
@@ -1929,7 +1928,7 @@ html[data-theme="night"] .waitlist__status[data-state="error"] { color: #ffaaa0;
   .hero__cta { gap: 10px; }
   .hero__cta .btn { font-size: 9px; padding: 16px 14px; }
   .hero__stats { margin-top: 24px; }
-  .hero-product { --hero-offset-x: -10%; }
+  .hero-product img { width: 120%; max-width: none; margin-left: -10%; }
 }
 @media (min-width: 801px) {
   .faces .section-head { max-width: none; width: 100%; display: grid; grid-template-columns: .8fr 1.7fr; column-gap: 36px; text-align: left; align-items: end; margin-bottom: 35px; }
@@ -1941,13 +1940,12 @@ html[data-theme="night"] .waitlist__status[data-state="error"] { color: #ffaaa0;
   .face-atlas__tab { padding-top: 13px; padding-bottom: 13px; }
 }
 
-/* The approved 1600×2000 renders share alpha bounds 357,195–1242,1805.
-   A single uniform scale retains the previous visible device height and center.
-   The square frame reserves layout space while both colourways crossfade. */
-.hero-product .swap-img {
-  position: absolute; inset: auto; top: -7.924703%; left: calc(3.864379% + var(--hero-offset-x));
-  width: 91.850179%; height: auto; max-width: none; margin: 0;
-}
+/* V9.3B visible bounds: day 284,33–951,1219; night 305,46–943,1220.
+   Both 1254² assets align to the previous night device's 298,41–950,1200
+   footprint, so colour changes preserve the visible size and position. */
+.hero-product .swap-img { transform-origin: 0 0; }
+.hero-product .swap-img--day { transform: translate(1.625742%, .697868%) scale(.977511244, .977234401); }
+.hero-product .swap-img--night { transform: translate(-1.091929%, -.351855%) scale(1.021943574, .987223169); }
 .demo .section-head { max-width: 760px; }
 .demo-intro { line-height: 1.6; }
 .demo-intro > span { display: block; }
