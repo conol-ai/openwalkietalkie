@@ -1,0 +1,28 @@
+What check.sh prints when U4 keeps its Rev B placement line
+(`place flash ... rotate 180 side bottom`) on soic 0.3.0. Recorded 2026-11-11;
+the line was restored afterwards and is not committed. `cohdl check` and
+`cohdl build` report no error or warning for this source: the land turns a
+quarter turn inside its own frame and the build is clean. check.sh exits 1.
+
+main-revc.kicad_pcb equals the Rev B board with the U4 frame and model-path edits only.
+Copper identity passed: 142 footprints, 493 pads, 1351 tracks, 477 vias, 36 zones identical to Rev B. Footprint frames turned: U4 0 -> 90.
+  installed 17 dependencies (0 fetched from the registry)
+cohdl 0.10.0 (aarch64-apple-darwin): source build passed.
+Assembly metadata applied: 5 DNP sites; openmicrodial-rev-c-fitted-bom.csv written.
+U4: rotation differs
+U4.2: pad center/size differs
+U4.2: pad copper differs on the board: source (31.965, 10.6125, 0.65, 1.625), board (29.0125, 14.835, 1.625, 0.65)
+U4.5: pad center/size differs
+U4.5: pad copper differs on the board: source (34.505, 17.7875, 0.65, 1.625), board (36.1875, 12.295, 1.625, 0.65)
+U4.7: pad center/size differs
+U4.7: pad copper differs on the board: source (31.965, 17.7875, 0.65, 1.625), board (36.1875, 14.835, 1.625, 0.65)
+U4.1: pad center/size differs
+U4.1: pad copper differs on the board: source (30.695, 10.6125, 0.65, 1.625), board (29.0125, 16.105, 1.625, 0.65)
+U4.6: pad center/size differs
+U4.6: pad copper differs on the board: source (33.235, 17.7875, 0.65, 1.625), board (36.1875, 13.565, 1.625, 0.65)
+U4.3: pad center/size differs
+U4.3: pad copper differs on the board: source (33.235, 10.6125, 0.65, 1.625), board (29.0125, 13.565, 1.625, 0.65)
+U4.8: pad center/size differs
+U4.8: pad copper differs on the board: source (30.695, 17.7875, 0.65, 1.625), board (36.1875, 16.105, 1.625, 0.65)
+U4.4: pad center/size differs
+U4.4: pad copper differs on the board: source (34.505, 10.6125, 0.65, 1.625), board (29.0125, 12.295, 1.625, 0.65)
