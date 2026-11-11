@@ -82,6 +82,7 @@ binary gives byte-identical output was not tested.
 | CoHDL source | [`source/main/src/main.cohdl`](source/main/src/main.cohdl); [build and checks](source/README.md) |
 | Routed board (KiCad 10, fabrication authority) | [`main/main-revc.kicad_pcb`](main/main-revc.kicad_pcb) with `.kicad_pro` and `.kicad_dru` copied from Rev B |
 | JLCPCB order package | [`fab-jlcpcb/`](fab-jlcpcb/ORDER-NOTES.md). **Read ORDER-NOTES first.** |
+| Placement preview before ordering | [`preview/`](preview/README.md): what goes through JLCPCB's assembly preview so that orientations are measured first. Not uploaded. |
 | Design BOM / KiCad positions | [`main/assembly/bom.csv`](main/assembly/bom.csv), [`main/assembly/positions-kicad-all.csv`](main/assembly/positions-kicad-all.csv) |
 | Verification reports | [`verification/`](verification/) |
 | Scripts | [`scripts/`](scripts/README.md) |

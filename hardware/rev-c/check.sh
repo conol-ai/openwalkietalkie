@@ -19,3 +19,7 @@ fi
 "$kpython" "$root/scripts/check_source.py" --report "$root/source/main/out/source-parity.json"
 "$kpython" "$root/scripts/build_fab.py" --check
 "$kpython" "$root/scripts/compare_fab.py"
+# The placement-preview files, when CoHDL's measure_preview.py is at hand.
+if [ -n "${COHDL_MEASURE_PREVIEW:-}" ]; then
+    "$kpython" "$root/scripts/build_preview.py" --measure-preview "$COHDL_MEASURE_PREVIEW" --check
+fi

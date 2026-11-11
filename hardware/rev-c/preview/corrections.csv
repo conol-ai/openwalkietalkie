@@ -1,0 +1,26 @@
+LCSC Part #,Board footprint,Rotate,Dx mm,Dy mm,Evidence,Detail
+C15850,passive-CHIP_0805,0,0,0,library binding,Frame record c2b1-c0805-c15850; the fab CPL row already carries it.
+C1525,passive-CHIP_0402,0,0,0,library binding,Frame record c2b1-c0402-c1525; the fab CPL row already carries it.
+C165948,usb-connectors-type_c-FP_USB_C_Receptacle_HRO_TYPE_C_31_M_12,0,0,-1.55,library binding,Frame record usbc-origin-c165948; the fab CPL row already carries it.
+C97521,soic-SOIC8P127X790X216N,0,0,0,library binding,Frame record c2b1-soic8_208-c97521; read 0 with this mapping on CoHDL preview board 4 (2026-11-11).
+C7519,esd-FP_SOT_23_6,270,0,0,board-4 raw reading,"Pin 1 read 100.1-100.8 deg counter-clockwise of pad 1 on four copies placed with no mapping; implies rotate 270. Not yet confirmed with the mapping applied: this preview is that test."
+C131941,load_switch-FP_TI_DBV0006A,180,0,0,board-4 raw reading,"Pin 1 read 181.8-183.0 deg on four copies placed with no mapping; implies rotate 180. Not yet confirmed with the mapping applied: this preview is that test."
+C189961,contrib_audio_amp-SOP8P65X490X110N,270,0,0,board-4 raw reading,"Pin 1 read 94.7-95.2 deg on four copies placed with no mapping; implies rotate 270. Not yet confirmed with the mapping applied: this preview is that test."
+C113780,passive-CHIP_0402,0,0,0,board-4 raw reading,"Body along its pads (mod 180) and centred on four copies; nothing to apply."
+C107006,passive-CHIP_0402,0,0,0,board-4 raw reading,"Body along its pads (mod 180) and centred on four copies; nothing to apply."
+C106255,passive-CHIP_0402,0,0,0,board-4 raw reading,"Body along its pads (mod 180) and centred on four copies; nothing to apply."
+C52923,passive-CHIP_0402,0,0,0,board-4 raw reading,"Body along its pads (mod 180) and centred on four copies; nothing to apply."
+C23733,passive-CHIP_0402,0,0,0,board-4 raw reading,"Body along its pads (mod 180) and centred on four copies; nothing to apply."
+C1548,passive-CHIP_0402,0,0,0,board-4 raw reading,"Body along its pads (mod 180) and centred on four copies; nothing to apply."
+C25741,passive-CHIP_0402,0,0,0,board-4 raw reading,"Body along its pads (mod 180) and centred on four copies; nothing to apply."
+C11702,passive-CHIP_0402,0,0,0,board-4 raw reading,"Body along its pads (mod 180) and centred on four copies; nothing to apply."
+C26083,passive-CHIP_0402,0,0,0,board-4 raw reading,"Body along its pads (mod 180) and centred on four copies; nothing to apply."
+C17168,passive-CHIP_0402,0,0,0,board-4 raw reading,"Body along its pads (mod 180) and centred on four copies; nothing to apply."
+C25768,passive-CHIP_0402,0,0,0,board-4 raw reading,"Body along its pads (mod 180) and centred on four copies; nothing to apply."
+C25905,passive-CHIP_0402,0,0,0,board-4 raw reading,"Body along its pads (mod 180) and centred on four copies; nothing to apply."
+C25092,passive-CHIP_0402,0,0,0,board-4 raw reading,"Body along its pads (mod 180) and centred on four copies; nothing to apply."
+C25890,passive-CHIP_0402,0,0,0,board-4 raw reading,"Body along its pads (mod 180) and centred on four copies; nothing to apply."
+C107039,passive-CHIP_0603,0,0,0,board-4 raw reading,"Body along its pads (mod 180) and centred on four copies; nothing to apply."
+C19666,passive-CHIP_0603,0,0,0,board-4 raw reading,"Body along its pads (mod 180) and centred on four copies; nothing to apply."
+C337893,passive-FP_L_0806_2016Metric,0,0,0,board-4 raw reading,"Body along its pads (mod 180) and centred on four copies; nothing to apply."
+C97018,passive-FP_L_WPN201610U_2016Metric,0,0,0,board-4 raw reading,"Drawn as one block over both pads, long side along them, on four copies; nothing to apply."

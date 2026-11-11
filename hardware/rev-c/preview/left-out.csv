@@ -1,0 +1,3 @@
+Designator,LCSC Part #,Reason
+U5,C47355842,"SF32LB525UC6: LCSC stock 0 when read on 2026-11-11. The preview tool stops at the BOM step on any stock warning."
+Y1,,"E1SB48E001G00E 48 MHz crystal: no LCSC number, so the BOM step cannot match it."

@@ -14,8 +14,10 @@ scripts that produce and check Rev C. All are MIT-licensed software.
 | `build_fab.py` | KiCad Python | Writes the JLC BOM, CPL, orientation list, sourcing record and coverage report; `--check` compares them with the committed files. |
 | `export_fab.sh` | kicad-cli | Plots Gerbers, paste, drill and positions into the ignored `build/fab/` and zips the 13 order files. |
 | `compare_fab.py` | Python 3 | Compares the order zip with Rev B's plots, allowing only header metadata to differ. |
+| `build_preview.py` | Python 3, KiCad Python, CoHDL's `measure_preview.py` | Writes the placement-preview manifest and checklist, and with `--out` the preview package for JLCPCB's assembly preview; see [`../preview/README.md`](../preview/README.md). Uploads nothing. |
 
-`../check.sh` runs everything except the tests, the export and DRC.
+`../check.sh` runs everything except the tests, the export and DRC;
+`build_preview.py --check` only when `COHDL_MEASURE_PREVIEW` is set.
 
 The order zip and `main/assembly/positions-kicad-all.csv` were produced with
 `export_fab.sh` (KiCad 10.0.7) and copied from `build/fab/`. The DRC reports
