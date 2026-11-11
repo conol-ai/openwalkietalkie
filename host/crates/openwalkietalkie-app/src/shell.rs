@@ -76,6 +76,9 @@ pub const TICK: Duration = Duration::from_secs(1);
 /// daemon's side can ever re-arm it. Re-asking is therefore the screen's job,
 /// and without it one refused `state.get` freezes the window's mirror for as
 /// long as it is open.
+/// Repaint ticks between reads of the Claude channel rows while the
+/// Integrations screen is open.
+const CHANNEL_POLL_BEATS: u32 = 5;
 const RESYNC_RETRY: Duration = Duration::from_secs(2);
 
 /// The sidebar. Narrow enough that the Deck's roster and detail still split
@@ -281,10 +284,22 @@ impl Shell {
                 }
             }
         });
-        let tick = cx.spawn(async move |this, cx| loop {
-            cx.background_executor().timer(TICK).await;
-            if this.update(cx, |_, cx| cx.notify()).is_err() {
-                break;
+        let tick = cx.spawn_in(window, async move |this, cx| {
+            let mut beats = 0u32;
+            loop {
+                cx.background_executor().timer(TICK).await;
+                beats = beats.wrapping_add(1);
+                let polled = this.update_in(cx, |this, window, cx| {
+                    // The channel rows are cheap to read (no CLI probes), so
+                    // they follow sessions starting and helpers retiring.
+                    if beats % CHANNEL_POLL_BEATS == 0 {
+                        this.poll_claude_channels(window, cx);
+                    }
+                    cx.notify();
+                });
+                if polled.is_err() {
+                    break;
+                }
             }
         });
         // Light and dark follow the Mac (or `OPENWALKIETALKIE_APPEARANCE`,

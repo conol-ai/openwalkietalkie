@@ -139,6 +139,77 @@ fn current_identity(config: &Path, pid: u32) -> Option<Identity> {
         .flatten()
 }
 
+/// Consecutive refusals by a live daemon after which the helper stops
+/// retrying every 2 s. It never exits for this alone: a hand-started debug
+/// daemon or a second app copy can come and go, and the right daemon returning
+/// must find the session's helper still there.
+const BACKOFF_AFTER: u32 = 15;
+const SLOW_RETRY: Duration = Duration::from_secs(30);
+/// Refusals (or connections the daemon drops at once) a helper whose own
+/// executable was replaced tolerates before it exits: it can never be
+/// accepted again, and only a restarted session helps.
+const RETIRE_AFTER: u32 = 5;
+/// A link that dies sooner than this after connecting was refused after the
+/// hello (the daemon checks the peer's executable on accept, and closes).
+const QUICK_DROP: Duration = Duration::from_secs(3);
+
+/// Is the file this helper was launched from still the same file? A Sparkle
+/// update swaps the bundle at the same path, so the path alone cannot tell:
+/// the helper keeps running the old image while `current_exe()` names the new
+/// one, the helper-side peer check passes, and only the daemon (which sees the
+/// old, unlinked vnode) refuses it.
+struct ExeWatch {
+    path: PathBuf,
+    start: Option<(u64, u64)>,
+}
+
+impl ExeWatch {
+    fn new(path: PathBuf) -> Self {
+        let start = Self::file_id(&path);
+        Self { path, start }
+    }
+
+    fn file_id(path: &Path) -> Option<(u64, u64)> {
+        use std::os::unix::fs::MetadataExt;
+        std::fs::metadata(path).ok().map(|m| (m.dev(), m.ino()))
+    }
+
+    /// Replaced or unlinked since launch. Unknown at launch means never.
+    fn replaced(&self) -> bool {
+        self.start.is_some() && Self::file_id(&self.path) != self.start
+    }
+}
+
+#[derive(Default)]
+struct Refusals {
+    /// Consecutive connections whose daemon had a different executable.
+    refused: u32,
+    /// Consecutive links that were dropped right after connecting.
+    quick_drops: u32,
+}
+
+impl Refusals {
+    fn reset(&mut self) {
+        *self = Self::default();
+    }
+
+    fn link_ended(&mut self, lived: Duration) {
+        if lived < QUICK_DROP {
+            self.quick_drops += 1;
+        } else {
+            self.quick_drops = 0;
+        }
+    }
+
+    fn backed_off(&self) -> bool {
+        self.refused >= BACKOFF_AFTER
+    }
+
+    fn retire(&self, exe_replaced: impl FnOnce() -> bool) -> bool {
+        (self.refused >= RETIRE_AFTER || self.quick_drops >= RETIRE_AFTER) && exe_replaced()
+    }
+}
+
 pub(super) fn run(data: &Path) -> Result<i32, String> {
     let pid = crate::hook::walk::from_process()
         .cli_pid
@@ -180,6 +251,10 @@ pub(super) fn run(data: &Path) -> Result<i32, String> {
     let result = rt.block_on(async {
         let mut protocol = Protocol::default();
         let mut tick = tokio::time::interval(Duration::from_secs(2));
+        let watch = ExeWatch::new(std::env::current_exe().map_err(io::Error::other)?);
+        let mut refusals = Refusals::default();
+        let mut linked_since: Option<Instant> = None;
+        let mut next_attempt = Instant::now();
         let mut link: Option<(Reader<tokio::net::unix::OwnedReadHalf>, tokio::net::unix::OwnedWriteHalf)> = None;
         loop {
             tokio::select! {
@@ -193,12 +268,29 @@ pub(super) fn run(data: &Path) -> Result<i32, String> {
                 }
                 _ = tick.tick() => {
                     protocol.identify(current_identity(&config, pid));
-                    if link.is_none() {
-                        if let Ok(Ok(mut stream)) = tokio::time::timeout(Duration::from_millis(250), UnixStream::connect(socket(data))).await {
-                            if peer(&stream).is_ok() && write(&mut stream, &json!({"config_dir": config})).await.is_ok() {
-                                let (input, output) = stream.into_split();
-                                link = Some((Reader::new(input), output));
-                            }
+                    if link.is_none() && Instant::now() >= next_attempt {
+                        match tokio::time::timeout(Duration::from_millis(250), UnixStream::connect(socket(data))).await {
+                            Ok(Ok(mut stream)) => match peer(&stream) {
+                                Err(PeerError::OtherExecutable { .. }) => {
+                                    refusals.refused += 1;
+                                    if refusals.refused == BACKOFF_AFTER {
+                                        eprintln!("openwalkietalkie: the running OpenWalkieTalkie daemon is a different deckd executable than this channel helper and refuses it; retrying every 30 s. This session reconnects once that daemon is the one running from this helper's app.");
+                                    }
+                                    if refusals.backed_off() { next_attempt = Instant::now() + SLOW_RETRY; }
+                                }
+                                Err(PeerError::Rejected(_)) => refusals.reset(),
+                                Ok(_) => if write(&mut stream, &json!({"config_dir": config})).await.is_ok() {
+                                    refusals.refused = 0;
+                                    next_attempt = Instant::now();
+                                    linked_since = Some(Instant::now());
+                                    let (input, output) = stream.into_split();
+                                    link = Some((Reader::new(input), output));
+                                } else {
+                                    refusals.reset();
+                                },
+                            },
+                            // No daemon to refuse anything: not a streak.
+                            _ => refusals.reset(),
                         }
                     }
                     if let Some(probe) = protocol.probe()? { emit(&probe)?; }
@@ -228,6 +320,13 @@ pub(super) fn run(data: &Path) -> Result<i32, String> {
             if let Some((_, output)) = &mut link {
                 if write(output, &protocol.status()).await.is_err() { link = None; }
             }
+            if link.is_none() {
+                if let Some(since) = linked_since.take() { refusals.link_ended(since.elapsed()); }
+            }
+            if refusals.retire(|| watch.replaced()) {
+                eprintln!("openwalkietalkie: this channel helper's executable was replaced (the app was updated) and the OpenWalkieTalkie daemon no longer accepts it; restart the Claude session to reconnect");
+                return Ok(0);
+            }
         }
     });
     rt.shutdown_timeout(Duration::from_millis(100));
@@ -237,6 +336,49 @@ pub(super) fn run(data: &Path) -> Result<i32, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exe_watch_sees_a_replaced_or_unlinked_launch_file() {
+        let dir = std::env::temp_dir().join(format!("owt-exewatch-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let exe = dir.join("deckd");
+        std::fs::write(&exe, b"old").unwrap();
+        let watch = ExeWatch::new(exe.clone());
+        assert!(!watch.replaced());
+        // Sparkle-style swap at the same path: new inode.
+        let new = dir.join("deckd.new");
+        std::fs::write(&new, b"new").unwrap();
+        std::fs::rename(&new, &exe).unwrap();
+        assert!(watch.replaced());
+        let watch = ExeWatch::new(exe.clone());
+        std::fs::remove_file(&exe).unwrap();
+        assert!(watch.replaced());
+        assert!(!ExeWatch::new(dir.join("missing")).replaced());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn refusals_retire_only_a_replaced_helper_and_only_when_consecutive() {
+        let mut r = Refusals::default();
+        for _ in 0..RETIRE_AFTER { r.refused += 1; }
+        assert!(r.retire(|| true));
+        // Same path, nothing replaced (debug daemon, second copy): never exits.
+        assert!(!r.retire(|| false));
+        for _ in 0..BACKOFF_AFTER { r.refused += 1; }
+        assert!(r.backed_off());
+        assert!(!r.retire(|| false));
+        // A daemon that is unreachable or accepts breaks the streak.
+        r.reset();
+        assert!(!r.backed_off() && !r.retire(|| true));
+        // In-place update: the daemon drops the link at once, repeatedly.
+        for _ in 0..RETIRE_AFTER { r.link_ended(Duration::from_millis(50)); }
+        assert!(r.retire(|| true));
+        assert!(!r.retire(|| false));
+        // One healthy link clears the streak.
+        r.link_ended(Duration::from_secs(60));
+        assert!(!r.retire(|| true));
+    }
+
     fn id(session: &str) -> Identity {
         Identity {
             pid: 42,
