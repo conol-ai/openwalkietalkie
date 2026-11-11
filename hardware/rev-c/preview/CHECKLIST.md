@@ -4,7 +4,7 @@ For JLCPCB's assembly preview only. Stop at Component Placements. Do not save to
 **Not uploaded.** An upload needs the owner's approval for this package, by its SHA-256.
 
 Upload `owt-revc-gerbers.zip` as the Gerber, `owt-revc-lcsc-bom.csv` as the BOM and `owt-revc-lcsc-cpl.csv` as the CPL.
-Expect 4 layers, 53.43 x 92.43 mm, 45 BOM lines and 123 placements: 60 top, 63 bottom. Assemble both sides.
+Expect 4 layers, 53.43 x 92.43 mm, 41 BOM lines and 118 placements: 59 top, 59 bottom. Assemble both sides.
 
 ## Left out, so not previewed
 
@@ -14,6 +14,11 @@ A part that is not in the BOM and CPL is not drawn. Its orientation stays unmeas
 |---|---|---|
 | U5 | C47355842 | SF32LB525UC6: LCSC stock 0 when read on 2026-11-11. The preview tool stops at the BOM step on any stock warning. |
 | Y1 | none | E1SB48E001G00E 48 MHz crystal: no LCSC number, so the BOM step cannot match it. |
+| AE1 | C2917717 | 2450AT18B100E antenna: stock shortage at the BOM step of the first preview run on 2026-11-12. |
+| R32 | C327334 | RC0402FR-07604KL: stock shortage at the BOM step of the first preview run on 2026-11-12. |
+| SW3 | C2799946 | Stock shortage at the BOM step of the first preview run on 2026-11-12. |
+| SW4 | C2799946 | Stock shortage at the BOM step of the first preview run on 2026-11-12. |
+| MK1 | C2688664 | MP34DT05TR-A: the BOM step matched no part for this number in the first preview run on 2026-11-12. |
 
 DNP sites (C52, C53, C58, L6, R44), test points and mounting holes are not assembled and are absent, as in the fab package.
 
@@ -25,11 +30,7 @@ The preview tool stops at the BOM step on any stock warning. If one of these is 
 |---|---|---|---|---|
 | C147972 | U7, U8 | 50 | 2026-11-11 | RT6150BGQW; two per board. |
 | C115365 | SW1, SW2, SW5, SW6 | 155 | 2026-11-11 | SKTDLDE010; four per board. |
-| C2688664 | MK1 | 229 | 2026-11-11 | MP34DT05TR-A. |
 | C15220 | U6 | 687 | 2026-11-11 | BQ24073RGTR. |
-| C2917717 | AE1 | not read | n/a | 2450AT18B100E: out of stock at LCSC on 2026-09-23; not read again since. |
-| C2799946 | SW3, SW4 | not read | n/a | PTS636SM25SMTRLFS: out of stock at LCSC on 2026-09-23; not read again since. |
-| C327334 | R32 | not read | n/a | 604k resistor: out of stock at LCSC with low JLC stock in September; not read again since. |
 
 ## Corrections applied
 
@@ -69,10 +70,10 @@ Rows not listed here are at the convention value (top = KiCad angle, bottom = 18
 - `pin 1 mark`: the tool needs one pin 1 mark on the part; `measure_preview.py measure` gives its angle against pad 1.
 - `by eye`: the tool has no evidence type for it. Expect "manual review"; read it from a crop of the export.
 
-- by eye (two-terminal, no mark): 8: AE1, L1, L2, L3, L4, L5, SW3, SW4
-- body: 97: C1, C2, C3, C4, C5, C6, C7, C8, C9, C10, C11, C12, C13, C14, C15, C16, C17, C18, C19, C20, C21, C22, C23, C24, C25, C26, C27, C28, C29, C30, C31, C32, C33, C34, C35, C36, C37, C38, C39, C40, C41, C42, C43, C44, C45, C46, C47, C48, C49, C50, C57, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29, R30, R31, R32, R34, R35, R36, R37, R38, R39, R40, R41, R42, R43, R45, R46, R47, R48
+- body: 96: C1, C2, C3, C4, C5, C6, C7, C8, C9, C10, C11, C12, C13, C14, C15, C16, C17, C18, C19, C20, C21, C22, C23, C24, C25, C26, C27, C28, C29, C30, C31, C32, C33, C34, C35, C36, C37, C38, C39, C40, C41, C42, C43, C44, C45, C46, C47, C48, C49, C50, C57, R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, R11, R12, R13, R14, R15, R16, R17, R18, R19, R20, R21, R22, R23, R24, R25, R26, R27, R28, R29, R30, R31, R34, R35, R36, R37, R38, R39, R40, R41, R42, R43, R45, R46, R47, R48
 - by eye (mark not certain): 8: J1, J2, J3, J5, SW1, SW2, SW5, SW6
-- pin 1 mark: 10: MK1, U1, U2, U3, U4, U6, U7, U8, U10, U20
+- by eye (two-terminal, no mark): 5: L1, L2, L3, L4, L5
+- pin 1 mark: 9: U1, U2, U3, U4, U6, U7, U8, U10, U20
 
 U4: pin 1 must land toward the lower left seen from the top. J5: the shell pegs must sit in their holes.
 U1, U2, U10 and U20 are placed with the candidate rotation: the model's leads must lie on the pads and its pin 1 on pad 1.
@@ -81,7 +82,6 @@ U1, U2, U10 and U20 are placed with the candidate rotation: the model's leads mu
 
 | Ref | Side | LCSC | Board footprint | Mid X | Mid Y | Convention | Preview rotation | Evidence | Applied | Check | Reading |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| AE1 | Top | C2917717 | `antenna-FP_ANT_2450AT18B100E` | 52.2000 | -24.6000 | 90 | 90 | none |  | by eye (two-terminal, no mark) | |
 | C1 | Top | C15849 | `passive-CHIP_0603` | 43.5000 | -68.6000 | 0 | 0 | none |  | body | |
 | C2 | Bottom | C107039 | `passive-CHIP_0603` | 46.6000 | -20.6500 | 90 | 90 | board-4 raw reading | rotate 0, nothing applied | body | |
 | C3 | Top | C15849 | `passive-CHIP_0603` | 41.6500 | -65.8500 | 270 | 270 | none |  | body | |
@@ -142,7 +142,6 @@ U1, U2, U10 and U20 are placed with the candidate rotation: the model's leads mu
 | L3 | Bottom | C97018 | `passive-FP_L_WPN201610U_2016Metric` | 34.0000 | -18.7000 | 0 | 0 | board-4 raw reading | rotate 0, nothing applied | by eye (two-terminal, no mark) | |
 | L4 | Bottom | C337893 | `passive-FP_L_0806_2016Metric` | 15.0000 | -45.5000 | 180 | 180 | board-4 raw reading | rotate 0, nothing applied | by eye (two-terminal, no mark) | |
 | L5 | Bottom | C337893 | `passive-FP_L_0806_2016Metric` | 22.0000 | -37.5000 | 180 | 180 | board-4 raw reading | rotate 0, nothing applied | by eye (two-terminal, no mark) | |
-| MK1 | Bottom | C2688664 | `openmicrodial_rev_a-FP_ST_MP34DT05_HCLGA_3x4` | 48.0000 | -70.5000 | 180 | 180 | none |  | pin 1 mark | |
 | R1 | Bottom | C11702 | `passive-CHIP_0402` | 44.6000 | -21.1500 | 180 | 180 | board-4 raw reading | rotate 0, nothing applied | body | |
 | R2 | Bottom | C11702 | `passive-CHIP_0402` | 44.6000 | -20.1500 | 180 | 180 | board-4 raw reading | rotate 0, nothing applied | body | |
 | R3 | Top | C25741 | `passive-CHIP_0402` | 43.9500 | -70.4000 | 270 | 270 | board-4 raw reading | rotate 0, nothing applied | body | |
@@ -174,7 +173,6 @@ U1, U2, U10 and U20 are placed with the candidate rotation: the model's leads mu
 | R29 | Bottom | C25744 | `passive-CHIP_0402` | 29.9500 | -36.4500 | 180 | 180 | none |  | body | |
 | R30 | Bottom | C25741 | `passive-CHIP_0402` | 45.3000 | -22.9500 | 90 | 90 | board-4 raw reading | rotate 0, nothing applied | body | |
 | R31 | Bottom | C477807 | `passive-CHIP_0402` | 23.4500 | -31.6000 | 0 | 0 | none |  | body | |
-| R32 | Bottom | C327334 | `passive-CHIP_0402` | 25.4000 | -31.6000 | 0 | 0 | none |  | body | |
 | R34 | Bottom | C26083 | `passive-CHIP_0402` | 20.6000 | -31.6000 | 0 | 0 | board-4 raw reading | rotate 0, nothing applied | body | |
 | R35 | Bottom | C11702 | `passive-CHIP_0402` | 26.5000 | -40.3500 | 0 | 0 | board-4 raw reading | rotate 0, nothing applied | body | |
 | R36 | Bottom | C26083 | `passive-CHIP_0402` | 23.4500 | -44.3000 | 0 | 0 | board-4 raw reading | rotate 0, nothing applied | body | |
@@ -191,8 +189,6 @@ U1, U2, U10 and U20 are placed with the candidate rotation: the model's leads mu
 | R48 | Bottom | C17168 | `passive-CHIP_0402` | 33.5000 | -33.3500 | 270 | 270 | board-4 raw reading | rotate 0, nothing applied | body | |
 | SW1 | Top | C115365 | `openmicrodial_rev_a-FP_ALPS_SKTDLDE010` | 3.7600 | -18.5000 | 270 | 270 | none |  | by eye (mark not certain) | |
 | SW2 | Top | C115365 | `openmicrodial_rev_a-FP_ALPS_SKTDLDE010` | 3.7600 | -30.5000 | 270 | 270 | none |  | by eye (mark not certain) | |
-| SW3 | Bottom | C2799946 | `switches-FP_CK_PTS636SM25` | 39.7225 | -57.0900 | 180 | 180 | none |  | by eye (two-terminal, no mark) | |
-| SW4 | Bottom | C2799946 | `switches-FP_CK_PTS636SM25` | 16.2775 | -57.0900 | 180 | 180 | none |  | by eye (two-terminal, no mark) | |
 | SW5 | Top | C115365 | `openmicrodial_rev_a-FP_ALPS_SKTDLDE010` | 52.2400 | -35.7430 | 90 | 90 | none |  | by eye (mark not certain) | |
 | SW6 | Top | C115365 | `openmicrodial_rev_a-FP_ALPS_SKTDLDE010` | 3.7600 | -42.5000 | 270 | 270 | none |  | by eye (mark not certain) | |
 | U1 | Top | C189961 | `contrib_audio_amp-SOP8P65X490X110N` | 41.5000 | -72.5000 | 270 | 180 | board-4 raw reading | rotate 270 applied | pin 1 mark | |

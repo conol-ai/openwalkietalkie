@@ -33,12 +33,19 @@ placements (60 top, 63 bottom).
 
 ## What differs from the order package
 
-1. **Two parts are left out** ([`left-out.csv`](left-out.csv)), because they
+1. **Seven parts are left out** ([`left-out.csv`](left-out.csv)), because they
    cannot pass the BOM step: U5 (SF32LB525UC6, C47355842, stock 0 when read
-   on 2026-11-11) and Y1 (no LCSC number). **A part that is left out is not
-   drawn, so this preview does not measure U5 or Y1.** They need a later
-   preview, once U5 is in stock and Y1 has a part number, or a reading by
-   another route.
+   on 2026-11-11) and Y1 (no LCSC number) from the start; and, after the first
+   preview run on 2026-11-12 stopped at the BOM step, AE1 (C2917717), R32
+   (C327334) and SW3/SW4 (C2799946), which showed a stock shortage, and MK1
+   (C2688664), for which the BOM step matched no part. **A part that is left
+   out is not drawn, so this preview does not measure these seven.** They need
+   a later preview, once they are in stock or have a part number the assembler
+   matches, or a reading by another route.
+
+   That first run also showed that JLCPCB's Economic PCBA type offers one
+   assembly side only for this four-layer board: assembling both sides needs
+   the **Standard** PCBA type, for the preview and for an order alike.
 2. **Three IC part numbers are placed with a candidate rotation**
    ([`corrections.csv`](corrections.csv)): C7519 (U20) rotate 270, C131941
    (U2, U10) rotate 180, C189961 (U1) rotate 270. Each comes from a raw

@@ -1,3 +1,8 @@
 Designator,LCSC Part #,Reason
 U5,C47355842,"SF32LB525UC6: LCSC stock 0 when read on 2026-11-11. The preview tool stops at the BOM step on any stock warning."
 Y1,,"E1SB48E001G00E 48 MHz crystal: no LCSC number, so the BOM step cannot match it."
+AE1,C2917717,"2450AT18B100E antenna: stock shortage at the BOM step of the first preview run on 2026-11-12."
+R32,C327334,"RC0402FR-07604KL: stock shortage at the BOM step of the first preview run on 2026-11-12."
+SW3,C2799946,"Stock shortage at the BOM step of the first preview run on 2026-11-12."
+SW4,C2799946,"Stock shortage at the BOM step of the first preview run on 2026-11-12."
+MK1,C2688664,"MP34DT05TR-A: the BOM step matched no part for this number in the first preview run on 2026-11-12."

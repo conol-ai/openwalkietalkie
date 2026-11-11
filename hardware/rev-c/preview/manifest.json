@@ -8,10 +8,10 @@
    53.43,
    92.43
   ],
-  "bom_lines": 45,
-  "placements": 123,
-  "top": 60,
-  "bottom": 63
+  "bom_lines": 41,
+  "placements": 118,
+  "top": 59,
+  "bottom": 59
  },
  "part_numbers": [
   "C106255",
@@ -44,11 +44,7 @@
   "C25890",
   "C25905",
   "C26083",
-  "C2688664",
-  "C2799946",
-  "C2917717",
   "C293630",
-  "C327334",
   "C337893",
   "C342827",
   "C477807",
@@ -71,6 +67,31 @@
    "designator": "Y1",
    "lcsc": "",
    "reason": "E1SB48E001G00E 48 MHz crystal: no LCSC number, so the BOM step cannot match it."
+  },
+  {
+   "designator": "AE1",
+   "lcsc": "C2917717",
+   "reason": "2450AT18B100E antenna: stock shortage at the BOM step of the first preview run on 2026-11-12."
+  },
+  {
+   "designator": "R32",
+   "lcsc": "C327334",
+   "reason": "RC0402FR-07604KL: stock shortage at the BOM step of the first preview run on 2026-11-12."
+  },
+  {
+   "designator": "SW3",
+   "lcsc": "C2799946",
+   "reason": "Stock shortage at the BOM step of the first preview run on 2026-11-12."
+  },
+  {
+   "designator": "SW4",
+   "lcsc": "C2799946",
+   "reason": "Stock shortage at the BOM step of the first preview run on 2026-11-12."
+  },
+  {
+   "designator": "MK1",
+   "lcsc": "C2688664",
+   "reason": "MP34DT05TR-A: the BOM step matched no part for this number in the first preview run on 2026-11-12."
   }
  ],
  "not_assembled": "DNP sites, test points and mounting holes are absent, as in the fab package",
@@ -178,7 +199,6 @@
    "R48"
   ],
   "none": [
-   "AE1",
    "C1",
    "C3",
    "C4",
@@ -204,17 +224,13 @@
    "J3",
    "L1",
    "L2",
-   "MK1",
    "R28",
    "R29",
    "R31",
-   "R32",
    "R37",
    "R43",
    "SW1",
    "SW2",
-   "SW3",
-   "SW4",
    "SW5",
    "SW6",
    "U3",
@@ -224,16 +240,6 @@
   ]
  },
  "tool_check": {
-  "by eye (two-terminal, no mark)": [
-   "AE1",
-   "L1",
-   "L2",
-   "L3",
-   "L4",
-   "L5",
-   "SW3",
-   "SW4"
-  ],
   "body": [
    "C1",
    "C2",
@@ -317,7 +323,6 @@
    "R29",
    "R30",
    "R31",
-   "R32",
    "R34",
    "R35",
    "R36",
@@ -343,8 +348,14 @@
    "SW5",
    "SW6"
   ],
+  "by eye (two-terminal, no mark)": [
+   "L1",
+   "L2",
+   "L3",
+   "L4",
+   "L5"
+  ],
   "pin 1 mark": [
-   "MK1",
    "U1",
    "U2",
    "U3",
@@ -380,15 +391,6 @@
    "note": "SKTDLDE010; four per board."
   },
   {
-   "lcsc": "C2688664",
-   "designators": [
-    "MK1"
-   ],
-   "stock": "229",
-   "read_on": "2026-11-11",
-   "note": "MP34DT05TR-A."
-  },
-  {
    "lcsc": "C15220",
    "designators": [
     "U6"
@@ -396,45 +398,17 @@
    "stock": "687",
    "read_on": "2026-11-11",
    "note": "BQ24073RGTR."
-  },
-  {
-   "lcsc": "C2917717",
-   "designators": [
-    "AE1"
-   ],
-   "stock": "not read",
-   "read_on": "",
-   "note": "2450AT18B100E: out of stock at LCSC on 2026-09-23; not read again since."
-  },
-  {
-   "lcsc": "C2799946",
-   "designators": [
-    "SW3",
-    "SW4"
-   ],
-   "stock": "not read",
-   "read_on": "",
-   "note": "PTS636SM25SMTRLFS: out of stock at LCSC on 2026-09-23; not read again since."
-  },
-  {
-   "lcsc": "C327334",
-   "designators": [
-    "R32"
-   ],
-   "stock": "not read",
-   "read_on": "",
-   "note": "604k resistor: out of stock at LCSC with low JLC stock in September; not read again since."
   }
  ],
  "sha256": {
   "owt-revc-gerbers.zip": "27080e47bf1e72411a38937efa247f7b0d45504f8e4da959a9686bc8a9411f9b",
-  "owt-revc-lcsc-bom.csv": "2448b243b4906dec692f0550f11ade1dde683ecfc17847bfd4f1bd464abfed11",
-  "owt-revc-lcsc-cpl.csv": "c288c169e84a98a98ed5ccd146a6c4ca541e6d753a2621a4b1559054075db2b9",
-  "board.json": "044eabaa22705428881e2bbdbaa6bcea8c1b3d68d3b7e6800f5bcb7be4c209f1",
+  "owt-revc-lcsc-bom.csv": "d203ef25f0e598371ae99f8bb3f023780bd182956a7cb3f1fbac8b1487d61fe7",
+  "owt-revc-lcsc-cpl.csv": "7229bcba0c07342f14d3b670a81186e45c80ea2669c0e0568c4dd0234f28c94a",
+  "board.json": "c526b77840c10163c93a47bd1c821af92873731544ba39915ee5022952554c1a",
   "corrections.csv": "d36731b2940a1d2c91eb5a0c298143c6e208d667ac1017dc103d1feac3b37385",
-  "left-out.csv": "23043f882680228065d07ac41d2299d4ca73840de35deef906a4aa9dd0d08991",
-  "stock-risks.csv": "ed9ba5ca318da6e1541c31427ad008dbbee01faa15331a0efbadf2bf43b663d7",
-  "CHECKLIST.md": "844418f3a969100681dc2a26c1f4f8794d1718bb13b7386f3aa430b8a90bc6db"
+  "left-out.csv": "21e20f92ca5dd6623ab3af1119dd84696a7247ecfd7e2485e56ea8c6925af033",
+  "stock-risks.csv": "501fe9100815fbde5a2d9f634b5f32621b679edf2d9851b36d4fcc506ff7d7c6",
+  "CHECKLIST.md": "ea62662b34163777fdb01aec5530b6e181d179c629306d816b6ca301acc3673c"
  },
  "inputs_sha256": {
   "main/main-revc.kicad_pcb": "0cc240b99af0713cda7510ce15641477036f4aba85542c33661119e14033f824",
