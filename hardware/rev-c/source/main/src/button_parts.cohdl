@@ -1,0 +1,74 @@
+// SPDX-License-Identifier: CERN-OHL-P-2.0
+// Alps Alpine SKTD, Drawing No.1, catalog Update 2510 (docs/alps-sktd.pdf).
+// Origin: midpoint of the two locating holes. Local +y faces the actuator.
+// Geometry is viewed from the PCB component side; pin 1 is left, pin 2 right
+// as in the outline drawing. The SPST contact has no electrical polarity.
+
+// Reference (inherited): docs/alps-sktd.pdf
+pub part SW_ALPS_SKTDLDE010: SKTDLDE010 {
+    primary { mfr: "Alps Alpine", mpn: "SKTDLDE010", footprint: FP_ALPS_SKTDLDE010 }
+}
+
+pub pad P_SKTD_CONTACT {
+    shape: rect
+    size: (0.7mm, 1.1mm)
+    layer: top_copper
+    plating: smd
+}
+pub pad P_SKTD_FRAME_CENTER {
+    shape: rect
+    size: (1.4mm, 1.1mm)
+    layer: top_copper
+    plating: smd
+}
+
+// Each side's 1.15mm-wide frame land is the exact union of three
+// rectangles and a circle. The exposed upper inner corner is R0.4.
+// Repeated ML/MR placements retain one net identity for each physical land.
+pub pad P_SKTD_FRAME_OUTER {
+    shape: rect
+    size: (0.45mm, 1.35mm)
+    layer: top_copper
+    plating: smd
+}
+pub pad P_SKTD_FRAME_MIDDLE {
+    shape: rect
+    size: (0.4mm, 0.95mm)
+    layer: top_copper
+    plating: smd
+}
+pub pad P_SKTD_FRAME_INNER {
+    shape: rect
+    size: (0.3mm, 0.65mm)
+    layer: top_copper
+    plating: smd
+}
+pub pad P_SKTD_FRAME_RADIUS {
+    shape: circle
+    size: (0.8mm)
+    layer: top_copper
+    plating: smd
+}
+
+pub footprint FP_ALPS_SKTDLDE010 {
+    pad 1: P_SKTD_CONTACT at (-1.4mm, -1.35mm)
+    pad 2: P_SKTD_CONTACT at (1.4mm, -1.35mm)
+    pad MC: P_SKTD_FRAME_CENTER at (0mm, -1.5mm)
+    pad ML: P_SKTD_FRAME_OUTER at (-2.075mm, 0.275mm)
+    pad ML: P_SKTD_FRAME_MIDDLE at (-1.65mm, 0.475mm)
+    pad ML: P_SKTD_FRAME_INNER at (-1.3mm, 0.625mm)
+    pad ML: P_SKTD_FRAME_RADIUS at (-1.85mm, 0mm)
+    pad MR: P_SKTD_FRAME_OUTER at (2.075mm, 0.275mm)
+    pad MR: P_SKTD_FRAME_MIDDLE at (1.65mm, 0.475mm)
+    pad MR: P_SKTD_FRAME_INNER at (1.3mm, 0.625mm)
+    pad MR: P_SKTD_FRAME_RADIUS at (1.85mm, 0mm)
+    // Manufacturer finished-hole range: 0.55..0.65mm; nominal 0.60 +/-0.05.
+    // These NPTHs lie inside ML/MR in the manufacturer drawing. Effective
+    // copper is the pad union minus drill; nominal minimum remaining ring
+    // is 0.10 mm. Fab and mask/paste treatment still require review; see docs.
+    mount_hole 1: non_plated at (-1.85mm, 0mm) diameter 0.6mm
+    mount_hole 2: non_plated at (1.85mm, 0mm) diameter 0.6mm
+    // Assembly envelope includes the 1.5mm-forward actuator and copper.
+    courtyard { shape: rect, at: (0mm, -0.275mm), size: (5.1mm, 4.05mm) }
+    silkscreen_ref { at: (0mm, -2.8mm) }
+}

@@ -1,0 +1,100 @@
+// SPDX-License-Identifier: CERN-OHL-P-2.0
+// Rev B MCU land. Exposed-pad thermal vias are tented board vias in the
+// routed PCB, not footprint PTH pads opening the mask on the battery face.
+
+pub footprint FP_SF32LB52X_QFN68L_BSide {
+    // Left side, top to bottom.
+    pad 1: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-3.3mm, -2.8mm)
+    pad 2: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-3.3mm, -2.45mm)
+    pad 3: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-3.3mm, -2.1mm)
+    pad 4: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-3.3mm, -1.75mm)
+    pad 5: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-3.3mm, -1.4mm)
+    pad 6: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-3.3mm, -1.05mm)
+    pad 7: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-3.3mm, -0.7mm)
+    pad 8: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-3.3mm, -0.35mm)
+    pad 9: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-3.3mm, 0mm)
+    pad 10: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-3.3mm, 0.35mm)
+    pad 11: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-3.3mm, 0.7mm)
+    pad 12: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-3.3mm, 1.05mm)
+    pad 13: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-3.3mm, 1.4mm)
+    pad 14: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-3.3mm, 1.75mm)
+    pad 15: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-3.3mm, 2.1mm)
+    pad 16: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-3.3mm, 2.45mm)
+    pad 17: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-3.3mm, 2.8mm)
+
+    // Bottom side, left to right.
+    pad 18: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-2.8mm, 3.3mm) rotate 90
+    pad 19: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-2.45mm, 3.3mm) rotate 90
+    pad 20: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-2.1mm, 3.3mm) rotate 90
+    pad 21: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-1.75mm, 3.3mm) rotate 90
+    pad 22: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-1.4mm, 3.3mm) rotate 90
+    pad 23: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-1.05mm, 3.3mm) rotate 90
+    pad 24: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-0.7mm, 3.3mm) rotate 90
+    pad 25: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-0.35mm, 3.3mm) rotate 90
+    pad 26: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (0mm, 3.3mm) rotate 90
+    pad 27: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (0.35mm, 3.3mm) rotate 90
+    pad 28: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (0.7mm, 3.3mm) rotate 90
+    pad 29: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (1.05mm, 3.3mm) rotate 90
+    pad 30: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (1.4mm, 3.3mm) rotate 90
+    pad 31: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (1.75mm, 3.3mm) rotate 90
+    pad 32: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (2.1mm, 3.3mm) rotate 90
+    pad 33: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (2.45mm, 3.3mm) rotate 90
+    pad 34: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (2.8mm, 3.3mm) rotate 90
+
+    // Right side, bottom to top.
+    pad 35: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (3.3mm, 2.8mm)
+    pad 36: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (3.3mm, 2.45mm)
+    pad 37: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (3.3mm, 2.1mm)
+    pad 38: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (3.3mm, 1.75mm)
+    pad 39: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (3.3mm, 1.4mm)
+    pad 40: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (3.3mm, 1.05mm)
+    pad 41: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (3.3mm, 0.7mm)
+    pad 42: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (3.3mm, 0.35mm)
+    pad 43: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (3.3mm, 0mm)
+    pad 44: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (3.3mm, -0.35mm)
+    pad 45: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (3.3mm, -0.7mm)
+    pad 46: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (3.3mm, -1.05mm)
+    pad 47: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (3.3mm, -1.4mm)
+    pad 48: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (3.3mm, -1.75mm)
+    pad 49: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (3.3mm, -2.1mm)
+    pad 50: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (3.3mm, -2.45mm)
+    pad 51: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (3.3mm, -2.8mm)
+
+    // Top side, right to left.
+    pad 52: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (2.8mm, -3.3mm) rotate 90
+    pad 53: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (2.45mm, -3.3mm) rotate 90
+    pad 54: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (2.1mm, -3.3mm) rotate 90
+    pad 55: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (1.75mm, -3.3mm) rotate 90
+    pad 56: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (1.4mm, -3.3mm) rotate 90
+    pad 57: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (1.05mm, -3.3mm) rotate 90
+    pad 58: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (0.7mm, -3.3mm) rotate 90
+    pad 59: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (0.35mm, -3.3mm) rotate 90
+    pad 60: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (0mm, -3.3mm) rotate 90
+    pad 61: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-0.35mm, -3.3mm) rotate 90
+    pad 62: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-0.7mm, -3.3mm) rotate 90
+    pad 63: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-1.05mm, -3.3mm) rotate 90
+    pad 64: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-1.4mm, -3.3mm) rotate 90
+    pad 65: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-1.75mm, -3.3mm) rotate 90
+    pad 66: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-2.1mm, -3.3mm) rotate 90
+    pad 67: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-2.45mm, -3.3mm) rotate 90
+    pad 68: sifli_sf32::P_SF32LB52X_QFN68_LEAD at (-2.8mm, -3.3mm) rotate 90
+
+    // Pin 69: continuous copper and nine stencil windows. Ground planes and
+    // filled/capped thermal vias remain in the routed PCB.
+    pad 69: sifli_sf32::P_SF32LB52X_EP_TOP at (0mm, 0mm)
+    pad 69: sifli_sf32::P_SF32LB52X_EP_PASTE_WINDOW at (-1.83mm, -1.83mm)
+    pad 69: sifli_sf32::P_SF32LB52X_EP_PASTE_WINDOW at (0mm, -1.83mm)
+    pad 69: sifli_sf32::P_SF32LB52X_EP_PASTE_WINDOW at (1.83mm, -1.83mm)
+    pad 69: sifli_sf32::P_SF32LB52X_EP_PASTE_WINDOW at (-1.83mm, 0mm)
+    pad 69: sifli_sf32::P_SF32LB52X_EP_PASTE_WINDOW at (0mm, 0mm)
+    pad 69: sifli_sf32::P_SF32LB52X_EP_PASTE_WINDOW at (1.83mm, 0mm)
+    pad 69: sifli_sf32::P_SF32LB52X_EP_PASTE_WINDOW at (-1.83mm, 1.83mm)
+    pad 69: sifli_sf32::P_SF32LB52X_EP_PASTE_WINDOW at (0mm, 1.83mm)
+    pad 69: sifli_sf32::P_SF32LB52X_EP_PASTE_WINDOW at (1.83mm, 1.83mm)
+
+    silkscreen {
+        pin_1_marker near pad 1 shape dot
+    }
+    courtyard { shape: rect, at: (0mm, 0mm), size: (7.65mm, 7.65mm) }
+    silkscreen_ref { at: (0mm, -4.1mm) }
+}

@@ -1,0 +1,29 @@
+// SPDX-License-Identifier: CERN-OHL-P-2.0
+// Parts selected in the released Rev B design BOM.
+pub part REVB_C_4U7: passive::MLCC<4.7uF, 10V, 20%>[C0402] {
+    primary { mfr: "Samsung Electro-Mechanics", mpn: "CL05A475MP5NRNC",
+              footprint: passive::CHIP_0402 }
+}
+pub part REVB_C_2U2: passive::MLCC<2.2uF, 10V, 10%>[C0402] {
+    primary { mfr: "Samsung Electro-Mechanics", mpn: "CL05A225KP5NSNC",
+              footprint: passive::CHIP_0402 }
+}
+pub part REVB_C_1U: passive::MLCC<1uF, 25V, 10%>[C0402] {
+    primary { mfr: "Samsung Electro-Mechanics", mpn: "CL05A105KA5NQNC",
+              footprint: passive::CHIP_0402 }
+}
+pub part REVB_C_15P: passive::MLCC<15pF, 50V, 5%>[C0402] {
+    primary { mfr: "FH (Guangdong Fenghua)", mpn: "0402CG150J500NT", footprint: passive::CHIP_0402 }
+}
+// Placeholder footprint for an unselected antenna shunt inductor. It is
+// explicitly DNP in assembly.json; no fitted inductance or purchasable MPN is claimed.
+pub device UnfittedRFShunt {
+    pins {
+        required A: 1 [passive]
+        required B: 2 [passive]
+    }
+}
+impl passive::Inductor for UnfittedRFShunt {}
+pub part RF_SHUNT_UNFITTED: UnfittedRFShunt {
+    primary { mfr: "Unselected", mpn: "DNP", footprint: passive::CHIP_0402 }
+}

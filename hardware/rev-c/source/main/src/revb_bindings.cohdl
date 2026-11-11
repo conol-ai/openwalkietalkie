@@ -1,0 +1,171 @@
+// SPDX-License-Identifier: CERN-OHL-P-2.0
+// Released local land patterns, component-side view (+y down).
+// Electrical pin definitions checked against TI SLUS810N and ST DS12239.
+// https://www.ti.com/lit/ds/symlink/bq24073.pdf
+// https://www.st.com/resource/en/datasheet/mp34dt05-a.pdf
+pub device BQ24073RGTR {
+    pins {
+        required TS: 1 [input]
+        required BAT: 2, 3 [bidirectional]
+        required CE: 4 [input]
+        required EN2: 5 [input]
+        required EN1: 6 [input]
+        optional PGOOD: 7 [bidirectional] // open-drain output
+        required VSS: 8 [power_in]
+        required CHG: 9 [bidirectional] // open-drain output
+        required OUT: 10, 11 [power_out]
+        required ILIM: 12 [input]
+        required IN: 13 [power_in]
+        optional TMR: 14 [input]
+        required TD: 15 [input]
+        required ISET: 16 [bidirectional]
+        required EPAD: 17 [power_in]
+    }
+}
+impl IC for BQ24073RGTR {}
+pub part CHARGER_BQ24073RGTR: BQ24073RGTR {
+    primary { mfr: "Texas Instruments", mpn: "BQ24073RGTR", footprint: FP_TI_RGT_VQFN16_3x3_EP1p68 }
+}
+
+pub device MP34DT05TR_A {
+    pins {
+        required VDD: 1 [power_in]
+        required SELECT: 2 [input]
+        required CLK: 3 [input]
+        required DATA: 4 [output]
+        required GND: 5 [power_in]
+    }
+}
+impl mic::Microphone for MP34DT05TR_A {}
+pub part MIC_ST_MP34DT05TR_A: MP34DT05TR_A {
+    primary { mfr: "STMicroelectronics", mpn: "MP34DT05TR-A", footprint: FP_ST_MP34DT05_HCLGA_3x4 }
+}
+
+pub device PicoBlade3Pin {
+    pins {
+        required P1: 1 [passive]
+        required P2: 2 [passive]
+        required P3: 3 [passive]
+        optional MP_LEFT: ML [passive]
+        optional MP_RIGHT: MR [passive]
+    }
+}
+impl Connector for PicoBlade3Pin {}
+pub part CONN_PICOBLADE_53261_0371: PicoBlade3Pin {
+    primary { mfr: "Molex", mpn: "53261-0371", footprint: FP_MOLEX_53261_0371 }
+}
+
+pub pad P_REVB_U6_1 {
+    shape: rect
+    size: (0.68mm, 0.68mm)
+    layer: top_copper
+    plating: smd
+    corner_radius: 0.17mm
+}
+pub pad P_REVB_U6_2 {
+    shape: rect
+    size: (0.825mm, 0.25mm)
+    layer: top_copper
+    plating: smd
+    corner_radius: 0.0625mm
+}
+pub pad P_REVB_U6_3 {
+    shape: rect
+    size: (0.25mm, 0.825mm)
+    layer: top_copper
+    plating: smd
+    corner_radius: 0.0625mm
+}
+pub pad P_REVB_U6_4 {
+    shape: rect
+    size: (1.68mm, 1.68mm)
+    layer: top_copper
+    plating: smd
+    paste: none
+}
+pub footprint FP_TI_RGT_VQFN16_3x3_EP1p68 {
+    pad 17: P_REVB_U6_1 at (-0.42mm, -0.42mm)
+    pad 17: P_REVB_U6_1 at (-0.42mm, 0.42mm)
+    pad 17: P_REVB_U6_1 at (0.42mm, -0.42mm)
+    pad 17: P_REVB_U6_1 at (0.42mm, 0.42mm)
+    pad 1: P_REVB_U6_2 at (-1.4625mm, -0.75mm)
+    pad 2: P_REVB_U6_2 at (-1.4625mm, -0.25mm)
+    pad 3: P_REVB_U6_2 at (-1.4625mm, 0.25mm)
+    pad 4: P_REVB_U6_2 at (-1.4625mm, 0.75mm)
+    pad 5: P_REVB_U6_3 at (-0.75mm, 1.4625mm)
+    pad 6: P_REVB_U6_3 at (-0.25mm, 1.4625mm)
+    pad 7: P_REVB_U6_3 at (0.25mm, 1.4625mm)
+    pad 8: P_REVB_U6_3 at (0.75mm, 1.4625mm)
+    pad 9: P_REVB_U6_2 at (1.4625mm, 0.75mm)
+    pad 10: P_REVB_U6_2 at (1.4625mm, 0.25mm)
+    pad 11: P_REVB_U6_2 at (1.4625mm, -0.25mm)
+    pad 12: P_REVB_U6_2 at (1.4625mm, -0.75mm)
+    pad 13: P_REVB_U6_3 at (0.75mm, -1.4625mm)
+    pad 14: P_REVB_U6_3 at (0.25mm, -1.4625mm)
+    pad 15: P_REVB_U6_3 at (-0.25mm, -1.4625mm)
+    pad 16: P_REVB_U6_3 at (-0.75mm, -1.4625mm)
+    pad 17: P_REVB_U6_4 at (0mm, 0mm)
+    courtyard { shape: rect, at: (0mm, 0mm), size: (4.25mm, 4.25mm) }
+}
+
+pub pad P_REVB_MK1_1 {
+    shape: rect
+    size: (0.4mm, 0.95mm)
+    layer: top_copper
+    plating: smd
+}
+pub pad P_REVB_MK1_2 {
+    shape: rect
+    size: (0.35mm, 2.3mm)
+    layer: top_copper
+    plating: smd
+}
+pub pad P_REVB_MK1_3 {
+    shape: rect
+    size: (1.3mm, 0.35mm)
+    layer: top_copper
+    plating: smd
+}
+pub footprint FP_ST_MP34DT05_HCLGA_3x4 {
+    pad 1: P_REVB_MK1_1 at (-0.45mm, -0.675mm)
+    pad 2: P_REVB_MK1_1 at (-0.45mm, 0.675mm)
+    pad 3: P_REVB_MK1_1 at (0.45mm, 0.675mm)
+    pad 4: P_REVB_MK1_1 at (0.45mm, -0.675mm)
+    pad 5: P_REVB_MK1_2 at (-1.225mm, -0mm)
+    pad 5: P_REVB_MK1_3 at (0mm, 1.725mm)
+    pad 5: P_REVB_MK1_3 at (0mm, -1.725mm)
+    pad 5: P_REVB_MK1_2 at (1.225mm, -0mm)
+    courtyard { shape: rect, at: (0mm, 0mm), size: (3.5mm, 4.5mm) }
+}
+
+pub pad P_REVB_J3_1 {
+    shape: rect
+    size: (0.8mm, 1.6mm)
+    layer: top_copper
+    plating: smd
+    corner_radius: 0.2mm
+}
+pub pad P_REVB_J3_2 {
+    shape: rect
+    size: (2.1mm, 3mm)
+    layer: top_copper
+    plating: smd
+    corner_radius: 0.250001mm
+}
+pub footprint FP_MOLEX_53261_0371 {
+    pad 1: P_REVB_J3_1 at (-1.25mm, -2.4mm)
+    pad 2: P_REVB_J3_1 at (0mm, -2.4mm)
+    pad 3: P_REVB_J3_1 at (1.25mm, -2.4mm)
+    pad ML: P_REVB_J3_2 at (-3.8mm, 0.5mm)
+    pad MR: P_REVB_J3_2 at (3.8mm, 0.5mm)
+    courtyard { shape: rect, at: (0mm, 0mm), size: (10.71mm, 6.8mm) }
+}
+
+pub footprint MountingHole_2mm_NPTH {
+    mount_hole 1: non_plated at (0mm, 0mm) diameter 2mm
+    courtyard { shape: rect, at: (0mm, 0mm), size: (2.4mm, 2.4mm) }
+}
+pub part REVB_MOUNTING_HOLE: misc::MechanicalMountingHole {
+    primary { mfr: "PCB Fabrication", mpn: "MOUNTING-HOLE-NPTH-2MM",
+              footprint: MountingHole_2mm_NPTH }
+}

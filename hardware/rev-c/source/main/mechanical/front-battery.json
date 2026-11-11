@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "required_stack": "display -> PCB -> battery",
+  "frame": {
+    "pcb_u": "Fusion X+28",
+    "pcb_v": "47.5-Fusion Z",
+    "front_normal_fusion": [
+      0,
+      -1,
+      0
+    ],
+    "back_normal_fusion": [
+      0,
+      1,
+      0
+    ],
+    "F_finished_mask_face_y_mm": 8.24532,
+    "B_finished_mask_seating_y_mm": 9.275,
+    "evidence": "Official KiCad10.0.4 isolated F/B pad STEP export: (u,-v,F+z); no reflected footprints"
+  },
+  "battery": {
+    "side": "F.Cu",
+    "same_side_as": "J5 USB-C",
+    "body_bounds_mm": [
+      7.625,
+      24,
+      48.625,
+      44
+    ],
+    "reserved_bounds_mm": [
+      7.325,
+      23.7,
+      48.925,
+      44.3
+    ],
+    "envelope_mm": [
+      41,
+      20,
+      7
+    ],
+    "original_max_thickness_mm": 9,
+    "permitted_alternatives_mm": [
+      8,
+      7
+    ],
+    "insulation_and_adhesive_mm": 0.3,
+    "outer_accommodation_mm": 0.3,
+    "body_y_fusion_mm": [
+      0.94532,
+      7.94532
+    ],
+    "remaining_to_y0_rim_after_accommodation_mm": 0.64532,
+    "note": "7mm chosen from permitted alternatives; not a guarantee for a cover, pouch growth, or supplier tolerance."
+  },
+  "connector": {
+    "ref": "J3",
+    "part": "Molex 53261-0271",
+    "mating_housing": "51021-0200",
+    "pitch_mm": 1.25,
+    "side": "F.Cu",
+    "placement_mm": [17, 16.5],
+    "rotation_degrees": 0,
+    "mating_direction_uv": [0, 1],
+    "mated_tail_v_mm": 20.1,
+    "straight_withdrawal_tail_v_mm": 23.05,
+    "withdrawal_margin_to_battery_reservation_mm": 0.65,
+    "pin_nets": {
+      "1": "CELL",
+      "2": "GND"
+    },
+    "current_rating_A": 1,
+    "note": "Peak/current rating and actual lead polarity remain qualification items. J4 separate NTC retained."
+  },
+  "component_keepout_name": "BATTERY_USB_FACE_COMPONENT_RESERVE",
+  "connector_access": {
+    "name": "J3_USB_FACE_PLUG_WITHDRAWAL_RESERVE",
+    "bounds_mm": [12.275, 19.65, 21.725, 23.7],
+    "note": "Component/pad-free access strip beyond J3 courtyard; straight housing withdrawal leaves 0.65mm before battery reserve. Actual cable bend and finger access remain qualification items."
+  },
+  "limitations": [
+    "No full panel or bent FPC model; display-library reference is 0.8mm only.",
+    "No separate cover solid; intrusion must fit remaining rim clearance.",
+    "BodyV5 r2 corrects macro-switch sides, flex access and microphone placement; static populated fit is checked, but physical travel and tolerance qualification remain necessary.",
+    "Use the enclosing r2 release's routed PCB and verification reports; rebuilding this source emits an unrouted board."
+  ]
+}
