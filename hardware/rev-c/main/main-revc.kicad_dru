@@ -1,0 +1,15 @@
+(version 1)
+# RF50 keeps 0.2 mm to other copper (coplanar gap) except between tracks/pads inside U5's
+# 0.35 mm pin field; zones are excluded so the GND pours keep the designed 0.2 mm CPWG gap
+(rule "RF50 at the U5 pins"
+  (condition "(A.NetClass == 'RF50' || B.NetClass == 'RF50') && (A.intersectsCourtyard('U5') || B.intersectsCourtyard('U5')) && A.Type != 'Zone' && B.Type != 'Zone'")
+  (constraint clearance (min 0.1mm)))
+# other analog audio nets: >= 0.3 mm to non-audio, non-GND copper (pads of their own parts excepted)
+(rule "audio analog spacing"
+  (condition "A.NetClass == 'AudioAnalog' && B.NetClass == 'Default' && B.Type != 'Pad' && !A.intersectsCourtyard('U5') && !B.intersectsCourtyard('U5')")
+  (constraint clearance (min 0.3mm)))
+# audio summing nodes: >= 0.5 mm to any non-audio, non-GND copper that is not a pad of U1.
+# Placed last so it wins over the 0.3 mm rule above (KiCad applies the last matching rule).
+(rule "audio summing nodes"
+  (condition "(A.NetName == 'audio::AMP_INP' || A.NetName == 'audio::AMP_INN') && B.NetClass != 'AudioAnalog' && B.NetClass != 'GroundLocal' && B.NetName != 'GND' && !B.memberOfFootprint('U1')")
+  (constraint clearance (min 0.5mm)))

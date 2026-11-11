@@ -1,0 +1,29 @@
+{
+  "passed": true,
+  "rev_b_pcb_sha256": "f9e8375c8ab7c64007a48d8d68c403fa7f1b0f661020226ed5e83dabe346aa7e",
+  "rev_c_pcb_sha256": "0cc240b99af0713cda7510ce15641477036f4aba85542c33661119e14033f824",
+  "footprints": 142,
+  "pads_compared": 493,
+  "pad_fields": [
+    "number",
+    "net",
+    "centre",
+    "board-frame size",
+    "shape",
+    "type",
+    "drill",
+    "layers"
+  ],
+  "tracks": 1351,
+  "vias": 477,
+  "zones": 36,
+  "board_graphics": 94,
+  "footprint_frames_turned": [
+    {
+      "ref": "U4",
+      "rev_b_angle": 0.0,
+      "rev_c_angle": 90.0
+    }
+  ],
+  "errors": []
+}
