@@ -1,0 +1,12 @@
+[Unit]
+Description=OpenWalkieTalkie deckd (drives the deck over Bluetooth HID)
+After=bluetooth.target
+
+[Service]
+Environment=DECKD_DATA_DIR=%h/.local/share/openwalkietalkie
+ExecStart=%h/.local/bin/deckd run
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

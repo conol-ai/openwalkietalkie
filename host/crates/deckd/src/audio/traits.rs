@@ -47,6 +47,9 @@
 //!   calling it. So the error callback may not allocate, lock or log:
 //!   [`StreamFaults`] is a single `fetch_or` and the control loop drains it.
 use deck_model::VoiceInput;
+
+/// Default final-decode budget. Only a completed decode may be dispatched.
+pub const FINISH_BUDGET: std::time::Duration = std::time::Duration::from_secs(30);
 use std::sync::atomic::{AtomicU32, Ordering};
 
 /// The design's `BoxFuture` with the lifetime it was missing (V16).
@@ -389,7 +392,7 @@ pub trait SttSession: Send {
     /// How long the caller waits for the complete final before reporting a
     /// failure. A timeout must never promote partial text to a final.
     fn finish_budget(&self) -> std::time::Duration {
-        super::engine::FINISH_BUDGET
+        FINISH_BUDGET
     }
 
     /// §7.4's `Aborting`: no final wanted, drop everything.

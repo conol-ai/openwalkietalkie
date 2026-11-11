@@ -740,11 +740,11 @@ impl Core {
     fn stt_info(&self, apple: &crate::audio::traits::EngineInfo) -> crate::audio::traits::EngineInfo {
         let settings = crate::stt::Settings::from_config(self.config());
         let present = crate::stt::present(&self.paths.stt, &settings.model);
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         {
             crate::audio::whisper::engine_info(&settings, present, apple)
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         {
             let _ = (settings, present);
             apple.clone()
@@ -761,7 +761,7 @@ impl Core {
         let path = crate::stt::model_path(&self.paths.stt, &settings.model);
         let present = crate::stt::present(&self.paths.stt, &settings.model);
         let (loaded, loading, load_error) = {
-            #[cfg(target_os = "macos")]
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
             {
                 match &self.whisper {
                     Some(whisper) => {
@@ -772,7 +772,7 @@ impl Core {
                     None => (false, false, None),
                 }
             }
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(not(any(target_os = "macos", target_os = "linux")))]
             {
                 (false, false, Some("no local recogniser in this build".to_string()))
             }
@@ -836,7 +836,7 @@ impl Core {
         if let Err(e) = crate::stt::job(&self.paths.stt, &settings.model).remove() {
             return Reply::err(ApiError::internal(&e));
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         if let Some(whisper) = &self.whisper {
             whisper.unload();
         }

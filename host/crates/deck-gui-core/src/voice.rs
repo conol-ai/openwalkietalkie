@@ -24,6 +24,9 @@
 use deck_model::VoiceTransport;
 use serde_json::Value;
 
+/// What the screens call the machine the daemon runs on.
+pub const HOST: &str = if cfg!(target_os = "macos") { "Mac" } else { "computer" };
+
 /// `voice.test{what}` — the four checks, in the order the screen offers
 /// them. Only the first makes a sound.
 pub const TESTS: [&str; 4] = ["speaker", "mic", "stt", "tts"];
@@ -261,7 +264,7 @@ impl SttStatus {
             return format!("Loading {} ({size})\u{2026}", self.model);
         }
         if self.loaded {
-            return format!("{} ({size}) is loaded and recognises on this Mac.", self.model);
+            return format!("{} ({size}) is loaded and recognises on this {HOST}.", self.model);
         }
         format!("{} ({size}) is downloaded; it loads before the next press.", self.model)
     }
@@ -345,7 +348,7 @@ impl TtsStatus {
             format!(" Agents speak as {}.", self.voices.join(", "))
         };
         if self.loaded {
-            return format!("{} ({size}) is loaded and speaks on this Mac.{voices}", self.model);
+            return format!("{} ({size}) is loaded and speaks on this {HOST}.{voices}", self.model);
         }
         format!("{} ({size}) is downloaded; it loads before the next announcement.{voices}", self.model)
     }

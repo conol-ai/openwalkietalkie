@@ -59,6 +59,11 @@ pub fn install() -> Option<Tray> {
 }
 
 pub fn install_localized(language: Language) -> Option<Tray> {
+    // Off macOS the tray backend is GTK, which this app never initialises: a
+    // status item there is the compositor bar's job, and the window works without it.
+    if cfg!(not(target_os = "macos")) {
+        return None;
+    }
     let menu = Menu::new();
     let open = MenuItem::with_id(
         TrayCommand::Open.id(),

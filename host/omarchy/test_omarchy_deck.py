@@ -1,0 +1,177 @@
+"""Tests for omarchy_deck.py: python3 -m unittest host/examples/test_omarchy_deck.py"""
+import sys
+import unittest
+from pathlib import Path
+from unittest import mock
+
+sys.path.insert(0, str(Path(__file__).parent))
+import omarchy_deck as o  # noqa: E402
+
+
+def client(address, ws, cls='kitty', title='', x=0, y=0, focus=5, **extra):
+    return {'address': address, 'workspace': {'id': ws}, 'class': cls, 'title': title,
+            'at': [x, y], 'focusHistoryID': focus, 'mapped': True, 'hidden': False, **extra}
+
+
+MONITORS = [{'id': 0, 'focused': True, 'activeWorkspace': {'id': 3}}]
+WORKSPACES = [{'id': 1, 'monitorID': 0, 'windows': 1}, {'id': 3, 'monitorID': 0, 'windows': 2},
+              {'id': 5, 'monitorID': 0, 'windows': 1}, {'id': 12, 'monitorID': 1, 'windows': 4}]
+
+
+class BuildWs(unittest.TestCase):
+    def test_chips_cover_the_highest_occupied_slot_of_the_focused_monitor(self):
+        line, _ = o.build_ws(MONITORS, WORKSPACES, [])
+        self.assertEqual((line['active'], line['count']), (3, 5))
+
+    def test_second_monitor_block_is_shown_as_slots_one_to_ten(self):
+        monitors = [{'id': 1, 'focused': True, 'activeWorkspace': {'id': 12}}]
+        line, _ = o.build_ws(monitors, WORKSPACES, [])
+        self.assertEqual((line['active'], line['count']), (2, 2))
+
+    def test_windows_are_the_active_workspaces_in_screen_order_with_the_focused_one_selected(self):
+        clients = [client('0xb', 3, title='right', x=900, focus=0), client('0xa', 3, title='left', x=10),
+                   client('0xc', 1, title='other workspace')]
+        line, addresses = o.build_ws(MONITORS, WORKSPACES, clients)
+        self.assertEqual(addresses, ['0xa', '0xb'])
+        self.assertEqual(line['sel'], 1)
+        self.assertEqual(line['windows'][1]['tone'], 'blue')
+        self.assertTrue(line['windows'][0]['title'].startswith('kitty — left'))
+
+    def test_at_most_six_rows_and_the_focused_window_always_shows(self):
+        clients = [client(f'0x{i}', 3, x=i, focus=i + 1) for i in range(8)]
+        clients[7]['focusHistoryID'] = 0
+        line, addresses = o.build_ws(MONITORS, WORKSPACES, clients)
+        self.assertEqual(len(line['windows']), 6)
+        self.assertIn('0x7', addresses)
+        self.assertEqual(addresses[line['sel']], '0x7')
+
+    def test_the_line_is_one_the_daemon_accepts(self):
+        clients = [client('0xa', 3, title='t' * 80)]
+        line, _ = o.build_ws(MONITORS, WORKSPACES, clients)
+        self.assertLessEqual(line['active'], line['count'])
+        self.assertLessEqual(line['count'], 9)
+        self.assertLess(line['sel'], max(1, len(line['windows'])))
+        self.assertLessEqual(len(line['windows'][0]['title']), 48)
+
+    def test_slot_ten_is_not_drawn_but_never_breaks_the_line(self):
+        monitors = [{'id': 0, 'focused': True, 'activeWorkspace': {'id': 10}}]
+        line, _ = o.build_ws(monitors, WORKSPACES, [])
+        self.assertEqual(line['active'], 0)
+        self.assertLessEqual(line['count'], 9)
+
+    def test_no_focused_monitor_sends_nothing(self):
+        self.assertIsNone(o.build_ws([{'id': 0, 'focused': False, 'activeWorkspace': {'id': 1}}], [], []))
+
+
+class Keys(unittest.TestCase):
+    def remote(self):
+        remote = o.Remote()
+        remote.addresses = ['0xa', '0xb']
+        return remote
+
+    def test_wheel_steps_cycle_windows_and_a_release_does_nothing(self):
+        with mock.patch.object(o, 'dispatch') as d:
+            self.remote().on_key({'k': 'ccw', 'act': 2, 'shift': 0})
+            self.remote().on_key({'k': 'enter', 'act': 0, 'shift': 0})
+        d.assert_called_once_with('hl.dsp.window.cycle_next()', ['cyclenext'])
+
+    def test_left_and_right_step_workspace_slots_and_wrap_and_shift_moves_window_focus(self):
+        monitors = lambda ws: [{'focused': True, 'activeWorkspace': {'id': ws}}]
+        for active, key, want in ((7, 'left', 6), (7, 'right', 8), (1, 'left', 10), (10, 'right', 1)):
+            with mock.patch.object(o, 'hyprctl_json', return_value=monitors(active)), \
+                    mock.patch.object(o, 'focus_slot') as f:
+                self.remote().on_key({'k': key, 'act': 1, 'shift': 0})
+            f.assert_called_once_with(want)
+        with mock.patch.object(o, 'dispatch') as d:
+            self.remote().on_key({'k': 'left', 'act': 1, 'shift': 1})
+        d.assert_called_once_with('hl.dsp.focus({ direction = "l" })', ['movefocus', 'l'])
+
+    def test_home_cancel_toggles_the_scratchpad_and_home_enter_sends_a_window_there(self):
+        with mock.patch.object(o, 'dispatch') as d:
+            self.remote().on_key({'k': 'cancel', 'act': 1, 'shift': 1})
+            self.remote().on_key({'k': 'enter', 'act': 1, 'shift': 1})
+        self.assertEqual([c.args[1] for c in d.call_args_list],
+                         [['togglespecialworkspace', 'scratchpad'], ['movetoworkspacesilent', 'special:scratchpad']])
+
+    def test_an_open_scratchpad_lists_its_own_windows(self):
+        monitors = [{'id': 0, 'focused': True, 'activeWorkspace': {'id': 7}, 'specialWorkspace': {'id': -98}}]
+        clients = [client('0xa', 7, title='main'), client('0xs', -98, title='notes')]
+        line, addresses = o.build_ws(monitors, [], clients)
+        self.assertEqual(addresses, ['0xs'])
+        self.assertTrue(line['windows'][0]['title'].endswith('notes'))
+
+    def test_unmapped_keys_are_ignored(self):
+        with mock.patch.object(o, 'dispatch') as d:
+            self.remote().on_key({'k': 'cancel', 'act': 1, 'shift': 0})
+        d.assert_not_called()
+
+    def test_tapping_a_row_focuses_its_window_and_a_stale_index_is_ignored(self):
+        with mock.patch.object(o, 'focus_window') as f:
+            self.remote().on_ws({'win': 1})
+            self.remote().on_ws({'win': 7})
+        f.assert_called_once_with('0xb')
+
+    def test_tapping_a_chip_goes_to_that_slot(self):
+        with mock.patch.object(o, 'focus_slot') as f:
+            self.remote().on_ws({'go': 4})
+        f.assert_called_once_with(4)
+
+
+class Resilience(unittest.TestCase):
+    def test_a_hyprctl_that_times_out_does_not_stop_the_bridge(self):
+        import subprocess
+        remote = o.Remote()
+        remote.push = lambda force=False: (_ for _ in ()).throw(subprocess.TimeoutExpired('hyprctl', 2))
+        remote.try_push(force=True)  # must not raise
+        remote.push = lambda force=False: (_ for _ in ()).throw(RuntimeError('hyprctl failed'))
+        remote.try_push()
+        remote.push = lambda force=False: (_ for _ in ()).throw(ValueError('bad json'))
+        remote.try_push()
+
+    def test_a_key_pressed_while_hyprland_is_away_is_dropped_not_fatal(self):
+        remote = o.Remote()
+        with mock.patch.object(o, 'dispatch', side_effect=RuntimeError('down')):
+            remote.on_key({'k': 'enter', 'act': 1, 'shift': 0})
+
+
+class KimiSeed(unittest.TestCase):
+    def test_with_hooks_the_log_reader_runs_once_and_without_them_always(self):
+        remote = o.Remote.__new__(o.Remote)
+        remote.kimi_seeded = False
+        remote.kimi = mock.Mock(poll=mock.Mock(return_value=['m']))
+        with mock.patch.object(o, 'hooks_installed', return_value=True):
+            self.assertEqual(remote.kimi_messages(), ['m'])
+            self.assertEqual(remote.kimi_messages(), [])
+        with mock.patch.object(o, 'hooks_installed', return_value=False):
+            self.assertEqual(remote.kimi_messages(), ['m'])
+            self.assertEqual(remote.kimi_messages(), ['m'])
+
+
+class Instance(unittest.TestCase):
+    def serve(self, root, name):
+        import socket as _s
+        d = Path(root) / 'hypr' / name
+        d.mkdir(parents=True)
+        srv = _s.socket(_s.AF_UNIX)
+        srv.bind(str(d / '.socket.sock'))
+        srv.listen(16)  # nobody accepts: leave room for every probe
+        self.addCleanup(srv.close)
+        return d
+
+    def test_a_stale_signature_is_replaced_by_the_live_instance(self):
+        import os as _os
+        import tempfile as _t
+        import omarchy_hypr as hy
+        with _t.TemporaryDirectory(dir='/tmp') as root:
+            (Path(root) / 'hypr' / 'dead_1').mkdir(parents=True)  # a directory with no socket
+            self.serve(root, 'live_2')
+            env = {'XDG_RUNTIME_DIR': root, 'HYPRLAND_INSTANCE_SIGNATURE': 'dead_1'}
+            with mock.patch.dict(_os.environ, env):
+                hy.ensure_instance()
+                self.assertEqual(_os.environ['HYPRLAND_INSTANCE_SIGNATURE'], 'live_2')
+            with mock.patch.dict(_os.environ, {'XDG_RUNTIME_DIR': root}, clear=True):
+                hy.ensure_instance()
+                self.assertEqual(_os.environ['HYPRLAND_INSTANCE_SIGNATURE'], 'live_2')
+
+if __name__ == '__main__':
+    unittest.main()
