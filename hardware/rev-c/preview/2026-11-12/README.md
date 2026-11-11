@@ -167,10 +167,13 @@ other previewed row is right as committed. The fab CPL is not changed here.
 
 ## Next
 
-[`../corrections-next.csv`](../corrections-next.csv) is the table for a
-second preview: the 36 confirmed part numbers as they were, and the five
-that need a mapping with the mapping this record implies. No second package
-has been built.
+[`../corrections.csv`](../corrections.csv) is now the table for a second
+preview: the 36 confirmed part numbers as they were, and the five that need
+a mapping with the mapping this record implies, marked "under test". The
+table this preview's package applied is
+[`package/corrections.csv`](package/corrections.csv), byte for byte the
+member of the ZIP. Whether a second package has been run is stated in
+[`../README.md`](../README.md), not here.
 
 [`SHA256SUMS`](SHA256SUMS) covers every other file in this directory.
 

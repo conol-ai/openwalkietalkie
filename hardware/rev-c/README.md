@@ -82,7 +82,7 @@ binary gives byte-identical output was not tested.
 | CoHDL source | [`source/main/src/main.cohdl`](source/main/src/main.cohdl); [build and checks](source/README.md) |
 | Routed board (KiCad 10, fabrication authority) | [`main/main-revc.kicad_pcb`](main/main-revc.kicad_pcb) with `.kicad_pro` and `.kicad_dru` copied from Rev B |
 | JLCPCB order package | [`fab-jlcpcb/`](fab-jlcpcb/ORDER-NOTES.md). **Read ORDER-NOTES first.** |
-| Placement preview before ordering | [`preview/`](preview/README.md): what goes through JLCPCB's assembly preview so that orientations are measured first. First preview read on 2026-11-12: [record](preview/2026-11-12/README.md). 109 of 118 placements confirmed, 9 need a mapping and a second preview, 7 parts not previewed. |
+| Placement preview before ordering | [`preview/`](preview/README.md): what goes through JLCPCB's assembly preview so that orientations are measured first. First preview read on 2026-11-12: [record](preview/2026-11-12/README.md). 109 of 118 placements confirmed, 9 need a mapping and a second preview, 7 parts not previewed. The package for the second preview is defined (the nine with their mapping applied) and has not been uploaded. |
 | Design BOM / KiCad positions | [`main/assembly/bom.csv`](main/assembly/bom.csv), [`main/assembly/positions-kicad-all.csv`](main/assembly/positions-kicad-all.csv) |
 | Verification reports | [`verification/`](verification/) |
 | Scripts | [`scripts/`](scripts/README.md) |

@@ -3,6 +3,7 @@
 """Rev C placement-preview package for JLCPCB's assembly preview (Python 3).
 
 usage: build_preview.py --measure-preview MEASURE_PREVIEW.py [--out DIR] [--check] [--allow-dirty]
+       build_preview.py --self-test
 
 The package is what CoHDL's `tools/frame_boards/jlc_preview.py` reads: the
 Gerber archive, an LCSC BOM, an LCSC CPL, `board.json`, a checklist,
@@ -18,8 +19,9 @@ Inputs, all committed:
 
 - fab-jlcpcb/main-bom-jlcpcb.csv, main-cpl-jlcpcb.csv,
   main-placement-sources.csv, main-revc-jlcpcb-gerber.zip   (build_fab.py)
-- preview/corrections.csv   part number on a footprint -> rotate / offset and
-                            the evidence for it
+- preview/corrections.csv   part number on a footprint -> rotate / offset, the
+                            evidence for it and whether it is confirmed or
+                            under test in this package
 - preview/left-out.csv      fitted parts that cannot pass the BOM step
 - preview/stock-risks.csv   parts kept in spite of low or unread stock
 
@@ -29,10 +31,19 @@ rotation mirrored: 180 - KiCad angle) with:
 - the rows of left-out.csv removed; a part left out cannot be previewed;
 - a "library binding" row unchanged: the fab row already carries the binding's
   map, and corrections.csv must state that same map;
-- a "board-4 raw reading" row turned by its Rotate. In the mirrored
-  convention a map's rotate adds to the CPL rotation on both sides, as in
-  CoHDL's supplier CPL (`compose_place`, then 180 - angle on the bottom);
+- a "Rev C preview 2026-11-12" (or "board-4 raw reading") row with its map
+  applied by `apply_map`, which is CoHDL's supplier CPL: `compose_place` of the
+  placement with the map, then the `lcsc=mirrored` bottom convention.
+  The offset (Dx, Dy) is in the footprint's own frame, +y down as KiCad draws
+  the footprint. On the bottom its x is mirrored first; then it is turned by
+  the placement's rotation and added to the position. The map's rotate does
+  not turn the offset. In the mirrored convention the rotate adds to the CPL
+  rotation on both sides. Only quarter turns are applied;
 - every other row at its convention value, to be measured.
+
+Every run first checks `apply_map` against the J5 binding (a known top-side
+case) and bottom-side cases worked by hand from the compiler's rules;
+--self-test does only that.
 
 The preview BOM has one line per LCSC number, because the tool expects each
 part number in one row of the BOM step.
@@ -56,6 +67,7 @@ import sys
 import tempfile
 import zipfile
 from collections import OrderedDict
+from decimal import Decimal
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -63,7 +75,8 @@ FAB = ROOT / "fab-jlcpcb"
 PREVIEW = ROOT / "preview"
 BOARD = ROOT / "main/main-revc.kicad_pcb"
 NAME = "owt-revc"
-LIBRARY, BOARD4, NONE = "library binding", "board-4 raw reading", "none"
+LIBRARY, BOARD4, REVC, NONE = "library binding", "board-4 raw reading", "Rev C preview 2026-11-12", "none"
+CONFIRMED, UNDER_TEST = "confirmed", "under test"
 KICAD_PYTHON = "/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/Current/bin/python3"
 BINDING_MAP = re.compile(r"binding map at \(([-\d.]+)mm, ([-\d.]+)mm\) rotate (\d+) on ")
 
@@ -87,6 +100,77 @@ def render(header, body):
 
 def sha256(data):
     return hashlib.sha256(data).hexdigest()
+
+
+def quarter_turn(x, y, deg):
+    """CoHDL's `trig::rotate` for a quarter turn."""
+    if deg % 90:
+        raise ValueError("only quarter turns are applied")
+    return {0: (x, y), 90: (-y, x), 180: (-x, -y), 270: (y, -x)}[deg % 360]
+
+
+def apply_map(x, y, layer, rotation, rotate, dx, dy):
+    """A supplier map (rotate, offset in the footprint's own frame) on a CPL row that has none.
+
+    The steps are CoHDL's: the row back to the compiler's placement, `compose_place`
+    (src/placement.rs), then `emit_cpl` with `lcsc=mirrored` (src/emit/cpl.rs).
+    """
+    bottom = layer == "Bottom"
+    # The CPL row as the compiler's placement: +y down; on the bottom the
+    # mirrored CPL rotation is 360 - the placement's rotation.
+    px, py, pr = x, -y, (360 - rotation) % 360 if bottom else rotation % 360
+    # compose_place: mirror x on the bottom BEFORE rotating; the board-frame
+    # rotation is the inverse angle; a bottom placement reverses the map's rotate.
+    if bottom:
+        dx = -dx
+    rx, ry = quarter_turn(dx, dy, (360 - pr) % 360)
+    mx, my = px + rx, py + ry
+    mr = (pr - rotate) % 360 if bottom else (pr + rotate) % 360
+    # emit_cpl: Y negated; bottom KiCad angle = rotate + 180, mirrored = 540 - that.
+    return mx, -my, (540 - (mr + 180) % 360) % 360 if bottom else mr
+
+
+def coordinate(value):
+    value = value.quantize(Decimal("0.0001"))
+    return str(abs(value) if value == 0 else value)
+
+
+def self_test():
+    """`apply_map` against the one case read on a board and cases worked from the compiler's rules."""
+    D = Decimal
+    cases = [
+        # J5, usb 0.1.6 binding `at (0mm, -1.55mm)`, top, KiCad angle 180: the
+        # fab row (28.0000, -5.5500) against the footprint origin (28.0000, -4.0000).
+        ("J5 binding, top", ("28.0000", "-4.0000", "Top", 180, 0, "0", "-1.55"), ("28.0000", "-5.5500", 180)),
+        # The four top rows the 2026-11-12 record states.
+        ("top 90, rotate 180", ("33.0000", "-84.9000", "Top", 90, 180, "0", "-0.95"), ("32.0500", "-84.9000", 270)),
+        ("top 0", ("17.0000", "-16.5000", "Top", 0, 0, "0", "-1.15"), ("17.0000", "-15.3500", 0)),
+        ("top 270, rotate 180", ("3.7600", "-18.5000", "Top", 270, 180, "0", "-0.55"), ("4.3100", "-18.5000", 90)),
+        ("top 0, +x", ("10.0000", "-20.0000", "Top", 0, 0, "1", "0"), ("11.0000", "-20.0000", 0)),
+        # Bottom, by hand from compose_place and emit_cpl. CPL (10, -20) rotation
+        # 90 is the placement at (10, 20) rotate 270 on the bottom. Map at (1, 2)
+        # rotate 90: mirror x -> (-1, 2); the inverse of 270 is 90, and
+        # rotate((-1, 2), 90) = (-2, -1); position (8, 19); rotate 270 - 90 = 180;
+        # KiCad angle 0; mirrored 540 - 0 = 180. So CPL (8, -19) rotation 180.
+        ("bottom 90, rotate 90", ("10.0000", "-20.0000", "Bottom", 90, 90, "1", "2"), ("8.0000", "-19.0000", 180)),
+        # Bottom at rotation 0: +x of the footprint is -x of the board seen from the top.
+        ("bottom 0, +x", ("10.0000", "-20.0000", "Bottom", 0, 0, "1", "0"), ("9.0000", "-20.0000", 0)),
+        # Bottom at CPL rotation 270 (placement rotate 90), map at (0, -1) rotate 270:
+        # no x to mirror; inverse 270; rotate((0, -1), 270) = (-1, 0); position
+        # (9, 20); rotate 90 - 270 = 180; KiCad 0; mirrored 180.
+        ("bottom 270, rotate 270", ("10.0000", "-20.0000", "Bottom", 270, 270, "0", "-1"), ("9.0000", "-20.0000", 180)),
+        # A rotate alone adds to the mirrored CPL rotation on the bottom too.
+        ("bottom 90, rotate 270 alone", ("15.0000", "-42.5000", "Bottom", 90, 270, "0", "0"), ("15.0000", "-42.5000", 0)),
+    ]
+    failed = []
+    for name, (x, y, layer, rotation, rotate, dx, dy), want in cases:
+        mx, my, mr = apply_map(D(x), D(y), layer, rotation, rotate, D(dx), D(dy))
+        got = (coordinate(mx), coordinate(my), mr)
+        if got != want:
+            failed.append(f"apply_map self-test, {name}: got {got}, expected {want}")
+    if failed:
+        raise SystemExit("\n".join(failed))
+    return len(cases)
 
 
 def load_tool(path):
@@ -150,32 +234,43 @@ def build(tool_path):
             problems.append(f"{ref}: no pad 1 or A1 to compare a pin 1 mark with")
         key = (src["LCSC Part #"], fp["fpid"])
         row = corrections.get(key)
-        rotation, evidence, applied = int(fab["Rotation"]), NONE, ""
+        x, y, rotation, evidence, state, applied = fab["Mid X"], fab["Mid Y"], int(fab["Rotation"]), NONE, "", ""
         bound = src["LCSC number source"] == LIBRARY
         if row is not None:
             used.add(key)
-            evidence = row["Evidence"]
-            rotate, offset = int(row["Rotate"]), (float(row["Dx mm"]), float(row["Dy mm"]))
+            evidence, state = row["Evidence"], row["State"]
+            rotate, offset = int(row["Rotate"]), (Decimal(row["Dx mm"]), Decimal(row["Dy mm"]))
+            if state not in (CONFIRMED, UNDER_TEST):
+                problems.append(f"{ref}: unknown state {state!r}")
+            if (state == UNDER_TEST) != bool(row["Look at"]):
+                problems.append(f"{ref}: a row under test, and only such a row, says what to look at")
             if evidence == LIBRARY:
                 m = BINDING_MAP.match(src["Position and rotation basis"])
-                if not bound or not m or (float(m.group(1)), float(m.group(2)), int(m.group(3))) != (*offset, rotate):
+                if not bound or not m or (Decimal(m.group(1)), Decimal(m.group(2)), int(m.group(3))) != (*offset, rotate):
                     problems.append(f"{ref}: corrections.csv does not state the library binding's map")
                 applied = f"binding map rotate {rotate}, offset ({row['Dx mm']}, {row['Dy mm']}) mm, already in the fab row"
-            elif evidence == BOARD4:
+            elif evidence in (BOARD4, REVC):
                 if bound:
                     problems.append(f"{ref}: bound by the library; its correction must be the binding")
-                if offset != (0.0, 0.0) or rotate % 90:
-                    problems.append(f"{ref}: only quarter-turn rotations are applied to unbound rows")
-                rotation = (rotation + rotate) % 360
-                applied = f"rotate {rotate} applied" if rotate else "rotate 0, nothing applied"
+                if rotate % 90 or rotation % 90:
+                    problems.append(f"{ref}: only quarter turns are applied")
+                else:
+                    mx, my, rotation = apply_map(Decimal(x), Decimal(y), fab["Layer"], rotation, rotate, *offset)
+                    x, y = coordinate(mx), coordinate(my)
+                if (x, y, rotation) == (fab["Mid X"], fab["Mid Y"], int(fab["Rotation"])):
+                    applied = "rotate 0, no offset: nothing applied"
+                else:
+                    applied = (f"rotate {rotate}, offset ({row['Dx mm']}, {row['Dy mm']}) mm applied: fab row "
+                               f"({fab['Mid X']}, {fab['Mid Y']}) {fab['Rotation']} becomes ({x}, {y}) {rotation}")
             else:
                 problems.append(f"{ref}: unknown evidence {evidence!r}")
         elif bound:
             problems.append(f"{ref}: bound by the library but missing from corrections.csv")
-        cpl.append([ref, fab["Mid X"], fab["Mid Y"], fab["Layer"], str(rotation)])
+        cpl.append([ref, x, y, fab["Layer"], str(rotation)])
         checklist.append({"ref": ref, "side": fab["Layer"], "pn": src["LCSC Part #"], "fpid": fp["fpid"],
-                          "x": fab["Mid X"], "y": fab["Mid Y"], "convention": int(fab["Rotation"]) if not bound else None,
-                          "rotation": rotation, "evidence": evidence, "applied": applied, "check": check_type(tool, fp)})
+                          "x": x, "y": y, "fab": [fab["Mid X"], fab["Mid Y"], int(fab["Rotation"])], "bound": bound,
+                          "rotation": rotation, "evidence": evidence, "state": state, "applied": applied,
+                          "check": check_type(tool, fp)})
     problems += [f"corrections.csv: {pn} on {fpid} is not a previewed placement" for pn, fpid in corrections if (pn, fpid) not in used]
 
     # One BOM line per LCSC number.
@@ -208,7 +303,8 @@ def build(tool_path):
     by_check = OrderedDict()
     for item in checklist:
         by_check.setdefault(item["check"], []).append(item["ref"])
-    turned = [c for c in checklist if c["evidence"] == BOARD4 and c["rotation"] != c["convention"]]
+    moved = [c for c in checklist if [c["x"], c["y"], c["rotation"]] != c["fab"]]
+    row_change = lambda c: {"lcsc": c["pn"], "side": c["side"], "fab": c["fab"], "preview": [c["x"], c["y"], c["rotation"]]}
     summary = {
         "name": NAME,
         "purpose": "placement preview only; stop at Component Placements; not an order",
@@ -219,11 +315,13 @@ def build(tool_path):
         "bottom_rotation": "mirrored (180 - KiCad angle), as the fab package",
         "left_out": [{"designator": ref, "lcsc": r["LCSC Part #"], "reason": r["Reason"]} for ref, r in left_out.items()],
         "not_assembled": "DNP sites, test points and mounting holes are absent, as in the fab package",
+        "pcba_type": "Standard (Economic offers one assembly side on this board); the tool selects it",
         "corrections": {
             LIBRARY: [c["ref"] for c in checklist if c["evidence"] == LIBRARY],
-            BOARD4 + ", rotation applied": {c["ref"]: {"lcsc": c["pn"], "convention": c["convention"], "preview": c["rotation"]}
-                                            for c in turned},
-            BOARD4 + ", rotate 0": [c["ref"] for c in checklist if c["evidence"] == BOARD4 and c not in turned],
+            UNDER_TEST + ", map applied": {c["ref"]: row_change(c) for c in checklist if c["state"] == UNDER_TEST},
+            CONFIRMED + ", map applied": {c["ref"]: row_change(c) for c in moved if c["state"] == CONFIRMED},
+            CONFIRMED + ", nothing to apply": [c["ref"] for c in checklist
+                                               if c["state"] == CONFIRMED and c["evidence"] != LIBRARY and c not in moved],
             NONE: [c["ref"] for c in checklist if c["evidence"] == NONE],
         },
         "tool_check": by_check,
@@ -259,7 +357,27 @@ def checklist_md(summary, checklist, corrections):
         "**Not uploaded.** An upload needs the owner's approval for this package, by its SHA-256.", "",
         f"Upload `{NAME}-gerbers.zip` as the Gerber, `{NAME}-lcsc-bom.csv` as the BOM and `{NAME}-lcsc-cpl.csv` as the CPL.",
         f"Expect {e['layers']} layers, {e['size_mm'][0]} x {e['size_mm'][1]} mm, {e['bom_lines']} BOM lines and "
-        f"{e['placements']} placements: {e['top']} top, {e['bottom']} bottom. Assemble both sides.", "",
+        f"{e['placements']} placements: {e['top']} top, {e['bottom']} bottom. Assemble both sides.",
+        "The run needs the **Standard** PCBA type: Economic offers one assembly side on this four-layer board. "
+        "`jlc_preview.py` (conol-ai/cohdl#116) selects it.", ""]
+    tested = [c for c in checklist if c["state"] == UNDER_TEST]
+    out += [
+        "## What this iteration tests", "",
+        f"The preview of 2026-11-12 read {len(tested)} placements wrong with no mapping applied. This package places them "
+        "with the mapping that reading implies. Each must now read right; until it does, the mapping is not confirmed. "
+        "The three offsets are estimates (J1 and J3 +-0.3 mm, the switches +-0.2 mm), so read how far the leads sit from the pad centres.", "",
+        "| LCSC | Parts | Mapping under test | CPL row: fab, then this package | Look at |", "|---|---|---|---|---|"]
+    for (pn, fpid), r in corrections.items():
+        if r["State"] == UNDER_TEST:
+            parts = [c for c in tested if (c["pn"], c["fpid"]) == (pn, fpid)]
+            change = "; ".join(f"{c['ref']} ({c['side'].lower()}) ({c['fab'][0]}, {c['fab'][1]}) {c['fab'][2]} -> "
+                               f"({c['x']}, {c['y']}) {c['rotation']}" for c in parts)
+            out.append(f"| {pn} | {', '.join(c['ref'] for c in parts)} | rotate {r['Rotate']}, offset ({r['Dx mm']}, {r['Dy mm']}) mm | "
+                       f"{change} | {r['Look at']} |")
+    out += [
+        "", "An offset is in the footprint's own frame (+y down, as KiCad draws the footprint): where the assembler's origin has to sit "
+        "relative to the footprint origin. On the board it is turned by the placement's rotation; on the bottom its x is mirrored first.",
+        "Every other placement was confirmed on 2026-11-12 and is placed as it was then; it should read as it did.", "",
         "## Left out, so not previewed", "",
         "A part that is not in the BOM and CPL is not drawn. Its orientation stays unmeasured after this preview.", "",
         "| Designator | LCSC | Why |", "|---|---|---|"]
@@ -272,21 +390,26 @@ def checklist_md(summary, checklist, corrections):
             for r in summary["stock_risks"]]
     out += ["", "## Corrections applied", "",
             "Rows not listed here are at the convention value (top = KiCad angle, bottom = 180 - KiCad angle) with no evidence.", "",
-            "| LCSC | Board footprint | Rotate | Offset mm | Evidence | Detail |", "|---|---|---|---|---|---|"]
-    out += [f"| {pn} | `{fpid}` | {r['Rotate']} | ({r['Dx mm']}, {r['Dy mm']}) | {r['Evidence']} | {r['Detail']} |"
+            "| LCSC | Board footprint | Rotate | Offset mm | Evidence | State | Detail |", "|---|---|---|---|---|---|---|"]
+    out += [f"| {pn} | `{fpid}` | {r['Rotate']} | ({r['Dx mm']}, {r['Dy mm']}) | {r['Evidence']} | {r['State']} | {r['Detail']} |"
             for (pn, fpid), r in corrections.items()]
     out += ["", "## What the tool checks, and what needs reading by eye", "",
             "- `body`: a chip part; the tool reads its drawn body along its pads (mod 180) and centred.",
             "- `pin 1 mark`: the tool needs one pin 1 mark on the part; `measure_preview.py measure` gives its angle against pad 1.",
             "- `by eye`: the tool has no evidence type for it. Expect \"manual review\"; read it from a crop of the export.", ""]
     out += [f"- {kind}: {len(refs)}: {', '.join(refs)}" for kind, refs in summary["tool_check"].items()]
-    out += ["", "U4: pin 1 must land toward the lower left seen from the top. J5: the shell pegs must sit in their holes.",
-            "U1, U2, U10 and U20 are placed with the candidate rotation: the model's leads must lie on the pads and its pin 1 on pad 1.",
+    out += ["", "On 2026-11-12 the tool sent U1, U2, U7 and U8 to \"manual review\" although each has a pin 1 mark (a chip part was "
+            "nearer the mark), and passed J1 and J3 on the mark alone. `measure_preview.py measure` reads the marks whatever the "
+            "tool's status says; read the leads of J1, J3 and U3 and the switches from crops.",
+            "U4, J5, U1, U2, U10 and U20 were confirmed on 2026-11-12 with the mapping they have here: U4's pin 1 toward the lower "
+            "left seen from the top, J5's shell pegs in their holes.",
             "", "## Placements", "",
-            "| Ref | Side | LCSC | Board footprint | Mid X | Mid Y | Convention | Preview rotation | Evidence | Applied | Check | Reading |",
-            "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+            "\"Fab rotation\" is the fab CPL's, the convention value unless the row is a library binding. Mid X, Mid Y and "
+            "\"Preview rotation\" are this package's.", "",
+            "| Ref | Side | LCSC | Board footprint | Mid X | Mid Y | Fab rotation | Preview rotation | Evidence | State | Applied | Check | Reading |",
+            "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     out += [f"| {c['ref']} | {c['side']} | {c['pn']} | `{c['fpid']}` | {c['x']} | {c['y']} | "
-            f"{'binding' if c['convention'] is None else c['convention']} | {c['rotation']} | {c['evidence']} | {c['applied']} | {c['check']} | |"
+            f"{'binding' if c['bound'] else c['fab'][2]} | {c['rotation']} | {c['evidence']} | {c['state']} | {c['applied']} | {c['check']} | |"
             for c in checklist]
     return "\n".join(out) + "\n"
 
@@ -301,8 +424,11 @@ Upload {name}-gerbers.zip as the Gerber, {name}-lcsc-bom.csv as the BOM and
 {name}-lcsc-cpl.csv as the CPL. Expect {layers} layers, {w} x {h} mm,
 {bom_lines} BOM lines and {placements} placements: {top} top, {bottom} bottom.
 
-CHECKLIST.md lists what was left out and why, the corrections applied, and
-every placement. board.json is `measure_preview.py board` of the routed board,
+The run needs the Standard PCBA type (Economic offers one assembly side on
+this board); jlc_preview.py selects it.
+
+CHECKLIST.md lists what this iteration tests, what was left out and why, the
+corrections applied, and every placement. board.json is `measure_preview.py board` of the routed board,
 limited to the previewed placements. SHA256SUMS covers every other file here.
 """
 
@@ -344,11 +470,18 @@ def write_package(out, files, manifest, allow_dirty):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--measure-preview", type=Path, required=True)
+    ap.add_argument("--measure-preview", type=Path)
+    ap.add_argument("--self-test", action="store_true", help="check apply_map against its known cases and stop")
     ap.add_argument("--out", type=Path)
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--allow-dirty", action="store_true")
     args = ap.parse_args()
+    cases = self_test()
+    if args.self_test:
+        print(f"apply_map: {cases} cases pass.")
+        return
+    if not args.measure_preview:
+        ap.error("--measure-preview is required")
     files, manifest = build(args.measure_preview)
     committed = {PREVIEW / "manifest.json": (json.dumps(manifest, indent=1) + "\n").encode(),
                  PREVIEW / "CHECKLIST.md": files["CHECKLIST.md"]}

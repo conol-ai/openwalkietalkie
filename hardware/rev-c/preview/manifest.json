@@ -95,6 +95,7 @@
   }
  ],
  "not_assembled": "DNP sites, test points and mounting holes are absent, as in the fab package",
+ "pcba_type": "Standard (Economic offers one assembly side on this board); the tool selects it",
  "corrections": {
   "library binding": [
    "C12",
@@ -104,43 +105,220 @@
    "J5",
    "U4"
   ],
-  "board-4 raw reading, rotation applied": {
+  "under test, map applied": {
+   "J1": {
+    "lcsc": "C177225",
+    "side": "Top",
+    "fab": [
+     "33.0000",
+     "-84.9000",
+     90
+    ],
+    "preview": [
+     "32.0500",
+     "-84.9000",
+     270
+    ]
+   },
+   "J3": {
+    "lcsc": "C293630",
+    "side": "Top",
+    "fab": [
+     "17.0000",
+     "-16.5000",
+     0
+    ],
+    "preview": [
+     "17.0000",
+     "-15.3500",
+     0
+    ]
+   },
+   "SW1": {
+    "lcsc": "C115365",
+    "side": "Top",
+    "fab": [
+     "3.7600",
+     "-18.5000",
+     270
+    ],
+    "preview": [
+     "4.3100",
+     "-18.5000",
+     90
+    ]
+   },
+   "SW2": {
+    "lcsc": "C115365",
+    "side": "Top",
+    "fab": [
+     "3.7600",
+     "-30.5000",
+     270
+    ],
+    "preview": [
+     "4.3100",
+     "-30.5000",
+     90
+    ]
+   },
+   "SW5": {
+    "lcsc": "C115365",
+    "side": "Top",
+    "fab": [
+     "52.2400",
+     "-35.7430",
+     90
+    ],
+    "preview": [
+     "51.6900",
+     "-35.7430",
+     270
+    ]
+   },
+   "SW6": {
+    "lcsc": "C115365",
+    "side": "Top",
+    "fab": [
+     "3.7600",
+     "-42.5000",
+     270
+    ],
+    "preview": [
+     "4.3100",
+     "-42.5000",
+     90
+    ]
+   },
+   "U3": {
+    "lcsc": "C55247264",
+    "side": "Bottom",
+    "fab": [
+     "36.6000",
+     "-36.7500",
+     180
+    ],
+    "preview": [
+     "36.6000",
+     "-36.7500",
+     0
+    ]
+   },
+   "U7": {
+    "lcsc": "C147972",
+    "side": "Bottom",
+    "fab": [
+     "15.0000",
+     "-42.5000",
+     90
+    ],
+    "preview": [
+     "15.0000",
+     "-42.5000",
+     0
+    ]
+   },
+   "U8": {
+    "lcsc": "C147972",
+    "side": "Bottom",
+    "fab": [
+     "22.0000",
+     "-34.5000",
+     90
+    ],
+    "preview": [
+     "22.0000",
+     "-34.5000",
+     0
+    ]
+   }
+  },
+  "confirmed, map applied": {
    "U1": {
     "lcsc": "C189961",
-    "convention": 270,
-    "preview": 180
+    "side": "Top",
+    "fab": [
+     "41.5000",
+     "-72.5000",
+     270
+    ],
+    "preview": [
+     "41.5000",
+     "-72.5000",
+     180
+    ]
    },
    "U2": {
     "lcsc": "C131941",
-    "convention": 270,
-    "preview": 90
+    "side": "Bottom",
+    "fab": [
+     "51.5000",
+     "-63.5000",
+     270
+    ],
+    "preview": [
+     "51.5000",
+     "-63.5000",
+     90
+    ]
    },
    "U10": {
     "lcsc": "C131941",
-    "convention": 90,
-    "preview": 270
+    "side": "Bottom",
+    "fab": [
+     "26.0000",
+     "-43.0000",
+     90
+    ],
+    "preview": [
+     "26.0000",
+     "-43.0000",
+     270
+    ]
    },
    "U20": {
     "lcsc": "C7519",
-    "convention": 270,
-    "preview": 180
+    "side": "Top",
+    "fab": [
+     "25.5500",
+     "-12.8000",
+     270
+    ],
+    "preview": [
+     "25.5500",
+     "-12.8000",
+     180
+    ]
    }
   },
-  "board-4 raw reading, rotate 0": [
+  "confirmed, nothing to apply": [
+   "C1",
    "C2",
+   "C3",
+   "C4",
+   "C5",
    "C6",
+   "C7",
    "C8",
    "C9",
    "C10",
+   "C11",
    "C13",
+   "C14",
    "C15",
+   "C16",
    "C17",
    "C18",
+   "C21",
+   "C23",
+   "C24",
    "C25",
    "C26",
+   "C27",
    "C28",
    "C29",
    "C30",
+   "C31",
    "C32",
    "C33",
    "C34",
@@ -151,9 +329,19 @@
    "C39",
    "C40",
    "C41",
+   "C42",
+   "C43",
+   "C44",
+   "C45",
+   "C46",
+   "C47",
    "C48",
+   "C49",
    "C50",
    "C57",
+   "J2",
+   "L1",
+   "L2",
    "L3",
    "L4",
    "L5",
@@ -184,60 +372,27 @@
    "R25",
    "R26",
    "R27",
+   "R28",
+   "R29",
    "R30",
+   "R31",
    "R34",
    "R35",
    "R36",
+   "R37",
    "R38",
    "R39",
    "R40",
    "R41",
    "R42",
+   "R43",
    "R45",
    "R46",
    "R47",
-   "R48"
+   "R48",
+   "U6"
   ],
-  "none": [
-   "C1",
-   "C3",
-   "C4",
-   "C5",
-   "C7",
-   "C11",
-   "C14",
-   "C16",
-   "C21",
-   "C23",
-   "C24",
-   "C27",
-   "C31",
-   "C42",
-   "C43",
-   "C44",
-   "C45",
-   "C46",
-   "C47",
-   "C49",
-   "J1",
-   "J2",
-   "J3",
-   "L1",
-   "L2",
-   "R28",
-   "R29",
-   "R31",
-   "R37",
-   "R43",
-   "SW1",
-   "SW2",
-   "SW5",
-   "SW6",
-   "U3",
-   "U6",
-   "U7",
-   "U8"
-  ]
+  "none": []
  },
  "tool_check": {
   "body": [
@@ -403,12 +558,12 @@
  "sha256": {
   "owt-revc-gerbers.zip": "27080e47bf1e72411a38937efa247f7b0d45504f8e4da959a9686bc8a9411f9b",
   "owt-revc-lcsc-bom.csv": "d203ef25f0e598371ae99f8bb3f023780bd182956a7cb3f1fbac8b1487d61fe7",
-  "owt-revc-lcsc-cpl.csv": "7229bcba0c07342f14d3b670a81186e45c80ea2669c0e0568c4dd0234f28c94a",
+  "owt-revc-lcsc-cpl.csv": "385f6fd99ab69efce636bc2186b9c3cab2137fb1afdb01953ad3258d254cd9d3",
   "board.json": "c526b77840c10163c93a47bd1c821af92873731544ba39915ee5022952554c1a",
-  "corrections.csv": "d36731b2940a1d2c91eb5a0c298143c6e208d667ac1017dc103d1feac3b37385",
+  "corrections.csv": "6f798cc180a733eda8ef6b195d5f36640c48be1a4fff09ed65cd427c489f1097",
   "left-out.csv": "21e20f92ca5dd6623ab3af1119dd84696a7247ecfd7e2485e56ea8c6925af033",
   "stock-risks.csv": "501fe9100815fbde5a2d9f634b5f32621b679edf2d9851b36d4fcc506ff7d7c6",
-  "CHECKLIST.md": "ea62662b34163777fdb01aec5530b6e181d179c629306d816b6ca301acc3673c"
+  "CHECKLIST.md": "0a71158c47d17b7bbfd9f705e2f20e8df8cafb76fc21edf461495cd17555d2ef"
  },
  "inputs_sha256": {
   "main/main-revc.kicad_pcb": "0cc240b99af0713cda7510ce15641477036f4aba85542c33661119e14033f824",

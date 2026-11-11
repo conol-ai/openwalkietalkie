@@ -11,7 +11,7 @@ orders.
 Uploading a package is the owner's decision, per package, by its SHA-256.
 The preview never saves to the cart, quotes or orders.
 
-## Status: first preview read on 2026-11-12
+## Status: first preview read on 2026-11-12; second package defined, not uploaded
 
 Package v2 (SHA-256 `8254b63a…5847`, built at commit 9b3e7dd) went through
 the preview on 2026-11-12 with the owner's approval and stopped at Component
@@ -29,16 +29,50 @@ is [`2026-11-12/`](2026-11-12/README.md).
 - **Seven parts were not previewed** and stay unmeasured: U5, Y1, AE1, R32,
   SW3, SW4, MK1.
 
-[`corrections-next.csv`](corrections-next.csv) is the corrections table for
-a second preview, with what changed against
-[`corrections.csv`](corrections.csv) in its last column. **No second package
-has been built, and nothing has been uploaded since.** (Earlier runs the
-same day used the first package, with AE1, R32, SW3, SW4 and MK1 still in
-it, and stopped at or before the BOM step.)
-`corrections.csv`, `manifest.json` and `CHECKLIST.md` still describe
-package v2; their "not uploaded" was true when it was built.
-`build_preview.py` cannot build the next package yet: it applies neither an
-offset nor a mapping whose evidence is this preview.
+(Earlier runs the same day used the first package, with AE1, R32, SW3, SW4
+and MK1 still in it, and stopped at or before the BOM step.)
+
+**Second iteration (package v3): defined here, not uploaded.**
+[`corrections.csv`](corrections.csv), [`manifest.json`](manifest.json) and
+[`CHECKLIST.md`](CHECKLIST.md) now describe the package for a second
+preview. It tests the nine placements that read wrong, with their mapping
+applied:
+
+| LCSC | Parts | Mapping under test | CPL row in this package (fab row) | Look at |
+|---|---|---|---|---|
+| C147972 | U7, U8 | rotate 270 | rotation 0 (90) | pin 1 mark at pad 1 |
+| C55247264 | U3 | rotate 180 | rotation 0 (180) | mount ears and the 16-lead row on their pads |
+| C177225 | J1 | rotate 180, offset (0, −0.95) | (32.0500, −84.9000) 270 ((33.0000, −84.9000) 90) | leads on pads 1–2 |
+| C293630 | J3 | offset (0, −1.15) | (17.0000, −15.3500) 0 ((17.0000, −16.5000) 0) | leads on pads 1–3 |
+| C115365 | SW1, SW2, SW6 | rotate 180, offset (0, −0.55) | x 4.3100, 90 (x 3.7600, 270) | actuator outboard, terminals on pads 1 and 2 |
+| C115365 | SW5 | the same | x 51.6900, 270 (x 52.2400, 90) | the same |
+
+The other 109 placements are placed as on 2026-11-12, when they were
+confirmed. The seven parts left out are still left out and still unmeasured.
+The run needs the Standard PCBA type; `jlc_preview.py` selects it. Uploading
+it needs the owner's approval for that package, by its SHA-256.
+
+The table package v2 applied is kept, byte for byte, as
+[`2026-11-12/package/corrections.csv`](2026-11-12/package/corrections.csv);
+the last column of `corrections.csv` says what changed against it per row.
+In short: 36 part numbers keep their mapping, now confirmed (the three IC
+rotations among them: C7519 rotate 270, C131941 rotate 180, C189961 rotate
+270); five get the mapping above.
+
+### How a mapping becomes a CPL row
+
+`build_preview.py` applies a mapping as CoHDL's supplier CPL does
+(`compose_place` in the compiler, then the `lcsc=mirrored` bottom
+convention). The offset is in the footprint's own frame, +y down as KiCad
+draws the footprint. On the bottom its x is mirrored first; then it is
+turned by the placement's rotation and added to the position; the mapping's
+rotate does not turn the offset. The rotate adds to the CPL rotation on both
+sides. The script checks this on every run against the one case read on a
+board, J5's binding `at (0mm, −1.55mm)` on the top, which turns
+(28.0000, −4.0000) into (28.0000, −5.5500), and against bottom-side cases
+worked by hand from the compiler's rules. **No bottom-side offset has been
+read on a board yet**; this package has none either (U3, U7 and U8 are
+rotations only).
 
 The fab CPL in `../fab-jlcpcb/` is unchanged, and 13 of its rows are now
 known to be wrong as they stand
@@ -60,8 +94,8 @@ the form CoHDL's `tools/frame_boards/jlc_preview.py` reads:
 
 The package itself is not committed. [`manifest.json`](manifest.json) records
 the SHA-256 of each file in it that does not depend on the commit, and what
-JLCPCB should detect: 4 layers, 53.43 × 92.43 mm, 45 BOM lines, 123
-placements (60 top, 63 bottom).
+JLCPCB should detect: 4 layers, 53.43 × 92.43 mm, 41 BOM lines, 118
+placements (59 top, 59 bottom).
 
 ## What differs from the order package
 
@@ -78,16 +112,14 @@ placements (60 top, 63 bottom).
    That first run also showed that JLCPCB's Economic PCBA type offers one
    assembly side only for this four-layer board: assembling both sides needs
    the **Standard** PCBA type, for the preview and for an order alike.
-2. **Three IC part numbers are placed with a candidate rotation**
-   ([`corrections.csv`](corrections.csv)): C7519 (U20) rotate 270, C131941
-   (U2, U10) rotate 180, C189961 (U1) rotate 270. Each comes from a raw
-   reading on CoHDL preview board 4 (2026-11-11), where the part was placed
-   with no mapping. This preview tests them with the mapping applied. They
-   are not in the order CPL.
+2. **Eight part numbers are placed with a mapping that is not in the order
+   CPL** ([`corrections.csv`](corrections.csv)). Three were confirmed on
+   2026-11-12 with the mapping applied: C7519 (U20) rotate 270, C131941
+   (U2, U10) rotate 180, C189961 (U1) rotate 270. Five are under test in
+   the second package; see the table above.
 3. The six library-bound rows (C12, C19, C20, C22, J5, U4) are as in the
-   order CPL. Every other row is at its convention value, to be measured.
-   For 18 chip and inductor part numbers board 4 already read rotation 0;
-   the table says which.
+   order CPL. Every other row is at its convention value, which the
+   2026-11-12 preview confirmed.
 4. The BOM has one line per LCSC number (the order BOM has C23733, C25741
    and C17168 on more than one line).
 
@@ -140,4 +172,5 @@ python3 hardware/rev-c/scripts/build_preview.py \
 ```
 
 `../check.sh` runs the `--check` form when `COHDL_MEASURE_PREVIEW` names
-`measure_preview.py`.
+`measure_preview.py`. `build_preview.py --self-test` checks only the
+mapping arithmetic and needs neither KiCad nor CoHDL.

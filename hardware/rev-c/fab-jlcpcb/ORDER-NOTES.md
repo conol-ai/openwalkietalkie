@@ -138,7 +138,8 @@ evidence, are confirmed on this board: U4's pin 1 is on pad 1, and J5's
 shell pegs are within 0.15 mm of their holes. With them, 105 previewed rows
 are confirmed as committed. The nine "read" rows need a second preview with
 the change applied before this file is corrected; the table for it is
-[`../preview/corrections-next.csv`](../preview/corrections-next.csv).
+[`../preview/corrections.csv`](../preview/corrections.csv) (rows whose state
+is "under test").
 
 ## PCB order options
 
