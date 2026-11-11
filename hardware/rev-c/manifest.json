@@ -1,0 +1,54 @@
+{
+ "revision": "OpenWalkieTalkie main board Rev C (BodyV6.13 case): the Rev B board re-expressed on CoHDL 0.10.0 and the current library versions; copper, drills, outline, silkscreen and paste are Rev B's; JLC BOM and CPL produced through CoHDL supplier bindings where the library binds the part",
+ "date": "2026-11-11",
+ "kicad_version": "10.0.7",
+ "cohdl": {
+  "version": "0.10.0",
+  "built_from": "conol-ai/cohdl main 43c055e2f93d7d580673cf0f28e1103e6d20c4dd",
+  "release": "v0.10.0 (2ca26c991f8965dd3f86aa5f7307177254f11510); no change to src/, Cargo.toml or Cargo.lock between the tag and the commit built"
+ },
+ "based_on": {
+  "release": "rev-b",
+  "main_sha256": "f9e8375c8ab7c64007a48d8d68c403fa7f1b0f661020226ed5e83dabe346aa7e"
+ },
+ "boards": {
+  "main": {
+   "file": "main/main-revc.kicad_pcb",
+   "sha256": "0cc240b99af0713cda7510ce15641477036f4aba85542c33661119e14033f824",
+   "derived_by": "scripts/make_board.py (U4 footprint frame 0 -> 90 degrees with children re-expressed; 3D model paths to ../rev-b/models)",
+   "copper_identity": "verification/copper-identity-vs-rev-b.json",
+   "fitted_components": 125,
+   "assembly_sides": {
+    "B.Cu": 65,
+    "F.Cu": 60
+   },
+   "native_drc_violations": 0,
+   "native_unconnected": 0,
+   "native_drc_report": "verification/main-revc-drc.rpt",
+   "source_parity": "verification/source-parity.json",
+   "everything_else": "as ../rev-b/manifest.json"
+  }
+ },
+ "supplier_coverage": {
+  "lcsc_sourced_placements": 124,
+  "library_bound": 6,
+  "fallback_table": 118,
+  "report": "verification/fab-coverage.json"
+ },
+ "fab": {
+  "main-bom-jlcpcb.csv": "8c876ae3a877f48760547c09e221f44d38316d06cdc4d78201518837a3837a49",
+  "main-cpl-jlcpcb.csv": "aaecf3a529b07dd68dd2127db708ec4add24ac50d04c878f85c4757003a0deb2",
+  "main-orientation-check.csv": "7731f2163c7917f6cfc94cc8f7edcc0c404c5089f948f61afadc0bf328877650",
+  "main-placement-sources.csv": "93ec2f182495848e2440b4883a7ab4a15a33853eaf6129c07a06bcd50275657e",
+  "main-revc-jlcpcb-gerber.zip": "27080e47bf1e72411a38937efa247f7b0d45504f8e4da959a9686bc8a9411f9b"
+ },
+ "verification": {
+  "main-revc-drc.json": "d3300db08842321b6732815d2fe1154f66277bf185267132b3a7f67ed1c2c5a9",
+  "main-revc-drc.rpt": "0f3e755ea536d2beca8cfdac04a9593b3c53cd0319ed78feefb6660fec919171",
+  "copper-identity-vs-rev-b.json": "f2e8c74d83eb8b237b80a951a23e159f111e795bb4e0f9bdb19a61ff19b6e49b",
+  "source-parity.json": "c6fb3bea52b23f612bf954ee022d2ef5bc6fd1722178eb62ac14d5ba563022e0",
+  "fab-compare-vs-rev-b.json": "4da6ccd77e3cda972467a9ee9e5bfaa918d917fe643831023923cfc01104f31f",
+  "fab-coverage.json": "8c4d2cc946d5dabd7b52a6065eb1620217111a54a1a4add42ba2e54afc3999b0",
+  "unmigrated-u4-check.txt": "312ccaf4af4b3621cf5fd4ede8856db9e4eece5e571a3c25e8d6f4dcac49ff36"
+ }
+}

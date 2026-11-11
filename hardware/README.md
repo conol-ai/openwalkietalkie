@@ -2,7 +2,9 @@
 
 Board, case and fixture designs for the OpenWalkieTalkie deck. `rev-a/` holds
 the BodyV5/BodyV6 lineage (r3 to r6) together with the case CAD and component
-evidence; `rev-b/` is the current re-placed main board and its UART flash jig.
+evidence; `rev-b/` is the current re-placed main board and its UART flash jig;
+`rev-c/` is the same board on current CoHDL and library versions, with the
+order data produced through CoHDL supplier bindings (copper unchanged).
 
 ## License
 
