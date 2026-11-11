@@ -1,0 +1,120 @@
+Designator,LCSC Part #,Part placed (if substituted),Note
+AE1,C2917717,,Exact. Out of stock at LCSC on 2026-09-23: check JLC stock / global sourcing.
+C1,C15849,Samsung CL10A105KB8NNNC 1uF 50V X5R 0603 (JLC Basic),"Basic substitute: same value/dielectric/size, higher voltage (50 V vs 10 V)."
+C2,C107039,,Exact.
+C3,C15849,Samsung CL10A105KB8NNNC 1uF 50V X5R 0603 (JLC Basic),"Basic substitute: same value/dielectric/size, higher voltage (50 V vs 10 V)."
+C4,C15849,Samsung CL10A105KB8NNNC 1uF 50V X5R 0603 (JLC Basic),"Basic substitute: same value/dielectric/size, higher voltage (50 V vs 10 V)."
+C5,C15849,Samsung CL10A105KB8NNNC 1uF 50V X5R 0603 (JLC Basic),"Basic substitute: same value/dielectric/size, higher voltage (50 V vs 10 V)."
+C6,C113780,,Exact.
+C7,C97946,Murata GRM31C5C1H104JA01L 100nF 50V C0G 1206,"Design MPN not found at any distributor. Substitute: same value, C0G, 1206, 50 V (design 25 V)."
+C8,C107006,,Exact.
+C9,C107006,,Exact.
+C10,C107006,,Exact.
+C11,C15849,Samsung CL10A105KB8NNNC 1uF 50V X5R 0603 (JLC Basic),"Basic substitute: same value/dielectric/size, higher voltage (50 V vs 10 V)."
+C13,C23733,,Rev B: 0603 -> 0402 at the relocated MCU. 4.7uF 10V X5R 0402 (JLC Basic). Rails <= 3.3 V.
+C14,C107369,,Rev B: 0603 -> 0402 at the relocated MCU. 2.2uF 10V X5R 0402 (10 V chosen for the 3.3 V rails; the 6.3 V Basic C12530 also fits).
+C15,C52923,,Rev B: 0603 -> 0402 at the relocated MCU. 1uF 25V X5R 0402 (JLC Basic).
+C16,C107369,,Rev B: 0603 -> 0402 at the relocated MCU. 2.2uF 10V X5R 0402 (10 V chosen for the 3.3 V rails; the 6.3 V Basic C12530 also fits).
+C17,C23733,,Rev B: 0603 -> 0402 at the relocated MCU. 4.7uF 10V X5R 0402 (JLC Basic). Rails <= 3.3 V.
+C18,C19666,Samsung CL10A475KO8NNNC 4.7uF 16V X5R 0603 (JLC Basic),"Basic substitute: same value/dielectric/size, higher voltage (16 V vs 10 V)."
+C21,C15849,Samsung CL10A105KB8NNNC 1uF 50V X5R 0603 (JLC Basic),"Basic substitute: same value/dielectric/size, higher voltage (50 V vs 10 V)."
+C23,C107369,,Rev B: 0603 -> 0402 at the relocated MCU. 2.2uF 10V X5R 0402 (10 V chosen for the 3.3 V rails; the 6.3 V Basic C12530 also fits).
+C24,C107369,,Rev B: 0603 -> 0402 at the relocated MCU. 2.2uF 10V X5R 0402 (10 V chosen for the 3.3 V rails; the 6.3 V Basic C12530 also fits).
+C25,C106255,,Exact.
+C26,C52923,,Rev B: 0603 -> 0402 at the relocated MCU. 1uF 25V X5R 0402 (JLC Basic).
+C27,C107369,,Rev B: 0603 -> 0402 at the relocated MCU. 2.2uF 10V X5R 0402 (10 V chosen for the 3.3 V rails; the 6.3 V Basic C12530 also fits).
+C28,C23733,,"Rev B: 0603 -> 0402 to fit the F-side cap row behind the MCU (U5 pin 24 VCC decoupling). On SYSTEM_SUPPLY (up to 4.4 V): 10V X5R keeps 2x voltage margin, but DC-bias derating leaves roughly half the nominal capacitance; the SYSTEM_SUPPLY bulk caps (C12 10uF 0805, C42/C45 10uF 1206) carry the rest."
+C29,C23733,,Rev B: 0603 -> 0402 at the relocated MCU. 4.7uF 10V X5R 0402 (JLC Basic). Rails <= 3.3 V.
+C30,C23733,,Rev B: 0603 -> 0402 at the relocated MCU. 4.7uF 10V X5R 0402 (JLC Basic). Rails <= 3.3 V.
+C31,C107369,,Rev B: 0603 -> 0402 at the relocated MCU. 2.2uF 10V X5R 0402 (10 V chosen for the 3.3 V rails; the 6.3 V Basic C12530 also fits).
+C32,C113780,,Exact.
+C33,C113780,,Exact.
+C34,C113780,,Exact.
+C35,C113780,,Exact.
+C36,C113780,,Exact.
+C37,C113780,,Exact.
+C38,C113780,,Exact.
+C39,C113780,,Exact.
+C40,C19666,Samsung CL10A475KO8NNNC 4.7uF 16V X5R 0603 (JLC Basic),"Basic substitute: same value/dielectric/size, higher voltage (16 V vs 10 V)."
+C41,C19666,Samsung CL10A475KO8NNNC 4.7uF 16V X5R 0603 (JLC Basic),"Basic substitute: same value/dielectric/size, higher voltage (16 V vs 10 V)."
+C42,C342827,TDK C3216X7R1C106KT000N 10uF 16V X7R 1206,"Same specs, same maker (exact MPN out of stock at LCSC)."
+C43,C342827,TDK C3216X7R1C106KT000N 10uF 16V X7R 1206,"Same specs, same maker (exact MPN out of stock at LCSC)."
+C44,C342827,TDK C3216X7R1C106KT000N 10uF 16V X7R 1206,"Same specs, same maker (exact MPN out of stock at LCSC)."
+C45,C342827,TDK C3216X7R1C106KT000N 10uF 16V X7R 1206,"Same specs, same maker (exact MPN out of stock at LCSC)."
+C46,C342827,TDK C3216X7R1C106KT000N 10uF 16V X7R 1206,"Same specs, same maker (exact MPN out of stock at LCSC)."
+C47,C342827,TDK C3216X7R1C106KT000N 10uF 16V X7R 1206,"Same specs, same maker (exact MPN out of stock at LCSC)."
+C48,C19666,Samsung CL10A475KO8NNNC 4.7uF 16V X5R 0603 (JLC Basic),"Basic substitute: same value/dielectric/size, higher voltage (16 V vs 10 V)."
+C49,C15849,Samsung CL10A105KB8NNNC 1uF 50V X5R 0603 (JLC Basic),"Basic substitute: same value/dielectric/size, higher voltage (50 V vs 10 V)."
+C50,C113780,,Exact.
+C57,C1548,,"Rev B: RF DC block, series in the SiFli pi at U5 pin 53. C0G 50V (JLC Basic)."
+J1,C177225,,Exact.
+J2,C596732,FH34SRJ-4S-0.5SH(50),"Same connector; (50) is the reel packaging, (99) the small-lot pack (not stocked)."
+J3,C293630,,"Rev B battery connector (MX1.25 / PicoBlade 3-pin SMT right angle): 1 VCELL, 2 NTC, 3 GND. Mates with 51021-0300."
+L1,C16902,,Exact.
+L2,C16902,,Exact.
+L3,C97018,,Exact.
+L4,C337893,,Exact.
+L5,C337893,,Exact.
+MK1,C2688664,,"Exact (Extended part). About 577 in stock at LCSC on 2026-09-23. Bottom side, sound port faces the case sound hole."
+R1,C11702,UniOhm 0402WGF1001TCE 1k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R2,C11702,UniOhm 0402WGF1001TCE 1k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R3,C25741,UniOhm 0402WGF1003TCE 100k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R4,C25768,UniOhm 0402WGF2202TCE 22k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R5,C25768,UniOhm 0402WGF2202TCE 22k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R6,C25092,UniOhm 0402WGF220JTCE 22R 0402 (JLC Basic),Basic substitute (22 ohm).
+R7,C25741,UniOhm 0402WGF1003TCE 100k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R8,C11702,UniOhm 0402WGF1001TCE 1k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R9,C26083,UniOhm 0402WGF1004TCE 1M 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R10,C25905,UniOhm 0402WGF5101TCE 5.1k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R11,C25905,UniOhm 0402WGF5101TCE 5.1k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R12,C25741,UniOhm 0402WGF1003TCE 100k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R13,C25741,UniOhm 0402WGF1003TCE 100k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R14,C25741,UniOhm 0402WGF1003TCE 100k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R15,C25741,UniOhm 0402WGF1003TCE 100k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R16,C25741,UniOhm 0402WGF1003TCE 100k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R17,C25741,UniOhm 0402WGF1003TCE 100k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R18,C25741,UniOhm 0402WGF1003TCE 100k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R19,C25741,UniOhm 0402WGF1003TCE 100k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R20,C11702,UniOhm 0402WGF1001TCE 1k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R21,C11702,UniOhm 0402WGF1001TCE 1k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R22,C11702,UniOhm 0402WGF1001TCE 1k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R23,C11702,UniOhm 0402WGF1001TCE 1k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R24,C11702,UniOhm 0402WGF1001TCE 1k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R25,C11702,UniOhm 0402WGF1001TCE 1k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R26,C11702,UniOhm 0402WGF1001TCE 1k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R27,C11702,UniOhm 0402WGF1001TCE 1k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R28,C25744,UniOhm 0402WGF1002TCE 10k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R29,C25744,UniOhm 0402WGF1002TCE 10k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R30,C25741,UniOhm 0402WGF1003TCE 100k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R31,C477807,,Exact.
+R32,C327334,,Exact. Out of stock at LCSC; JLC stock was low.
+R34,C26083,UniOhm 0402WGF1004TCE 1M 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R35,C11702,UniOhm 0402WGF1001TCE 1k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R36,C26083,UniOhm 0402WGF1004TCE 1M 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R37,C137990,,"Exact. About 590k in stock at JLCPCB on 2026-10-10. Sets the BQ24073 charge current: 890/3.6k = 247 mA, 0.5 C of the 500 mAh cell (changed 2026-10-10; r6 had 2.55k = 349 mA)."
+R38,C25890,UniOhm 0402WGF3301TCE 3.3k 1% 0402,"Same value/tolerance/size in the UniOhm series used for the other 0402 resistors; about 1.46 M in stock at LCSC on 2026-09-23. ILIM resistor: only sets the input limit in ILIM mode, the board runs in USB500 mode."
+R39,C26083,UniOhm 0402WGF1004TCE 1M 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R40,C17168,UniOhm 0402WGF0000TCE 0R 0402 (JLC Basic),"Rev B: antenna-side match S1/S2 (0R until tuned; Johanson eval values S1 1.2 pF, S2 3.3 nH)."
+R41,C25741,UniOhm 0402WGF1003TCE 100k 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R42,C26083,UniOhm 0402WGF1004TCE 1M 1% 0402 (JLC Basic),Basic substitute with identical specs.
+R43,C25760,UniOhm 0402WGF1803TCE 180k 1% 0402,"Same value/tolerance/size in the UniOhm series used for the other 0402 resistors; about 165,000 in stock at LCSC on 2026-09-24. U7 feedback divider bottom resistor."
+R45,C25741,UniOhm 0402WGF1003TCE 100k 1% 0402 (JLC Basic),Rev B: TOUCH_RESET pull-down.
+R46,C25741,UniOhm 0402WGF1003TCE 100k 1% 0402 (JLC Basic),Rev B: CHG_STATUS pull-up to IO_3V3 (charger CHG -> MCU PA33).
+R47,C17168,UniOhm 0402WGF0000TCE 0R 0402 (JLC Basic),"Rev B: antenna-side match S1/S2 (0R until tuned; Johanson eval values S1 1.2 pF, S2 3.3 nH)."
+R48,C17168,UniOhm 0402WGF0000TCE 0R 0402 (JLC Basic),Rev B: ties display TP_VCC (U3 pin 6) to IO_3V3; remove to float the pin as on r6.
+SW1,C115365,,Exact.
+SW2,C115365,,Exact.
+SW3,C2799946,,Exact. Out of stock at LCSC on 2026-09-23: check JLC stock.
+SW4,C2799946,,Exact. Out of stock at LCSC on 2026-09-23: check JLC stock.
+SW5,C115365,,Exact.
+SW6,C115365,,Exact.
+U1,C189961,,Exact.
+U2,C131941,,Exact.
+U3,C55247264,,Exact.
+U5,C47355842,,Exact. Out of stock at LCSC; JLC also lists C9900153074.
+U6,C15220,,"Exact (Extended part). About 16,900 in stock at LCSC on 2026-09-23. Replaces the out-of-stock SGM41562SA."
+U7,C147972,,"Exact. About 1,350 in stock at LCSC on 2026-09-24. U7 now uses this adjustable version too (with R42/R43); the fixed RT6150B-33GQW is out of stock."
+U8,C147972,,"Exact. About 1,350 in stock at LCSC on 2026-09-24. U7 now uses this adjustable version too (with R42/R43); the fixed RT6150B-33GQW is out of stock."
+U10,C131941,,Exact.
+U20,C7519,,Exact.
+Y1,,,"NOT at LCSC/JLC. Candidate C54561124 (TKD SX20Y048000B81T001, 48 MHz 8 pF +/-10 ppm, ESR not listed) needs review against SiFli limits (CL 7-12 pF, ESR <= 30 ohm) before use."

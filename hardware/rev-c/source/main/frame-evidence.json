@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "note": "Frame-evidence rows for the LCSC bindings this design uses, copied verbatim from the CoHDL library repository (tools/sourcing_data/jlc_frames.json). The compiler output does not carry these ids; build_fab.py joins them by part number, footprint and package version and fails if a bound placement has no row here.",
+  "copied_from": {
+    "repository": "https://github.com/conol-ai/cohdl",
+    "path": "tools/sourcing_data/jlc_frames.json",
+    "commit": "43c055e2f93d7d580673cf0f28e1103e6d20c4dd"
+  },
+  "rows": [
+    {
+      "id": "c2b1-c0402-c1525",
+      "package": "passive",
+      "package_version": "0.2.6",
+      "footprint": "CHIP_0402",
+      "supplier": "lcsc",
+      "pn": "C1525",
+      "mapping": {
+        "dx_mm": 0,
+        "dy_mm": 0,
+        "rotate_deg": 0
+      },
+      "measured": {
+        "dx_mm": 0,
+        "dy_mm": 0,
+        "rotate_deg": 0
+      },
+      "exception": null,
+      "evidence": {
+        "method": "preview",
+        "date": "2026-10-30",
+        "record": "tools/sourcing_data/jlc_previews/2026-10-30-c2-board-1/README.md"
+      },
+      "evidence_ref": null
+    },
+    {
+      "id": "c2b1-c0805-c15850",
+      "package": "passive",
+      "package_version": "0.2.6",
+      "footprint": "CHIP_0805",
+      "supplier": "lcsc",
+      "pn": "C15850",
+      "mapping": {
+        "dx_mm": 0,
+        "dy_mm": 0,
+        "rotate_deg": 0
+      },
+      "measured": {
+        "dx_mm": 0,
+        "dy_mm": 0,
+        "rotate_deg": 0
+      },
+      "exception": null,
+      "evidence": {
+        "method": "preview",
+        "date": "2026-10-30",
+        "record": "tools/sourcing_data/jlc_previews/2026-10-30-c2-board-1/README.md",
+        "note": "read by eye: the body sits centred on its pads on all four copies (README); measurements.json has no reading for C9 to C12 (\"dots\": []), so this zero map is not a measured body offset"
+      },
+      "evidence_ref": null
+    },
+    {
+      "id": "c2b1-soic8_208-c97521",
+      "package": "soic",
+      "package_version": "0.3.0",
+      "footprint": "SOIC8P127X790X216N",
+      "supplier": "lcsc",
+      "pn": "C97521",
+      "mapping": {
+        "dx_mm": 0,
+        "dy_mm": 0,
+        "rotate_deg": 0
+      },
+      "measured": {
+        "dx_mm": 0,
+        "dy_mm": 0,
+        "rotate_deg": 270
+      },
+      "exception": null,
+      "evidence": {
+        "method": "preview",
+        "date": "2026-10-30",
+        "record": "tools/sourcing_data/jlc_previews/2026-10-30-c2-board-1/README.md"
+      },
+      "evidence_ref": null
+    },
+    {
+      "id": "usbc-origin-c165948",
+      "package": "usb",
+      "package_version": "0.1.6",
+      "footprint": "FP_USB_C_Receptacle_HRO_TYPE_C_31_M_12",
+      "supplier": "lcsc",
+      "pn": "C165948",
+      "mapping": {
+        "dx_mm": 0,
+        "dy_mm": -1.55,
+        "rotate_deg": 0
+      },
+      "measured": {
+        "dx_mm": 0,
+        "dy_mm": -1.42,
+        "rotate_deg": 0
+      },
+      "exception": "Supplier model origin sits about 1.5 mm from ours along the mating axis (RFC-034 section 3.1 origin control); confirmed on a preview with this map, pegs within 0.2 mm of our holes",
+      "evidence": {
+        "method": "preview",
+        "date": "2026-10-30",
+        "record": "tools/sourcing_data/jlc_previews/2026-10-30-usbc-origin/README.md"
+      },
+      "evidence_ref": null
+    }
+  ]
+}

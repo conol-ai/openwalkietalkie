@@ -1,0 +1,52 @@
+Comment,Designator,Footprint,LCSC Part #,Quantity,Design MPN,Design Manufacturer,Part placed (if substituted),Note,LCSC number source
+2450AT18B100E,AE1,FP_ANT_2450AT18B100E,C2917717,1,2450AT18B100E,Johanson Technology,,Exact. Out of stock at LCSC on 2026-09-23: check JLC stock / global sourcing.,fallback table
+1uF,"C1,C3,C4,C5,C11,C21,C49",CHIP_0603,C15849,7,CC0603KRX5R6BB105,Yageo,Samsung CL10A105KB8NNNC 1uF 50V X5R 0603 (JLC Basic),"Basic substitute: same value/dielectric/size, higher voltage (50 V vs 10 V).",fallback table
+1.5nF,C2,CHIP_0603,C107039,1,CC0603JRNPO9BN152,Yageo,,Exact.,fallback table
+1nF,"C6,C32,C33,C34,C35,C36,C37,C38,C39,C50",CHIP_0402,C113780,10,CC0402JRNPO9BN102,Yageo,,Exact.,fallback table
+100nF,C7,CHIP_1206,C97946,1,CC1206JRNPO8BN104,Yageo,Murata GRM31C5C1H104JA01L 100nF 50V C0G 1206,"Design MPN not found at any distributor. Substitute: same value, C0G, 1206, 50 V (design 25 V).",fallback table
+330pF,"C8,C9,C10",CHIP_0402,C107006,3,CC0402JRNPO9BN331,Yageo,,Exact.,fallback table
+10uF,C12,CHIP_0805,C15850,1,CC0805KRX5R8BB106,Yageo,Samsung CL21A106KAYNNNE,"LCSC number and placement frame from the library binding on passive::C_10u_25V_X5R_0805, land passive::CHIP_0805 (passive 0.2.6); frame evidence c2b1-c0805-c15850 (preview, 2026-10-30).",library binding: c2b1-c0805-c15850
+4.7uF,"C13,C17,C29,C30",CHIP_0402,C23733,4,CL05A475MP5NRNC,Samsung Electro-Mechanics,,Rev B: 0603 -> 0402 at the relocated MCU. 4.7uF 10V X5R 0402 (JLC Basic). Rails <= 3.3 V.,fallback table
+2.2uF,"C14,C16,C23,C24,C27,C31",CHIP_0402,C107369,6,CL05A225KP5NSNC,Samsung Electro-Mechanics,,Rev B: 0603 -> 0402 at the relocated MCU. 2.2uF 10V X5R 0402 (10 V chosen for the 3.3 V rails; the 6.3 V Basic C12530 also fits).,fallback table
+1uF,"C15,C26",CHIP_0402,C52923,2,CL05A105KA5NQNC,Samsung Electro-Mechanics,,Rev B: 0603 -> 0402 at the relocated MCU. 1uF 25V X5R 0402 (JLC Basic).,fallback table
+4.7uF,"C18,C40,C41,C48",CHIP_0603,C19666,4,CC0603KRX5R6BB475,Yageo,Samsung CL10A475KO8NNNC 4.7uF 16V X5R 0603 (JLC Basic),"Basic substitute: same value/dielectric/size, higher voltage (16 V vs 10 V).",fallback table
+100nF,"C19,C20,C22",CHIP_0402,C1525,3,CC0402KRX7R7BB104,Yageo,Samsung CL05B104KO5NNNC,"LCSC number and placement frame from the library binding on passive::C_100n_16V_X7R_0402, land passive::CHIP_0402 (passive 0.2.6); frame evidence c2b1-c0402-c1525 (preview, 2026-10-30).",library binding: c2b1-c0402-c1525
+470nF,C25,CHIP_0402,C106255,1,CC0402KRX5R6BB474,Yageo,,Exact.,fallback table
+4.7uF,C28,CHIP_0402,C23733,1,CL05A475MP5NRNC,Samsung Electro-Mechanics,,"Rev B: 0603 -> 0402 to fit the F-side cap row behind the MCU (U5 pin 24 VCC decoupling). On SYSTEM_SUPPLY (up to 4.4 V): 10V X5R keeps 2x voltage margin, but DC-bias derating leaves roughly half the nominal capacitance; the SYSTEM_SUPPLY bulk caps (C12 10uF 0805, C42/C45 10uF 1206) carry the rest.",fallback table
+10uF,"C42,C43,C44,C45,C46,C47",CHIP_1206,C342827,6,C3216X7R1C106K160AC,TDK,TDK C3216X7R1C106KT000N 10uF 16V X7R 1206,"Same specs, same maker (exact MPN out of stock at LCSC).",fallback table
+15pF,C57,CHIP_0402,C1548,1,0402CG150J500NT,FH (Guangdong Fenghua),,"Rev B: RF DC block, series in the SiFli pi at U5 pin 53. C0G 50V (JLC Basic).",fallback table
+53261-0271,J1,FP_MOLEX_53261_0271,C177225,1,53261-0271,Molex,,Exact.,fallback table
+FH34SRJ-4S-0.5SH(99),J2,FP_HIROSE_FH34SRJ_4S,C596732,1,FH34SRJ-4S-0.5SH(99),Hirose,FH34SRJ-4S-0.5SH(50),"Same connector; (50) is the reel packaging, (99) the small-lot pack (not stocked).",fallback table
+53261-0371,J3,FP_MOLEX_53261_0371,C293630,1,53261-0371,Molex,,"Rev B battery connector (MX1.25 / PicoBlade 3-pin SMT right angle): 1 VCELL, 2 NTC, 3 GND. Mates with 51021-0300.",fallback table
+TYPE-C-31-M-12,J5,FP_USB_C_Receptacle_HRO_TYPE_C_31_M_12,C165948,1,TYPE-C-31-M-12,HRO,,"LCSC number and placement frame from the library binding on usb::connectors::type_c::USB_C_HRO_TYPE_C_31_M_12, land usb::connectors::type_c::FP_USB_C_Receptacle_HRO_TYPE_C_31_M_12 (usb 0.1.6); frame evidence usbc-origin-c165948 (preview, 2026-10-30).",library binding: usbc-origin-c165948
+SpeakerFerrite600R,"L1,L2",FP_MURATA_BLM31PG_1P5A_REFLOW,C16902,2,BLM31PG601SN1L,Murata,,Exact.,fallback table
+4.7uH,L3,FP_L_WPN201610U_2016Metric,C97018,1,WPN201610U4R7MT,Sunlord,,Exact.,fallback table
+2.2uH,"L4,L5",FP_L_0806_2016Metric,C337893,2,DFE201612E-2R2M=P2,Murata,,Exact.,fallback table
+MP34DT05TR-A,MK1,FP_ST_MP34DT05_HCLGA_3x4,C2688664,1,MP34DT05TR-A,STMicroelectronics,,"Exact (Extended part). About 577 in stock at LCSC on 2026-09-23. Bottom side, sound port faces the case sound hole.",fallback table
+1kohm,"R1,R2,R8,R20,R21,R22,R23,R24,R25,R26,R27,R35",CHIP_0402,C11702,12,RC0402FR-071KL,Yageo,UniOhm 0402WGF1001TCE 1k 1% 0402 (JLC Basic),Basic substitute with identical specs.,fallback table
+100kohm,"R3,R7,R12,R13,R14,R15,R16,R17,R18,R19,R30,R41",CHIP_0402,C25741,12,RC0402FR-07100KL,Yageo,UniOhm 0402WGF1003TCE 100k 1% 0402 (JLC Basic),Basic substitute with identical specs.,fallback table
+22kohm,"R4,R5",CHIP_0402,C25768,2,RC0402FR-0722KL,Yageo,UniOhm 0402WGF2202TCE 22k 1% 0402 (JLC Basic),Basic substitute with identical specs.,fallback table
+22ohm,R6,CHIP_0402,C25092,1,RC0402FR-0722RL,Yageo,UniOhm 0402WGF220JTCE 22R 0402 (JLC Basic),Basic substitute (22 ohm).,fallback table
+1Mohm,"R9,R34,R36,R39,R42",CHIP_0402,C26083,5,RC0402FR-071ML,Yageo,UniOhm 0402WGF1004TCE 1M 1% 0402 (JLC Basic),Basic substitute with identical specs.,fallback table
+5.1kohm,"R10,R11",CHIP_0402,C25905,2,RC0402FR-075K1L,Yageo,UniOhm 0402WGF5101TCE 5.1k 1% 0402 (JLC Basic),Basic substitute with identical specs.,fallback table
+10kohm,"R28,R29",CHIP_0402,C25744,2,RC0402FR-0710KL,Yageo,UniOhm 0402WGF1002TCE 10k 1% 0402 (JLC Basic),Basic substitute with identical specs.,fallback table
+86.6kohm,R31,CHIP_0402,C477807,1,RC0402FR-0786K6L,Yageo,,Exact.,fallback table
+604kohm,R32,CHIP_0402,C327334,1,RC0402FR-07604KL,Yageo,,Exact. Out of stock at LCSC; JLC stock was low.,fallback table
+3.6kohm,R37,CHIP_0402,C137990,1,RC0402FR-073K6L,Yageo,,"Exact. About 590k in stock at JLCPCB on 2026-10-10. Sets the BQ24073 charge current: 890/3.6k = 247 mA, 0.5 C of the 500 mAh cell (changed 2026-10-10; r6 had 2.55k = 349 mA).",fallback table
+3.3kohm,R38,CHIP_0402,C25890,1,RC0402FR-073K3L,Yageo,UniOhm 0402WGF3301TCE 3.3k 1% 0402,"Same value/tolerance/size in the UniOhm series used for the other 0402 resistors; about 1.46 M in stock at LCSC on 2026-09-23. ILIM resistor: only sets the input limit in ILIM mode, the board runs in USB500 mode.",fallback table
+0ohm,"R40,R47",CHIP_0402,C17168,2,RC0402JR-070RL,Yageo,UniOhm 0402WGF0000TCE 0R 0402 (JLC Basic),"Rev B: antenna-side match S1/S2 (0R until tuned; Johanson eval values S1 1.2 pF, S2 3.3 nH).",fallback table
+180kohm,R43,CHIP_0402,C25760,1,RC0402FR-07180KL,Yageo,UniOhm 0402WGF1803TCE 180k 1% 0402,"Same value/tolerance/size in the UniOhm series used for the other 0402 resistors; about 165,000 in stock at LCSC on 2026-09-24. U7 feedback divider bottom resistor.",fallback table
+100kohm,R45,CHIP_0402,C25741,1,RC0402FR-07100KL,Yageo,UniOhm 0402WGF1003TCE 100k 1% 0402 (JLC Basic),Rev B: TOUCH_RESET pull-down.,fallback table
+100kohm,R46,CHIP_0402,C25741,1,RC0402FR-07100KL,Yageo,UniOhm 0402WGF1003TCE 100k 1% 0402 (JLC Basic),Rev B: CHG_STATUS pull-up to IO_3V3 (charger CHG -> MCU PA33).,fallback table
+0ohm,R48,CHIP_0402,C17168,1,RC0402JR-070RL,Yageo,UniOhm 0402WGF0000TCE 0R 0402 (JLC Basic),Rev B: ties display TP_VCC (U3 pin 6) to IO_3V3; remove to float the pin as on r6.,fallback table
+SKTDLDE010,"SW1,SW2,SW5,SW6",FP_ALPS_SKTDLDE010,C115365,4,SKTDLDE010,Alps Alpine,,Exact.,fallback table
+PTS636SM25SMTRLFS,"SW3,SW4",FP_CK_PTS636SM25,C2799946,2,PTS636SM25SMTRLFS,C&K,,Exact. Out of stock at LCSC on 2026-09-23: check JLC stock.,fallback table
+NS4150B,U1,SOP8P65X490X110N,C189961,1,NS4150B,NSIWAY,,Exact.,fallback table
+TPS22918DBVR,"U2,U10",FP_TI_DBV0006A,C131941,2,TPS22918DBVR,Texas Instruments,,Exact.,fallback table
+8.03A5.031250,U3,FP_DIANWEI_8_03A5_031250,C55247264,1,8.03A5.031250,DIANWEI,,Exact.,fallback table
+W25Q128JVSIQ,U4,SOIC8P127X790X216N,C97521,1,W25Q128JVSIQ,Winbond,,"LCSC number and placement frame from the library binding on flash::FLASH_W25Q128JVSIQ, land soic::SOIC8P127X790X216N (soic 0.3.0); frame evidence c2b1-soic8_208-c97521 (preview, 2026-10-30).",library binding: c2b1-soic8_208-c97521
+SF32LB525UC6,U5,FP_SF32LB52X_QFN68L_BSide,C47355842,1,SF32LB525UC6,SiFli Technologies,,Exact. Out of stock at LCSC; JLC also lists C9900153074.,fallback table
+BQ24073RGTR,U6,FP_TI_RGT_VQFN16_3x3_EP1p68,C15220,1,BQ24073RGTR,Texas Instruments,,"Exact (Extended part). About 16,900 in stock at LCSC on 2026-09-23. Replaces the out-of-stock SGM41562SA.",fallback table
+RT6150BGQW,"U7,U8",QFN10N50P250X250_1EP120X200,C147972,2,RT6150BGQW,Richtek,,"Exact. About 1,350 in stock at LCSC on 2026-09-24. U7 now uses this adjustable version too (with R42/R43); the fixed RT6150B-33GQW is out of stock.",fallback table
+USBLC6-2SC6,U20,FP_SOT_23_6,C7519,1,USBLC6-2SC6,STMicroelectronics,,Exact.,fallback table
+E1SB48E001G00E,Y1,FP_Crystal_SMD_2016_4Pin_E1SB,,1,E1SB48E001G00E,Hosonic,,"NOT at LCSC/JLC. Candidate C54561124 (TKD SX20Y048000B81T001, 48 MHz 8 pF +/-10 ppm, ESR not listed) needs review against SiFli limits (CL 7-12 pF, ESR <= 30 ohm) before use.",no LCSC part

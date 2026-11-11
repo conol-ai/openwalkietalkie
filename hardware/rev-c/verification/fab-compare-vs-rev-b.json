@@ -1,0 +1,93 @@
+{
+  "passed": true,
+  "zip_sha256": "27080e47bf1e72411a38937efa247f7b0d45504f8e4da959a9686bc8a9411f9b",
+  "compared_with": "../rev-b/main/{gerber,stencil,drill} and ../rev-b/fab-jlcpcb/main-revb-jlcpcb-gerber.zip",
+  "metadata_lines_allowed": [
+    "TF.GenerationSoftware",
+    "TF.CreationDate",
+    "TF.ProjectId",
+    "G04 Created by KiCad",
+    "; DRILL file KiCad"
+  ],
+  "files": {
+    "main-revc-B_Cu.gbr": {
+      "sha256": "80e3bf8260a7b2a5162d4ee6a160da33d4830dc060d9d23131456599dc0f20f8",
+      "lines": 13659,
+      "metadata_lines_differing": 4,
+      "other_lines_differing": 0
+    },
+    "main-revc-B_Mask.gbr": {
+      "sha256": "8eb44949740d3eb259e1b487bd7c55697d1c3b0b011cdde44a705b87df3577e5",
+      "lines": 676,
+      "metadata_lines_differing": 4,
+      "other_lines_differing": 0
+    },
+    "main-revc-B_Paste.gbr": {
+      "sha256": "38eba8f24fc8789e2c8e98a864b05c10cd849f0847b24d3c0c40c9dd64eeb081",
+      "lines": 554,
+      "metadata_lines_differing": 4,
+      "other_lines_differing": 0
+    },
+    "main-revc-B_Silkscreen.gbr": {
+      "sha256": "c7d1ba78b7993637141f73fe2cb9662143f366f9f4d66846ba36891ac4a96bfe",
+      "lines": 117,
+      "metadata_lines_differing": 4,
+      "other_lines_differing": 0
+    },
+    "main-revc-Edge_Cuts.gbr": {
+      "sha256": "cad4b47f742fe2d4bcc50e5ac27ffefc215f039324d8470696ffe50e69bc68cb",
+      "lines": 236,
+      "metadata_lines_differing": 4,
+      "other_lines_differing": 0
+    },
+    "main-revc-F_Cu.gbr": {
+      "sha256": "1d585911eda367b6a9f4ef5527de2bf36c252bc0f979ad4c3673e9a43c61540d",
+      "lines": 14519,
+      "metadata_lines_differing": 4,
+      "other_lines_differing": 0
+    },
+    "main-revc-F_Mask.gbr": {
+      "sha256": "0a891d4c1b7f9b494481da3437127f2434fc1d9ec11fa65bcaea1a93ef30b01c",
+      "lines": 516,
+      "metadata_lines_differing": 4,
+      "other_lines_differing": 0
+    },
+    "main-revc-F_Paste.gbr": {
+      "sha256": "459e97d437809bf96c3a9888cff50f0aa8830c4e40592b376a14f12d75f90bb7",
+      "lines": 438,
+      "metadata_lines_differing": 4,
+      "other_lines_differing": 0
+    },
+    "main-revc-F_Silkscreen.gbr": {
+      "sha256": "e83f76a39997eb7d4bc4d6fc547b3037102319f8787d40adf5a2957709636f3c",
+      "lines": 732,
+      "metadata_lines_differing": 4,
+      "other_lines_differing": 0
+    },
+    "main-revc-In1_Cu.gbr": {
+      "sha256": "d8951670e4523e3d83a34dfe975982761783c3b57a561d5a3ae08e8ccdb5dde6",
+      "lines": 7523,
+      "metadata_lines_differing": 4,
+      "other_lines_differing": 0
+    },
+    "main-revc-In2_Cu.gbr": {
+      "sha256": "926476f0ffc69ec1afb5ad79b06461713f0d6419ff434e5166e69f73bed463c9",
+      "lines": 7584,
+      "metadata_lines_differing": 4,
+      "other_lines_differing": 0
+    },
+    "main-revc-NPTH.drl": {
+      "sha256": "7fd4cc07b98d6f9dfba7cc50f97244ccd7ac1cf7e014d491e3fdcad236e70584",
+      "lines": 30,
+      "metadata_lines_differing": 3,
+      "other_lines_differing": 0
+    },
+    "main-revc-PTH.drl": {
+      "sha256": "5c960a5089d763de7ac474aeb0e1e12797acba147728391ead0e3e6522ce2059",
+      "lines": 515,
+      "metadata_lines_differing": 3,
+      "other_lines_differing": 0
+    }
+  },
+  "errors": []
+}
