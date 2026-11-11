@@ -1,0 +1,13 @@
+jlc_preview.py: exports complete; 13 instances unverified or for manual review: L1, L2, L3, L4, L5, SW1, SW2, SW5, SW6, U1, U2, U7, U8 (see preview/checks.json)
+Detected 4 layer board of 92.38x53.38mm(3.637x2.102 inches).
+PCBA Type: Standard, because Both Sides is not offered on Economic for this board
+BOM step: 41 part numbers detected and confirmed; each of 59 top and 59 bottom designators once, on its side, with its part number, selected; no stock warning
+Top export shows no evidence yet on L1, L2, SW1, SW2, SW5, SW6, U1; exporting again
+Top export: still no evidence on L1, L2, SW1, SW2, SW5, SW6, U1 after 2 exports
+Top export: preview/top.png (sha256 e66cfd404f5dbf3eca799423d844adf9cce89c91cff57db088b680d9ee622464)
+Bottom export shows no evidence yet on L3, L4, L5, U2, U7, U8; exporting again
+Bottom export: still no evidence on L3, L4, L5, U2, U7, U8 after 2 exports
+Bottom export: preview/bottom.png (sha256 1ca0b8ee6926c7e62fc4566e176e2b74a9cb79c2131020aca2eb03de785640a0)
+Instances: 9 with a pin 1 mark, 96 chip bodies along their pads; unverified: none; manual review: L1, L2, L3, L4, L5, SW1, SW2, SW5, SW6, U1, U2, U7, U8
+Stopped at Component Placements; nothing was added to the cart.
+exit 3

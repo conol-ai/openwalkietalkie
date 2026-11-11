@@ -82,7 +82,7 @@ binary gives byte-identical output was not tested.
 | CoHDL source | [`source/main/src/main.cohdl`](source/main/src/main.cohdl); [build and checks](source/README.md) |
 | Routed board (KiCad 10, fabrication authority) | [`main/main-revc.kicad_pcb`](main/main-revc.kicad_pcb) with `.kicad_pro` and `.kicad_dru` copied from Rev B |
 | JLCPCB order package | [`fab-jlcpcb/`](fab-jlcpcb/ORDER-NOTES.md). **Read ORDER-NOTES first.** |
-| Placement preview before ordering | [`preview/`](preview/README.md): what goes through JLCPCB's assembly preview so that orientations are measured first. Not uploaded. |
+| Placement preview before ordering | [`preview/`](preview/README.md): what goes through JLCPCB's assembly preview so that orientations are measured first. First preview read on 2026-11-12: [record](preview/2026-11-12/README.md). 109 of 118 placements confirmed, 9 need a mapping and a second preview, 7 parts not previewed. |
 | Design BOM / KiCad positions | [`main/assembly/bom.csv`](main/assembly/bom.csv), [`main/assembly/positions-kicad-all.csv`](main/assembly/positions-kicad-all.csv) |
 | Verification reports | [`verification/`](verification/) |
 | Scripts | [`scripts/`](scripts/README.md) |
@@ -155,11 +155,16 @@ Specific to Rev C:
 2. **Only two CPL rows carry a checked frame.** U4 and J5 come out of the
    library binding and differ from Rev B's file. The other 123 rows are the
    same uncorrected convention values as Rev B (119 of them for unbound
-   parts, 4 for bound capacitors whose map is zero). They still need JLC's
-   placement preview.
+   parts, 4 for bound capacitors whose map is zero). The placement preview
+   of 2026-11-12 ([record](preview/2026-11-12/README.md)) confirmed 105 of
+   the 118 rows it could read, U4 and J5 among them, and showed 13 to be
+   wrong (U1, U2, U10, U20, U7, U8, U3, J1, J3, SW1, SW2, SW5, SW6). The
+   CPL has not been corrected yet: nine of the 13 need a second preview
+   first, and seven parts were not read at all.
 3. **The library evidence for U4 and J5 was taken on other boards**
-   (preview records dated 2026-10-30). It has not been compared with what
-   was actually placed on Rev B boards; see the open questions.
+   (preview records dated 2026-10-30). The 2026-11-12 preview confirmed
+   both on this board. Neither has been compared with what was actually
+   placed on Rev B boards; see the open questions.
 4. **R39's pads.** On the routed board R39's two pads lie 0.64 × 0.54 mm;
    the `passive::CHIP_0402` land is 0.54 × 0.64 mm. The centres agree. This
    is on the Rev B board already (its check compared nominal pad sizes and

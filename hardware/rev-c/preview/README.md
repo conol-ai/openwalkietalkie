@@ -8,9 +8,41 @@ read from the preview's own exports. The readings then become library
 bindings or local mappings, the board is previewed again, and a person
 orders.
 
-**Nothing has been uploaded.** Uploading a package is the owner's decision,
-per package, by its SHA-256. The preview never saves to the cart, quotes or
-orders.
+Uploading a package is the owner's decision, per package, by its SHA-256.
+The preview never saves to the cart, quotes or orders.
+
+## Status: first preview read on 2026-11-12
+
+Package v2 (SHA-256 `8254b63a…5847`, built at commit 9b3e7dd) went through
+the preview on 2026-11-12 with the owner's approval and stopped at Component
+Placements. The record, with both exports, every measurement and the crops,
+is [`2026-11-12/`](2026-11-12/README.md).
+
+- **109 of the 118 previewed placements are confirmed**, 36 part numbers:
+  all 96 chip bodies, the five inductors and ferrites, U6, J2, the library
+  bindings for U4 and J5, and the three candidate rotations (U20 rotate 270,
+  U2/U10 rotate 180, U1 rotate 270) with the mapping applied.
+- **Nine placements, five part numbers, read wrong** and need a mapping this
+  preview did not carry: U7/U8 rotate 270, U3 rotate 180, J1 rotate 180 with
+  an offset, J3 an offset, SW1/SW2/SW5/SW6 rotate 180 with an offset. The
+  rotations are read; the three offsets are estimates.
+- **Seven parts were not previewed** and stay unmeasured: U5, Y1, AE1, R32,
+  SW3, SW4, MK1.
+
+[`corrections-next.csv`](corrections-next.csv) is the corrections table for
+a second preview, with what changed against
+[`corrections.csv`](corrections.csv) in its last column. **No second package
+has been built, and nothing has been uploaded since.** (Earlier runs the
+same day used the first package, with AE1, R32, SW3, SW4 and MK1 still in
+it, and stopped at or before the BOM step.)
+`corrections.csv`, `manifest.json` and `CHECKLIST.md` still describe
+package v2; their "not uploaded" was true when it was built.
+`build_preview.py` cannot build the next package yet: it applies neither an
+offset nor a mapping whose evidence is this preview.
+
+The fab CPL in `../fab-jlcpcb/` is unchanged, and 13 of its rows are now
+known to be wrong as they stand
+([the list](2026-11-12/README.md#rows-of-the-committed-cpl-this-shows-to-be-wrong)).
 
 ## What the package is
 
@@ -82,6 +114,12 @@ board:
   and J1, J2, J3, J5, SW1, SW2, SW5, SW6 (connectors and switches; a mark is
   not certain). Read these by eye from crops of the exports. J5's shell pegs
   can be compared with its holes by `measure_preview.py pegs`.
+
+On 2026-11-12 the tool also sent U1, U2, U7 and U8 to "manual review",
+though each has a pin 1 mark: it gives a mark to the nearest footprint in
+reach, chip parts included, and a chip part was nearer. It counted a magenta
+part of J2's model as a mark. `measure_preview.py measure` reads the marks
+whatever the tool's status says; see the record.
 
 **Use `measure_preview.py` from conol-ai/cohdl#116 or later.** This board's
 outline is not a rectangle (the lower left of its bounding box is cut away)

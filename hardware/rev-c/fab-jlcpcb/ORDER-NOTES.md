@@ -7,9 +7,13 @@ from header metadata
 KiCad 10.0.7 DRC with zones refilled, all severities: 0 violations,
 0 unconnected.
 
-**Nothing in this package has been uploaded to JLCPCB or checked in its
-placement preview.** Read "What the BOM and CPL rest on" before using the
-placement file.
+**Do not order from this placement file as it stands.** A preview package
+derived from it went through JLCPCB's placement preview on 2026-11-12
+([record](../preview/2026-11-12/README.md)); nothing was ordered. That
+preview shows 13 rows of `main-cpl-jlcpcb.csv` to be wrong and left seven
+parts unread. See "What the 2026-11-12 preview found" below, and read "What
+the BOM and CPL rest on" before using the placement file. The files in this
+directory have not been changed since.
 
 This package covers the main board only. The encoder board did not change:
 order r6's `encoder/` (or `encoder-wheel/`) package from
@@ -82,6 +86,59 @@ need the preview check below.
 for the BOM and CPL as exported from JLC's order history. Those would
 replace the guesswork in (a) and (b). Until they arrive, treat this package
 as Rev B's with two rows improved, not as a record of a known-good order.
+
+## What the 2026-11-12 preview found
+
+The preview used this package's Gerbers, and its BOM and CPL without seven
+parts and with three candidate rotations applied
+([`../preview/README.md`](../preview/README.md)).
+
+**PCBA type: Standard.** On this four-layer board JLCPCB's Economic PCBA
+type offers one assembly side; Both Sides is disabled. The board has parts
+on both sides, so the order needs Standard.
+
+**Parts JLCPCB cannot assemble as the BOM stands** (read at the BOM step on
+2026-11-11 and 2026-11-12; stock changes):
+
+| Part | LCSC | Why |
+|---|---|---|
+| U5 SF32LB525UC6 (the MCU) | C47355842 | Stock 0 on 2026-11-11. |
+| Y1 E1SB48E001G00E | none | No LCSC number; see the decision table below. |
+| AE1 2450AT18B100E | C2917717 | Stock shortage on 2026-11-12. |
+| R32 604k RC0402FR-07604KL | C327334 | Stock shortage on 2026-11-12. |
+| SW3, SW4 PTS636SM25SMTRLFS | C2799946 | Stock shortage on 2026-11-12. |
+| MK1 MP34DT05TR-A | C2688664 | The BOM step matched no part to this number. |
+
+Each needs stock, a substitute, global sourcing or consignment before an
+order, and none of the seven has had its placement read: a part that cannot
+pass the BOM step is not drawn in the preview.
+
+The other 41 part numbers were detected and confirmed with no stock warning.
+C147972 (U7, U8; 50 in stock on 2026-11-11), C115365 (the four side
+switches; 155) and C15220 (U6; 687) were low.
+
+**CPL rows that are wrong as committed.** Rotations are JLC rotations;
+positions are CPL coordinates.
+
+| Part | Row here | Should be | State |
+|---|---|---|---|
+| U1 NS4150B | rotation 270 | 180 | confirmed in the preview |
+| U2 TPS22918DBVR | 270 | 90 | confirmed |
+| U10 TPS22918DBVR | 90 | 270 | confirmed |
+| U20 USBLC6-2SC6 | 270 | 180 | confirmed |
+| U7, U8 RT6150BGQW | 90 | 0 | read; not yet previewed with the change |
+| U3 display connector | 180 | 0 | read; not yet previewed with the change |
+| J1 53261-0271 | (33.0000, −84.9000), 90 | about (32.0500, −84.9000), 270 | read; offset estimated |
+| J3 53261-0371 | (17.0000, −16.5000), 0 | about (17.0000, −15.3500), 0 | read; offset estimated |
+| SW1, SW2, SW6 SKTDLDE010 | x 3.7600, 270 | about x 4.3100, 90 | read by eye; offset estimated |
+| SW5 SKTDLDE010 | x 52.2400, 90 | about x 51.6900, 270 | read by eye; offset estimated |
+
+The rows for U4 and J5, which Rev C changed against Rev B on the library's
+evidence, are confirmed on this board: U4's pin 1 is on pad 1, and J5's
+shell pegs are within 0.15 mm of their holes. With them, 105 previewed rows
+are confirmed as committed. The nine "read" rows need a second preview with
+the change applied before this file is corrected; the table for it is
+[`../preview/corrections-next.csv`](../preview/corrections-next.csv).
 
 ## PCB order options
 
