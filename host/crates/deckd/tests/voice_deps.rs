@@ -113,12 +113,21 @@ fn the_voice_pins_are_exact_macos_gated_and_resolve_to_one_objc2() {
     // section — a test that only checked the new rows would go green if the
     // section were renamed out from under them.
     let deckd = read("crates/deckd/Cargo.toml");
-    let at = deckd
-        .find("[target.'cfg(target_os = \"macos\")'.dependencies]")
-        .expect("deckd still gates its macOS-only dependencies");
-    let gated = &deckd[at..];
-    let end = gated[1..].find("\n[").map_or(gated.len(), |i| i + 1);
-    let gated = &gated[..end];
+    // The macOS section, and the one macOS shares with Linux (the voice engine's
+    // `lanes`/`ble` pieces: cpal, rubato, rtrb). Neither is a plain `[dependencies]`.
+    let section = |header: &str| {
+        let at = deckd
+            .find(header)
+            .unwrap_or_else(|| panic!("deckd still gates its dependencies under {header}"));
+        let body = &deckd[at..];
+        let end = body[1..].find("\n[").map_or(body.len(), |i| i + 1);
+        body[..end].to_string()
+    };
+    let gated = format!(
+        "{}\n{}",
+        section("[target.'cfg(target_os = \"macos\")'.dependencies]"),
+        section("[target.'cfg(any(target_os = \"macos\", target_os = \"linux\"))'.dependencies]"),
+    );
     for name in AUDIO_PINS
         .iter()
         .map(|(n, _)| *n)
@@ -126,7 +135,7 @@ fn the_voice_pins_are_exact_macos_gated_and_resolve_to_one_objc2() {
     {
         assert!(
             gated.contains(&format!("\n{name} = ")),
-            "{name} must be declared under cfg(target_os = \"macos\")"
+            "{name} must be declared under cfg(target_os = \"macos\") (or macos+linux)"
         );
     }
 
