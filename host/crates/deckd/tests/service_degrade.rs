@@ -68,10 +68,13 @@ impl Daemon {
         daemon
     }
 
+    /// No usage probe: it would read the operator's Claude login from the
+    /// Keychain (redirecting `HOME` does not move the Keychain) and ask
+    /// api.anthropic.com.
     fn write_config(&self, port: u16) {
         std::fs::write(
             self.dir.join("config.toml"),
-            format!("[api]\nport = {port}\n\n[log]\nlevel = \"warn\"\n"),
+            format!("[api]\nport = {port}\n\n[log]\nlevel = \"warn\"\n\n[usage]\nproviders = []\n"),
         )
         .expect("the daemon's config");
     }
@@ -376,8 +379,10 @@ fn change_the_port_and_repair_the_hooks_is_the_way_out_of_a_squatted_port() {
         .iter()
         .filter(|f| f.contains("claude-marketplace"))
         .collect();
-    // Marketplace, plugin manifest, command hooks, and the stdio MCP config.
-    assert_eq!(plugin_files.len(), 4, "{files:?}");
+    // Marketplace, plugin manifest and command hooks. A new install has no
+    // stdio MCP config: the Claude Channels helper waits for the owner's
+    // switch (`[sources] claude_channels`).
+    assert_eq!(plugin_files.len(), 3, "{files:?}");
     for file in &plugin_files {
         let text = std::fs::read_to_string(file).unwrap_or_else(|e| panic!("{file}: {e}"));
         assert!(

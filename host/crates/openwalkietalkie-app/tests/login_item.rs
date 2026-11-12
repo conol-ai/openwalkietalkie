@@ -14,12 +14,12 @@
 //!   operator put there.
 //!
 //! Without the variable it prints a skip and its reason, the way every other
-//! suite here treats a grant it does not have.
-use openwalkietalkie_app::login_item;
+//! suite here treats a grant it does not have. A test binary is not the
+//! installed app, so without it `register` would refuse anyway; the variable
+//! is the one thing that lets it change this binary's own item, and never the
+//! background service's.
+use openwalkietalkie_app::login_item::{self, LIVE};
 use openwalkietalkie_app::present::LoginItem;
-
-/// Opt in to the half that writes: `OPENWALKIETALKIE_LOGIN_ITEM_LIVE=1`.
-const LIVE: &str = "OPENWALKIETALKIE_LOGIN_ITEM_LIVE";
 
 #[test]
 fn reading_the_login_item_status_registers_nothing_and_can_be_asked_twice() {

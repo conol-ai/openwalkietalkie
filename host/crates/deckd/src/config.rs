@@ -27,9 +27,10 @@ pub const WATCH_DEBOUNCE: Duration = Duration::from_millis(300);
 const WATCH_POLL: Duration = Duration::from_millis(25);
 /// The keys a reload applies without a restart (`<table>.<key>`, or
 /// `<table>.*`); everything else is logged "restart needed".
-pub const HOT_KEYS: [&str; 18] = [
+pub const HOT_KEYS: [&str; 20] = [
     "api.allowed_origins",
-    // `deckd::codexd` reads `[codex]` on every connect attempt.
+    // `deckd::codexd` reads `[codex]` on every connect attempt, and a live
+    // connection ends when `daemon` is switched off.
     "codex.*",
     "api.uds_default_scope",
     "api.uds_max_scope",
@@ -53,6 +54,10 @@ pub const HOT_KEYS: [&str; 18] = [
     "hooks.codex.hold_s",
     "hooks.gemini.hold_s",
     "liveness.*",
+    // The owner's pauses (`care::sources`): the core works its muted
+    // sessions out again on every change, and the hook doors read the table
+    // per hook. A pause that waited for a restart would not be one.
+    "sources.*",
     // B14: `[voice]` was not hot, so a `config.reload` that changed the
     // STT locale or the device selection reported them as applied and
     // changed nothing until a restart. The whole table is hot because
@@ -63,6 +68,11 @@ pub const HOT_KEYS: [&str; 18] = [
     // around, and is in `RESTART_KEYS`.
     "voice.*",
     "log.level",
+    // The Usage face's providers, the switches on its panel: the Claude
+    // probe reads the cell on every turn of its loop and wakes on every
+    // event (`config.changed` included), the Codex client reads it on
+    // every report, and the core redraws the face on `CoreMsg::Config`.
+    "usage.providers",
 ];
 
 /// Keys inside a hot table that still need a restart: they are read once,
@@ -470,6 +480,15 @@ pub struct Api {
     /// CLI shows its own dialog, which is the right answer when the deck
     /// already has more than anyone can work through.
     pub max_held_hooks: u32,
+    /// Whether the TCP door (`127.0.0.1:<port>`: `/v1/rpc`, `/v1/ws`,
+    /// `/v1/events`, the REST mirror, the HTTP hook door) is bound at all.
+    /// On by default. Off, the daemon serves its Unix sockets alone, which
+    /// is where everything shipped with the deck already talks — the app,
+    /// `deckd ctl`, the hook helpers, the channel helper — and only a
+    /// bearer-token client is left out. Nothing is bound, so nothing can
+    /// collide: no `port_in_use` degrade, an empty port file and
+    /// `service.info.port: null`. Read at start, like `port`.
+    pub tcp: bool,
 }
 
 impl Default for Api {
@@ -481,6 +500,7 @@ impl Default for Api {
             uds_max_scope: "admin".into(),
             mailbox_ttl_s: 600,
             max_held_hooks: 64,
+            tcp: true,
         }
     }
 }
@@ -942,6 +962,12 @@ pub struct Voice {
     pub transport: VoiceTransport,
     pub device_uid: Option<String>,
     pub fallback_output: String,
+    /// What a press records from when the deck's microphone is not there:
+    /// `"none"` (the default: the press gets silence and a code) or
+    /// `"system_default"` (the Mac's own input). It was the Mac's input
+    /// until the companion app; now the Mac microphone is opened only when
+    /// the operator names it here, because a press that records the room
+    /// instead of the deck is not what anyone pressed for.
     pub fallback_input: String,
     /// `"never" | "card_pending" | "always"` — when the input stream may
     /// exist (§7.1).
@@ -989,7 +1015,7 @@ impl Default for Voice {
             transport: VoiceTransport::Ble,
             device_uid: None,
             fallback_output: "none".into(),
-            fallback_input: "system_default".into(),
+            fallback_input: "none".into(),
             // V1/V2, measured 2026-09-21; see the fields above.
             mic_warm: "card_pending".into(),
             speak_over_sco: true,
@@ -1027,6 +1053,10 @@ pub struct Device {
     pub hello_s: u32,
     pub clock: String,
     pub usage_period: String,
+    /// Seconds between two asks of a live deck's charge on channel 2
+    /// (`device::status`); 0 asks the deck nothing on channel 2 at all,
+    /// its board included. Read at start.
+    pub status_poll_s: u32,
 }
 
 impl Default for Device {
@@ -1036,6 +1066,8 @@ impl Default for Device {
             hello_s: 5,
             clock: "local".into(),
             usage_period: "5h / 7d".into(),
+            // `device::status::STATUS_EVERY`.
+            status_poll_s: 30,
         }
     }
 }
@@ -1044,6 +1076,16 @@ impl Device {
     /// The pace floor is 8 ms whatever the file says (§6.1).
     pub fn pace(&self) -> std::time::Duration {
         std::time::Duration::from_millis(u64::from(self.pace_ms.max(8)))
+    }
+
+    /// How often the hid thread asks a live deck its charge; `None` when
+    /// `status_poll_s = 0` turned channel 2 off. Never more often than
+    /// `device::status::STATUS_EVERY_MIN`, whatever the file says.
+    pub fn status_every(&self) -> Option<std::time::Duration> {
+        (self.status_poll_s > 0).then(|| {
+            std::time::Duration::from_secs(u64::from(self.status_poll_s))
+                .max(crate::device::status::STATUS_EVERY_MIN)
+        })
     }
 }
 
@@ -1071,6 +1113,11 @@ pub struct UsageCfg {
     /// status line's `rate_limits` when one is chained; the older
     /// `claude-statusline` still names it) and `codex` (the app-server's
     /// rate limits). A provider left out is never probed.
+    ///
+    /// Codex alone by default. Claude is the owner's to switch on (the
+    /// Usage face's panel writes this list): its probe reads the Claude Code
+    /// login, from the Keychain on a Mac, which asks, and sends it to
+    /// `api.anthropic.com`. A file that already names `claude` keeps it.
     pub providers: Vec<String>,
     /// How often the Claude probe runs, in seconds; 60 at least. Codex
     /// pushes its own updates after every turn.
@@ -1080,7 +1127,7 @@ pub struct UsageCfg {
 impl Default for UsageCfg {
     fn default() -> Self {
         UsageCfg {
-            providers: vec!["claude".into(), "codex".into()],
+            providers: vec!["codex".into()],
             poll_s: 300,
         }
     }
@@ -1123,6 +1170,80 @@ impl Default for Codex {
     }
 }
 
+/// `[sources]`: what may put sessions on the deck, as the owner switched it
+/// (`care::sources`, the Integrations page, the menu's "Pause
+/// Integrations").
+///
+/// Pausing a source never refuses it. Its sessions stay registered and are
+/// served, but none of them holds a deck slot, a question parked for one
+/// goes back to its tool's own dialog, nothing of it is spoken, and its
+/// hooks are answered `{}`. Resuming gives the slots back. Every key is hot.
+/// The Codex switch is not here: it is `[codex] daemon`, whose connection it
+/// ends.
+///
+/// `claude_channels` is a switch of another kind: not a pause but an
+/// opt-in, for the Claude Channels bridge that carries the deck's orders
+/// into Claude sessions as their own messages.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(default)]
+pub struct Sources {
+    /// Every source at once.
+    pub paused: bool,
+    /// Claude Code: its hooks and the roster seed.
+    pub claude: bool,
+    /// Claude Channels: whether the Claude Code plugin carries the channel
+    /// helper (its `.mcp.json`) and the channel door serves it. Unset, it
+    /// is whatever the installed plugin has now
+    /// (`integrations::claude::channels_on`): a plugin installed before the
+    /// switch existed keeps its helper, and a new install has none.
+    /// `config.get` publishes it resolved. The door (within a second) and
+    /// `sources.list` follow a change without a restart; the plugin follows
+    /// it at the next `integrations.repair claude`, and a Claude session at
+    /// its next start.
+    pub claude_channels: Option<bool>,
+    /// The connected apps paused one by one, by the name `sources.list`
+    /// shows them under: the `client.name` they connect with, or their
+    /// principal (`uid:501`, `token:<name>`) when they give none.
+    pub apps_paused: Vec<String>,
+}
+
+impl Default for Sources {
+    fn default() -> Self {
+        Sources {
+            paused: false,
+            claude: true,
+            claude_channels: None,
+            apps_paused: Vec::new(),
+        }
+    }
+}
+
+impl Sources {
+    /// Whether Claude Code reaches the deck: switched on, and not paused
+    /// with everything else.
+    #[must_use]
+    pub fn claude_live(&self) -> bool {
+        self.claude && !self.paused
+    }
+
+    /// Whether the connected app listed as `name` is paused on its own.
+    #[must_use]
+    pub fn app_paused(&self, name: &str) -> bool {
+        self.apps_paused.iter().any(|paused| paused == name)
+    }
+
+    /// Whether the hook doors answer `cli` (the `<cli>` of `hooks.<cli>`):
+    /// no CLI while everything is paused, and neither of Claude's two doors
+    /// while Claude Code is switched off.
+    #[must_use]
+    pub fn hooks_answer(&self, cli: &str) -> bool {
+        match cli {
+            "claude" | "claude_statusline" => self.claude_live(),
+            _ => !self.paused,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
 pub struct Config {
@@ -1132,6 +1253,7 @@ pub struct Config {
     pub privacy: Privacy,
     pub agents: Agents,
     pub hooks: Hooks,
+    pub sources: Sources,
     pub liveness: Liveness,
     pub cards: Cards,
     pub voice: Voice,
@@ -1531,6 +1653,67 @@ mod tests {
         assert!(!is_hot("hooks.claude.tool_titles"));
     }
 
+    /// `[sources]`: everything on by default, every key hot, and the one
+    /// rule the hook doors read — a pause stops every CLI, Claude Code's
+    /// own switch only Claude's two doors.
+    #[test]
+    fn the_sources_default_to_everything_on_and_pausing_them_is_hot() {
+        let c = Config::default();
+        assert_eq!(c.sources, Sources::default());
+        assert!(!c.sources.paused && c.sources.claude && c.sources.apps_paused.is_empty());
+        assert!(c.sources.claude_live());
+        for key in [
+            "sources.paused",
+            "sources.claude",
+            "sources.claude_channels",
+            "sources.apps_paused",
+        ] {
+            assert!(is_hot(key), "{key}");
+        }
+        assert!(is_hot("codex.daemon"), "the Codex switch");
+        let paused = Config::parse(
+            "[sources]\npaused = true\napps_paused = [\"Conol\", \"uid:501\"]\n",
+        )
+        .unwrap();
+        assert!(paused.sources.claude, "the rest of the table keeps its defaults");
+        assert!(!paused.sources.claude_live());
+        assert!(paused.sources.app_paused("Conol") && paused.sources.app_paused("uid:501"));
+        assert!(!paused.sources.app_paused("conol"), "names match exactly");
+        for cli in ["claude", "claude_statusline", "codex", "codex_notify"] {
+            assert!(c.sources.hooks_answer(cli), "{cli}");
+            assert!(!paused.sources.hooks_answer(cli), "{cli}");
+        }
+        let claude_off = Config::parse("[sources]\nclaude = false\n").unwrap();
+        assert!(!claude_off.sources.hooks_answer("claude"));
+        assert!(!claude_off.sources.hooks_answer("claude_statusline"));
+        assert!(claude_off.sources.hooks_answer("codex"));
+        assert!(claude_off.sources.hooks_answer("codex_notify"));
+        assert_eq!(
+            changed_keys(&c, &paused),
+            ["sources.apps_paused", "sources.paused"]
+        );
+        assert!(Config::parse("[sources]\napps_paused = \"Conol\"\n").is_err());
+    }
+
+    /// D4: the Claude Channels switch is an opt-in with three positions.
+    /// Left out it is unset — the plugin on disk decides — and a file that
+    /// sets it says so either way; nothing else in the table moves with it.
+    #[test]
+    fn the_claude_channels_switch_is_unset_until_the_file_sets_it() {
+        let c = Config::default();
+        assert_eq!(c.sources.claude_channels, None);
+        let paused = Config::parse("[sources]\npaused = true\n").unwrap();
+        assert_eq!(paused.sources.claude_channels, None, "another key leaves it unset");
+        for (text, want) in [("true", true), ("false", false)] {
+            let set = Config::parse(&format!("[sources]\nclaude_channels = {text}\n")).unwrap();
+            assert_eq!(set.sources.claude_channels, Some(want), "{text}");
+            assert!(set.sources.claude && !set.sources.paused);
+            assert_eq!(changed_keys(&c, &set), ["sources.claude_channels"]);
+        }
+        assert!(Config::parse("[sources]\nclaude_channels = \"on\"\n").is_err());
+        assert!(Config::parse("[sources]\nclaude_channels = 1\n").is_err());
+    }
+
     #[test]
     fn the_changed_keys_are_the_dotted_paths_that_differ() {
         let before = Config::default();
@@ -1590,6 +1773,7 @@ hold_s = 30
         assert_eq!(c.api.port, 47201);
         assert_eq!(c.api.uds_default_scope, "observe");
         assert_eq!(c.api.mailbox_ttl_s, 600);
+        assert!(c.api.tcp);
         assert!(c.trust.require_trusted_for_allow);
         assert_eq!(c.privacy.keep_tool_input, "pending");
         assert_eq!(c.privacy.event_ring, 4096);
@@ -1599,6 +1783,7 @@ hold_s = 30
         assert_eq!(c.hooks.gemini.permission, "notify");
         assert!(!c.cards.paging);
         assert_eq!(c.cards.ready_ttl_s, 900);
+        assert_eq!(c.voice.fallback_input, "none");
         assert_eq!(c.voice.mic_warm, "card_pending");
         assert!(c.voice.speak_over_sco);
         assert_eq!(c.voice.slow_sco_ms, 1500);
@@ -1616,10 +1801,120 @@ hold_s = 30
         assert_eq!(c.device.pace_ms, 8);
         assert_eq!(c.device.hello_s, 5);
         assert_eq!(c.device.usage_period, "5h / 7d");
-        assert_eq!(c.usage.providers, vec!["claude", "codex"]);
+        assert_eq!(c.usage.providers, vec!["codex"]);
         assert_eq!(c.usage.poll_s, 300);
         assert_eq!(c.log.level, "info");
         assert_eq!(Config::parse("").unwrap(), c);
+    }
+
+    /// D3: the Claude bars are opt-in. `Config::default()` names Codex
+    /// alone, so a daemon whose file says nothing about `[usage]` never
+    /// reads the Claude Code login (a Keychain dialog on a Mac) and never
+    /// calls `api.anthropic.com` — and this test is the proof, not a live
+    /// run (B6d). A file that already names Claude keeps it, a `[usage]`
+    /// table without the key keeps the default, and the list is hot: the
+    /// Usage panel's switch takes no restart.
+    #[test]
+    fn claude_usage_is_opt_in_and_a_file_that_names_it_keeps_it() {
+        use crate::usage::Provider;
+        let c = Config::default();
+        assert_eq!(c.usage.providers, ["codex"]);
+        assert!(
+            !Provider::Claude.enabled(&c.usage),
+            "no Claude probe by default"
+        );
+        assert!(Provider::Codex.enabled(&c.usage));
+        assert_eq!(Config::parse("").unwrap().usage, c.usage, "no file at all");
+        let poll = Config::parse("[usage]\npoll_s = 120\n").unwrap();
+        assert_eq!(poll.usage.providers, ["codex"], "the key, not the table");
+        assert!(!Provider::Claude.enabled(&poll.usage));
+        // The owner who named Claude before the update keeps the bars, under
+        // either spelling the probe has ever had.
+        let both = Config::parse("[usage]\nproviders = [\"claude\", \"codex\"]\n").unwrap();
+        assert!(Provider::Claude.enabled(&both.usage) && Provider::Codex.enabled(&both.usage));
+        let older = Config::parse("[usage]\nproviders = [\"claude-statusline\"]\n").unwrap();
+        assert!(Provider::Claude.enabled(&older.usage));
+        assert!(
+            !Provider::Codex.enabled(&older.usage),
+            "a list is the whole list"
+        );
+        let none = Config::parse("[usage]\nproviders = []\n").unwrap();
+        assert!(Provider::ALL.iter().all(|p| !p.enabled(&none.usage)));
+        assert!(
+            is_hot("usage.providers"),
+            "the panel's switch takes no restart"
+        );
+        assert_eq!(changed_keys(&c, &both), ["usage.providers"]);
+    }
+
+    /// D3: no Mac microphone unless the file names it. `system_default` is
+    /// still the operator's to choose, the key is as hot as the rest of
+    /// `[voice]`, and the engine's own start-up options say the same.
+    #[test]
+    fn the_mac_microphone_is_no_fallback_unless_the_file_names_it() {
+        let c = Config::default();
+        assert_eq!(c.voice.fallback_input, "none");
+        assert_eq!(
+            crate::audio::AudioConfig::default().fallback_input,
+            c.voice.fallback_input
+        );
+        let mac = Config::parse("[voice]\nfallback_input = \"system_default\"\n").unwrap();
+        assert_eq!(mac.voice.fallback_input, "system_default");
+        assert_eq!(
+            mac.voice.fallback_output, "none",
+            "the rest of [voice] keeps its defaults"
+        );
+        assert_eq!(changed_keys(&c, &mac), ["voice.fallback_input"]);
+        assert!(is_hot("voice.fallback_input"));
+    }
+
+    /// D3: `[api] tcp`, the Service page's Local API switch. On by default
+    /// (nothing that works today stops working), off parses, and it is read
+    /// at start like the port, so a change is "restart needed" and never
+    /// "applied". The gate's own API daemon, whose file names a port and
+    /// no switch, keeps its door.
+    #[test]
+    fn the_tcp_door_is_on_by_default_and_switching_it_needs_a_restart() {
+        let c = Config::default();
+        assert!(c.api.tcp);
+        let off = Config::parse("[api]\ntcp = false\n").unwrap();
+        assert!(!off.api.tcp);
+        assert_eq!(off.api.port, 47201, "the rest of [api] keeps its defaults");
+        assert_eq!(changed_keys(&c, &off), ["api.tcp"]);
+        assert!(!is_hot("api.tcp"), "read at start, like the port");
+        assert!(Config::parse("[api]\ntcp = \"no\"\n").is_err());
+        // `tools/host-test.sh`'s API daemon, byte for byte.
+        let gate = Config::parse(
+            "[api]\nport = 0\nallowed_origins = [\"http://localhost:5173\"]\n\n[liveness]\nseed = false\n\n[codex]\ndaemon = false\n",
+        )
+        .unwrap();
+        assert!(gate.api.tcp);
+        assert_eq!(gate.api.port, 0);
+    }
+
+    /// `[device] status_poll_s`, the kill switch of the deck's channel-2
+    /// requests (D1): 30 s by default, 0 turns channel 2 off without a
+    /// rebuild, never more often than the floor, and read at start like the
+    /// rest of `[device]`.
+    #[test]
+    fn the_status_poll_defaults_to_thirty_seconds_and_zero_turns_channel_two_off() {
+        use crate::device::status::{STATUS_EVERY, STATUS_EVERY_MIN};
+        let c = Config::default();
+        assert_eq!(c.device.status_poll_s, 30);
+        assert_eq!(c.device.status_every(), Some(STATUS_EVERY));
+        let off = Config::parse("[device]\nstatus_poll_s = 0\n").unwrap();
+        assert_eq!(off.device.status_every(), None);
+        assert_eq!(
+            off.device.pace_ms, 8,
+            "the rest of [device] keeps its defaults"
+        );
+        let fast = Config::parse("[device]\nstatus_poll_s = 1\n").unwrap();
+        assert_eq!(fast.device.status_every(), Some(STATUS_EVERY_MIN));
+        let slow = Config::parse("[device]\nstatus_poll_s = 120\n").unwrap();
+        assert_eq!(slow.device.status_every(), Some(Duration::from_secs(120)));
+        assert!(Config::parse("[device]\nstatus_poll_s = -1\n").is_err());
+        assert!(!is_hot("device.status_poll_s"), "read at start");
+        assert_eq!(changed_keys(&c, &off), ["device.status_poll_s"]);
     }
 
     /// V1 and V2 (HOST-CONTRACT-W4 §2, measured 2026-09-21, n=16): the two

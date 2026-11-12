@@ -42,8 +42,10 @@ were taken from Zeron (https://github.com/zeronsh/zeron):
     OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
     USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-Drawn for this app in the same style: `bluetooth`, `check-circle`, `dial`,
-`gemini-mark` (a generic four-point sparkle), `plug`, `server` and `stop`.
+Drawn for this app in the same style: `bluetooth`, `check-circle`, `deck`,
+`deck-care`, `deck-off`, `dial`, `gemini-mark` (a generic four-point sparkle),
+`mod-command`, `mod-control`, `mod-option`, `mod-shift`, `plate-ring`,
+`plate-ring-half`, `plug`, `server` and `stop`.
 
 The product marks `claude-mark` (Anthropic's Claude) and `openai-mark`
 (OpenAI) are ports of Zeron's and are trademarks of their owners. They are

@@ -1,21 +1,24 @@
 //! `config.set{patch}` end to end (§4.11, week 6): the call writes
-//! `config.toml` and the change reaches the **running daemon**
-//! through the one path a config has ever taken into it — the notify
-//! watcher of §3.7 — rather than through a second one the method poked
-//! itself.
+//! `config.toml`, and what it reports applied is in force in the **running
+//! daemon** by the time it answers: the core takes the file it wrote, as
+//! `config.reload` would. The notify watcher of §3.7 still reads the same
+//! file one debounce later, swaps the cell the doors read and raises
+//! `config.changed{keys}`, exactly as for an editor's save.
 //!
 //! That is the whole point of the row. A method that wrote the file and
-//! also called `set_config` would have two ideas of what is in force and no
-//! way to tell which was right after an operator edited by hand; a method
-//! that wrote the file and did not wire the watcher would leave the daemon
-//! and the disk disagreeing until a restart. So the assertion here is not
-//! "the file changed" but "`config.get`, answered by the core, now reads
-//! back what the file says" — and `config.get` is answered from
-//! `Core::config`, which only `CoreMsg::Config` ever sets.
+//! left the core to the watcher answered "applied" while `config.get` and
+//! the pauses still read the old value for a debounce, and every switch
+//! page reads back at once; a method that wrote the file and did not wire
+//! the watcher would leave the doors and the disk disagreeing until a
+//! restart. Both legs take the file, so there is one idea of what is in
+//! force, and the assertions here are not "the file changed" but
+//! "`config.get`, answered by the core, reads back what the file says" at
+//! once, then "the watcher's cell and event follow".
 //!
-//! `core::run` hands the same watcher's cell to the doors as well, so the
-//! bearer checks and the CORS list follow by the same swap; what this rig
-//! holds is the core leg, which is the one with a thread boundary in it.
+//! `core::run` hands the watcher's cell to the doors, so the bearer checks
+//! and the CORS list follow by the same swap; this rig holds a watcher of
+//! its own on the daemon's directory, which is the leg with a thread
+//! boundary in it.
 //!
 //! Nothing here binds 47201 or touches the real data dir: the daemon is
 //! `common::Daemon` on a temp dir with `[api] port = 0`.
@@ -50,26 +53,6 @@ async fn admin(daemon: &Daemon) -> UdsClient {
     client
 }
 
-/// Poll `config.get` — the **core's** view — until `f` holds.
-async fn until_in_force(
-    client: &mut UdsClient,
-    what: &str,
-    mut f: impl FnMut(&serde_json::Value) -> bool,
-) -> serde_json::Value {
-    let deadline = Instant::now() + WAIT;
-    loop {
-        let config = client.call("config.get", serde_json::json!({})).await;
-        if f(&config) {
-            return config;
-        }
-        assert!(
-            Instant::now() < deadline,
-            "the daemon never picked up {what}: {config}"
-        );
-        tokio::time::sleep(Duration::from_millis(25)).await;
-    }
-}
-
 #[tokio::test]
 async fn config_set_writes_the_file_and_the_watcher_puts_it_in_force() {
     let daemon = Daemon::start().await;
@@ -98,7 +81,7 @@ locale = \"en-US\"
     let mut client = admin(&daemon).await;
     let mut events = daemon.api.bus.subscribe();
 
-    // A hot key. The reply describes the write; the watcher does the rest.
+    // A hot key. The reply describes the write, and the write is in force.
     let ok = client
         .call(
             "config.set",
@@ -119,18 +102,11 @@ locale = \"en-US\"
         "no default was materialised: {text:?}"
     );
 
-    // …and the running daemon agrees with it, through the watcher.
-    until_in_force(&mut client, "voice.stt.locale", |config| {
-        config["voice"]["stt.locale"] == "en-GB"
-    })
-    .await;
-    assert_eq!(
-        *watch.current().voice.stt.locale,
-        *"en-GB",
-        "the cell the doors read moved with it"
-    );
+    // …and the running daemon agrees with it at once: the very next read.
+    let config = client.call("config.get", serde_json::json!({})).await;
+    assert_eq!(config["voice"]["stt.locale"], "en-GB", "{config}");
     // `config.changed{keys}` is on the bus exactly as an editor's save
-    // raises it: one path, one event, whoever did the writing.
+    // raises it: one event, whoever did the writing.
     let deadline = Instant::now() + WAIT;
     let changed = loop {
         match events.try_recv() {
@@ -150,6 +126,13 @@ locale = \"en-US\"
     assert_eq!(
         changed.data["keys"],
         serde_json::json!(["voice.stt.locale"])
+    );
+    // The watcher raises it after swapping its cell, so the doors' view has
+    // moved with the core's by now.
+    assert_eq!(
+        *watch.current().voice.stt.locale,
+        *"en-GB",
+        "the cell the doors read moved with it"
     );
 
     // A key that needs a restart is written and **named** as such rather
@@ -183,10 +166,9 @@ locale = \"en-US\"
         ok["changed"],
         serde_json::json!(["voice.commands", "voice.tts.announce_max_chars"])
     );
-    until_in_force(&mut client, "the two-key patch", |config| {
-        config["voice"]["commands"] == false && config["voice"]["tts.announce_max_chars"] == 80
-    })
-    .await;
+    let config = client.call("config.get", serde_json::json!({})).await;
+    assert_eq!(config["voice"]["commands"], false, "{config}");
+    assert_eq!(config["voice"]["tts.announce_max_chars"], 80, "{config}");
 
     // An invalid key or value is `-32602` and **writes nothing**, which is
     // checked against the bytes and not against the reply — and so is a key

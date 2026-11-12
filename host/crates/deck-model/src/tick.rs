@@ -43,12 +43,19 @@ impl Store {
                 && deliver == Deliver::Hold
                 && matches!(status, CardStatus::Pending | CardStatus::Snoozed)
             {
-                self.effects.push(Effect::ReleaseHold {
-                    agent: id.clone(),
-                    card: cid,
-                    reason: Release::Expiry,
-                });
-                self.degrade_card(&id, "expiry");
+                if self.snapshot.agents.get(&id).is_some_and(|a| self.is_muted(a)) {
+                    // Held while its agent was muted, with a deadline already
+                    // due (`card_set`): the core has parked it by now, so it
+                    // can go back to its tool.
+                    self.release_to_tool(&id);
+                } else {
+                    self.effects.push(Effect::ReleaseHold {
+                        agent: id.clone(),
+                        card: cid,
+                        reason: Release::Expiry,
+                    });
+                    self.degrade_card(&id, "expiry");
+                }
                 continue;
             }
             if expire_at.is_some_and(|at| at <= now)

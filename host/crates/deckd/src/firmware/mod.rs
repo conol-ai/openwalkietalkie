@@ -24,6 +24,13 @@ pub const LEGACY_APP_SIZE: usize = 7 * 1024 * 1024 - 64 * 1024;
 pub const BONDS_START: u32 = 0x12700000;
 pub const BONDS_END: u32 = 0x12720000;
 pub const CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+/// The updater's folder under the caches directory: the release manifest
+/// and the images it downloaded.
+pub const CACHE_DIR: &str = "firmware";
+/// The folder inside [`CACHE_DIR`] that keeps each deck's bootloader as it
+/// was before an install replaced it. It is not a download and nothing can
+/// fetch it again, so clearing the cache (`care.cache.clear`) leaves it.
+pub const BOOTLOADER_BACKUPS: &str = "bootloader-backups";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Asset {
@@ -199,9 +206,33 @@ impl Status {
 pub struct Updater {
     state: Arc<Mutex<Status>>,
     checked: Arc<Mutex<Option<Instant>>>,
+    /// Never probe USB or fetch: see [`Updater::offline`].
+    offline: bool,
 }
 
+/// Why an offline updater refuses to install (see [`Updater::offline`]).
+pub const NO_DEVICE: &str =
+    "This service runs with --no-device: it never opens the deck, so it cannot install firmware.";
+
 impl Updater {
+    /// The updater of a daemon that may not open the deck: `deckd run
+    /// --no-device`, and every unit-test core. `check` answers with the
+    /// status it already has and `install` refuses, so neither probes USB
+    /// nor runs curl.
+    ///
+    /// The hid thread's `hardware: false` never covered these: a check
+    /// opens the deck from a thread of its own, beside the hid thread, and
+    /// then fetches the release manifest. The app sends one on every
+    /// connection, so a throwaway service it was pointed at answered by
+    /// opening the operator's own deck and downloading the manifest (B2).
+    #[must_use]
+    pub fn offline() -> Self {
+        Updater {
+            offline: true,
+            ..Updater::default()
+        }
+    }
+
     pub fn status(&self) -> Status {
         let mut state = self.state.lock().unwrap().clone();
         state.available = state
@@ -228,6 +259,11 @@ impl Updater {
     }
 
     pub fn check(&self, cache: PathBuf, force: bool) -> Result<Status, String> {
+        // Offline: no deck to read and no release to fetch, so the status
+        // it already has is the whole answer.
+        if self.offline {
+            return Ok(self.status());
+        }
         let mut state = self.state.lock().unwrap();
         if state.busy() {
             return Ok(state.clone());
@@ -298,6 +334,11 @@ impl Updater {
         cache: PathBuf,
         maintenance: Maintenance,
     ) -> Result<Status, String> {
+        // Before anything else: whatever the state holds, an offline
+        // updater neither pauses the link nor opens the deck.
+        if self.offline {
+            return Err(NO_DEVICE.into());
+        }
         let mut state = self.state.lock().unwrap();
         if state.busy() {
             return Err("An update operation is already running.".into());
@@ -395,7 +436,7 @@ impl Updater {
                                 allow_bootloader_update,
                             },
                             &images,
-                            &cache.join("bootloader-backups"),
+                            &cache.join(BOOTLOADER_BACKUPS),
                             |phase, percent, message| progress.progress(phase, percent, message),
                         )
                     })
@@ -1025,6 +1066,50 @@ mod tests {
             )
             .is_err());
         assert_eq!(updater.status().phase, "idle");
+    }
+
+    /// B2: an offline updater (`--no-device`, every unit-test core) answers
+    /// a check with the idle status it has, and refuses an install that an
+    /// online one would start (same deck, newer version, consent given)
+    /// without asking the link to pause: nothing is probed, fetched or
+    /// written.
+    #[test]
+    fn an_offline_updater_answers_its_status_and_refuses_to_install_without_probing() {
+        let cache = std::env::temp_dir()
+            .join(format!("owt-offline-firmware-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&cache);
+        let updater = Updater::offline();
+        for force in [false, true] {
+            let status = updater.check(cache.clone(), force).unwrap();
+            assert_eq!(status.phase, "idle");
+            assert!(status.device.is_none() && status.release.is_none() && !status.available);
+        }
+        assert!(updater.checked.lock().unwrap().is_none(), "nothing was checked");
+        assert!(!cache.exists(), "no manifest, not even its directory");
+        let (release, _) = fixture();
+        {
+            let mut state = updater.state.lock().unwrap();
+            state.release = Some(release);
+            state.device = Some(Device {
+                serial: "USB-A".into(),
+                board: Some("hw-a".into()),
+                version: Some("0.1.0-openwalkietalkie".into()),
+                recovery_protocol: Some(2),
+                ..Device::default()
+            });
+        }
+        assert!(updater.status().available, "an online updater would install this");
+        let maintenance = Maintenance::default();
+        let error = updater
+            .install("hw-a", "USB-A", "0.2.0", true, cache.clone(), maintenance.clone())
+            .unwrap_err();
+        assert_eq!(error, NO_DEVICE);
+        assert_eq!(updater.status().phase, "idle");
+        assert!(
+            !maintenance.requested.load(Ordering::Acquire),
+            "the link was never asked to pause"
+        );
+        assert!(!cache.exists());
     }
 
     #[test]

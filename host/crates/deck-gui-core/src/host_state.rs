@@ -11,60 +11,51 @@
 //! [`HostState::detached`] builds one with no connection behind it, which is
 //! what makes the reducer suite in `tests/reducer.rs` hermetic: scripted
 //! `ApiEvent`s in, effects and a mirror out, no socket and no daemon.
+//!
+//! The window is the deck's companion and never a session's. The mirror
+//! holds no agent: every snapshot is installed with its agents and the focus
+//! on one of them dropped (`without_sessions`), and no agent, card, reply,
+//! order, focus, confirmation or transcript event is folded. Each of those
+//! still advances `rev`, because the rev check runs before the fold: the
+//! subscription stays whole, so the rule that a jump is a hole keeps holding.
 use crate::events::{ApiEvent, AppEvent};
 use crate::ApiClient;
 use deck_model::{
-    Agent, AgentId, Card, CardId, CardStatus, EventKind, FaceEntry, Focus, FocusSource, Link,
-    Permission, Principal, Route, SessionState, SetKey, Slot, Snapshot, Speaking, Ts, Usage,
-    VoiceTransport,
+    EventKind, FaceEntry, Focus, LastLinked, Link, LinkDrop, MacroKey, MacroLayout, Permission,
+    Principal, Route, SessionState, SetKey, Snapshot, Speaking,
+    Transport, Ts, Usage, VoiceTransport,
 };
 use serde_json::Value;
-use std::collections::BTreeMap;
 use std::time::Duration;
 
 /// §8.1's reconnect schedule, and `deck-client`'s: one definition, so what
 /// the yellow bar counts down and what the socket actually does cannot drift.
 pub use deck_client::{BACKOFF_MAX, BACKOFF_MIN};
 
-/// Orders kept per agent for the Deck screen's order history — enough to
-/// show "the exact string typed or pushed" for a session's recent work
-/// without the mirror growing without bound.
-pub const ORDER_HISTORY: usize = 32;
+/// The reason `service.shutdown` folds into `service.degraded`. The service
+/// never sends it as a degradation of its own: it marks a service that is
+/// going away, which the next `Disconnected` says in full.
+pub const SHUTTING_DOWN: &str = "shutdown";
 
-/// `x-apple.systempreferences:` URLs for the two panes a *denied* permission
-/// can only be fixed in: macOS will not prompt twice, so the sheet is
-/// useless and System Settings is the only recourse (§7.8).
-pub const MICROPHONE_SETTINGS: &str =
-    "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone";
+/// `x-apple.systempreferences:` URLs for the panes a *denied* permission can
+/// only be fixed in: macOS will not prompt twice, so System Settings is the
+/// only recourse (§7.8). The Voice page's **Open Settings** goes there when
+/// the owner presses it; nothing opens them unasked.
 pub const SPEECH_SETTINGS: &str =
     "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition";
 /// Where a Bluetooth denial is lifted (the BLE voice transport needs it).
 pub const BLUETOOTH_SETTINGS: &str =
     "x-apple.systempreferences:com.apple.preference.security?Privacy_Bluetooth";
 
-/// §4.2's guarded operation: an untrusted principal asked for a permission
-/// allow or an `inject` order and the daemon said `-32002 {need:"trusted",
-/// how:"gui_confirm"}`. The operator's click on the sheet re-issues the call
-/// from here, which *is* the trusted principal.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ConfirmRequest {
-    pub agent: Option<AgentId>,
-    pub card: Option<CardId>,
-    /// The exact order text, when the guarded operation was an `op.order`.
-    pub order: Option<String>,
-    /// Who asked and was refused.
-    pub principal: Option<Principal>,
-}
-
 /// Which sheet [`HostEffect::RaisePermissionSheet`] asks for.
+///
+/// Speech recognition alone. The Mac's microphone is no longer a voice
+/// path of this app (owner decision 11), so a microphone that has not been
+/// asked for is nothing to raise a sheet about.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SheetKind {
-    /// macOS has not been asked for the microphone yet (§7.8).
-    Microphone,
-    /// …nor for speech recognition.
+    /// macOS has not been asked for speech recognition yet (§7.8).
     Speech,
-    /// §4.2's confirmation sheet.
-    Confirm(ConfirmRequest),
 }
 
 /// What the reducer asks the app to do. Everything here is an *action on the
@@ -77,37 +68,17 @@ pub enum SheetKind {
 /// is exactly what it should run).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HostEffect {
-    /// Bring the window forward: something needs the operator's eyes now.
-    ShowWindow,
     RaisePermissionSheet(SheetKind),
     Toast(String),
     /// Connect again after this long (250 ms doubling to 5 s).
     Reconnect(Duration),
-    OpenUrl(String),
     /// The mirror is stale: fetch the whole snapshot again.
     StateGet,
 }
 
-/// One entry of the Deck screen's order history: "the exact string typed or
-/// pushed, shown before an `inject` executes" (§8.2).
-///
-/// It is kept here rather than derived on the fly because `order.failed`
-/// carries `{agent, reason, text_kept:true}` and **no text** (§4.12) — the
-/// text was in the `order.dispatched` before it. Without this history the
-/// Deck screen's Copy button on a failed order would have nothing to copy.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct OrderEntry {
-    pub text: Option<String>,
-    /// `"inject"`, `"push"`, `"poll"`; `None` when the order never got a route.
-    pub via: Option<String>,
-    /// `Some` once an `order.failed` landed on this entry.
-    pub reason: Option<String>,
-    pub at: Ts,
-}
-
-/// The last capture RMS the daemon reported (`voice.level`, §7.1), for the
-/// Voice screen's meter. Not part of the `Snapshot` for the same reason the
-/// transcript is not: it is a per-buffer stream, not state.
+/// The last capture RMS the daemon reported (`voice.level`, §7.1), for a
+/// microphone meter. Not part of the `Snapshot`: it is a per-buffer stream,
+/// not state.
 ///
 /// **An `rms` of 0.0 is not "no microphone".** V2 measured that a dead mic
 /// and a warming SCO link report exactly the same digital zero for about a
@@ -119,18 +90,6 @@ pub struct Level {
     /// The event's own stamp. The reducer reads no clock, so how old this
     /// is, is the view's question to ask.
     pub at: Ts,
-}
-
-/// The live dictation, for the PTT indicator. Not part of the `Snapshot`:
-/// transcripts are a stream, not state (§4.3 keeps none of them).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Transcript {
-    pub agent: Option<AgentId>,
-    pub utterance: String,
-    pub text: String,
-    /// §5.6's matched intent (`allow`, `deny`, `choice:n`, …), when there was one.
-    pub intent: Option<String>,
-    pub final_: bool,
 }
 
 /// §8.1's reconnect schedule: 250 ms, doubling, ceiling 5 s, reset by a
@@ -173,12 +132,17 @@ impl Default for Backoff {
 /// the one that matters: the config is validated whole-file against a schema
 /// (§4.11), and a GUI that could hand it an arbitrary JSON tree would be
 /// able to compose a patch no screen has a control for. The three shapes
-/// week 6's screens actually set — a port, a flag, a name — are these.
+/// week 6's screens actually set — a port, a flag, a name — are these, and
+/// the companion pages add the fourth: a list of names
+/// (`usage.providers`, `sources.apps_paused`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ConfigValue {
     Bool(bool),
     Int(i64),
     Text(String),
+    /// A list of names, written whole: the service keeps no list it could
+    /// add one name to, so a control that switches one name sends them all.
+    List(Vec<String>),
     /// Remove the key, so the documented default applies again (§4.11):
     /// what "Remove key" on the Voice screen says.
     Null,
@@ -190,6 +154,9 @@ impl ConfigValue {
             ConfigValue::Bool(b) => Value::Bool(*b),
             ConfigValue::Int(n) => Value::from(*n),
             ConfigValue::Text(s) => Value::String(s.clone()),
+            ConfigValue::List(names) => {
+                Value::Array(names.iter().cloned().map(Value::String).collect())
+            }
             ConfigValue::Null => Value::Null,
         }
     }
@@ -200,35 +167,12 @@ impl ConfigValue {
 /// `&self`, so there is no path from a UI action to a write on the mirror —
 /// the events the call produces are the only writer.
 ///
-/// The Deck screen's six come first; the Integrations and Service screens'
-/// follow. The second group differs in one way worth naming: none of them
-/// produces an event, so nothing folds their answers into the mirror and the
-/// screens keep what they asked for in their own view state
-/// ([`crate::admin`]).
+/// None of them is a session's: the window answers no card, sends no order
+/// and opens no image (never a session). Most produce no event at all, so
+/// nothing folds their answers into the mirror and the pages keep what they
+/// asked for in their own view state ([`crate::admin`], [`crate::care`]).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum UiAction {
-    ImageGet { agent: AgentId, image: String, offset: usize },
-    Answer {
-        agent: AgentId,
-        card: CardId,
-        choice: Option<u8>,
-        text: Option<String>,
-    },
-    Snooze {
-        agent: AgentId,
-        card: CardId,
-    },
-    Ack {
-        agent: AgentId,
-        card: CardId,
-    },
-    Focus {
-        agent: AgentId,
-    },
-    Order {
-        agent: AgentId,
-        text: String,
-    },
     /// The whole snapshot again (§4.5). What a [`HostEffect::StateGet`] runs.
     StateGet,
 
@@ -289,7 +233,7 @@ pub enum UiAction {
         level: Option<String>,
     },
 
-    // ---- the Voice screen and the tray (§8.2) --------------------------
+    // ---- the Voice screen (§8.2) ---------------------------------------
     /// `voice.engines` (§4.9) — the STT/TTS badges. Answered from the one
     /// report the audio side pushed when its engines came up, so a daemon
     /// with no engine answers `-32013` and the screen says *that* rather
@@ -332,11 +276,62 @@ pub enum UiAction {
     PermRequest {
         which: String,
     },
-    /// `device.set{k, v}` — the tray's **Mute announcements**. The only
-    /// device write any week-6 screen makes, and the one key it writes.
+    /// `device.set{k, v}` — one deck setting: the Deck page's controls and
+    /// the menu's **Auto-Announce**.
     DeviceSet {
         key: deck_model::SetKey,
         value: u16,
+    },
+
+    // ---- the companion's pages ------------------------------------------
+    /// `device.faces.set{list}` — the deck's whole strip, in order. The
+    /// service adds no check of its own (an existing method may not start
+    /// refusing), so the Faces page sends only a strip it built valid and
+    /// confirms it by the `device.faces` that comes back.
+    DeviceFacesSet {
+        list: Vec<FaceEntry>,
+    },
+    /// `device.macro.set{f, layout, src, keys}` — one Macropad face's keys,
+    /// whole: the deck takes no single key. `src` is the tag the deck shows
+    /// in the face's header, sent back as it was read.
+    DeviceMacroSet {
+        f: u8,
+        layout: String,
+        src: Option<String>,
+        keys: Vec<MacroKey>,
+    },
+    /// `config.set{patch}` with several keys that must land together: the
+    /// patch is atomic, two `ConfigSet` calls are not (a language and its
+    /// locale; resuming the sources and the hooks at once). A key named
+    /// twice is sent once, with the later value.
+    ConfigPatch {
+        entries: Vec<(String, ConfigValue)>,
+    },
+    /// `sources.list` — what feeds the deck, as counts and times per source,
+    /// never a session.
+    SourcesList,
+    /// `care.test.question` — a test question on the deck. Answers at once
+    /// with `sent` or `no_deck`; the outcome is read later with
+    /// [`UiAction::TestStatus`].
+    TestQuestion,
+    /// `care.test.voice` — a card asking the owner to hold PTT and speak;
+    /// what was heard is read later with [`UiAction::TestStatus`].
+    TestVoice,
+    /// `care.test.say` — a sentence spoken on the deck.
+    TestSay,
+    /// `care.test.status` — the last test question and voice test.
+    TestStatus,
+    /// `care.checks` — the service's own setup checks.
+    CareChecks,
+    /// `care.footprint` — what the app has put on this Mac, item by item.
+    CareFootprint,
+    /// `care.support_file{to}` — `"desktop"`, or an absolute directory.
+    CareSupportFile {
+        to: String,
+    },
+    /// `care.cache.clear{what}` — `"firmware"` is the one cache there is.
+    CareCacheClear {
+        what: String,
     },
 }
 
@@ -344,29 +339,6 @@ impl UiAction {
     /// The JSON-RPC call this action is.
     pub fn request(&self) -> (&'static str, Value) {
         match self {
-            UiAction::Answer {
-                agent,
-                card,
-                choice,
-                text,
-            } => (
-                "op.answer",
-                serde_json::json!({"agent": agent, "card": card, "choice": choice, "text": text}),
-            ),
-            UiAction::Snooze { agent, card } => (
-                "op.snooze",
-                serde_json::json!({"agent": agent, "card": card}),
-            ),
-            UiAction::Ack { agent, card } => {
-                ("op.ack", serde_json::json!({"agent": agent, "card": card}))
-            }
-            UiAction::Focus { agent } => ("op.focus", serde_json::json!({"agent": agent})),
-            // §4.7: a typed order is `source:"gui"`, and `ctx:"talk"` is the
-            // default the reducer would have filled in anyway.
-            UiAction::Order { agent, text } => (
-                "op.order",
-                serde_json::json!({"agent": agent, "text": text, "ctx": "talk", "source": "gui"}),
-            ),
             UiAction::StateGet => ("state.get", serde_json::json!({})),
             UiAction::IntegrationsStatus { detect } => {
                 ("integrations.status", serde_json::json!({"detect": detect}))
@@ -414,7 +386,6 @@ impl UiAction {
             ),
             UiAction::VoiceEngines => ("voice.engines", serde_json::json!({})),
             UiAction::VoiceTest { what } => ("voice.test", serde_json::json!({"what": what})),
-            UiAction::ImageGet { agent, image, offset } => ("image.get", serde_json::json!({"agent":agent,"image":image,"offset":offset})),
             UiAction::FirmwareStatus => ("firmware.status", serde_json::json!({})),
             UiAction::FirmwareCheck { force } => ("firmware.check", serde_json::json!({"force": force})),
             UiAction::FirmwareInstall {
@@ -447,12 +418,47 @@ impl UiAction {
             UiAction::DeviceSet { key, value } => {
                 ("device.set", serde_json::json!({"k": key, "v": value}))
             }
+            // The strip and the keys go out as the store's own types
+            // serialise, so the params are the `Request` the service parses
+            // and not a second spelling of it.
+            UiAction::DeviceFacesSet { list } => {
+                ("device.faces.set", serde_json::json!({"list": list}))
+            }
+            UiAction::DeviceMacroSet {
+                f,
+                layout,
+                src,
+                keys,
+            } => (
+                "device.macro.set",
+                serde_json::json!({"f": f, "layout": layout, "src": src, "keys": keys}),
+            ),
+            UiAction::ConfigPatch { entries } => {
+                let patch: serde_json::Map<String, Value> = entries
+                    .iter()
+                    .map(|(key, value)| (key.clone(), value.json()))
+                    .collect();
+                ("config.set", serde_json::json!({"patch": patch}))
+            }
+            UiAction::SourcesList => ("sources.list", serde_json::json!({})),
+            UiAction::TestQuestion => ("care.test.question", serde_json::json!({})),
+            UiAction::TestVoice => ("care.test.voice", serde_json::json!({})),
+            UiAction::TestSay => ("care.test.say", serde_json::json!({})),
+            UiAction::TestStatus => ("care.test.status", serde_json::json!({})),
+            UiAction::CareChecks => ("care.checks", serde_json::json!({})),
+            UiAction::CareFootprint => ("care.footprint", serde_json::json!({})),
+            UiAction::CareSupportFile { to } => {
+                ("care.support_file", serde_json::json!({"to": to}))
+            }
+            UiAction::CareCacheClear { what } => {
+                ("care.cache.clear", serde_json::json!({"what": what}))
+            }
         }
     }
 }
 
-/// The mirror of the daemon's `Snapshot` plus the little the GUI needs that
-/// the snapshot does not carry (the live transcript, the order history).
+/// The mirror of the daemon's `Snapshot`, without its sessions, plus the one
+/// stream the snapshot does not carry (the microphone level).
 pub struct HostState {
     mirror: Snapshot,
     /// `None` on a [`HostState::detached`]: the reducer runs, nothing calls.
@@ -474,8 +480,6 @@ pub struct HostState {
     gaps: u64,
     /// Events folded (a duplicate or a hole is not one).
     folded: u64,
-    orders: BTreeMap<AgentId, Vec<OrderEntry>>,
-    transcript: Option<Transcript>,
     level: Option<Level>,
 }
 
@@ -483,7 +487,6 @@ impl std::fmt::Debug for HostState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("HostState")
             .field("rev", &self.mirror.rev)
-            .field("agents", &self.mirror.agents.len())
             .field("connected", &self.connected)
             .field("resyncing", &self.resyncing)
             .finish()
@@ -514,8 +517,6 @@ impl HostState {
             resyncing: false,
             gaps: 0,
             folded: 0,
-            orders: BTreeMap::new(),
-            transcript: None,
             level: None,
         }
     }
@@ -531,10 +532,19 @@ impl HostState {
         self.connected
     }
 
-    /// Whether the GUI was verified as §4.2's trusted principal. False on an
-    /// ad-hoc dev build without `[trust] dev_requirement` — a red badge, not
-    /// an error: an untrusted GUI still observes and still operates, it just
-    /// cannot allow a permission or inject without the confirmation path.
+    /// The service has answered at least once since this app started:
+    /// false until the first `Connected`, then true for good, through any
+    /// number of drops. It is what tells a service that was never there (a
+    /// first run, nothing installed yet) from one that went away, whose
+    /// last mirror is still worth showing.
+    pub fn seen(&self) -> bool {
+        self.seen
+    }
+
+    /// Whether the last hello was answered as §4.2's trusted principal.
+    /// False on an ad-hoc dev build without `[trust] dev_requirement`, and on
+    /// a detached state — never an error: this window allows nothing and
+    /// injects nothing, so it only ever reports it.
     pub fn trusted(&self) -> bool {
         self.client.as_ref().is_some_and(ApiClient::trusted)
     }
@@ -555,19 +565,6 @@ impl HostState {
 
     pub fn folded(&self) -> u64 {
         self.folded
-    }
-
-    /// The Deck screen's order history for one agent, oldest first.
-    pub fn orders(&self, agent: &AgentId) -> &[OrderEntry] {
-        self.orders
-            .get(agent)
-            .map(Vec::as_slice)
-            .unwrap_or_default()
-    }
-
-    /// The dictation in flight, if any.
-    pub fn transcript(&self) -> Option<&Transcript> {
-        self.transcript.as_ref()
     }
 
     /// The last capture level the daemon reported, with the stamp it
@@ -600,13 +597,14 @@ impl HostState {
             AppEvent::Api(ApiEvent::Event(event)) => self.on_event(&event),
             AppEvent::Api(ApiEvent::Disconnected) => self.on_disconnected(),
             AppEvent::Api(ApiEvent::Resync) => self.on_resync(),
-            // A tray click is an *action*, and the reducer issues none: it
+            // A menu click is an *action*, and the reducer issues none: it
             // folds what the daemon reported and says what the app should
-            // do about it. The window turns the command into the same
-            // `UiAction` a button on a screen would send, so the tray and
-            // the screens take one path to the daemon and the mirror has
-            // one writer — the events that come back.
-            AppEvent::Tray(_) => Vec::new(),
+            // do about it. The window turns the click into the same
+            // `UiAction` a control on a page would send (the one
+            // `MenuModel` names), so the menu and the pages take one path to
+            // the daemon and the mirror has one writer — the events that
+            // come back.
+            AppEvent::Menu(_) => Vec::new(),
         }
     }
 
@@ -619,7 +617,7 @@ impl HostState {
         // A snapshot that closes a resync while the socket was up is not a
         // reconnection and must not claim to be one.
         let reconnected = self.seen && !self.connected;
-        self.mirror = snapshot;
+        self.mirror = without_sessions(snapshot);
         self.connected = true;
         self.resyncing = false;
         self.backoff.reset();
@@ -642,14 +640,14 @@ impl HostState {
         if snapshot.rev < self.mirror.rev {
             return if self.resyncing { vec![HostEffect::StateGet] } else { Vec::new() };
         }
-        self.mirror = snapshot;
+        self.mirror = without_sessions(snapshot);
         self.resyncing = false;
         Vec::new()
     }
 
     /// The connection ended or an attempt failed. The last mirror is kept —
-    /// greyed, not thrown away: a roster from two seconds ago is worth more
-    /// to the operator than an empty window.
+    /// greyed, not thrown away: the deck as it was two seconds ago is worth
+    /// more to the owner than an empty window.
     fn on_disconnected(&mut self) -> Vec<HostEffect> {
         self.connected = false;
         vec![HostEffect::Reconnect(self.backoff.wait())]
@@ -694,187 +692,6 @@ impl HostState {
     fn fold(&mut self, event: &deck_model::Event) -> Vec<HostEffect> {
         let data = &event.data;
         match event.kind {
-            EventKind::AgentAdded => {
-                if let Ok(agent) = serde_json::from_value::<Agent>(data["agent"].clone()) {
-                    self.mirror.agents.insert(agent.id.clone(), agent);
-                }
-            }
-            EventKind::AgentChanged => {
-                // `changed` carries only the fields that changed (§4.12), so
-                // the merge goes through JSON: the daemon's own field names
-                // are the contract and this crate does not restate them.
-                if let (Some(id), Some(fields)) = (agent_of(data), data.get("fields")) {
-                    if let Some(agent) = self.mirror.agents.get_mut(&id) {
-                        merge_fields(agent, fields);
-                    }
-                }
-            }
-            EventKind::AgentRemoved => {
-                if let Some(id) = agent_of(data) {
-                    self.mirror.agents.remove(&id);
-                    self.orders.remove(&id);
-                    if self.mirror.focus.agent.as_ref() == Some(&id) {
-                        self.mirror.focus = Focus::default();
-                    }
-                }
-            }
-            EventKind::AgentSlot => {
-                if let Some(agent) = agent_of(data).and_then(|id| self.mirror.agents.get_mut(&id)) {
-                    agent.slot = data
-                        .get("slot")
-                        .and_then(Value::as_u64)
-                        .and_then(|s| u8::try_from(s).ok())
-                        .map(Slot);
-                }
-            }
-            EventKind::CardSet => {
-                if let Some(id) = agent_of(data) {
-                    if let Ok(card) = serde_json::from_value::<Card>(data["card"].clone()) {
-                        if let Some(agent) = self.mirror.agents.get_mut(&id) {
-                            agent.card = Some(card);
-                        }
-                    }
-                }
-            }
-            EventKind::CardAnswered => {
-                let choice = data
-                    .get("choice")
-                    .and_then(Value::as_u64)
-                    .and_then(|c| u8::try_from(c).ok());
-                let text = string_of(data, "text");
-                self.with_card(data, |card| {
-                    card.status = CardStatus::Answering { choice, text };
-                });
-            }
-            EventKind::CardDelivered => {
-                self.with_card(data, |card| card.status = CardStatus::Delivered);
-            }
-            EventKind::CardFailed => {
-                let reason = string_of(data, "reason").unwrap_or_default();
-                self.with_card(data, |card| card.status = CardStatus::Failed { reason });
-            }
-            EventKind::CardSnoozed => {
-                self.with_card(data, |card| card.status = CardStatus::Snoozed);
-            }
-            EventKind::CardDegraded => {
-                // The same id re-pushed as a `⌨ Focus terminal` card (§4.8);
-                // `deliver:"none"` is the neutralised, informational case.
-                let none = data.get("deliver").and_then(Value::as_str) == Some("none");
-                self.with_card(data, |card| {
-                    if none {
-                        card.deliver = deck_model::Deliver::None;
-                        card.choices.clear();
-                        card.rec = None;
-                    } else {
-                        card.status = CardStatus::Degraded { focused_at: None };
-                        card.deliver = deck_model::Deliver::Focus;
-                        card.expires = None;
-                    }
-                });
-            }
-            EventKind::CardFocused => {
-                // A degraded card is kept with its "focused at" until the
-                // hook flow ends; anything else is cleared by the
-                // `card.cleared` that follows this event.
-                let at = event.ts;
-                self.with_card(data, |card| {
-                    if matches!(card.status, CardStatus::Degraded { .. }) {
-                        card.status = CardStatus::Degraded {
-                            focused_at: Some(at),
-                        };
-                    }
-                });
-            }
-            EventKind::CardAcked => {
-                self.with_card(data, |card| card.status = CardStatus::Cleared);
-            }
-            EventKind::CardExpired | EventKind::CardCleared => {
-                if let Some(id) = agent_of(data) {
-                    let card = card_of(data);
-                    if let Some(agent) = self.mirror.agents.get_mut(&id) {
-                        if agent.card.as_ref().is_some_and(|c| Some(c.id) == card) {
-                            agent.card = None;
-                        }
-                    }
-                }
-            }
-            EventKind::ReplySet => {
-                if let Some(agent) = agent_of(data).and_then(|id| self.mirror.agents.get_mut(&id)) {
-                    let meta = data.get("message").and_then(|v| serde_json::from_value::<deck_model::MessageMeta>(v.clone()).ok());
-                    if let (Some(message), Some(text)) = (&meta, string_of(data, "text")) {
-                        deck_model::workflow::observe(agent, message);
-                        let entry = deck_model::ChatMessage { message: message.clone(), text: deck_model::sanitize::cut(&text, 64 * 1024), at: event.ts };
-                        if let Some(old) = agent.messages.iter_mut().find(|m| m.message.id == message.id) { *old = entry; }
-                        else { agent.messages.push(entry); }
-                        while agent.messages.len() > 64 || agent.messages.iter().map(|m| m.text.len()).sum::<usize>() > 512 * 1024 { agent.messages.remove(0); }
-                    }
-                    if meta.as_ref().is_none_or(|m| m.role == deck_model::ChatRole::Assistant && !m.streaming) {
-                    agent.reply = Some(deck_model::Reply {
-                        text: string_of(data, "text"),
-                        at: event.ts,
-                        announce: string_of(data, "announce"),
-                        redacted: data.get("text").is_some_and(Value::is_null),
-                    });
-                    }
-                }
-            }
-            EventKind::OrderDispatched => {
-                let entry = OrderEntry {
-                    text: string_of(data, "text"),
-                    via: string_of(data, "via"),
-                    reason: None,
-                    at: event.ts,
-                };
-                if let Some(id) = agent_of(data) {
-                    self.push_order(id, entry);
-                }
-            }
-            EventKind::OrderFailed => {
-                let reason = string_of(data, "reason").unwrap_or_else(|| "failed".into());
-                if let Some(id) = agent_of(data) {
-                    let history = self.orders.entry(id).or_default();
-                    match history.last_mut() {
-                        // The text was in the `order.dispatched` before this.
-                        Some(last) if last.reason.is_none() => {
-                            last.reason = Some(reason.clone());
-                        }
-                        // Refused before it was ever dispatched (`dialog_open`,
-                        // `not_foreground`): there is no text to keep.
-                        _ => history.push(OrderEntry {
-                            text: None,
-                            via: None,
-                            reason: Some(reason.clone()),
-                            at: event.ts,
-                        }),
-                    }
-                    let len = history.len();
-                    if len > ORDER_HISTORY {
-                        history.drain(..len - ORDER_HISTORY);
-                    }
-                }
-                return vec![HostEffect::Toast(self.ui_language().format("Order not delivered: {0}", &[&reason]))];
-            }
-            EventKind::OpConfirmRequested => {
-                return vec![
-                    HostEffect::ShowWindow,
-                    HostEffect::RaisePermissionSheet(SheetKind::Confirm(ConfirmRequest {
-                        agent: agent_of(data),
-                        card: card_of(data),
-                        order: string_of(data, "order"),
-                        principal: string_of(data, "principal")
-                            .and_then(|p| p.parse::<Principal>().ok()),
-                    })),
-                ];
-            }
-            EventKind::TranscriptPartial | EventKind::TranscriptFinal => {
-                self.transcript = Some(Transcript {
-                    agent: agent_of(data),
-                    utterance: string_of(data, "utterance").unwrap_or_default(),
-                    text: string_of(data, "text").unwrap_or_default(),
-                    intent: string_of(data, "intent"),
-                    final_: event.kind == EventKind::TranscriptFinal,
-                });
-            }
             EventKind::VoiceLevel => {
                 // Per-buffer and opt-in on the bus (`api_client::subscribe`
                 // names it). It is folded and nothing else happens: a meter
@@ -928,9 +745,10 @@ impl HostState {
             EventKind::PermChanged => return self.fold_permissions(data),
             EventKind::DeviceLink => {
                 let device = &mut self.mirror.device;
-                if let Ok(link) =
+                let link =
                     serde_json::from_value::<Link>(data.get("link").cloned().unwrap_or(Value::Null))
-                {
+                        .ok();
+                if let Some(link) = link {
                     device.link = link;
                 }
                 if let Ok(session) = serde_json::from_value::<SessionState>(
@@ -949,6 +767,34 @@ impl HostState {
                 }
                 if let Some(online) = data.get("host_online").and_then(Value::as_bool) {
                     device.host_online = online;
+                }
+                // A link that went down: the store emits this event and only
+                // then clears what described the deck on it, the firmware
+                // this event still carries included (`Store::on_link`). The
+                // same clear here, so the mirror agrees with the next
+                // snapshot instead of naming a deck that has gone.
+                if link == Some(Link::Offline) {
+                    device.fw = None;
+                    device.face = None;
+                    device.language_supported = false;
+                    device.transport = None;
+                    device.battery = None;
+                    device.charging = None;
+                    device.board = None;
+                }
+            }
+            EventKind::DeviceStatus => {
+                // The six travel together, every time, so they are replaced
+                // together or not at all: a status that does not read whole
+                // is not applied in half.
+                if let Some(status) = DeviceStatus::parse(data) {
+                    let device = &mut self.mirror.device;
+                    device.transport = status.transport;
+                    device.battery = status.battery;
+                    device.charging = status.charging;
+                    device.board = status.board;
+                    device.last = status.last;
+                    device.drops = status.drops;
                 }
             }
             EventKind::DeviceSession => {
@@ -975,6 +821,14 @@ impl HostState {
                     self.mirror.faces = list;
                 }
             }
+            EventKind::DeviceMacros => {
+                // One face's keys, whole, as the snapshot now holds them:
+                // replaced, never merged, so a slot the deck emptied is gone
+                // here too.
+                if let Some((f, layout)) = macros_of(data) {
+                    self.mirror.macros.insert(f, layout);
+                }
+            }
             EventKind::DeviceSet => {
                 let key =
                     serde_json::from_value::<SetKey>(data.get("k").cloned().unwrap_or(Value::Null));
@@ -993,19 +847,6 @@ impl HostState {
                     }
                 }
             }
-            EventKind::FocusChanged => {
-                self.mirror.focus = Focus {
-                    agent: agent_of(data),
-                    seq: data
-                        .get("seq")
-                        .and_then(Value::as_u64)
-                        .and_then(|s| u16::try_from(s).ok()),
-                    source: serde_json::from_value::<FocusSource>(
-                        data.get("source").cloned().unwrap_or(Value::Null),
-                    )
-                    .ok(),
-                };
-            }
             EventKind::UsageUpdated => {
                 if let Ok(usage) = serde_json::from_value::<Usage>(
                     data.get("usage").cloned().unwrap_or(Value::Null),
@@ -1015,14 +856,18 @@ impl HostState {
             }
             EventKind::ServiceDegraded => return self.fold_degraded(data),
             EventKind::ServiceShutdown => {
-                self.mirror.service.degraded = Some("shutdown".into());
+                self.mirror.service.degraded = Some(SHUTTING_DOWN.into());
                 return vec![HostEffect::Toast(self.ui_language().text("The service is shutting down").into())];
             }
-            // Owner-only events (the GUI owns no agent), opt-in device edges,
-            // the raw hook stream, and the kinds whose whole content is
-            // already in the objects above. They advance `rev` and change
-            // nothing here — which is why the rev check runs before the fold
-            // and not inside it.
+            // Never a session: an agent and its slot, card, reply and chat,
+            // an order and its failure, a confirmation, the focus on an
+            // agent and the dictation addressed to one are not this window's
+            // to hold, so nothing of them is folded and nothing is raised.
+            // With them, the owner-only events (the GUI owns no agent),
+            // opt-in device edges, the raw hook stream, and the kinds whose
+            // whole content is already in the objects above. They all advance
+            // `rev` and change nothing here — which is why the rev check runs
+            // before the fold and not inside it.
             _ => {}
         }
         Vec::new()
@@ -1032,6 +877,9 @@ impl HostState {
     /// `live`, the event's own `ts` gives `since`, and the rest is in the
     /// data. `finalizing`/`aborted`/`ended` close the session, exactly where
     /// the store's own `finish_listen`/`abort_live` take it.
+    ///
+    /// Whom the press is for — the agent, its card, the caller's session —
+    /// is a session's, and is not kept ([`without_sessions`]).
     fn fold_voice_state(&mut self, event: &deck_model::Event) {
         let data = &event.data;
         let state = data.get("state").and_then(Value::as_str).unwrap_or("");
@@ -1042,16 +890,13 @@ impl HostState {
                 );
                 let Ok(ctx) = ctx else { return };
                 self.mirror.voice.ptt = Some(deck_model::PttInfo {
-                    agent: agent_of(data),
+                    agent: None,
                     ctx,
-                    card: card_of(data),
+                    card: None,
                     principal: string_of(data, "principal")
                         .and_then(|p| p.parse().ok())
                         .unwrap_or(Principal::Device),
-                    session: serde_json::from_value(
-                        data.get("session").cloned().unwrap_or(Value::Null),
-                    )
-                    .unwrap_or(None),
+                    session: None,
                     utterance: string_of(data, "utterance").unwrap_or_default(),
                     live: state == "listening",
                     since: event.ts, device_press: None,
@@ -1060,9 +905,6 @@ impl HostState {
             }
             "finalizing" | "aborted" | "ended" => {
                 self.mirror.voice.ptt = None;
-                if state != "finalizing" {
-                    self.transcript = None;
-                }
                 // The meter has nothing to meter once the capture is over.
                 // Leaving the last buffer's RMS on screen would draw a live
                 // level for a microphone that is shut.
@@ -1074,11 +916,16 @@ impl HostState {
         }
     }
 
-    /// `perm.changed{microphone, speech, bluetooth}` (§7.8). A permission
-    /// that has not been asked for yet is a sheet; one that was *denied*
-    /// cannot be asked again, so the only honest offer is System Settings.
-    /// Bluetooth has no sheet: macOS asks by itself when the service's BLE
-    /// link first starts, so there is nothing for a sheet to do.
+    /// `perm.changed{microphone, speech, bluetooth}` (§7.8). All three are
+    /// folded; the one effect is a sheet for speech recognition that has
+    /// not been asked for yet.
+    ///
+    /// The microphone raises nothing: the Mac's microphone is no longer a
+    /// voice path of this app (owner decision 11). Bluetooth has no sheet:
+    /// macOS asks by itself when the service's BLE link first starts. And a
+    /// denial opens nothing by itself: System Settings is where it is
+    /// lifted, and the Voice page's **Open Settings** goes there when the
+    /// owner presses it, never unasked.
     fn fold_permissions(&mut self, data: &Value) -> Vec<HostEffect> {
         let read = |key: &str| {
             serde_json::from_value::<Permission>(data.get(key).cloned().unwrap_or(Value::Null)).ok()
@@ -1095,34 +942,11 @@ impl HostState {
             after.bluetooth = p;
         }
         self.mirror.voice.permissions = after;
-        let mut out = Vec::new();
-        for (was, now, sheet, url) in [
-            (
-                before.microphone,
-                after.microphone,
-                Some(SheetKind::Microphone),
-                MICROPHONE_SETTINGS,
-            ),
-            (
-                before.speech,
-                after.speech,
-                Some(SheetKind::Speech),
-                SPEECH_SETTINGS,
-            ),
-            (before.bluetooth, after.bluetooth, None, BLUETOOTH_SETTINGS),
-        ] {
-            if was == now {
-                continue;
-            }
-            match (now, sheet) {
-                (Permission::NotDetermined, Some(sheet)) => {
-                    out.push(HostEffect::RaisePermissionSheet(sheet));
-                }
-                (Permission::Denied, _) => out.push(HostEffect::OpenUrl(url.to_string())),
-                _ => {}
-            }
+        if before.speech != after.speech && after.speech == Permission::NotDetermined {
+            vec![HostEffect::RaisePermissionSheet(SheetKind::Speech)]
+        } else {
+            Vec::new()
         }
-        out
     }
 
     /// `service.degraded{reason, port, listener}` (§4.1). The toast is
@@ -1147,11 +971,12 @@ impl HostState {
         let Some(reason) = reason else {
             return vec![HostEffect::Toast(self.ui_language().text("The service recovered").into())];
         };
-        // §4.1: the installed Claude http hooks keep POSTing prompts, tool
-        // inputs and the `hooks` bearer token to whoever holds the port, and
-        // each held prompt blocks Claude for its timeout. That is worth the
-        // operator's attention by name.
-        if reason == "hooks_hijack_risk" {
+        // §4.1's two port words: another program holds the TCP door's port,
+        // or holds it and answers on it. Either way the local API is closed
+        // until the service gets its port back, and that is all: the deck,
+        // the plugin's hooks and the connected apps are on the socket. Who
+        // holds it is said by name when the service could tell.
+        if crate::admin::port_clash(&reason) {
             let who = self
                 .mirror
                 .service
@@ -1161,56 +986,32 @@ impl HostState {
                 .unwrap_or_else(|| self.ui_language().text("another process").into());
             let port = self.mirror.service.port;
             return vec![HostEffect::Toast(self.ui_language().format(
-                "Port {0} is held by {1}; Claude hooks may stall", &[&port.to_string(), &who]
+                "Port {0} is held by {1}, so the local API is closed until the port is free.",
+                &[&port.to_string(), &who],
             ))];
         }
         vec![HostEffect::Toast(self.ui_language().format("Service degraded: {0}", &[&reason]))]
     }
-
-    /// Run `f` on the named agent's current card, and only when the event's
-    /// `card` is that card: a lifecycle event for a card the agent has
-    /// already replaced belongs to nothing.
-    fn with_card(&mut self, data: &Value, f: impl FnOnce(&mut Card)) {
-        let Some(id) = agent_of(data) else { return };
-        let card = card_of(data);
-        let Some(agent) = self.mirror.agents.get_mut(&id) else {
-            return;
-        };
-        if let Some(current) = agent.card.as_mut() {
-            if Some(current.id) == card {
-                f(current);
-            }
-        }
-    }
-
-    fn push_order(&mut self, agent: AgentId, entry: OrderEntry) {
-        let history = self.orders.entry(agent).or_default();
-        history.push(entry);
-        let len = history.len();
-        if len > ORDER_HISTORY {
-            history.drain(..len - ORDER_HISTORY);
-        }
-    }
 }
 
-/// `data.agent` as an `AgentId` (`null` on the one `order.failed` that has
-/// no agent at all — `reason:"no_agent"`).
-fn agent_of(data: &Value) -> Option<AgentId> {
-    data.get("agent")
-        .and_then(Value::as_str)
-        .map(|id| AgentId(id.to_string()))
-}
-
-/// `data.card` as a `CardId`. `card.set` carries the whole card object, so
-/// this reads the nested `id` there too.
-fn card_of(data: &Value) -> Option<CardId> {
-    let card = data.get("card")?;
-    let id = if card.is_object() {
-        card.get("id")?.as_u64()?
-    } else {
-        card.as_u64()?
-    };
-    u16::try_from(id).ok().map(CardId)
+/// A snapshot as this window keeps it: the deck, its voice, the service and
+/// the settings, and never a session. The agents (with their cards, replies
+/// and chat) and the focus that names one of them are dropped on the way in,
+/// as every event about them is dropped by the fold, and so is whom a press
+/// or a spoken reply is for — the agent, its card, the caller's session —
+/// so nothing about a session is ever held here to be shown.
+fn without_sessions(mut snapshot: Snapshot) -> Snapshot {
+    snapshot.agents.clear();
+    snapshot.focus = Focus::default();
+    if let Some(ptt) = snapshot.voice.ptt.as_mut() {
+        ptt.agent = None;
+        ptt.card = None;
+        ptt.session = None;
+    }
+    if let Some(speaking) = snapshot.voice.speaking.as_mut() {
+        speaking.agent = None;
+    }
+    snapshot
 }
 
 /// A content string that may be present, absent, or `null` because the
@@ -1219,26 +1020,44 @@ fn string_of(data: &Value, key: &str) -> Option<String> {
     data.get(key).and_then(Value::as_str).map(str::to_string)
 }
 
-/// Merge an `agent.changed{fields}` object into an agent. The round trip
-/// through JSON is the point: the field names are the daemon's, and keys
-/// that are not `Agent` fields at all (`orphaned`, `reason`) are ignored by
-/// serde exactly as every other client ignores them.
-fn merge_fields(agent: &mut Agent, fields: &Value) {
-    let Some(fields) = fields.as_object() else {
-        return;
-    };
-    let Ok(mut value) = serde_json::to_value(&*agent) else {
-        return;
-    };
-    let Some(object) = value.as_object_mut() else {
-        return;
-    };
-    for (key, field) in fields {
-        object.insert(key.clone(), field.clone());
+/// `device.status` as the store emits it (`deck_model`'s `device_status`):
+/// all six keys every time, `null` for what is unknown and `[]` for no
+/// drops.
+struct DeviceStatus {
+    transport: Option<Transport>,
+    battery: Option<u8>,
+    charging: Option<bool>,
+    board: Option<String>,
+    last: Option<LastLinked>,
+    drops: Vec<LinkDrop>,
+}
+
+impl DeviceStatus {
+    /// `None` when a key is missing or does not read as the store's own
+    /// type: a newer service's word for a transport, say. The status is then
+    /// left as it was rather than half replaced.
+    fn parse(data: &Value) -> Option<DeviceStatus> {
+        let field = |key: &str| data.get(key).cloned();
+        Some(DeviceStatus {
+            transport: serde_json::from_value(field("transport")?).ok()?,
+            battery: serde_json::from_value(field("battery")?).ok()?,
+            charging: serde_json::from_value(field("charging")?).ok()?,
+            board: serde_json::from_value(field("board")?).ok()?,
+            last: serde_json::from_value(field("last")?).ok()?,
+            drops: serde_json::from_value(field("drops")?).ok()?,
+        })
     }
-    if let Ok(merged) = serde_json::from_value::<Agent>(value) {
-        *agent = merged;
-    }
+}
+
+/// `device.macros{f, src, keys}` as the face id and its layout. `None` when
+/// the face or the keys do not read, so a malformed event replaces nothing.
+fn macros_of(data: &Value) -> Option<(u8, MacroLayout)> {
+    let f = u8::try_from(data.get("f")?.as_u64()?).ok()?;
+    let src =
+        serde_json::from_value::<Option<String>>(data.get("src").cloned().unwrap_or(Value::Null))
+            .ok()?;
+    let keys = serde_json::from_value::<Vec<MacroKey>>(data.get("keys")?.clone()).ok()?;
+    Some((f, MacroLayout { src, keys }))
 }
 
 #[cfg(test)]
@@ -1256,28 +1075,19 @@ mod tests {
 
     #[test]
     fn a_ui_action_is_the_json_rpc_call_of_the_design() {
-        let agent = AgentId("ag_1".into());
-        let (method, params) = UiAction::Order {
-            agent: agent.clone(),
-            text: "run the smoke tests".into(),
+        // §4.10's `{k, v}`, the key going out as the wire word `SetKey`
+        // serialises to.
+        let (method, params) = UiAction::DeviceSet {
+            key: SetKey::Announce,
+            value: 0,
         }
         .request();
-        assert_eq!(method, "op.order");
-        assert_eq!(params["source"], "gui");
-        assert_eq!(params["ctx"], "talk");
-        assert_eq!(params["text"], "run the smoke tests");
-        let (method, params) = UiAction::Answer {
-            agent,
-            card: CardId(17),
-            choice: Some(0),
-            text: None,
-        }
-        .request();
-        assert_eq!(method, "op.answer");
-        assert_eq!(params["card"], 17);
-        assert_eq!(params["choice"], 0);
-        assert_eq!(params["text"], Value::Null);
-        assert_eq!(UiAction::StateGet.request().0, "state.get");
+        assert_eq!(method, "device.set");
+        assert_eq!(params, serde_json::json!({"k": "announce", "v": 0}));
+        assert_eq!(
+            UiAction::StateGet.request(),
+            ("state.get", serde_json::json!({}))
+        );
     }
 
     #[test]
@@ -1380,6 +1190,182 @@ mod tests {
             Value::Null,
             "no filter is no level, never the string \"none\""
         );
+    }
+
+    /// The service builds the store's `Request` out of `{method, params}`
+    /// (`api::dispatch`), so a round trip through it proves the service
+    /// reads exactly the strip and the keys the page meant to send.
+    #[test]
+    fn the_strip_and_the_keys_go_out_as_the_requests_the_service_parses() {
+        use deck_model::{Binding, Request, Template};
+        let parsed = |action: &UiAction| {
+            let (method, params) = action.request();
+            let call = serde_json::json!({"method": method, "params": params});
+            serde_json::from_value::<Request>(call).unwrap_or_else(|e| panic!("{method}: {e}"))
+        };
+        let list = vec![
+            FaceEntry {
+                f: 1,
+                t: Template::Agents,
+                n: "Agents".into(),
+            },
+            FaceEntry {
+                f: 3,
+                t: Template::Macropad,
+                n: "Macropad".into(),
+            },
+            FaceEntry {
+                f: 5,
+                t: Template::Settings,
+                n: "Settings".into(),
+            },
+        ];
+        let faces = UiAction::DeviceFacesSet { list: list.clone() };
+        assert_eq!(faces.request().0, "device.faces.set");
+        assert_eq!(
+            faces.request().1["list"][1],
+            serde_json::json!({"f": 3, "t": "macropad", "n": "Macropad"})
+        );
+        assert_eq!(parsed(&faces), Request::DeviceFacesSet { list });
+
+        let keys = vec![
+            MacroKey {
+                label: "build".into(),
+                binding: Some(Binding::Left),
+                keys: Some("cmd+b".into()),
+            },
+            // An empty slot in the middle keeps the key after it in place.
+            MacroKey {
+                label: String::new(),
+                binding: None,
+                keys: None,
+            },
+            MacroKey {
+                label: "shot".into(),
+                binding: None,
+                keys: Some("cmd+shift+4".into()),
+            },
+        ];
+        let set = UiAction::DeviceMacroSet {
+            f: 3,
+            layout: "app".into(),
+            src: None,
+            keys: keys.clone(),
+        };
+        let (method, params) = set.request();
+        assert_eq!(method, "device.macro.set");
+        assert_eq!(
+            params,
+            serde_json::json!({"f": 3, "layout": "app", "src": null, "keys": [
+                {"label": "build", "binding": "left", "keys": "cmd+b"},
+                {"label": "", "binding": null},
+                {"label": "shot", "binding": null, "keys": "cmd+shift+4"}
+            ]})
+        );
+        assert_eq!(
+            parsed(&set),
+            Request::DeviceMacroSet {
+                f: 3,
+                layout: "app".into(),
+                src: None,
+                keys: keys.clone(),
+            }
+        );
+        // The deck's tag goes back as it was read.
+        let tagged = UiAction::DeviceMacroSet {
+            f: 3,
+            layout: "app".into(),
+            src: Some("deck.toml".into()),
+            keys: keys.clone(),
+        };
+        assert_eq!(tagged.request().1["src"], "deck.toml");
+        assert_eq!(
+            parsed(&tagged),
+            Request::DeviceMacroSet {
+                f: 3,
+                layout: "app".into(),
+                src: Some("deck.toml".into()),
+                keys,
+            }
+        );
+    }
+
+    #[test]
+    fn a_config_patch_moves_its_keys_in_one_call_and_a_list_goes_out_whole() {
+        let names = ConfigValue::List(vec!["codex".into(), "claude".into()]);
+        assert_eq!(names.json(), serde_json::json!(["codex", "claude"]));
+        assert_eq!(ConfigValue::List(Vec::new()).json(), serde_json::json!([]));
+        let (method, params) = UiAction::ConfigPatch {
+            entries: vec![
+                ("voice.stt.language".into(), ConfigValue::Text("en".into())),
+                ("voice.stt.locale".into(), ConfigValue::Text("en-GB".into())),
+                ("usage.providers".into(), names.clone()),
+                ("sources.apps_paused".into(), ConfigValue::List(Vec::new())),
+                ("voice.tts.model".into(), ConfigValue::Null),
+            ],
+        }
+        .request();
+        assert_eq!(method, "config.set");
+        assert_eq!(
+            params,
+            serde_json::json!({"patch": {
+                "voice.stt.language": "en",
+                "voice.stt.locale": "en-GB",
+                "usage.providers": ["codex", "claude"],
+                "sources.apps_paused": [],
+                "voice.tts.model": null
+            }})
+        );
+        // One map: a key named twice goes out once, with the later value.
+        let (_, twice) = UiAction::ConfigPatch {
+            entries: vec![
+                ("hooks.enabled".into(), ConfigValue::Bool(false)),
+                ("hooks.enabled".into(), ConfigValue::Bool(true)),
+            ],
+        }
+        .request();
+        assert_eq!(twice, serde_json::json!({"patch": {"hooks.enabled": true}}));
+        // A one-key `ConfigSet` with a list is the same shape.
+        assert_eq!(
+            UiAction::ConfigSet {
+                key: "usage.providers".into(),
+                value: names,
+            }
+            .request()
+            .1,
+            serde_json::json!({"patch": {"usage.providers": ["codex", "claude"]}})
+        );
+    }
+
+    #[test]
+    fn the_care_actions_are_the_methods_the_contract_names_and_carry_only_their_own_params() {
+        for (action, method, params) in [
+            (UiAction::SourcesList, "sources.list", serde_json::json!({})),
+            (UiAction::TestQuestion, "care.test.question", serde_json::json!({})),
+            (UiAction::TestVoice, "care.test.voice", serde_json::json!({})),
+            (UiAction::TestSay, "care.test.say", serde_json::json!({})),
+            (UiAction::TestStatus, "care.test.status", serde_json::json!({})),
+            (UiAction::CareChecks, "care.checks", serde_json::json!({})),
+            (UiAction::CareFootprint, "care.footprint", serde_json::json!({})),
+            // The two that write or delete are refused `{}` by the service,
+            // so they always name what they act on.
+            (
+                UiAction::CareSupportFile {
+                    to: "desktop".into(),
+                },
+                "care.support_file",
+                serde_json::json!({"to": "desktop"}),
+            ),
+            (
+                UiAction::CareCacheClear {
+                    what: "firmware".into(),
+                },
+                "care.cache.clear",
+                serde_json::json!({"what": "firmware"}),
+            ),
+        ] {
+            assert_eq!(action.request(), (method, params), "{action:?}");
+        }
     }
 
     #[test]

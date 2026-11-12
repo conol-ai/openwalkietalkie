@@ -298,6 +298,9 @@ pub enum CoreMsg {
     CloseSession(SessionId),
     /// Hot reload.
     Config(Arc<Config>),
+    /// What a care method answered on the blocking pool needs from the
+    /// core (`crate::care`): the daemon's own paths and how it was started.
+    CareContext(oneshot::Sender<crate::care::Context>),
     Shutdown,
 }
 
@@ -538,6 +541,14 @@ impl CoreHandle {
 
     pub async fn config(&self, config: Arc<Config>) {
         let _ = self.send(CoreMsg::Config(config)).await;
+    }
+
+    /// The core's side of a care method ([`crate::care::Context`]); the
+    /// door does the rest off the core thread.
+    pub async fn care_context(&self) -> Result<crate::care::Context, ApiError> {
+        let (tx, rx) = oneshot::channel();
+        self.send(CoreMsg::CareContext(tx)).await?;
+        rx.await.map_err(|_| unavailable())
     }
 
     /// Queued messages (metrics, tests).

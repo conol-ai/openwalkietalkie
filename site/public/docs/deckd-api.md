@@ -40,6 +40,7 @@ answers out of band. `params` links the type the request carries.
 | `device.get` | `observe` | core | — (not in the `Request` enum) |
 | `voice.get` | `observe` | core | — (not in the `Request` enum) |
 | `service.info` | `observe` | core | — (not in the `Request` enum) |
+| `sources.list` | `observe` | core | — (not in the `Request` enum) |
 | `agent.register` | `agent` | store | [`AgentRegister`](#agentregister) |
 | `agent.heartbeat` | `agent` | store | {agents: [`AgentId`](#agentid)[]} |
 | `agent.update` | `agent` | store | [`AgentUpdate`](#agentupdate) |
@@ -95,6 +96,14 @@ answers out of band. `params` links the type the request carries.
 | `integrations.install` | `admin` | core | — (not in the `Request` enum) |
 | `integrations.uninstall` | `admin` | core | — (not in the `Request` enum) |
 | `integrations.repair` | `admin` | core | — (not in the `Request` enum) |
+| `care.checks` | `admin` | core | — (not in the `Request` enum) |
+| `care.footprint` | `admin` | core | — (not in the `Request` enum) |
+| `care.support_file` | `admin` | core | — (not in the `Request` enum) |
+| `care.cache.clear` | `admin` | core | — (not in the `Request` enum) |
+| `care.test.question` | `admin` | core | — (not in the `Request` enum) |
+| `care.test.voice` | `admin` | core | — (not in the `Request` enum) |
+| `care.test.say` | `admin` | core | — (not in the `Request` enum) |
+| `care.test.status` | `admin` | core | — (not in the `Request` enum) |
 | `log.tail` | `admin` | core | — (not in the `Request` enum) |
 | `device.flood` | `admin` | core | — (not in the `Request` enum) |
 | `device.sync` | `admin` | core | — (not in the `Request` enum) |
@@ -131,6 +140,7 @@ sees depends on its scopes.
 | `device` | [`DeviceState`](#devicestate) | yes |  |  |
 | `faces` | [`FaceEntry`](#faceentry)[] | yes |  | The last adopted strip (restored on `boot:1`). |
 | `focus` | [`Focus`](#focus) | yes |  |  |
+| `macros` | object | no |  | Each Macropad face's keys, by face id; `device.macros` says every change. Absent while no face has any, so a reader that predates the field meets nothing new. |
 | `rev` | uint64 | yes |  | Increases only when something observable changed. |
 | `service` | [`ServiceState`](#servicestate) | yes |  |  |
 | `settings` | [`Settings`](#settings) | yes |  | Host-persisted settings (restored on `boot:1`). |
@@ -163,7 +173,7 @@ From the hid thread (§6.2, §6.3): what happened to the link.
 
 ## Types
 
-The 86 named types the schemas above refer to.
+The 90 named types the schemas above refer to.
 
 ### `ActivityStatus`
 
@@ -406,13 +416,18 @@ One of: `session`, `launcher`.
 
 | field | type | required | default | description |
 |---|---|---|---|---|
+| `battery` | uint8? | no |  | Charge in percent as the deck last reported it. `None` while unlinked and while the deck does not know, which it sends as 0. |
+| `board` | string? | no |  | The board as the deck names it (`Rev A`, `Rev B`, `LilyGo`). |
 | `boot` | boolean? | no |  |  |
+| `charging` | boolean? | no |  | Whether the cell is taking current, as the deck last reported it. |
+| `drops` | [`LinkDrop`](#linkdrop)[] | no |  | The link's recent drops, oldest first: at most 60, none more than an hour older than the newest. Not kept across a restart. |
 | `err_counts` | [`ErrCounts`](#errcounts) | yes |  |  |
 | `face` | uint8? | no |  | Unknown until the first `face` event. |
 | `faces` | [`FaceEntry`](#faceentry)[] | yes |  | The strip as the device reports it. |
 | `fw` | string? | no |  |  |
 | `host_online` | boolean | yes |  |  |
 | `language_supported` | boolean | no | `false` |  |
+| `last` | [`LastLinked`](#lastlinked)? | no |  | The last deck that went live here (the linked one, while it is linked); kept across restarts. |
 | `link` | [`Link`](#link) | yes |  |  |
 | `outbox_depth` | uint32 | yes |  |  |
 | `pace_ms` | uint16 | yes |  |  |
@@ -420,6 +435,7 @@ One of: `session`, `launcher`.
 | `sessions` | uint8? | no |  | The sessions the deck holds (its `hello`'s `agents`); `None` until a deck has said, and a deck that predates the field holds 8. |
 | `settings` | [`Settings`](#settings) | yes |  | The device's settings as last reported/pushed. |
 | `sid` | uint32 | yes |  | This daemon's session id (0 until `Store::new` is told one). |
+| `transport` | [`Transport`](#transport)? | no |  | The bus the linked deck is on; `None` while unlinked. |
 
 ### `ErrCounts`
 
@@ -435,7 +451,9 @@ One of: `session`, `launcher`.
 Event types of §4.12, serialized as their dotted names.
 
 - string
+- string — The deck's transport, battery, charging, board, last link or drops changed (`device.status`). Every event carries all six keys: null when unknown, `[]` for no drops.
 - string — The deck's own key editor changed a slot (`device.macro.edit`).
+- string — A Macropad face's keys changed, by `device.macro.set` or the deck's own editor (`device.macros`): `{f, src, keys}`, the whole layout as `snapshot.macros[f]` now holds it.
 
 
 ### `FaceEntry`
@@ -480,10 +498,30 @@ One of: `device`, `desktop`, `api`.
 One of: `claude`, `codex`, `gemini`, `other`, `conol`.
 
 
+### `LastLinked`
+
+The deck as it was the last time it was linked, kept in `state.json`: while the deck is away, even across a restart, the service can still say when it was last seen and what it ran.
+
+| field | type | required | default | description |
+|---|---|---|---|---|
+| `at` | [`Ts`](#ts) | yes |  | When the link went live while it is up; when it ended after that. |
+| `board` | string? | no |  |  |
+| `fw` | string? | no |  |  |
+| `transport` | [`Transport`](#transport)? | no |  |  |
+
 ### `Link`
 
 One of: `offline`, `connected`, `degraded`.
 
+
+### `LinkDrop`
+
+A link drop: when it happened, and the hid thread's reason (`read`, `write`, `write_stall`, `removed`, `misses`).
+
+| field | type | required | default | description |
+|---|---|---|---|---|
+| `at` | [`Ts`](#ts) | yes |  |  |
+| `why` | string | yes |  |  |
 
 ### `Listener`
 
@@ -501,6 +539,15 @@ Who holds the TCP port when the daemon could not take it (§4.1's `lsof -nP -iTC
 | `binding` | [`Binding`](#binding)? | no |  | A hardware control of the deck that presses this key; `None` = touch (and the keystroke, if any) only. |
 | `keys` | string? | no |  | The keystroke the daemon posts when the key is pressed: `cmd+shift+4` (`keystroke_valid`). `None` = an event only. |
 | `label` | string | yes |  |  |
+
+### `MacroLayout`
+
+A Macropad face's keys as the host holds them, set by `device.macro.set` or by the deck's own editor, and kept in `state.json` so a restart brings them back. The deck reports single edits and never a whole set, so this is the only full copy there is.
+
+| field | type | required | default | description |
+|---|---|---|---|---|
+| `keys` | [`MacroKey`](#macrokey)[] | yes |  | Slot 0 first, at most nine. An empty label is an empty slot, which keeps the keys after it in their places. |
+| `src` | string? | no |  | The tag the deck shows in the Macropad's header, as last given; `None` when none was. |
 
 ### `MessageMeta`
 
@@ -839,6 +886,13 @@ Who may turn a press's audio into text (`caps.transcribe`).
 
 - string — The owner receives `agent.transcribe` for every utterance addressed to the agent and answers `agent.transcribe.result`.
 - string — The daemon's own recogniser only.
+
+
+### `Transport`
+
+How the deck is linked to this computer: the bus the hid thread opened it on.
+
+One of: `usb`, `bluetooth`.
 
 
 ### `Ts`

@@ -94,7 +94,7 @@ impl Peer {
         params
     }
 
-    async fn event(&mut self, rev: u64, kind: &str) {
+    async fn event(&mut self, rev: u64, kind: &str, data: Value) {
         self.write(json!({
             "jsonrpc": "2.0",
             "method": "event",
@@ -103,7 +103,7 @@ impl Peer {
                 "ts": "2026-09-18T19:42:03.120Z",
                 "type": kind,
                 "principal": "uid:501",
-                "data": {"reason": "released"},
+                "data": data,
             },
         }))
         .await;
@@ -129,10 +129,8 @@ async fn the_hello_asks_for_the_scopes_and_subscriptions_of_the_design() {
     let mut peer = Peer::accept(&listener).await;
     let params = peer.hello(1202, true).await;
     assert_eq!(params["client"]["name"], "OpenWalkieTalkie");
-    assert_eq!(
-        params["scopes"],
-        json!(["observe:content", "operate", "voice", "device", "admin"])
-    );
+    // Never a session: neither card text to read nor a card to answer.
+    assert_eq!(params["scopes"], json!(["voice", "device", "admin"]));
     assert_eq!(
         params["subscribe"],
         json!([
@@ -205,10 +203,10 @@ async fn a_call_is_drained_by_the_connection_task_and_answered_on_its_receiver()
     next(&rx).await;
 
     // `call` is synchronous: no await, no runtime, just a queue push.
-    let reply = client.call("op.focus", json!({"agent": "ag_1"}));
+    let reply = client.call("device.set", json!({"k": "announce", "v": 0}));
     let request = peer.read().await.expect("the call on the socket");
-    assert_eq!(request["method"], "op.focus");
-    assert_eq!(request["params"]["agent"], "ag_1");
+    assert_eq!(request["method"], "device.set");
+    assert_eq!(request["params"]["k"], "announce");
     peer.write(json!({"jsonrpc": "2.0", "id": request["id"], "result": {"rev": 8}}))
         .await;
     let answered = tokio::time::timeout(WAIT, reply)
@@ -218,18 +216,18 @@ async fn a_call_is_drained_by_the_connection_task_and_answered_on_its_receiver()
     assert_eq!(answered["rev"], 8);
 
     // A JSON-RPC error comes back as one, not as a disconnect.
-    let reply = client.call("op.order", json!({"agent": "ag_1", "text": "x"}));
+    let reply = client.call("care.support_file", json!({}));
     let request = peer.read().await.unwrap();
     peer.write(json!({
         "jsonrpc": "2.0", "id": request["id"],
-        "error": {"code": -32002, "message": "forbidden", "data": {"need": "trusted"}},
+        "error": {"code": -32602, "message": "invalid params", "data": {"field": "to"}},
     }))
     .await;
     let err = tokio::time::timeout(WAIT, reply)
         .await
         .unwrap()
         .unwrap_err();
-    assert_eq!(err.api_error().unwrap().code, -32002);
+    assert_eq!(err.api_error().unwrap().code, -32602);
 }
 
 #[tokio::test]
@@ -246,13 +244,14 @@ async fn events_from_the_daemon_reach_the_bus_and_fold_into_the_mirror() {
     state.handle_event(next(&rx).await);
     assert_eq!(state.mirror().rev, 10);
 
-    peer.event(11, "agent.removed").await;
+    peer.event(11, "device.face", json!({"f": 3})).await;
     let AppEvent::Api(ApiEvent::Event(ref event)) = next(&rx).await else {
         panic!("an event notification reaches the bus as an AppEvent");
     };
-    assert_eq!(event.kind, EventKind::AgentRemoved);
+    assert_eq!(event.kind, EventKind::DeviceFace);
     state.handle_event(AppEvent::Api(ApiEvent::Event(event.clone())));
     assert_eq!(state.mirror().rev, 11);
+    assert_eq!(state.mirror().device.face, Some(3));
 
     // A `resync` notification is the same answer the reducer gives a gap.
     peer.write(json!({"jsonrpc": "2.0", "method": "resync", "params": {"rev": 40}}))
@@ -274,7 +273,7 @@ async fn killing_the_daemon_posts_disconnected_and_the_client_hellos_again_with_
 
     let mut peer = Peer::accept(&listener).await;
     peer.hello(10, true).await;
-    peer.event(11, "agent.removed").await;
+    peer.event(11, "device.face", json!({"f": 3})).await;
     let mut state = HostState::new(client);
     state.handle_event(next(&rx).await);
     state.handle_event(next(&rx).await);
@@ -355,9 +354,9 @@ async fn a_call_made_while_the_daemon_is_down_fails_instead_of_queueing() {
     ));
     assert!(!client.connected());
 
-    // A click now must not fire minutes later at whatever the roster has
+    // A click now must not fire minutes later at whatever the deck has
     // become by then.
-    let reply = client.call("op.answer", json!({"agent": "ag_1", "card": 17}));
+    let reply = client.call("device.set", json!({"k": "announce", "v": 0}));
     let err = tokio::time::timeout(WAIT, reply)
         .await
         .expect("a refusal within 5 s")

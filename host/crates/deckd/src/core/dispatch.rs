@@ -20,7 +20,9 @@ use super::{event_agent, wall_now, Core};
 use crate::config::{self, Config, HOT_KEYS};
 use crate::hid::HidDebug;
 use crate::tokens::{self, Tokens};
-use deck_model::{redact_event, redact_for, AgentId, ApiError, EventKind, Listener, Scope, Ts};
+use deck_model::{
+    redact_event, redact_for, AgentId, ApiError, EventKind, Listener, Permission, Scope, Ts,
+};
 use std::time::Instant;
 
 /// What this build can actually do (`/v1/info.capabilities`,
@@ -56,8 +58,12 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// names its own blind spots, rather than a confident value that is a
 /// guess.
 pub const PERM_LIMITS: &[&str] = &[
-    "microphone and speech are what the audio side last reported; with no engine in this \
-     build they stay `unknown` and that is not the same as `not_determined`",
+    "microphone is what the audio side last reported; with no engine in this build it stays \
+     `unknown` and that is not the same as `not_determined`",
+    "speech is macOS's own answer (SFSpeechRecognizer.authorizationStatus), read when this is \
+     asked while the daemon has an audio engine, whose Apple recogniser is what needs it; a \
+     read never asks for the grant. With no engine it is what the audio side last reported, \
+     `unknown` like the microphone",
     "bluetooth is CoreBluetooth's authorization for this process as the BLE voice link last \
      read it (`[voice] transport = \"ble\"`, where the deck's microphone and speaker need it \
      instead of Microphone); `unknown` on the CoreAudio transport and until the link has \
@@ -130,10 +136,29 @@ pub const LOG_TAIL_MAX: usize = 5_000;
 /// What is here is what week 6 has a caller for: the Service screen's port,
 /// the tray's "Pause hooks", and the `[voice]` preferences the Voice screen
 /// shows. The `[voice]` keys are spelled out rather than taken as
-/// `voice.*` for the same fail-closed reason.
+/// `voice.*` for the same fail-closed reason. The companion app's
+/// Integrations page added the source switches: `[sources]` and the Codex
+/// switch, `codex.daemon` (its `daemon_socket` stays the operator's).
+/// `sources.claude_channels` among them is an opt-in rather than a pause:
+/// it decides whether the Claude plugin carries the channel helper and the
+/// channel door serves it, both local, and Claude still asks each session
+/// to opt in to channels itself. Its
+/// Service page added the Local API switch, `api.tcp`: whether the TCP door
+/// is bound at all, and a door that answers only the bearer tokens
+/// `tokens.toml` holds grants nobody anything by being open. Its Usage
+/// panel added `usage.providers`, whose Claude switch says where it is
+/// offered that it reads the Claude Code login (the rule
+/// `voice.tts.api_key` joined under).
 pub const MANAGED: &[&str] = &[
     "api.port",
+    "api.tcp",
+    "codex.daemon",
     "hooks.enabled",
+    "sources.apps_paused",
+    "sources.claude",
+    "sources.claude_channels",
+    "sources.paused",
+    "usage.providers",
     "voice.announce_questions",
     "voice.commands",
     "voice.device_uid",
@@ -180,6 +205,25 @@ pub const NO_ENGINE: &str =
     "this daemon has no audio engine: `--no-device`, a build without one, or the moment before \
      the engines' first report reaches the core. `voice.engines` answers from that report and \
      never asks the run loop, so there is nothing to wait for here";
+
+/// `perm.status`'s `speech`. While this daemon has an audio engine (its
+/// report has landed), whose Apple recogniser is what needs the grant, it is
+/// the OS's answer, `read` when asked (`crate::audio::speech_authorization`,
+/// which never prompts). Without an engine — `--no-device`, a build with
+/// none, the moment before its report — nothing is read and it is what the
+/// audio side last `reported`, and so it is on a system with no answer to
+/// read. The read changes no state: the snapshot's `voice.permissions` stays
+/// the audio side's report.
+fn speech_grant(
+    reported: Permission,
+    engine: bool,
+    read: impl FnOnce() -> Option<Permission>,
+) -> Permission {
+    if !engine {
+        return reported;
+    }
+    read().unwrap_or(reported)
+}
 
 /// The one `-32013` both voice reads answer with.
 fn no_engine() -> ApiError {
@@ -305,6 +349,15 @@ impl Core {
                 self.nudge_metric();
                 Reply::ok(self.service_info(now))
             }
+            // Counts, times and switches per source, never a session
+            // (`care::sources`); `{}` is all it takes.
+            "sources.list" => Reply::ok(self.sources_list()),
+            // The test agent (`care::test`): a card on the deck from the
+            // daemon's own care session, a spoken sample, and how the last
+            // test of each kind went.
+            "care.test.question" | "care.test.voice" | "care.test.say" | "care.test.status" => {
+                self.care_test(&ctx, method, &params, now)
+            }
             "metrics.get" => {
                 self.refresh_metric(now);
                 match serde_json::to_value(self.metric) {
@@ -384,8 +437,8 @@ impl Core {
                 self.write_status(now);
                 Reply::ok(serde_json::json!({"rev": self.store.snapshot().rev}))
             }
-            "config.get" => Reply::ok(config_json(self.config())),
-            "config.set" => self.config_set(&params),
+            "config.get" => Reply::ok(self.config_get()),
+            "config.set" => self.config_set(&params, now),
             "config.reload" => self.config_reload(&ctx, now),
             "service.restart" | "service.stop" => {
                 let voice = &self.store.snapshot().voice;
@@ -404,7 +457,7 @@ impl Core {
             "voice.test" => self.voice_test(&params),
             "firmware.status" => Reply::ok(serde_json::to_value(self.firmware.status()).unwrap()),
             "firmware.check" | "firmware.install" => {
-                let cache = self.paths.caches.join("firmware");
+                let cache = self.paths.caches.join(crate::firmware::CACHE_DIR);
                 let result = if method == "firmware.check" {
                     self.firmware.check(cache, params.get("force").and_then(serde_json::Value::as_bool).unwrap_or(false))
                 } else {
@@ -476,6 +529,17 @@ impl Core {
         Reply::ok(serde_json::json!({"events": events, "gap": gap}))
     }
 
+    /// `config.get`: [`config_json`] of the config in force, with the one key
+    /// whose value is not the file's alone resolved. `sources.claude_channels`
+    /// left out of the file is whatever this daemon's Claude plugin carries
+    /// now ([`Core::channels_on`]), and a client is told that, never `null`:
+    /// it is what the Integrations page's switch shows.
+    fn config_get(&self) -> serde_json::Value {
+        let mut published = config_json(self.config());
+        published["sources"]["claude_channels"] = self.channels_on().into();
+        published
+    }
+
     /// `config.set{patch}` (§4.11, §9): the **managed** keys of `config.toml`,
     /// written together or not at all.
     ///
@@ -486,17 +550,22 @@ impl Core {
     /// default applies again: there is no TOML null to write, and "unset it"
     /// is what a control with a Default position has to be able to say.
     ///
-    /// It **writes the file and stops there**, on purpose. The running
-    /// daemon's config is applied by exactly one path — the notify watcher
-    /// of §3.7, which re-reads the whole file, validates it, swaps the
-    /// `ArcSwap` the doors read and sends `CoreMsg::Config` to the core —
-    /// and a method that also poked `set_config` would be a second path
-    /// with its own idea of what is in force. So the reply describes the
-    /// write (which keys move, which of them are hot) and the change lands
-    /// through the same `config.changed{keys}` an editor's save does, one
-    /// debounce later. A daemon started without a watcher
-    /// (`WatchHandle::watching() == false`) picks it up on the next
-    /// `config.reload` or restart, which is the same deal an edit gets.
+    /// **What the reply calls applied is in force when it is written.** Once
+    /// the file is on disk the core takes the config it just validated,
+    /// exactly as `config.reload` takes one ([`Core::take_config`]): the
+    /// pauses are worked out again and the Usage face is redrawn before the
+    /// answer goes. The pages that flip a switch read back at once
+    /// (`config.get`, `sources.list`); when the change landed only one
+    /// debounce later they read the old value, showed it, and built their
+    /// next write from it, undoing the one before. The notify watcher of
+    /// §3.7 still reads the file a debounce later: it swaps the `ArcSwap`
+    /// the doors read (the hook doors, the Codex client) and raises the
+    /// same `config.changed{keys}` an editor's save does, and the
+    /// `CoreMsg::Config` it sends is the config the core already holds,
+    /// which changes nothing. Both take the file, so there is still one
+    /// idea of what is in force. A daemon started without a watcher
+    /// (`WatchHandle::watching() == false`) has its doors keep the old
+    /// config until a restart, which is the deal an edit gets there.
     ///
     /// **A patch is all-or-nothing.** Every check below runs against the
     /// whole patch applied to one in-memory copy of the file, and the file
@@ -533,7 +602,7 @@ impl Core {
     /// watcher's debounce or an operator has edited by hand, and a `changed`
     /// computed from the in-force one would then name the other write's
     /// keys and refuse this one for moving them.
-    fn config_set(&self, params: &serde_json::Value) -> Reply {
+    fn config_set(&mut self, params: &serde_json::Value, now: Instant) -> Reply {
         let Some(patch) = params.get("patch").and_then(serde_json::Value::as_object) else {
             return Reply::err(ApiError::invalid_params(
                 "patch is required: {\"<dotted key>\": <value>}, the names config.get publishes \
@@ -650,11 +719,14 @@ impl Core {
             .iter()
             .cloned()
             .partition(|k| is_hot(k) && config::is_hot_change(k, &current, &next));
+        // In force before the reply says so; the watcher's reload of this
+        // same file is then the config the core already holds.
+        self.take_config(std::sync::Arc::new(next), now);
         let keys: Vec<&str> = patch.keys().map(String::as_str).collect();
         tracing::info!(
             keys = %keys.join(","),
             hot = hot.len(),
-            "config.toml written"
+            "config.toml written and applied"
         );
         Reply::ok(serde_json::json!({
             "keys": keys, "changed": changed, "applied": hot, "restart_needed": restart,
@@ -1100,7 +1172,8 @@ impl Core {
             .iter()
             .cloned()
             .partition(|k| is_hot(k) && config::is_hot_change(k, self.config(), &next));
-        self.set_config(std::sync::Arc::new(next));
+        // Pauses and the Usage face follow, as on the watcher's path.
+        self.take_config(std::sync::Arc::new(next), now);
         for key in &restart {
             tracing::info!(key = %key, "config: restart needed");
         }
@@ -1220,7 +1293,9 @@ impl Core {
     /// until a script has run, then `granted`, or `denied` after a -1743.
     /// `accessibility` is the same kind of answer from the Macropad keys:
     /// what the last keystroke (or `perm.request`) learned, `unknown`
-    /// until one has been pressed.
+    /// until one has been pressed. `speech` is macOS's own answer, read
+    /// here and now ([`speech_grant`]) once there is a recogniser to need
+    /// it; a read, so asking for the status never asks for the grant.
     fn perm_status(&self) -> serde_json::Value {
         let p = self.store.snapshot().voice.permissions;
         let learned = |granted: Option<bool>| match granted {
@@ -1228,9 +1303,14 @@ impl Core {
             Some(false) => "denied",
             None => "unknown",
         };
+        let speech = speech_grant(
+            p.speech,
+            self.engines().is_some(),
+            crate::audio::speech_authorization,
+        );
         serde_json::json!({
             "microphone": p.microphone,
-            "speech": p.speech,
+            "speech": speech,
             "bluetooth": p.bluetooth,
             "automation": {"ghostty": learned(self.automation_denied.map(|denied| !denied))},
             "accessibility": learned(self.accessibility_granted),
@@ -1314,14 +1394,9 @@ impl Core {
         // failed (`port_in_use`) or because a stranger answers on it
         // (`hooks_hijack_risk`) — the daemon does not hold it, and saying
         // it does would send a client (and Claude's hooks) to the squatter.
-        let port = if matches!(
-            degraded.as_deref(),
-            Some(crate::api::http::DEGRADED_PORT_IN_USE | crate::api::http::DEGRADED_HIJACK_RISK)
-        ) {
-            None
-        } else {
-            Some(snap.service.port)
-        };
+        // Nor does it hold one with no door bound at all (`[api] tcp =
+        // false`).
+        let port = crate::api::http::held_port(&snap.service);
         let mut info = serde_json::json!({
             "api": "1",
             "daemon": VERSION,
@@ -1495,6 +1570,12 @@ fn published_key_hint(key: &str) -> String {
 /// The effective config as JSON (`config.get`). `Config` is
 /// `Deserialize`-only (it is `config.rs`'s, owner B3), so the shape is
 /// written out here; every §9 key the daemon reads is present.
+///
+/// It is a function of the file alone, which is what `config.set` and
+/// `config.reload` compare: `sources.claude_channels` is the file's own
+/// value here, `null` when the file leaves it out. `config.get` publishes
+/// that key resolved (`Core::config_get`), because an unset switch follows
+/// the plugin on this machine.
 pub fn config_json(c: &Config) -> serde_json::Value {
     let macropad: serde_json::Map<String, serde_json::Value> = c
         .macropad
@@ -1534,6 +1615,7 @@ pub fn config_json(c: &Config) -> serde_json::Value {
             "uds_max_scope": c.api.uds_max_scope,
             "mailbox_ttl_s": c.api.mailbox_ttl_s,
             "max_held_hooks": c.api.max_held_hooks,
+            "tcp": c.api.tcp,
         },
         "trust": {
             "require_trusted_for_allow": c.trust.require_trusted_for_allow,
@@ -1559,6 +1641,12 @@ pub fn config_json(c: &Config) -> serde_json::Value {
             "claude.desk_presence": c.hooks.claude.desk_presence,
             "codex.hold_s": c.hooks.codex.hold_s,
             "gemini.permission": c.hooks.gemini.permission,
+        },
+        "sources": {
+            "paused": c.sources.paused,
+            "claude": c.sources.claude,
+            "claude_channels": c.sources.claude_channels,
+            "apps_paused": c.sources.apps_paused,
         },
         "cards": {
             "paging": c.cards.paging,
@@ -1605,6 +1693,7 @@ pub fn config_json(c: &Config) -> serde_json::Value {
             "hello_s": c.device.hello_s,
             "clock": c.device.clock,
             "usage_period": c.device.usage_period,
+            "status_poll_s": c.device.status_poll_s,
         },
         "macropad": macropad,
         "usage": {"providers": c.usage.providers},
@@ -2080,10 +2169,9 @@ mod tests {
     /// everything it cannot write cleanly — with the file untouched, which
     /// is the half a "validated" method usually gets wrong.
     ///
-    /// The applying is deliberately **not** here: §3.7's watcher is the one
-    /// path a config takes into the running daemon, and a method that also
-    /// poked `set_config` would be a second one. The end-to-end proof that
-    /// the write really does come back through it is
+    /// The applying is checked beside it
+    /// (`config_set_is_in_force_before_it_answers`), and the watcher's leg,
+    /// the doors' cell and `config.changed`, end to end in
     /// `tests/config_set.rs`.
     #[test]
     fn config_set_writes_a_patch_and_refuses_anything_it_cannot_write_cleanly() {
@@ -2374,6 +2462,458 @@ mod tests {
         std::fs::remove_dir_all(dir).unwrap();
     }
 
+    /// The Integrations page's switches are managed keys: `[sources]` and
+    /// the Codex switch go in one patch, every one of them hot, and
+    /// `config.get` reads them back; `null` puts one back to its default. A
+    /// key beside them that is not on the list — the Codex socket is the
+    /// operator's — is still refused, and so is a value the table cannot
+    /// hold, with the file untouched.
+    #[test]
+    fn config_set_writes_the_source_switches_and_still_refuses_an_unmanaged_key() {
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("dispatch-config-sources");
+        let t0 = Instant::now();
+        let path = c.paths.config.clone();
+        let set = |c: &mut Core, patch: serde_json::Value| {
+            c.call(
+                ctx(2, &[Scope::Admin]),
+                "config.set",
+                serde_json::json!({ "patch": patch }),
+                t0,
+            )
+            .result
+        };
+        let ok = set(
+            &mut c,
+            serde_json::json!({
+                "sources.paused": true,
+                "sources.claude": false,
+                "sources.apps_paused": ["Conol", "uid:501"],
+                "codex.daemon": false,
+            }),
+        )
+        .unwrap();
+        let all = serde_json::json!([
+            "codex.daemon",
+            "sources.apps_paused",
+            "sources.claude",
+            "sources.paused"
+        ]);
+        assert_eq!(ok["changed"], all);
+        assert_eq!(ok["applied"], all, "a pause that waited for a restart is none");
+        assert_eq!(ok["restart_needed"], serde_json::json!([]));
+        let written = Config::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert!(written.sources.paused && !written.sources.claude && !written.codex.daemon);
+        assert_eq!(written.sources.apps_paused, ["Conol", "uid:501"]);
+        assert_eq!(
+            config_json(&written)["sources"],
+            serde_json::json!({
+                "paused": true, "claude": false, "claude_channels": null,
+                "apps_paused": ["Conol", "uid:501"],
+            })
+        );
+        let ok = set(
+            &mut c,
+            serde_json::json!({"sources.paused": null, "sources.apps_paused": null}),
+        )
+        .unwrap();
+        assert_eq!(
+            ok["changed"],
+            serde_json::json!(["sources.apps_paused", "sources.paused"])
+        );
+        let back = Config::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert!(!back.sources.paused && back.sources.apps_paused.is_empty());
+        let before = std::fs::read_to_string(&path).unwrap();
+        for patch in [
+            serde_json::json!({"sources.claude_channels": "off"}),
+            serde_json::json!({"codex.daemon_socket": "/tmp/elsewhere.sock"}),
+            serde_json::json!({"sources.paused": false, "hooks.claude.tool_titles": true}),
+            serde_json::json!({"sources.apps_paused": "Conol"}),
+            serde_json::json!({"sources.paused": "yes"}),
+        ] {
+            let err = set(&mut c, patch.clone()).unwrap_err();
+            assert_eq!(err.code, ApiError::INVALID_PARAMS, "{patch}");
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), before, "{patch}");
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// D4: the Claude Channels switch through `config.set` and back through
+    /// `config.get`, which always publishes a bool: the file's value once it
+    /// sets one, and while it leaves the key out, whether this daemon's
+    /// plugin carries the helper. `null` takes the key out of the file again
+    /// and the plugin decides once more; a value that is not a bool is
+    /// refused with the file untouched.
+    #[test]
+    fn config_set_and_get_round_trip_the_claude_channels_switch() {
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("dispatch-config-channels");
+        let t0 = Instant::now();
+        let path = c.paths.config.clone();
+        let helper = crate::integrations::claude::mcp_json_in(&c.paths.data);
+        let admin = || ctx(2, &[Scope::Admin]);
+        let get = |c: &mut Core| {
+            let published = c
+                .call(admin(), "config.get", serde_json::json!({}), t0)
+                .result
+                .unwrap();
+            published["sources"]["claude_channels"].clone()
+        };
+        // `config.set` alone: what it writes is in force when it answers,
+        // so `get` reads it back with no reload in between.
+        let set = |c: &mut Core, value: serde_json::Value| {
+            let patch = serde_json::json!({"patch": {"sources.claude_channels": value}});
+            c.call(admin(), "config.set", patch, t0).result
+        };
+        assert_eq!(get(&mut c), false, "a new install: unset, and no helper");
+        std::fs::create_dir_all(helper.parent().unwrap()).unwrap();
+        std::fs::write(&helper, b"{}\n").unwrap();
+        assert_eq!(
+            get(&mut c),
+            true,
+            "an install from before the switch: its plugin has the helper"
+        );
+
+        let ok = set(&mut c, serde_json::json!(false)).unwrap();
+        assert_eq!(ok["changed"], serde_json::json!(["sources.claude_channels"]));
+        assert_eq!(
+            ok["applied"],
+            serde_json::json!(["sources.claude_channels"]),
+            "the door and the row follow it without a restart"
+        );
+        assert_eq!(ok["restart_needed"], serde_json::json!([]));
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("claude_channels = false"), "{text:?}");
+        assert_eq!(get(&mut c), false, "the switch over the plugin");
+        set(&mut c, serde_json::json!(true)).unwrap();
+        assert_eq!(get(&mut c), true);
+        std::fs::remove_file(&helper).unwrap();
+        assert_eq!(get(&mut c), true, "and before a repair has written one");
+
+        let ok = set(&mut c, serde_json::Value::Null).unwrap();
+        assert_eq!(ok["changed"], serde_json::json!(["sources.claude_channels"]));
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(!text.contains("claude_channels"), "the key is gone: {text:?}");
+        assert_eq!(get(&mut c), false, "unset again, and the plugin has none");
+
+        for value in [
+            serde_json::json!("on"),
+            serde_json::json!(1),
+            serde_json::json!([true]),
+        ] {
+            let err = set(&mut c, value.clone()).unwrap_err();
+            assert_eq!(err.code, ApiError::INVALID_PARAMS, "{value}");
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), text, "{value}");
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// D3: the Usage panel's switches are one managed, hot key, written as
+    /// the whole list (a `ConfigValue::List` on the app's side). Claude on
+    /// is the list with it, off the list without it, `[]` no bars at all and
+    /// `null` the default, Codex alone. Anything that is not a list of names
+    /// is refused with the file untouched.
+    #[test]
+    fn config_set_switches_the_usage_providers_on_and_off() {
+        use crate::usage::Provider;
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("dispatch-config-usage");
+        let t0 = Instant::now();
+        let path = c.paths.config.clone();
+        let set = |c: &mut Core, providers: serde_json::Value| {
+            c.call(
+                ctx(2, &[Scope::Admin]),
+                "config.set",
+                serde_json::json!({"patch": {"usage.providers": providers}}),
+                t0,
+            )
+            .result
+        };
+        let written = || Config::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let ok = set(&mut c, serde_json::json!(["codex", "claude"])).unwrap();
+        assert_eq!(ok["changed"], serde_json::json!(["usage.providers"]));
+        assert_eq!(
+            ok["applied"],
+            serde_json::json!(["usage.providers"]),
+            "the face redraws without a restart"
+        );
+        assert_eq!(ok["restart_needed"], serde_json::json!([]));
+        let on = written();
+        assert!(Provider::Claude.enabled(&on.usage) && Provider::Codex.enabled(&on.usage));
+        assert_eq!(
+            config_json(&on)["usage"]["providers"],
+            serde_json::json!(["codex", "claude"]),
+            "config.get reads the list back as written"
+        );
+        let ok = set(&mut c, serde_json::json!(["codex"])).unwrap();
+        assert_eq!(ok["changed"], serde_json::json!(["usage.providers"]));
+        assert!(!Provider::Claude.enabled(&written().usage));
+        set(&mut c, serde_json::json!([])).unwrap();
+        assert!(Provider::ALL.iter().all(|p| !p.enabled(&written().usage)));
+        let ok = set(&mut c, serde_json::Value::Null).unwrap();
+        assert_eq!(ok["changed"], serde_json::json!(["usage.providers"]));
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(!text.contains("providers"), "the key is gone: {text:?}");
+        assert_eq!(
+            written().usage.providers,
+            ["codex"],
+            "and the default is in force"
+        );
+        for providers in [
+            serde_json::json!("claude"),
+            serde_json::json!(["claude", null]),
+            serde_json::json!([1]),
+            serde_json::json!(true),
+        ] {
+            let err = set(&mut c, providers.clone()).unwrap_err();
+            assert_eq!(err.code, ApiError::INVALID_PARAMS, "{providers}");
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), text, "{providers}");
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// D3: `usage.providers` is hot on both paths a config takes in. The
+    /// watcher's `CoreMsg::Config` always redrew the face; `config.reload`
+    /// does too now, so the Claude windows the feeder still holds stop being
+    /// drawn the moment the list leaves Claude out, and Codex's stay.
+    #[test]
+    fn a_reload_that_leaves_claude_out_redraws_the_face_without_it() {
+        use crate::usage::{Provider, Window};
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("dispatch-usage-reload");
+        let t0 = Instant::now();
+        let reload = |c: &mut Core, text: &str| {
+            std::fs::write(&c.paths.config, text).unwrap();
+            c.call(
+                ctx(2, &[Scope::Admin]),
+                "config.reload",
+                serde_json::json!({}),
+                t0,
+            )
+            .result
+            .unwrap()
+        };
+        let drawn = |c: &Core| -> Vec<String> {
+            let usage = c.store.snapshot().usage.as_ref();
+            usage
+                .map(|u| u.items.iter().map(|i| i.name.clone()).collect())
+                .unwrap_or_default()
+        };
+        reload(&mut c, "[usage]\nproviders = [\"claude\", \"codex\"]\n");
+        let window = |label: &str| Window {
+            label: label.into(),
+            percent: 10,
+            resets_at: None,
+        };
+        c.usage.set(Provider::Claude, vec![window("session")], None);
+        c.usage.set(Provider::Codex, vec![window("week")], None);
+        c.push_usage(t0);
+        assert_eq!(drawn(&c), ["Claude session", "Codex week"]);
+        let reloaded = reload(&mut c, "[usage]\nproviders = [\"codex\"]\n");
+        assert_eq!(reloaded["applied"], serde_json::json!(["usage.providers"]));
+        assert_eq!(drawn(&c), ["Codex week"]);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// R3: what `config.set` reports applied is in force when it answers,
+    /// with no reload and no watcher in between. `config.get` reads the
+    /// switches back at once, and a Usage face drawn with Claude's windows
+    /// is redrawn without them by the call that leaves Claude out. The
+    /// reload a watcher makes of the same file afterwards has nothing left
+    /// to change. (The pauses' half is in `care::sources`.)
+    #[test]
+    fn config_set_is_in_force_before_it_answers() {
+        use crate::usage::{Provider, Window};
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("dispatch-config-in-force");
+        let t0 = Instant::now();
+        let admin = || ctx(2, &[Scope::Admin]);
+        let set = |c: &mut Core, patch: serde_json::Value| {
+            c.call(admin(), "config.set", serde_json::json!({ "patch": patch }), t0)
+                .result
+                .unwrap()
+        };
+        let get = |c: &mut Core| {
+            c.call(admin(), "config.get", serde_json::json!({}), t0)
+                .result
+                .unwrap()
+        };
+        let drawn = |c: &Core| -> Vec<String> {
+            let usage = c.store.snapshot().usage.as_ref();
+            usage
+                .map(|u| u.items.iter().map(|i| i.name.clone()).collect())
+                .unwrap_or_default()
+        };
+        let ok = set(
+            &mut c,
+            serde_json::json!({"sources.paused": true, "usage.providers": ["claude", "codex"]}),
+        );
+        assert_eq!(
+            ok["applied"],
+            serde_json::json!(["sources.paused", "usage.providers"])
+        );
+        let published = get(&mut c);
+        assert_eq!(published["sources"]["paused"], true);
+        assert_eq!(
+            published["usage"]["providers"],
+            serde_json::json!(["claude", "codex"])
+        );
+        let window = |label: &str| Window {
+            label: label.into(),
+            percent: 10,
+            resets_at: None,
+        };
+        c.usage.set(Provider::Claude, vec![window("session")], None);
+        c.usage.set(Provider::Codex, vec![window("week")], None);
+        c.push_usage(t0);
+        assert_eq!(drawn(&c), ["Claude session", "Codex week"]);
+        set(&mut c, serde_json::json!({"usage.providers": ["codex"]}));
+        assert_eq!(drawn(&c), ["Codex week"], "redrawn before the reply");
+        assert_eq!(get(&mut c)["usage"]["providers"], serde_json::json!(["codex"]));
+        set(&mut c, serde_json::json!({"sources.paused": null}));
+        assert_eq!(get(&mut c)["sources"]["paused"], false);
+        let reloaded = c
+            .call(admin(), "config.reload", serde_json::json!({}), t0)
+            .result
+            .unwrap();
+        assert_eq!(
+            reloaded["changed"],
+            serde_json::json!([]),
+            "the core already holds the file"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// D3: the Local API switch is managed and, like the port, read at
+    /// start: the reply names it under `restart_needed` instead of claiming
+    /// it was applied, and so does a reload that finds it moved by hand.
+    #[test]
+    fn config_set_writes_the_tcp_switch_for_the_next_start() {
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("dispatch-config-tcp");
+        let t0 = Instant::now();
+        let path = c.paths.config.clone();
+        let admin = || ctx(2, &[Scope::Admin]);
+        let ok = c
+            .call(
+                admin(),
+                "config.set",
+                serde_json::json!({"patch": {"api.tcp": false}}),
+                t0,
+            )
+            .result
+            .unwrap();
+        assert_eq!(ok["changed"], serde_json::json!(["api.tcp"]));
+        assert_eq!(ok["applied"], serde_json::json!([]));
+        assert_eq!(ok["restart_needed"], serde_json::json!(["api.tcp"]));
+        let written = Config::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert!(!written.api.tcp);
+        assert_eq!(config_json(&written)["api"]["tcp"], false);
+        // The operator switches it back by hand; the reload says the same.
+        std::fs::write(&path, "[api]\ntcp = true\n").unwrap();
+        let reloaded = c
+            .call(admin(), "config.reload", serde_json::json!({}), t0)
+            .result
+            .unwrap();
+        assert_eq!(reloaded["restart_needed"], serde_json::json!(["api.tcp"]));
+        let before = std::fs::read_to_string(&path).unwrap();
+        let err = c
+            .call(
+                admin(),
+                "config.set",
+                serde_json::json!({"patch": {"api.tcp": "off"}}),
+                t0,
+            )
+            .result
+            .unwrap_err();
+        assert_eq!(err.code, ApiError::INVALID_PARAMS);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), before);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// The JSON type of a value, for holding a reply to the app's fixture.
+    fn json_type(value: &serde_json::Value) -> &'static str {
+        match value {
+            serde_json::Value::Null => "null",
+            serde_json::Value::Bool(_) => "bool",
+            serde_json::Value::Number(_) => "number",
+            serde_json::Value::String(_) => "string",
+            serde_json::Value::Array(_) => "array",
+            serde_json::Value::Object(_) => "object",
+        }
+    }
+
+    /// B3.3 for D3's switches: `config.get`'s `api` table has every key of
+    /// the app's fixture (`GC/tests/fixtures/daemon/config_get_sources.json`)
+    /// with the same JSON type, `tcp` among them, and no key the fixture
+    /// lacks; the usage providers and the Mac microphone fallback have the
+    /// fixture's types; and all three are keys `config.set` writes.
+    #[test]
+    fn config_get_has_the_keys_of_the_apps_fixture_for_the_d3_switches() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../deck-gui-core/tests/fixtures/daemon/config_get_sources.json"
+        ))
+        .unwrap();
+        let published = config_json(&Config::default());
+        let want = fixture["api"].as_object().unwrap();
+        let got = published["api"].as_object().unwrap();
+        for (key, value) in want {
+            let mine = got.get(key).unwrap_or_else(|| panic!("api: no {key:?}"));
+            assert_eq!(
+                json_type(mine),
+                json_type(value),
+                "api.{key}: {mine} where {value}"
+            );
+        }
+        for key in got.keys() {
+            assert!(want.contains_key(key), "api: {key:?} is not in the fixture");
+        }
+        for key in ["api.tcp", "usage.providers", "voice.fallback_input"] {
+            let (mine, theirs) = (key_of(&published, key), key_of(&fixture, key));
+            assert_eq!(mine.map(json_type), theirs.map(json_type), "{key}");
+            assert!(
+                MANAGED.contains(&key),
+                "{key} is a switch config.set writes"
+            );
+        }
+        assert_eq!(published["api"]["tcp"], true);
+        assert_eq!(
+            published["usage"]["providers"],
+            serde_json::json!(["codex"])
+        );
+        assert_eq!(published["voice"]["fallback_input"], "none");
+    }
+
+    /// D3: with no TCP door there is no port to name. `api::serve` records
+    /// port 0 for `[api] tcp = false`, and `service.info` then says `null` —
+    /// not the configured 47201 and not 0 — while nothing is degraded, so no
+    /// `service.degraded` event is raised either.
+    #[test]
+    fn service_info_names_no_port_while_no_door_is_bound() {
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("dispatch-no-door");
+        let t0 = Instant::now();
+        assert_eq!(
+            c.service_info(t0)["port"],
+            47201,
+            "configured, not yet bound"
+        );
+        c.call(
+            ctx(2, &[Scope::Admin]),
+            "service.bound",
+            serde_json::json!({"port": 0, "degraded": null, "listener": null}),
+            t0,
+        )
+        .result
+        .unwrap();
+        let info = c.service_info(t0);
+        assert_eq!(info["port"], serde_json::Value::Null);
+        assert_eq!(info["degraded"], serde_json::Value::Null);
+        assert_eq!(c.bus.snapshot().service.port, 0, "the cell carries it");
+        c.publish();
+        assert!(
+            c.bus
+                .replay(0, 10, Some(&["service.*".to_string()]))
+                .0
+                .is_empty(),
+            "nothing degraded"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     /// `service.restart`/`service.stop`: the reply names the code, and the
     /// supervisor cannot see it yet.
     ///
@@ -2490,6 +3030,41 @@ mod tests {
         assert!(!c.store.is_finalizing());
         c.call(ctx(2, &[Scope::Admin]), "service.restart", serde_json::json!({"when_idle":true}), now).result.unwrap();
         assert_eq!(exit.requested(now + crate::service::Exit::GRACE), Some(crate::service::EXIT_RESTART));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// O16: a unit-test core never reaches out. These three used to open
+    /// whatever deck was on USB, fetch the release manifest and start the
+    /// default models' downloads whenever the API tests swept the method
+    /// table; each now answers from what it already has.
+    #[test]
+    fn a_test_core_answers_the_firmware_check_and_both_downloads_without_reaching_out() {
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("offline-guards");
+        let now = Instant::now();
+        let admin = ctx(2, &[Scope::Admin]);
+        let check = c
+            .call(admin.clone(), "firmware.check", serde_json::json!({"force": true}), now)
+            .result
+            .unwrap();
+        assert_eq!(check["phase"], "idle", "{check}");
+        assert!(check["device"].is_null() && check["release"].is_null(), "{check}");
+        let install = serde_json::json!({
+            "board": "hw-b", "serial": "X", "version": "9.9.9", "allow_bootloader_update": true,
+        });
+        let refused = c.call(admin.clone(), "firmware.install", install, now).result.unwrap_err();
+        assert_eq!(refused.data["why"], crate::firmware::NO_DEVICE);
+        for method in ["stt.install", "tts.install"] {
+            let status = c.call(admin.clone(), method, serde_json::json!({}), now).result.unwrap();
+            let download = &status["download"];
+            assert_eq!(download["running"], false, "{method}: {status}");
+            assert_eq!(download["done"], false, "{method}: {status}");
+            assert_eq!(download["error"], crate::download::OFFLINE, "{method}: {status}");
+        }
+        let status = c.call(admin, "firmware.status", serde_json::json!({}), now).result.unwrap();
+        assert_eq!(status["phase"], "idle", "{status}");
+        for what in ["firmware", "stt", "tts"] {
+            assert!(!dir.join("caches").join(what).exists(), "{what} was written");
+        }
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -2642,6 +3217,80 @@ mod tests {
             .unwrap_err();
         assert_eq!(err.code, ApiError::INVALID);
         assert_eq!(err.data["field"], "what");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// R2: `perm.status.speech` is the OS's answer, read when it is asked,
+    /// once there is an engine whose recogniser needs it; with no engine,
+    /// or no OS answer to read, it is what the audio side reported, and
+    /// with no engine nothing is read at all.
+    #[test]
+    fn the_speech_grant_is_read_only_when_a_recogniser_needs_it() {
+        let never = || -> Option<Permission> { panic!("read with no engine") };
+        for reported in [Permission::Unknown, Permission::Denied] {
+            assert_eq!(speech_grant(reported, false, never), reported);
+        }
+        assert_eq!(
+            speech_grant(Permission::Unknown, true, || Some(Permission::Granted)),
+            Permission::Granted
+        );
+        assert_eq!(
+            speech_grant(Permission::Denied, true, || Some(Permission::NotDetermined)),
+            Permission::NotDetermined,
+            "the OS's answer over a stale report"
+        );
+        assert_eq!(
+            speech_grant(Permission::Unknown, true, || None),
+            Permission::Unknown,
+            "no OS answer to read"
+        );
+    }
+
+    /// The same through the method: `unknown` with no engine (the snapshot's
+    /// value), then, with an engine up, macOS's own answer — never the
+    /// `unknown` of no answer — and still the report elsewhere. The read
+    /// moves nothing in the snapshot.
+    #[test]
+    fn perm_status_reads_the_speech_grant_once_an_engine_is_up() {
+        use crate::audio::traits::EngineInfo;
+        use crate::audio::{AudioHandle, FromAudio};
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("dispatch-perm-speech");
+        let t0 = Instant::now();
+        let speech = |c: &mut Core| {
+            c.call(ctx(2, &[Scope::Voice]), "perm.status", serde_json::json!({}), t0)
+                .result
+                .unwrap()["speech"]
+                .clone()
+        };
+        assert_eq!(speech(&mut c), "unknown", "no engine, nothing read");
+        let (audio, _cmds, _events) = AudioHandle::detached();
+        c.set_audio(audio);
+        let apple = || EngineInfo {
+            name: "apple".into(),
+            on_device: true,
+            locales: vec!["en-US".into()],
+        };
+        c.on_from_audio(
+            FromAudio::Engines {
+                stt: apple(),
+                tts: apple(),
+            },
+            t0,
+        );
+        let read = speech(&mut c);
+        if cfg!(target_os = "macos") {
+            assert!(
+                ["granted", "denied", "not_determined"].contains(&read.as_str().unwrap()),
+                "{read}"
+            );
+        } else {
+            assert_eq!(read, "unknown");
+        }
+        assert_eq!(
+            c.store.snapshot().voice.permissions.speech,
+            Permission::Unknown,
+            "a status read changes no state"
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

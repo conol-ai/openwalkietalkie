@@ -428,15 +428,22 @@ impl Info {
 /// origins and the scope ceiling a UDS peer may ask for.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ApiConfig {
+    /// The port `[api] port` names. `None` when it names none, and when it
+    /// names `0`: any free port, which the service picks when it starts and
+    /// which only `service.info` (the port it holds) can say. A real service
+    /// answers `0` whenever its config asks for any port (the gate's own
+    /// does), and a page that printed it would name a port nothing listens
+    /// on.
     pub port: Option<u16>,
     pub allowed_origins: Vec<String>,
     pub uds_default_scope: Option<String>,
     pub uds_max_scope: Option<String>,
     pub max_held_hooks: Option<u64>,
     /// `[hooks] enabled`, which is not `[api]` at all but comes out of the
-    /// same one call. The tray's **Pause hooks** tick is what needs it, and
-    /// a second `config.get` to read one boolean would be a second answer
-    /// that could disagree with this one.
+    /// same one call. The Integrations page's pause is what needs it (hooks
+    /// turned off are a paused source), and a second `config.get` to read
+    /// one boolean would be a second answer that could disagree with this
+    /// one.
     pub hooks_enabled: Option<bool>,
 }
 
@@ -451,7 +458,8 @@ impl ApiConfig {
             port: api
                 .get("port")
                 .and_then(Value::as_u64)
-                .and_then(|p| u16::try_from(p).ok()),
+                .and_then(|p| u16::try_from(p).ok())
+                .filter(|port| *port != 0),
             allowed_origins: strings(api.get("allowed_origins")),
             uds_default_scope: text(api.get("uds_default_scope")),
             uds_max_scope: text(api.get("uds_max_scope")),
@@ -493,6 +501,19 @@ pub const HIJACK_RISK: &str = "hooks_hijack_risk";
 
 /// §4.1's reason word for "the bind failed".
 pub const PORT_IN_USE: &str = "port_in_use";
+
+/// Whether `reason` is one of §4.1's two port-degrade words: another program
+/// holds the TCP door's port ([`PORT_IN_USE`]), or holds it and answers on it
+/// ([`HIJACK_RISK`]).
+///
+/// Both are about the local API alone. The deck, the Claude Code plugin's
+/// hooks and every connected app reach the service over its socket, so a
+/// lost port takes nothing of theirs away: the window says it on the Service
+/// page's Local API row, and the attention list leaves it out
+/// ([`crate::attention::attention`]).
+pub fn port_clash(reason: &str) -> bool {
+    reason == PORT_IN_USE || reason == HIJACK_RISK
+}
 
 /// Did the daemon answer `-32601`? Week 6 ships the GUI against three
 /// methods that are being added in parallel (contract §3), and a screen
@@ -552,6 +573,15 @@ mod tests {
         );
         assert!(!Status::Installed.wants_attention());
         assert!(!Status::Absent.installed());
+    }
+
+    #[test]
+    fn only_the_two_port_words_are_a_clash_on_the_local_apis_port() {
+        assert!(port_clash(PORT_IN_USE));
+        assert!(port_clash(HIJACK_RISK));
+        for other in ["shutdown", "disk_full", "", "PORT_IN_USE", "port_in_use "] {
+            assert!(!port_clash(other), "{other:?}");
+        }
     }
 
     #[test]
@@ -724,11 +754,15 @@ mod tests {
         assert_eq!(config.port, Some(47201));
         assert_eq!(config.allowed_origins, vec!["http://localhost:5173"]);
         assert_eq!(config.max_held_hooks, Some(64));
-        // The tray's Pause hooks tick, off the same one call.
+        // The pause's `hooks.enabled`, off the same one call.
         assert_eq!(config.hooks_enabled, Some(true));
         assert_eq!(ApiConfig::parse(&Value::Null), ApiConfig::default());
-        // A daemon that answered no `[hooks]` table leaves the tick unread
-        // rather than claiming hooks are on.
+        // `port = 0` asks for any free port: not a port anybody can call, so
+        // none is read (the one the service holds is `service.info`'s).
+        let any = ApiConfig::parse(&json!({"api": {"port": 0, "tcp": true}}));
+        assert_eq!(any.port, None);
+        // A daemon that answered no `[hooks]` table leaves it unread rather
+        // than claiming hooks are on.
         assert_eq!(
             ApiConfig::parse(&json!({"api": {"port": 47201}})).hooks_enabled,
             None

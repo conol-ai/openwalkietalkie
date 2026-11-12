@@ -3,9 +3,19 @@
 //! spoken name of a new face.
 use crate::api::{ApiError, ApiResult};
 use crate::{
-    Control, DeviceOp, Effect, EventKind, FaceEntry, FaceId, HostLine, Key, MacroKey, Principal,
-    SetKey, StatePatch, Store, Usage, UsageItem, Window,
+    Control, DeviceOp, Effect, EventKind, FaceEntry, FaceId, HostLine, Key, MacroKey, MacroLayout,
+    Principal, SetKey, StatePatch, Store, Usage, UsageItem, Window,
 };
+
+/// The `macro` line that gives the deck face `f`'s keys: always the whole
+/// set, which is all the deck accepts.
+pub(crate) fn macro_line(f: u8, macros: &MacroLayout) -> HostLine {
+    HostLine::Macro {
+        face: f,
+        src: macros.src.clone(),
+        keys: macros.keys.clone(),
+    }
+}
 
 impl Store {
     /// §6.4: `set speaker` and `set mic` **are** the mixer's master gain
@@ -153,12 +163,18 @@ impl Store {
         }
     }
 
+    /// `device.macro.set`: face `f`'s keys, whole, persisted with the name
+    /// of the layout they came from and sent to the deck. A repeated set is
+    /// persisted and sent like any other (the outbox drops a line the deck
+    /// already has) but changes nothing a client can see, so it says
+    /// nothing.
     pub(crate) fn device_macro_set(
         &mut self,
         f: u8,
         layout: String,
         src: Option<String>,
         keys: Vec<MacroKey>,
+        principal: Principal,
     ) -> ApiResult {
         if !(1..=8).contains(&f) {
             return Err(ApiError::invalid("f", "1..=8"));
@@ -177,12 +193,26 @@ impl Store {
             src: src.clone(),
             keys: keys.clone(),
         }));
-        let line = HostLine::Macro { face: f, src, keys };
-        self.macros.insert(f, line.clone());
+        let macros = MacroLayout { src, keys };
         self.effects
             .push(Effect::Persist(StatePatch::MacropadBinding { f, layout }));
-        self.device_op(DeviceOp::Put(Key::Macro(FaceId(f)), line));
+        self.device_op(DeviceOp::Put(Key::Macro(FaceId(f)), macro_line(f, &macros)));
+        self.set_macros(f, macros, principal);
         Ok(self.rev())
+    }
+
+    /// Face `f`'s keys are now `macros`, from the API or the deck's own
+    /// editor. The snapshot holds them (every `macro` line is built from
+    /// it), and a change is said once, as `device.macros` with the whole
+    /// layout: a reader replaces what it had for `f` and never has to
+    /// merge single edits. Persisting and sending stay with the caller.
+    pub(crate) fn set_macros(&mut self, f: u8, macros: MacroLayout, principal: Principal) {
+        if self.snapshot.macros.get(&f) == Some(&macros) {
+            return;
+        }
+        let data = serde_json::json!({"f": f, "src": macros.src, "keys": macros.keys});
+        self.snapshot.macros.insert(f, macros);
+        self.emit(EventKind::DeviceMacros, principal, data);
     }
 
     pub(crate) fn device_ws_set(
@@ -622,56 +652,241 @@ mod tests {
             .any(|op| matches!(op, DeviceOp::Put(Key::Macro(FaceId(3)), HostLine::Macro { src: Some(s), keys: k, .. }) if s == "deck" && *k == keys)));
     }
 
+    /// The keys a client sets are the snapshot's, and the one event that
+    /// says so carries the whole layout and who set it. The same set again
+    /// changes nothing a client can see, so it says nothing.
     #[test]
-    fn macro_ws_and_name_go_to_the_device_with_their_ranges_checked() {
+    fn a_macro_set_puts_the_keys_in_the_snapshot_and_says_so_once() {
+        let keys = vec![
+            MacroKey {
+                label: "build".into(),
+                binding: Some(crate::Binding::Left),
+                keys: Some("cmd+b".into()),
+            },
+            MacroKey {
+                label: String::new(),
+                binding: None,
+                keys: None,
+            },
+            MacroKey {
+                label: "shot".into(),
+                binding: None,
+                keys: Some("cmd+shift+4".into()),
+            },
+        ];
+        let set = |src: Option<&str>| Request::DeviceMacroSet {
+            f: 3,
+            layout: "app".into(),
+            src: src.map(str::to_string),
+            keys: keys.clone(),
+        };
         let mut sim = Sim::new();
-        let keys = vec![MacroKey {
+        let res = sim.api(UID, SessionId(1), set(None)).unwrap();
+        assert_eq!(sim.kinds(), vec![EventKind::DeviceMacros]);
+        let said = &sim.events[0];
+        assert_eq!(said.principal, UID);
+        assert_eq!(said.rev, sim.store.snapshot().rev);
+        assert_eq!(
+            res["rev"], said.rev,
+            "the reply names the revision that holds them"
+        );
+        // The empty middle slot is said too, so `shot` keeps its place.
+        assert_eq!(
+            said.data,
+            serde_json::json!({"f": 3, "src": null, "keys": [
+                {"label": "build", "binding": "left", "keys": "cmd+b"},
+                {"label": "", "binding": null},
+                {"label": "shot", "binding": null, "keys": "cmd+shift+4"}
+            ]})
+        );
+        assert_eq!(
+            sim.store.snapshot().macros[&3],
+            MacroLayout {
+                src: None,
+                keys: keys.clone()
+            }
+        );
+        // The same keys again are still persisted and sent, and say nothing.
+        let rev = sim.store.snapshot().rev;
+        let res = sim.api(UID, SessionId(1), set(None)).unwrap();
+        assert!(sim.events.is_empty());
+        assert_eq!(res["rev"], rev);
+        assert_eq!(sim.puts(), vec![Key::Macro(FaceId(3))]);
+        // A new tag on the same keys is a change.
+        sim.api(UID, SessionId(1), set(Some("deck.toml"))).unwrap();
+        assert_eq!(sim.kinds(), vec![EventKind::DeviceMacros]);
+        assert_eq!(sim.events[0].data["src"], "deck.toml");
+        assert_eq!(
+            sim.store.snapshot().macros[&3].src.as_deref(),
+            Some("deck.toml")
+        );
+        // A refused set leaves the keys as they were.
+        let before = sim.store.snapshot().clone();
+        let unknown = Request::DeviceMacroSet {
+            f: 3,
+            layout: "app".into(),
+            src: None,
+            keys: vec![MacroKey {
+                label: "x".into(),
+                binding: None,
+                keys: Some("cmd+nope".into()),
+            }],
+        };
+        assert!(sim.api(UID, SessionId(1), unknown).is_err());
+        assert_eq!(sim.store.snapshot(), &before);
+        assert!(sim.events.is_empty() && sim.effects.is_empty());
+    }
+
+    /// The deck's own editor changes one slot. The snapshot folds the edit
+    /// into the face's whole layout, keeping the tag a client gave it, and
+    /// says the result after the edit itself.
+    #[test]
+    fn a_key_edited_on_the_deck_lands_in_the_snapshot_and_the_whole_face_is_said_after_the_edit() {
+        let build = MacroKey {
             label: "build".into(),
             binding: Some(crate::Binding::Left),
-            keys: None,
-        }];
+            keys: Some("cmd+b".into()),
+        };
+        let mut sim = Sim::new();
         sim.api(
             UID,
             SessionId(1),
             Request::DeviceMacroSet {
-                f: 5,
-                layout: "Build".into(),
-                src: Some("build.toml".into()),
-                keys: keys.clone(),
+                f: 3,
+                layout: "app".into(),
+                src: Some("app".into()),
+                keys: vec![build.clone()],
             },
         )
         .unwrap();
-        assert_eq!(sim.puts(), vec![Key::Macro(FaceId(5))]);
+        let shot = Command::Device(DeviceLine::MacroKey {
+            f: 3,
+            i: 2,
+            label: Some("shot".into()),
+            binding: None,
+            keys: Some("cmd+shift+4".into()),
+        });
+        sim.apply(shot.clone());
+        assert_eq!(
+            sim.kinds(),
+            vec![EventKind::DeviceMacroEdit, EventKind::DeviceMacros]
+        );
+        let layout = MacroLayout {
+            src: Some("app".into()),
+            keys: vec![
+                build.clone(),
+                MacroKey {
+                    label: String::new(),
+                    binding: None,
+                    keys: None,
+                },
+                MacroKey {
+                    label: "shot".into(),
+                    binding: None,
+                    keys: Some("cmd+shift+4".into()),
+                },
+            ],
+        };
+        assert_eq!(sim.store.snapshot().macros[&3], layout);
+        let said = &sim.events[1];
+        assert_eq!(said.principal, Principal::Device);
+        assert_eq!(said.rev, sim.store.snapshot().rev);
+        assert_eq!(
+            said.data,
+            serde_json::json!({"f": 3, "src": "app", "keys": layout.keys})
+        );
+        // The editor saving the same slot again changes no key: only the
+        // edit is said.
+        sim.apply(shot);
+        assert_eq!(sim.kinds(), vec![EventKind::DeviceMacroEdit]);
+        // Clearing the last key trims the face, and that is a change.
+        sim.apply(Command::Device(DeviceLine::MacroKey {
+            f: 3,
+            i: 2,
+            label: None,
+            binding: None,
+            keys: None,
+        }));
+        assert_eq!(
+            sim.kinds(),
+            vec![EventKind::DeviceMacroEdit, EventKind::DeviceMacros]
+        );
+        assert_eq!(sim.store.snapshot().macros[&3].keys, vec![build]);
+        // A face the host had no keys for starts from none.
+        sim.apply(Command::Device(DeviceLine::MacroKey {
+            f: 6,
+            i: 0,
+            label: Some("mute".into()),
+            binding: Some(crate::Binding::Cw),
+            keys: None,
+        }));
+        assert_eq!(
+            sim.store.snapshot().macros[&6],
+            MacroLayout {
+                src: None,
+                keys: vec![MacroKey {
+                    label: "mute".into(),
+                    binding: Some(crate::Binding::Cw),
+                    keys: None,
+                }],
+            }
+        );
+        assert_eq!(
+            sim.kinds(),
+            vec![EventKind::DeviceMacroEdit, EventKind::DeviceMacros]
+        );
+        assert_eq!(sim.events[1].data["f"], 6);
+    }
+
+    /// After a restart the keys on file are the snapshot's at once, with no
+    /// event (nothing changed); the deck is sent them and a press posts from
+    /// them, and setting the same keys from the API says nothing.
+    #[test]
+    fn the_keys_on_file_are_in_the_snapshot_from_the_start_and_a_press_posts_from_them() {
+        let layout = MacroLayout {
+            src: Some("deck".into()),
+            keys: vec![MacroKey {
+                label: "shot".into(),
+                binding: None,
+                keys: Some("cmd+shift+4".into()),
+            }],
+        };
+        let mut sim = Sim::with(|cfg| {
+            cfg.persisted.macros.insert(3, layout.clone());
+        });
+        let snapshot = sim.store.snapshot();
+        assert_eq!(
+            snapshot.macros,
+            std::collections::BTreeMap::from([(3, layout.clone())])
+        );
+        assert_eq!(snapshot.rev, 0);
+        assert!(sim.store.project().contains(&DeviceOp::Put(
+            Key::Macro(FaceId(3)),
+            macro_line(3, &layout)
+        )));
+        sim.apply(Command::Device(DeviceLine::Macro { f: 3, i: 0, act: 1 }));
         assert!(sim
             .effects
-            .contains(&Effect::Persist(StatePatch::MacropadBinding {
-                f: 5,
-                layout: "Build".into()
+            .contains(&Effect::Desktop(crate::DesktopCmd::Keystroke {
+                keys: "cmd+shift+4".into()
             })));
-        assert!(sim
-            .store
-            .project()
-            .iter()
-            .any(|op| matches!(op, DeviceOp::Put(Key::Macro(FaceId(5)), HostLine::Macro { keys: k, .. }) if *k == keys)));
-        for (f, layout, keys, why) in [
-            (0, "x", vec![], "1..=8"),
-            (1, " ", vec![], "empty"),
-            (1, "x", vec![keys[0].clone(); 10], "max 9"),
-        ] {
-            let err = sim
-                .api(
-                    UID,
-                    SessionId(1),
-                    Request::DeviceMacroSet {
-                        f,
-                        layout: layout.into(),
-                        src: None,
-                        keys,
-                    },
-                )
-                .unwrap_err();
-            assert_eq!(err.data["why"], why);
-        }
+        sim.api(
+            UID,
+            SessionId(1),
+            Request::DeviceMacroSet {
+                f: 3,
+                layout: "deck".into(),
+                src: layout.src.clone(),
+                keys: layout.keys.clone(),
+            },
+        )
+        .unwrap();
+        assert!(sim.events.is_empty());
+    }
+
+    #[test]
+    fn macro_ws_and_name_go_to_the_device_with_their_ranges_checked() {
+        let mut sim = Sim::new();
         let window = Window {
             tone: None,
             title: "t".into(),
@@ -737,6 +952,65 @@ mod tests {
             0,
             "device-only lines never bump rev"
         );
+    }
+
+    /// `device.macro.set` puts face `f`'s keys on the wire and persists the
+    /// layout's name, and refuses a face, a name or a key count out of
+    /// range. The keys are the snapshot's as well, so a set moves `rev` once
+    /// and says so (`device.macros`), and a refusal moves nothing.
+    #[test]
+    fn a_macro_set_goes_to_the_device_with_its_ranges_checked() {
+        let mut sim = Sim::new();
+        let keys = vec![MacroKey {
+            label: "build".into(),
+            binding: Some(crate::Binding::Left),
+            keys: None,
+        }];
+        sim.api(
+            UID,
+            SessionId(1),
+            Request::DeviceMacroSet {
+                f: 5,
+                layout: "Build".into(),
+                src: Some("build.toml".into()),
+                keys: keys.clone(),
+            },
+        )
+        .unwrap();
+        assert_eq!(sim.puts(), vec![Key::Macro(FaceId(5))]);
+        assert!(sim
+            .effects
+            .contains(&Effect::Persist(StatePatch::MacropadBinding {
+                f: 5,
+                layout: "Build".into()
+            })));
+        assert_eq!(sim.kinds(), vec![EventKind::DeviceMacros]);
+        let rev = sim.store.snapshot().rev;
+        assert!(sim
+            .store
+            .project()
+            .iter()
+            .any(|op| matches!(op, DeviceOp::Put(Key::Macro(FaceId(5)), HostLine::Macro { keys: k, .. }) if *k == keys)));
+        for (f, layout, keys, why) in [
+            (0, "x", vec![], "1..=8"),
+            (1, " ", vec![], "empty"),
+            (1, "x", vec![keys[0].clone(); 10], "max 9"),
+        ] {
+            let err = sim
+                .api(
+                    UID,
+                    SessionId(1),
+                    Request::DeviceMacroSet {
+                        f,
+                        layout: layout.into(),
+                        src: None,
+                        keys,
+                    },
+                )
+                .unwrap_err();
+            assert_eq!(err.data["why"], why);
+        }
+        assert_eq!(sim.store.snapshot().rev, rev, "a refused set moves nothing");
     }
 
     /// B15 / §7.4: `ptt ctx:name` is the one place a dictated string becomes

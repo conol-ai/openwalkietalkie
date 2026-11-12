@@ -236,6 +236,13 @@ impl Sim {
             .set_card_held(&owner.principal, owner.session, cmd, hold)
     }
 
+    /// `Command::Mute` with exactly `sessions` muted.
+    pub fn mute(&mut self, sessions: &[SessionId]) {
+        self.apply(Command::Mute {
+            sessions: sessions.iter().copied().collect(),
+        });
+    }
+
     pub fn kinds(&self) -> Vec<EventKind> {
         self.events.iter().map(|e| e.kind).collect()
     }

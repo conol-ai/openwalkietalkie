@@ -20,10 +20,35 @@ impl MacOsUpdater {
     /// Start Sparkle when this is a signed release bundle with a configured
     /// feed. Must be called on the macOS application main thread.
     pub fn new() -> Self {
-        let signed_release = platform::is_enabled();
+        Self::starting(true, platform::is_enabled, platform::start)
+    }
+
+    /// The updater for this run: Sparkle's only in the installed app run
+    /// for real (`installed`, [`crate::app::Launch::installed`]). Sparkle
+    /// checks the network at launch, writes its keys into the app's
+    /// defaults and can install an update by itself, so a `--shots` walk, a
+    /// window on a test service's `DECKD_DATA_DIR` or a build outside the
+    /// bundle never starts it — not even in a signed release bundle — and
+    /// says updates are unavailable instead.
+    pub fn for_run(installed: bool) -> Self {
+        Self::starting(installed, platform::is_enabled, platform::start)
+    }
+
+    /// [`MacOsUpdater::for_run`], with the platform's two calls passed in:
+    /// `enabled` is asked only for the installed app, and `start` only for
+    /// a signed release.
+    fn starting(
+        installed: bool,
+        enabled: impl FnOnce() -> bool,
+        start: impl FnOnce() -> bool,
+    ) -> Self {
+        if !installed {
+            return Self::default();
+        }
+        let signed_release = enabled();
         Self {
             signed_release,
-            started: signed_release && platform::start(),
+            started: signed_release && start(),
         }
     }
 
@@ -138,5 +163,31 @@ mod tests {
             updater.check_for_updates(),
             Err("automatic updates are unavailable in this build")
         );
+    }
+
+    #[test]
+    fn sparkle_is_asked_nothing_and_never_started_outside_the_installed_app() {
+        // A harness walk, a window on a test service, a build: the platform
+        // is not even asked whether this is a signed release.
+        let elsewhere = MacOsUpdater::starting(
+            false,
+            || panic!("asked whether Sparkle is enabled"),
+            || panic!("started Sparkle"),
+        );
+        assert!(!elsewhere.uses_signed_updates() && !elsewhere.started);
+        assert_eq!(
+            elsewhere.check_for_updates(),
+            Err("automatic updates are unavailable in this build")
+        );
+        assert!(!MacOsUpdater::for_run(false).uses_signed_updates());
+        // The installed app: a signed release starts it; an unsigned one
+        // is asked, and starts nothing.
+        let signed = MacOsUpdater::starting(true, || true, || true);
+        assert!(signed.signed_release && signed.started);
+        let failed = MacOsUpdater::starting(true, || true, || false);
+        assert!(failed.uses_signed_updates() && !failed.started);
+        let unsigned =
+            MacOsUpdater::starting(true, || false, || panic!("started an unsigned release"));
+        assert!(!unsigned.signed_release && !unsigned.started);
     }
 }

@@ -1,78 +1,56 @@
-//! The two places the window reaches past gpui into AppKit, both about how
-//! it looks and neither about what it does.
-//!
-//! **The blur.** gpui 0.2.2 blurs a `Blurred` window with an
-//! `NSVisualEffectView` it inserts under its own view, set to the
-//! `Selection` material. macOS 26 stopped producing a blur for that material,
-//! which leaves the glass tint over an unblurred desktop. Zeron's gpui fork
-//! moved to `UnderWindowBackground` for the same reason; this does the same
-//! to the view gpui already made, so gpui's own hooks on it (the hidden
-//! desktop-tint layer, the dropped saturation filter) still apply.
+//! The one place the window reaches past gpui into AppKit, about how it
+//! looks and not about what it does.
 //!
 //! **The pinned appearance.** [`crate::style::APPEARANCE_ENV`] sets
-//! `NSApp.appearance`, so the traffic lights, the blur and the window's
-//! reported appearance all agree with the palette instead of only the
-//! palette changing.
-use gpui::Window;
+//! `NSApp.appearance`, so the traffic lights and the window's reported
+//! appearance agree with the palette instead of only the palette changing.
+//!
+//! The window is opaque: there is no blur to re-material and nothing
+//! translucent to pin, so nothing else here touches the window.
 use objc2::msg_send;
 use objc2::runtime::{AnyClass, AnyObject};
-use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
-/// `NSVisualEffectMaterialUnderWindowBackground`.
-const UNDER_WINDOW_BACKGROUND: isize = 21;
-/// `NSVisualEffectBlendingModeBehindWindow`.
-const BEHIND_WINDOW: isize = 0;
-/// `NSVisualEffectStateActive`: blurred whether or not the window has focus.
-const ACTIVE: isize = 1;
-
-/// The `NSWindow` gpui's view lives in.
-fn ns_window(window: &Window) -> Option<*mut AnyObject> {
-    let handle = HasWindowHandle::window_handle(window).ok()?;
-    let RawWindowHandle::AppKit(appkit) = handle.as_raw() else {
-        return None;
+/// A harness walk only (`--shots`): keep its window above other apps'
+/// ordinary windows and on whichever Space is showing, without taking the
+/// keyboard. gpui stops drawing a window macOS reports as not visible, so a
+/// walk whose window opened behind the frontmost app (activation is refused
+/// while another process holds the front, a system dialog for one) would
+/// capture the same empty window for every scene. A product run never calls
+/// this.
+pub fn float_for_capture() {
+    // NSFloatingWindowLevel; canJoinAllSpaces | fullScreenAuxiliary.
+    const FLOATING: isize = 3;
+    const ALL_SPACES: usize = 1 << 0;
+    const FULL_SCREEN_AUXILIARY: usize = 1 << 8;
+    let Some(app_class) = AnyClass::get(c"NSApplication") else {
+        return;
     };
-    let view = appkit.ns_view.as_ptr().cast::<AnyObject>();
-    // SAFETY: `view` is gpui's live NSView; `window` is a getter, called on
-    // the main thread where gpui runs.
-    let ns_window: *mut AnyObject = unsafe { msg_send![view, window] };
-    (!ns_window.is_null()).then_some(ns_window)
-}
-
-/// Re-material the effect view gpui put behind the window's content.
-/// `false` when there is none, which is what a window opened without
-/// `WindowBackgroundAppearance::Blurred` has, and what tells the caller to
-/// paint the shell opaque.
-pub fn use_under_window_material(window: &Window) -> bool {
-    let Some(ns_window) = ns_window(window) else {
-        return false;
-    };
-    let Some(effect_class) = AnyClass::get(c"NSVisualEffectView") else {
-        return false;
-    };
-    // SAFETY: AppKit getters and the three documented NSVisualEffectView
-    // setters, on views this window owns, on the main thread.
+    // SAFETY: documented NSApplication and NSWindow methods with their
+    // documented integer types (NSInteger, NSUInteger); every object is
+    // checked for nil before use and nothing is retained past the call.
     unsafe {
-        let content: *mut AnyObject = msg_send![ns_window, contentView];
-        if content.is_null() {
-            return false;
+        let app: *mut AnyObject = msg_send![app_class, sharedApplication];
+        if app.is_null() {
+            return;
         }
-        let subviews: *mut AnyObject = msg_send![content, subviews];
-        if subviews.is_null() {
-            return false;
+        let windows: *mut AnyObject = msg_send![app, windows];
+        if windows.is_null() {
+            return;
         }
-        let count: usize = msg_send![subviews, count];
-        let mut found = false;
-        for i in 0..count {
-            let view: *mut AnyObject = msg_send![subviews, objectAtIndex: i];
-            let is_effect: bool = msg_send![view, isKindOfClass: effect_class];
-            if is_effect {
-                let _: () = msg_send![view, setMaterial: UNDER_WINDOW_BACKGROUND];
-                let _: () = msg_send![view, setBlendingMode: BEHIND_WINDOW];
-                let _: () = msg_send![view, setState: ACTIVE];
-                found = true;
+        let count: usize = msg_send![windows, count];
+        for index in 0..count {
+            let window: *mut AnyObject = msg_send![windows, objectAtIndex: index];
+            if window.is_null() {
+                continue;
             }
+            let _: () = msg_send![window, setLevel: FLOATING];
+            let behaviour: usize = msg_send![window, collectionBehavior];
+            let _: () = msg_send![
+                window,
+                setCollectionBehavior: behaviour | ALL_SPACES | FULL_SCREEN_AUXILIARY
+            ];
+            let _: () = msg_send![window, orderFrontRegardless];
         }
-        found
     }
 }
 

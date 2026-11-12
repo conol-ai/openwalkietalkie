@@ -1,0 +1,12 @@
+{
+  "question": {
+    "state": "answered",
+    "at": "2026-11-11T09:58:12.000Z",
+    "after_ms": 3120
+  },
+  "voice": {
+    "state": "heard",
+    "at": "2026-11-11T09:59:40.000Z",
+    "heard": "hello"
+  }
+}

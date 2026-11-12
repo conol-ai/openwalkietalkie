@@ -187,9 +187,11 @@ impl Store {
         }
         let inherited_hold = self.aux.get(&id).and_then(|a| a.hold_at);
         self.retire_current_card(&id, "replaced");
+        let muted = self.is_muted(&self.snapshot.agents[&id]);
         let unslotted = self.snapshot.agents[&id].slot.is_none();
         if c.kind == CardKind::Q && unslotted {
-            // A question must reach the deck.
+            // A question must reach the deck — unless its agent is muted,
+            // which `assign_slot` keeps off it.
             self.assign_slot(&id, None, None);
         }
         let slot = self.snapshot.agents[&id].slot;
@@ -210,6 +212,13 @@ impl Store {
         let ready_ttl = Duration::from_secs(u64::from(self.cfg.ready_ttl_s));
         let in_group = c.origin.group.is_some_and(|g| g.index > 0);
         let (hold_at, expire_at) = match (deliver, c.kind) {
+            // A muted agent's question goes straight back to its tool
+            // (`release_to_tool`), but not in this step: the core parks a
+            // hold only after it has run this step's effects, so a release
+            // now would find nothing parked and the tool would wait out its
+            // own timeout. A deadline that is already due is released by
+            // the core's next tick, after the park.
+            (Deliver::Hold, _) if muted => (Some(now), None),
             (Deliver::Hold, _) => {
                 // One `hold_s` bounds a whole question group (§4.6).
                 let at = inherited_hold
@@ -288,7 +297,9 @@ impl Store {
         }
         self.put_card(&id);
         if c.kind == CardKind::Q {
-            if self.snapshot.settings.chime == 1 {
+            // A muted agent's question makes no sound: no chime here, and
+            // `say` drops its announcement.
+            if self.snapshot.settings.chime == 1 && !muted {
                 self.effects.push(Effect::Audio(AudioCmd::Chime {
                     which: "question".into(),
                 }));
@@ -966,6 +977,38 @@ impl Store {
             self.degrade_card(id, "snooze");
         }
         Ok(self.rev())
+    }
+
+    /// A muted agent's parked question goes back to its tool, as a snooze
+    /// sends it back: the hold is released, so the hook is answered `{}`
+    /// and the CLI asks in its own dialog.
+    ///
+    /// Unlike a snooze, the card leaves with it (released `Cleared`,
+    /// `card.cleared{reason:"muted"}`) rather than staying on as `⌨ Focus
+    /// terminal`. The agent is off the deck, and when it comes back a slot
+    /// gives its card a new id (§6.5), while the Claude adapter would clear
+    /// that copy by the old one: the clear would be refused as stale and
+    /// the copy would outlive the question.
+    ///
+    /// Only a question that is parked: an answer already on its way stays
+    /// the operator's, and a push or poll question is its owner's to settle.
+    pub(crate) fn release_to_tool(&mut self, id: &AgentId) {
+        let Some(card) = self
+            .current_card(id)
+            .filter(|c| {
+                c.deliver == Deliver::Hold
+                    && matches!(c.status, CardStatus::Pending | CardStatus::Snoozed)
+            })
+            .map(|c| c.id)
+        else {
+            return;
+        };
+        self.effects.push(Effect::ReleaseHold {
+            agent: id.clone(),
+            card,
+            reason: Release::Cleared,
+        });
+        self.clear_card(id, EventKind::CardCleared, false, Some("muted"), false);
     }
 
     /// `op.ack` (GUI-only): a Ready card acknowledged.

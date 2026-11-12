@@ -1,0 +1,68 @@
+{
+  "items": [
+    {
+      "bytes": null,
+      "count": null,
+      "id": "service",
+      "path": "/tmp/owt/bin/deckd-s6",
+      "present": true
+    },
+    {
+      "bytes": null,
+      "count": null,
+      "id": "claude_plugin",
+      "path": "d/claude-marketplace",
+      "present": false
+    },
+    {
+      "bytes": null,
+      "count": null,
+      "id": "codex_hooks",
+      "path": "/tmp/owt/run/l1/home/codex/hooks.json",
+      "present": false
+    },
+    {
+      "bytes": null,
+      "count": null,
+      "id": "stt",
+      "path": "d/caches/stt",
+      "present": false
+    },
+    {
+      "bytes": null,
+      "count": null,
+      "id": "kokoro",
+      "path": "d/caches/tts/kokoro",
+      "present": false
+    },
+    {
+      "bytes": null,
+      "count": null,
+      "id": "firmware",
+      "path": "d/caches/firmware",
+      "present": false
+    },
+    {
+      "bytes": 4534,
+      "count": null,
+      "id": "data",
+      "path": "d",
+      "present": true
+    },
+    {
+      "bytes": null,
+      "count": null,
+      "id": "prefs",
+      "path": "/tmp/owt/run/l1/home/Library/Preferences/ai.cohdl.openwalkietalkie.plist",
+      "present": false
+    },
+    {
+      "bytes": null,
+      "count": null,
+      "id": "logs",
+      "path": "d/logs",
+      "present": false
+    }
+  ],
+  "total_bytes": 4534
+}

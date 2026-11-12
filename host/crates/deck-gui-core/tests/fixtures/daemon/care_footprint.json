@@ -1,0 +1,75 @@
+{
+  "items": [
+    {
+      "id": "service",
+      "path": "/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd",
+      "bytes": null,
+      "count": null,
+      "present": true
+    },
+    {
+      "id": "claude_plugin",
+      "path": "/Users/you/Library/Application Support/OpenWalkieTalkie/claude-marketplace",
+      "bytes": 61440,
+      "count": 13,
+      "present": true
+    },
+    {
+      "id": "codex_hooks",
+      "path": "/Users/you/.codex/hooks.json",
+      "bytes": 2048,
+      "count": 7,
+      "present": true
+    },
+    {
+      "id": "stt",
+      "path": "/Users/you/Library/Caches/OpenWalkieTalkie/stt",
+      "bytes": 1624555275,
+      "count": null,
+      "present": true
+    },
+    {
+      "id": "kokoro",
+      "path": "/Users/you/Library/Caches/OpenWalkieTalkie/tts/kokoro",
+      "bytes": 427819008,
+      "count": null,
+      "present": true
+    },
+    {
+      "id": "firmware",
+      "path": "/Users/you/Library/Caches/OpenWalkieTalkie/firmware",
+      "bytes": 9437184,
+      "count": null,
+      "present": true
+    },
+    {
+      "id": "data",
+      "path": "/Users/you/Library/Application Support/OpenWalkieTalkie",
+      "bytes": 184320,
+      "count": null,
+      "present": true
+    },
+    {
+      "id": "prefs",
+      "path": "/Users/you/Library/Preferences/ai.cohdl.openwalkietalkie.plist",
+      "bytes": 4096,
+      "count": null,
+      "present": true
+    },
+    {
+      "id": "logs",
+      "path": "/Users/you/Library/Logs/OpenWalkieTalkie",
+      "bytes": 80740352,
+      "count": null,
+      "present": true
+    },
+    {
+      "id": "codex_desktop",
+      "path": "/Users/you/Applications/Codex with OpenWalkieTalkie.app",
+      "bytes": null,
+      "count": null,
+      "present": false
+    }
+  ],
+  "total_bytes": 2142803723
+}

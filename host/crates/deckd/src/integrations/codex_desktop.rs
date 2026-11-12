@@ -10,7 +10,7 @@
 use super::backup::{self, FileSnapshot, Planned};
 use super::{markers, Detected, Env, Plan, Report, Status, Target, Verb};
 use serde_json::{json, Value};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 const NAME: &str = "Codex with OpenWalkieTalkie.app";
 const PLIST: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -26,7 +26,13 @@ const PLIST: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 "#;
 
 pub fn launcher(env: &Env) -> PathBuf {
-    env.home.join("Applications").join(NAME)
+    launcher_in(&env.home)
+}
+
+/// The launcher under `home`, without an installer environment: where the
+/// Footprint page looks (`care.footprint`).
+pub fn launcher_in(home: &Path) -> PathBuf {
+    home.join("Applications").join(NAME)
 }
 
 // Per-user installations take precedence. Within each location prefer the

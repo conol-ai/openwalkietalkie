@@ -1,0 +1,22 @@
+{
+  "transport": "bluetooth",
+  "battery": 85,
+  "charging": false,
+  "board": "Rev B",
+  "last": {
+    "at": "2026-11-11T09:41:00.000Z",
+    "fw": "0.13.0-openwalkietalkie",
+    "board": "Rev B",
+    "transport": "bluetooth"
+  },
+  "drops": [
+    {
+      "at": "2026-11-11T09:12:00.000Z",
+      "why": "read"
+    },
+    {
+      "at": "2026-11-11T09:36:00.000Z",
+      "why": "write_stall"
+    }
+  ]
+}

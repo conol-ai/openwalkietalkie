@@ -1,0 +1,33 @@
+{
+  "boot": null,
+  "err_counts": {
+    "parse": 0,
+    "range": 0,
+    "size": 0,
+    "unknown": 0
+  },
+  "face": null,
+  "faces": [],
+  "fw": null,
+  "host_online": false,
+  "language_supported": false,
+  "link": "offline",
+  "outbox_depth": 0,
+  "pace_ms": 8,
+  "session": "absent",
+  "settings": {
+    "announce": 1,
+    "arcadesound": 0,
+    "autojump": 0,
+    "brightness": 5,
+    "chime": 1,
+    "demo": 1,
+    "idlehome": 120,
+    "language": 0,
+    "language_revision": 0,
+    "mic": 6,
+    "speaker": 6,
+    "textsize": 1
+  },
+  "sid": 106140337
+}

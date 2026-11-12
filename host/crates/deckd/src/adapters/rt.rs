@@ -44,7 +44,7 @@ use deck_model::{
 };
 use serde::Deserialize;
 use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::OnceLock;
 
 /// How many report batches may be in flight before the oldest CLI's
@@ -239,6 +239,10 @@ pub struct Adapters {
     /// does (approvals, questions, the turn), and two owners flipping one
     /// agent's capabilities back and forth would be worse than either.
     daemon_threads: std::sync::Mutex<std::collections::BTreeSet<String>>,
+    /// Whether that client holds a live connection to Codex's daemon right
+    /// now: set once its handshake is done, cleared when the connection
+    /// ends. The Codex row of `sources.list` reads it (`care::sources`).
+    codex_connected: AtomicBool,
 }
 
 /// `[hooks.<cli>] hold_s`, refreshed by `Core::set_config` so a hot
@@ -297,6 +301,18 @@ impl Adapters {
         self.daemon_threads
             .lock()
             .is_ok_and(|threads| threads.contains(key))
+    }
+
+    /// `crate::codexd` finished its handshake with Codex's daemon (`true`),
+    /// or its connection ended (`false`).
+    pub fn set_codex_connected(&self, connected: bool) {
+        self.codex_connected.store(connected, Ordering::Relaxed);
+    }
+
+    /// Whether `crate::codexd` is connected to Codex's daemon now.
+    #[must_use]
+    pub fn codex_connected(&self) -> bool {
+        self.codex_connected.load(Ordering::Relaxed)
     }
 
     /// Remember where this agent's session reads peer messages. A later

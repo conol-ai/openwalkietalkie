@@ -82,6 +82,21 @@ use deck_model::{AudioCmd, VoiceIn};
 /// ring is filled at and every render callback drains at.
 pub const LANE_RATE: u32 = 44_100;
 
+/// Speech Recognition's grant for this process as the OS has it now, where
+/// there is one to ask: macOS ([`apple::speech_authorization`], a read that
+/// never prompts). `None` elsewhere, where no recogniser needs one.
+#[must_use]
+pub fn speech_authorization() -> Option<deck_model::Permission> {
+    #[cfg(target_os = "macos")]
+    {
+        Some(apple::speech_authorization())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        None
+    }
+}
+
 /// **V2's liveness rule, written once.**
 ///
 /// A capture buffer is evidence that the microphone is alive if and only if
@@ -267,7 +282,8 @@ impl Default for AudioConfig {
             transport: crate::config::VoiceTransport::default(),
             device_uid: None,
             fallback_output: "none".into(),
-            fallback_input: "system_default".into(),
+            // `[voice] fallback_input`'s own default: no Mac microphone.
+            fallback_input: "none".into(),
             link: None,
             tts_engine: "apple".into(),
             sidecar: None,

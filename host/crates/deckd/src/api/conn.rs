@@ -71,6 +71,10 @@ pub struct HelloParams {
     pub snapshot: bool,
     #[serde(default)]
     pub since: Option<u64>,
+    /// `false`: show this session no content at all, whatever its scopes
+    /// grant (`ConnCtx::content`). Absent is `true`, as before the field.
+    #[serde(default)]
+    pub content: Option<bool>,
 }
 
 /// The principal, scopes and trust of a hello (§3.4).
@@ -239,6 +243,7 @@ pub async fn run(
         trusted: resolved.trusted,
         client: hello.client.clone(),
         adapters: api.adapters.clone(),
+        content: hello.content.unwrap_or(true),
     };
     let mut subs: Vec<String> = hello.subscribe.clone();
     let snapshot = api.bus.snapshot();
@@ -254,9 +259,14 @@ pub async fn run(
         "session": session_id,
         "rev": rev,
     });
+    // Said back only to a hello that asked, so a client can tell this
+    // daemon honoured it from one that never heard of it.
+    if !ctx.content {
+        reply["content"] = false.into();
+    }
     if hello.snapshot {
         reply["snapshot"] =
-            serde_json::to_value(redact_for(&snapshot, &ctx.scopes, &BTreeSet::new()))
+            serde_json::to_value(redact_for(&snapshot, &ctx.seen_as(), &BTreeSet::new()))
                 .unwrap_or(serde_json::Value::Null);
     }
     // The replay: the ring after `since`, as this session would have seen
@@ -557,7 +567,7 @@ fn event_for(
     if !matches_any(subs, event.kind) {
         return None;
     }
-    let redacted = redact_event(event, &ctx.scopes, own)?;
+    let redacted = redact_event(event, &ctx.seen_as(), own)?;
     Some(rpc::event_line(&redacted))
 }
 
@@ -824,6 +834,176 @@ pub(crate) mod tests {
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
         let _ = EventKind::Error;
+    }
+
+    /// Everything one session is shown, from its hello on: the hello reply,
+    /// the replay of `since: 0`, a `state.get` and a `state.events`, then
+    /// the events that a live reply (by `agent`'s `owner`) and a heard
+    /// transcript raise, up to a marker event published last. The session
+    /// asks for what the companion app asks for (`admin` among it), and
+    /// `content` is what its hello says, or nothing.
+    async fn shown(
+        daemon: &TestDaemon,
+        agent: &deck_model::AgentId,
+        owner: deck_model::SessionId,
+        content: Option<bool>,
+    ) -> String {
+        let (mut r, mut w) = connect(daemon, PeerVerdict::default());
+        let mut params = serde_json::json!({
+            "client": {"name": "OpenWalkieTalkie", "version": "1"},
+            "scopes": ["observe", "voice", "device", "admin"],
+            "subscribe": ["*"],
+            "snapshot": true,
+            "since": 0,
+        });
+        if let Some(content) = content {
+            params["content"] = content.into();
+        }
+        let hello = serde_json::json!({"id": 1, "method": "session.hello", "params": params});
+        w.write_all(format!("{hello}\n").as_bytes()).await.unwrap();
+        let reply = read_line(&mut r).await;
+        assert_eq!(reply["result"]["api"], "1", "{reply}");
+        let mut lines = vec![reply.to_string()];
+        for _ in 0..reply["result"]["replayed"].as_u64().expect("a replay") {
+            lines.push(read_line(&mut r).await.to_string());
+        }
+        w.write_all(b"{\"id\":2,\"method\":\"state.get\"}\n")
+            .await
+            .unwrap();
+        w.write_all(b"{\"id\":3,\"method\":\"state.events\",\"params\":{\"since\":0}}\n")
+            .await
+            .unwrap();
+        let replied = daemon
+            .api
+            .core
+            .api(
+                Principal::Uid(501),
+                owner,
+                false,
+                deck_model::Request::Reply(deck_model::ReplySet {
+                    agent: agent.clone(),
+                    text: "REPLY-SECRET again".into(),
+                    message: None,
+                    speak: false,
+                    announce: None,
+                    lane: None,
+                }),
+            )
+            .await
+            .unwrap();
+        // The core publishes the reply's events just after it answers: wait
+        // for them, so the marker below comes after them on the bus.
+        let rev = replied["rev"].as_u64().expect("the reply's rev");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        while daemon.api.bus.rev() < rev {
+            assert!(std::time::Instant::now() < deadline, "the reply never reached the bus");
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        for (kind, data) in [
+            (
+                EventKind::TranscriptFinal,
+                serde_json::json!({"utterance": "u1", "text": "HEARD-SECRET"}),
+            ),
+            (EventKind::Error, serde_json::json!({"code": "marker"})),
+        ] {
+            daemon.api.bus.publish(Published {
+                event: Arc::new(deck_model::Event {
+                    rev: daemon.api.bus.rev(),
+                    ts: crate::core::wall_now(),
+                    kind,
+                    principal: Principal::Device,
+                    data,
+                }),
+                owner: None,
+            });
+        }
+        let (mut answered, mut marked) = (0, false);
+        while answered < 2 || !marked {
+            let line = read_line(&mut r).await;
+            answered += usize::from(line["id"] == 2 || line["id"] == 3);
+            marked |= line["params"]["data"]["code"] == "marker";
+            lines.push(line.to_string());
+        }
+        lines.join("\n")
+    }
+
+    /// R2: `session.hello{content:false}` shows a session no content,
+    /// whatever its scopes grant. The companion app holds `admin`, which
+    /// grants content: with the flag no title, card, reply or transcript
+    /// text reaches it — not in the hello snapshot, the replay, `state.get`,
+    /// `state.events` or a live event — and the hello says it was honoured.
+    /// The same hello without the flag is shown all of it, as before.
+    #[tokio::test]
+    async fn a_hello_without_content_is_shown_no_session_text_whatever_its_scopes() {
+        const SECRETS: [&str; 4] = ["TITLE-SECRET", "CARD-SECRET", "REPLY-SECRET", "HEARD-SECRET"];
+        let daemon = test_api("conn-no-content", FakeVerifier::default());
+        // Another client's agent: a title from its prompt, a question on
+        // the deck and a reply.
+        let other = daemon
+            .api
+            .core
+            .open_session(OpenSession {
+                kind: SessionKind::Observer,
+                principal: Principal::Uid(501),
+                scopes: vec![Scope::Agent],
+                trusted: false,
+                client: ClientInfo::default(),
+            })
+            .await
+            .unwrap();
+        let call = |req| daemon.api.core.api(Principal::Uid(501), other, false, req);
+        let registered = call(deck_model::Request::AgentRegister(
+            crate::core::testkit::register("api", Some("k")),
+        ))
+        .await
+        .unwrap();
+        let agent: deck_model::AgentId =
+            serde_json::from_value(registered["agent"].clone()).unwrap();
+        call(deck_model::Request::AgentUpdate(deck_model::AgentUpdate {
+            agent: agent.clone(),
+            state: None,
+            title: Some("TITLE-SECRET".into()),
+            title_source: Some(deck_model::TitleSource::Prompt),
+            since: None,
+            name: None,
+            meta: None,
+            task: None,
+            subagents: None,
+        }))
+        .await
+        .unwrap();
+        call(deck_model::Request::CardSet(crate::core::testkit::card(
+            &agent,
+            "CARD-SECRET?",
+        )))
+        .await
+        .unwrap();
+        call(deck_model::Request::Reply(deck_model::ReplySet {
+            agent: agent.clone(),
+            text: "REPLY-SECRET".into(),
+            message: None,
+            speak: false,
+            announce: None,
+            lane: None,
+        }))
+        .await
+        .unwrap();
+
+        let blind = shown(&daemon, &agent, other, Some(false)).await;
+        for secret in SECRETS {
+            assert!(!blind.contains(secret), "{secret} reached it: {blind}");
+        }
+        assert!(blind.contains("\"content\":false"), "honoured, and said so");
+        assert!(blind.contains("\"redacted\":true"), "{blind}");
+        assert!(blind.contains("\"name\":\"api\""), "state still shows: {blind}");
+
+        let seeing = shown(&daemon, &agent, other, None).await;
+        for secret in SECRETS {
+            assert!(seeing.contains(secret), "{secret}: the default changed: {seeing}");
+        }
+        assert!(!seeing.contains("\"content\":false"), "{seeing}");
+        let explicit = shown(&daemon, &agent, other, Some(true)).await;
+        assert!(SECRETS.iter().all(|secret| explicit.contains(secret)));
     }
 
     /// JSON-RPC 2.0 on the line door: a malformed member is answered in

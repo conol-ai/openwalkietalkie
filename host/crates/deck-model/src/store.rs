@@ -1,17 +1,18 @@
 //! The reducer: `Store::apply(Command, now) -> (Vec<Event>, Vec<Effect>)`,
 //! the device projection and the per-scope redaction. This file holds the
 //! store itself, the link/device-line handlers, the projection and the
-//! redaction; the API methods, roster, cards, voice, device methods and the
-//! timers live in their own `impl Store` modules (`api`, `roster`, `cards`,
-//! `voice`, `devapi`, `tick`).
+//! redaction; the API methods, roster, cards, voice, device methods, the
+//! deck's own status and the timers live in their own `impl Store` modules
+//! (`api`, `roster`, `cards`, `voice`, `devapi`, `device_status`, `tick`).
+use crate::devapi::macro_line;
 use crate::{
     Agent, AgentId, AgentState, CardId, CardStatus, Command, Control, DeviceLine, DeviceOp,
-    DocKind, Effect, Event, EventKind, FaceEntry, FocusSource, HostLine, Key, Kind, Link,
-    LinkEvent, OriginKind, Principal, Scope, SessionState, Settings, Slot, Snapshot, StatePatch,
-    TitleSource, Ts, Usage,
+    DocKind, Effect, Event, EventKind, FaceEntry, FocusSource, HostLine, Key, Kind, LastLinked,
+    Link, LinkEvent, MacroLayout, OriginKind, Principal, Scope, SessionState, Settings, Slot,
+    Snapshot, StatePatch, TitleSource, Ts, Usage,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::time::{Duration, Instant};
 
 /// `[agents]` pins from `config.toml`.
@@ -31,14 +32,6 @@ pub struct SlotMemory {
     pub cwd: Option<String>,
 }
 
-/// `state.json.macros[f]`: a Macropad face's keys as last set, by the API or
-/// the deck's own editor.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct MacroLayout {
-    pub src: Option<String>,
-    pub keys: Vec<crate::MacroKey>,
-}
-
 /// What `state.json` contributes at start.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Persisted {
@@ -55,6 +48,9 @@ pub struct Persisted {
     /// face id → its keys, so a Macropad comes back as it was left.
     #[serde(default)]
     pub macros: BTreeMap<u8, MacroLayout>,
+    /// The deck as it was last linked: `snapshot.device.last` from the start.
+    #[serde(default)]
+    pub last_linked: Option<LastLinked>,
 }
 
 #[derive(Clone, Debug)]
@@ -211,8 +207,6 @@ pub struct Store {
     pub(crate) transcript_doc: Option<(Slot, String)>,
     /// Bumped with each final transcript; `DocText.id` for `Tr`.
     pub(crate) transcript_rev: u16,
-    /// Desired `macro` line per Macropad face (device-facing only).
-    pub(crate) macros: BTreeMap<u8, HostLine>,
     /// Desired `ws` line (device-facing only).
     pub(crate) ws: Option<HostLine>,
     pub(crate) usage_refresh_at: Option<Instant>,
@@ -241,6 +235,19 @@ pub struct Store {
     /// the release (§7.4, M6). Last one wins: the operator can turn the
     /// knob twice, and only where it ends up is a focus.
     pub(crate) pending_channel: Option<(Slot, u16)>,
+    /// The link that is up has gone live. From then until it ends,
+    /// `snapshot.device.last` is that deck and its end is stamped; before
+    /// it, `last` still describes the previous one, which a deck that opens
+    /// and never answers must not overwrite.
+    pub(crate) live_link: bool,
+    /// The drop the hid thread reported for the link that is up, recorded
+    /// by the `Down` that follows it (`device_status`).
+    pub(crate) pending_drop: Option<crate::LinkDrop>,
+    /// The sessions whose source the owner paused (`Command::Mute`). An
+    /// agent they own is kept and served but never holds a slot, and
+    /// nothing of it is spoken (`roster`). The core works the set out and
+    /// sends it whole. Not persisted: a session id lasts one run.
+    pub(crate) muted: BTreeSet<crate::SessionId>,
 }
 
 /// One released session waiting for its final transcript.
@@ -262,12 +269,16 @@ impl Store {
             settings: cfg.persisted.settings,
             faces: cfg.persisted.faces.clone(),
             usage: cfg.persisted.usage.clone(),
+            // The keys on file are the deck's from the start: the snapshot
+            // is what every `macro` line is built from.
+            macros: cfg.persisted.macros.clone(),
             ..Snapshot::default()
         };
         snapshot.settings.normalize_language();
         snapshot.device.sid = cfg.sid;
         snapshot.device.settings = snapshot.settings;
         snapshot.device.pace_ms = 8;
+        snapshot.device.last.clone_from(&cfg.persisted.last_linked);
         snapshot.voice.stt.locale.clone_from(&cfg.locale);
         snapshot.service.version = cfg.version.clone();
         snapshot.service.port = cfg.port;
@@ -278,21 +289,6 @@ impl Store {
             .map(|(slot, id)| (Slot(*slot), CardId(*id)))
             .collect();
         let voices = cfg.persisted.voices.clone();
-        let macros = cfg
-            .persisted
-            .macros
-            .iter()
-            .map(|(f, layout)| {
-                (
-                    *f,
-                    HostLine::Macro {
-                        face: *f,
-                        src: layout.src.clone(),
-                        keys: layout.keys.clone(),
-                    },
-                )
-            })
-            .collect();
         Store {
             now: cfg.started,
             slots: cfg.persisted.slots.clone(),
@@ -309,7 +305,6 @@ impl Store {
             voices,
             transcript_doc: None,
             transcript_rev: 0,
-            macros,
             ws: None,
             usage_refresh_at: None,
             ptt_cap_at: None,
@@ -319,6 +314,9 @@ impl Store {
             pending_channel: None,
             session_panel: None,
             session_menu_rev: 0,
+            live_link: false,
+            pending_drop: None,
+            muted: BTreeSet::new(),
         }
     }
 
@@ -400,6 +398,7 @@ impl Store {
         match cmd {
             Command::SystemStatus(status) => { if status.valid() { self.device_op(DeviceOp::Put(Key::System, HostLine::System(status))); } },
             Command::Link(link) => self.on_link(link),
+            Command::DeviceReport(report) => self.on_report(report),
             Command::Device(line) => self.on_device(line),
             Command::SessionControls { agent, session, settled, controls } => self.on_session_controls(agent, session, settled, controls),
             Command::Voice(v) => self.on_voice(v),
@@ -438,6 +437,7 @@ impl Store {
                 }),
             ),
             Command::SessionClosed(session) => self.on_session_closed(session),
+            Command::Mute { sessions } => self.on_mute(sessions),
             Command::ServiceBound {
                 port,
                 degraded,
@@ -489,10 +489,14 @@ impl Store {
     /// The audio side owns the *policy* (`"never"` ignores this,
     /// `"always"` needs no signal); this owns only the fact.
     fn sync_warm(&mut self) {
+        // A muted agent's question is not on the deck, so nobody is about
+        // to press to answer it, and warming the microphone would move the
+        // Mac's audio route for a source the owner paused.
         let pending = self.snapshot.agents.values().any(|a| {
-            a.card.as_ref().is_some_and(|c| {
-                c.kind == crate::CardKind::Q && c.status == crate::CardStatus::Pending
-            })
+            !self.is_muted(a)
+                && a.card.as_ref().is_some_and(|c| {
+                    c.kind == crate::CardKind::Q && c.status == crate::CardStatus::Pending
+                })
         });
         if pending != self.warm_pending {
             self.warm_pending = pending;
@@ -502,15 +506,14 @@ impl Store {
     }
 
     /// The device projection of the current snapshot (seeds the hid thread,
-    /// re-sent after an overflow), in barrier order (§6.5), with the
-    /// device-only `macro`/`ws` lines the snapshot does not carry.
+    /// re-sent after an overflow), in barrier order (§6.5), with what
+    /// [`project`] leaves out: each Macropad face's `macro` line and the
+    /// device-only `ws` line.
     pub fn project(&self) -> Vec<DeviceOp> {
         let mut ops = project_with(&self.snapshot, self.ts(self.now), Some(&self.aux));
-        ops.extend(
-            self.macros
-                .iter()
-                .map(|(f, line)| DeviceOp::Put(Key::Macro(crate::FaceId(*f)), line.clone())),
-        );
+        ops.extend(self.snapshot.macros.iter().map(|(f, layout)| {
+            DeviceOp::Put(Key::Macro(crate::FaceId(*f)), macro_line(*f, layout))
+        }));
         if let Some(ws) = &self.ws {
             ops.push(DeviceOp::Put(Key::Ws, ws.clone()));
         }
@@ -708,6 +711,7 @@ impl Store {
 
     fn on_link(&mut self, link: LinkEvent) {
         let dev = &mut self.snapshot.device;
+        let was_up = dev.link != Link::Offline;
         let (link_state, session) = match link {
             LinkEvent::Linked => (Link::Connected, SessionState::AwaitHello),
             LinkEvent::Down => (Link::Offline, SessionState::Absent),
@@ -749,6 +753,13 @@ impl Store {
                 "session": session,
             });
             self.emit(EventKind::DeviceLink, Principal::Device, data);
+        }
+        match link {
+            LinkEvent::Live { .. } | LinkEvent::Synced { .. } => self.status_link_live(),
+            // Before `fw` is cleared below: the deck is remembered as it was
+            // when the link ended.
+            LinkEvent::Down if was_up => self.status_link_ended(Principal::Device),
+            _ => {}
         }
         if matches!(link, LinkEvent::Down) {
             self.snapshot.device.language_supported = false;
@@ -915,10 +926,12 @@ impl Store {
                 // A press or a wheel step posts the key's keystroke; a
                 // release does nothing (the stroke is a down-up pair).
                 if act != 0 {
-                    let keys = match self.macros.get(&f) {
-                        Some(HostLine::Macro { keys, .. }) => keys.get(usize::from(i)).and_then(|key| key.keys.clone()),
-                        _ => None,
-                    };
+                    let keys = self
+                        .snapshot
+                        .macros
+                        .get(&f)
+                        .and_then(|layout| layout.keys.get(usize::from(i)))
+                        .and_then(|key| key.keys.clone());
                     if let Some(keys) = keys {
                         self.effects
                             .push(Effect::Desktop(crate::DesktopCmd::Keystroke { keys }));
@@ -932,46 +945,43 @@ impl Store {
                 binding,
                 keys: stroke,
             } => {
-                // The slot lands in the face's line (an empty label keeps
+                // The slot lands in the face's layout (an empty label keeps
                 // later keys in place; trailing empties are dropped), which
                 // is persisted and sent back whole.
-                let mut line = self.macros.remove(&f).unwrap_or(HostLine::Macro {
-                    face: f,
-                    src: None,
-                    keys: Vec::new(),
-                });
-                let empty = crate::MacroKey {
-                    label: String::new(),
-                    binding: None,
-                    keys: None,
-                };
-                if let HostLine::Macro { keys, .. } = &mut line {
-                    let at = usize::from(i.min(8));
-                    if keys.len() <= at {
-                        keys.resize(at + 1, empty.clone());
-                    }
-                    keys[at] = crate::MacroKey {
-                        label: label.clone().unwrap_or_default(),
-                        binding,
-                        keys: stroke.clone(),
+                let mut layout = self.snapshot.macros.get(&f).cloned().unwrap_or_default();
+                let at = usize::from(i.min(8));
+                if layout.keys.len() <= at {
+                    let empty = crate::MacroKey {
+                        label: String::new(),
+                        binding: None,
+                        keys: None,
                     };
-                    while keys.last().is_some_and(|key| key.label.is_empty()) {
-                        keys.pop();
-                    }
+                    layout.keys.resize(at + 1, empty);
                 }
-                let (src, keys) = match &line {
-                    HostLine::Macro { src, keys, .. } => (src.clone(), keys.clone()),
-                    _ => (None, Vec::new()),
+                layout.keys[at] = crate::MacroKey {
+                    label: label.clone().unwrap_or_default(),
+                    binding,
+                    keys: stroke.clone(),
                 };
-                self.macros.insert(f, line.clone());
-                self.effects
-                    .push(Effect::Persist(StatePatch::Macro { f, src, keys }));
-                self.device_op(DeviceOp::Put(Key::Macro(crate::FaceId(f)), line));
+                while layout.keys.last().is_some_and(|key| key.label.is_empty()) {
+                    layout.keys.pop();
+                }
+                self.effects.push(Effect::Persist(StatePatch::Macro {
+                    f,
+                    src: layout.src.clone(),
+                    keys: layout.keys.clone(),
+                }));
+                self.device_op(DeviceOp::Put(
+                    Key::Macro(crate::FaceId(f)),
+                    macro_line(f, &layout),
+                ));
                 self.emit(
                     EventKind::DeviceMacroEdit,
                     Principal::Device,
                     serde_json::json!({"f": f, "i": i, "l": label, "b": binding, "k": stroke}),
                 );
+                // The edit first, then what it made of the whole face.
+                self.set_macros(f, layout, Principal::Device);
             }
             DeviceLine::WsGo(go) => {
                 self.emit(
@@ -1046,6 +1056,10 @@ impl Store {
                 Principal::Uid(0),
                 serde_json::json!({"link": "offline", "session": "absent", "host_online": false}),
             );
+            // The link ends with this service. Stamped now, because a deck
+            // that does not come back before the next start would otherwise
+            // read as last linked when it went live, hours earlier.
+            self.status_link_ended(Principal::Uid(0));
         }
     }
 }
@@ -1874,14 +1888,7 @@ mod tests {
             items: vec![],
             at: None,
         });
-        s.macros.insert(
-            5,
-            HostLine::Macro {
-                face: 5,
-                src: None,
-                keys: vec![],
-            },
-        );
+        s.snapshot.macros.insert(5, MacroLayout::default());
         s.ws = Some(HostLine::Ws {
             active: 1,
             count: 2,

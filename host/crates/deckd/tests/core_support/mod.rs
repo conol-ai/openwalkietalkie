@@ -70,6 +70,13 @@ pub fn build(name: &str, ring: usize) -> (Core, Parts) {
     let (hid, ops, lines, debug) = HidHandle::detached();
     let mut core = Core::new(store, State::default(), hid, paths);
     core.set_bus(Arc::new(Bus::new(ring)));
+    // `--no-device` all the way through, whatever a test calls: no
+    // firmware check opens a deck or fetches the release manifest, no model
+    // download starts, and `care.checks` enumerates no HID.
+    core.firmware = deckd::firmware::Updater::offline();
+    core.stt_install = deckd::download::Installer::offline();
+    core.tts_install = deckd::download::Installer::offline();
+    core.no_device = true;
     (
         core,
         Parts {

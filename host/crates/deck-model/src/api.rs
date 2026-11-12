@@ -358,7 +358,7 @@ impl Store {
                 layout,
                 src,
                 keys,
-            } => self.device_macro_set(f, layout, src, keys),
+            } => self.device_macro_set(f, layout, src, keys, principal),
             Request::DeviceWsSet {
                 active,
                 count,

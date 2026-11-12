@@ -8,9 +8,17 @@
 //! `config.get`, `voice.engines`, `voice.test` and `perm.request`, which are
 //! **calls and not events** — nothing the daemon emits folds any of them into
 //! the mirror, so the screens ask, keep the answer themselves, and ask again.
-//! [`tray`] is beside them for a different reason: the menu-bar aggregate is
-//! a pure function of the mirror, so the whole of what the tray *says* is
-//! testable here and only the status item itself is platform code.
+//!
+//! The companion app's additions follow that pattern and one more. [`care`]
+//! parses the replies of `sources.list`, `care.*` and the `[sources]` half
+//! of `config.get`, which are calls. [`attention`] and [`menu`] are pure
+//! functions of the mirror — what needs the owner's attention, and the
+//! status item — so the whole of what the menu bar *says* is testable here
+//! and only the status item itself is platform code.
+//!
+//! The window is the deck's companion and never a session's: the mirror
+//! holds no agent and folds no event about one, and the hello asks for
+//! `voice`, `device` and `admin` only ([`host_state`], [`api_client`]).
 //!
 //! There is no `gpui` here, deliberately. Everything in this crate is a plain
 //! type a `#[test]` can drive, so the reducer suite (`tests/reducer.rs`) is
@@ -23,11 +31,13 @@
 //! `oneshot::Receiver` for a view to await on gpui's own executor.
 pub mod admin;
 pub mod api_client;
+pub mod attention;
+pub mod care;
 pub mod events;
 pub mod host_state;
 pub mod i18n;
+pub mod menu;
 pub mod tokio_bridge;
-pub mod tray;
 pub mod voice;
 
 pub use admin::{
@@ -35,11 +45,13 @@ pub use admin::{
     TokenRow, Verb,
 };
 pub use api_client::ApiClient;
+pub use attention::{Attention, Extras};
+pub use care::{Checks, Footprint, FootprintItem, Source, Sources, SourcesConfig, TestStatus};
 pub use events::{bus, ApiEvent, AppEvent, EventReceiver, EventSender};
 pub use host_state::{
-    Backoff, ConfigValue, ConfirmRequest, HostEffect, HostState, Level, OrderEntry, SheetKind,
-    Transcript, UiAction, BACKOFF_MAX, BACKOFF_MIN,
+    Backoff, ConfigValue, HostEffect, HostState, Level, SheetKind, UiAction, BACKOFF_MAX,
+    BACKOFF_MIN,
 };
+pub use menu::{IconState, MenuCommand, MenuModel, NoService};
 pub use tokio_bridge::TokioBridge;
-pub use tray::TrayCommand;
 pub use voice::{Engine, Engines, Prompt, TestReport};

@@ -50,7 +50,9 @@ fn install_is_idempotent_and_backs_up_every_file_it_touches() {
     std::fs::write(&hooks, &hooks_before).unwrap();
     std::fs::write(&config, &config_before).unwrap();
 
-    // Claude: four files of ours, created, none of the user's touched.
+    // Claude: three files of ours, created, none of the user's touched (a
+    // new install has no Claude Channels helper until the owner switches it
+    // on: `[sources] claude_channels`).
     let first = integrations::run(&env, Target::Claude, INSTALL).expect("first install");
     assert_eq!(
         first.changed,
@@ -58,7 +60,6 @@ fn install_is_idempotent_and_backs_up_every_file_it_touches() {
             integrations::claude::marketplace_json_path(&env),
             integrations::claude::plugin_json_path(&env),
             integrations::claude::hooks_json_path(&env),
-            integrations::claude::mcp_json_path(&env),
         ]
     );
     assert!(

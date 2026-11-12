@@ -12,6 +12,7 @@ pub mod handle;
 pub mod holds;
 mod images;
 pub mod sessions;
+mod test_agent;
 
 pub use handle::{
     CallCtx, ClientInfo, CoreHandle, CoreMsg, Delivery, HoldGuard, HoldResult, HoldRx, OpenSession,
@@ -30,8 +31,8 @@ use crossbeam_channel::TrySendError;
 use crossbeam_channel::{select, tick, Receiver};
 use deck_model::{
     AgentId, Answer, ApiError, ApiResult, CardId, CardKind, Command, Control, Deliver, DeviceLine,
-    DeviceOp, Effect, Event, EventKind, HoldId, Key, LinkEvent, Principal, Request, Scope,
-    SessionId, Slot, Store, StoreConfig, TimerKey, Ts, VoiceIn,
+    DeviceOp, DeviceReport, Effect, Event, EventKind, HoldId, Key, LinkEvent, Principal, Request,
+    Scope, SessionId, Slot, Store, StoreConfig, TimerKey, Ts, VoiceIn,
 };
 use guard::{Guard, Refusal};
 use holds::Holds;
@@ -273,6 +274,16 @@ pub struct Core {
     /// The Usage face's feeders' latest windows (`crate::usage`), and the
     /// line last pushed from them.
     usage: crate::usage::Feeder,
+    /// Which source each session is, when each was last heard from, and the
+    /// sessions the owner's `[sources]` switches mute (`care::sources`).
+    sources: crate::care::sources::Ledger,
+    /// The test agent (`care::test`): the daemon's own care session, the
+    /// agent "Test" while a test is on the deck, and how the last test of
+    /// each kind went.
+    test_agent: crate::care::test::TestAgent,
+    /// `--no-device`: the deck is never opened here, nor looked for —
+    /// `care.checks` leaves the doctor's HID enumeration out (O16).
+    pub no_device: bool,
 }
 
 /// A parked `op.answer` reply. `deck-model` answers the method before the
@@ -294,6 +305,24 @@ impl Core {
     pub fn new(store: Store, state: State, hid: HidHandle, paths: Paths) -> Self {
         let bus = Arc::new(Bus::default());
         bus.set_snapshot(store.snapshot().clone());
+        // A unit-test core never reaches out (O16). The API tests call every
+        // advertised method with `{}`: `firmware.check` then opened whatever
+        // deck was on USB and fetched the release manifest, and `stt.install`
+        // and `tts.install` started the default models' downloads. `run`
+        // takes the firmware side offline for `--no-device` as well.
+        let (firmware, stt_install, tts_install) = if cfg!(test) {
+            (
+                crate::firmware::Updater::offline(),
+                crate::download::Installer::offline(),
+                crate::download::Installer::offline(),
+            )
+        } else {
+            (
+                crate::firmware::Updater::default(),
+                crate::download::Installer::default(),
+                crate::download::Installer::default(),
+            )
+        };
         Core {
             store,
             state,
@@ -307,13 +336,13 @@ impl Core {
             audio_policy: None,
             tts_settings: Arc::new(arc_swap::ArcSwap::from_pointee(crate::audio::cloud::Settings::default())),
             stt_settings: Arc::new(arc_swap::ArcSwap::from_pointee(crate::stt::Settings::default())),
-            stt_install: crate::download::Installer::default(),
-            firmware: crate::firmware::Updater::default(),
+            stt_install,
+            firmware,
             executable: std::env::current_exe().ok(),
             #[cfg(any(target_os = "macos", target_os = "linux"))]
             whisper: None,
             kokoro_settings: Arc::new(arc_swap::ArcSwap::from_pointee(crate::kokoro::Settings::default())),
-            tts_install: crate::download::Installer::default(),
+            tts_install,
             #[cfg(target_os = "macos")]
             kokoro: None,
             transcribe: crate::audio::companion::CompanionHub::new(),
@@ -353,6 +382,9 @@ impl Core {
             answers: Vec::new(),
             adapters: Arc::default(),
             usage: crate::usage::Feeder::default(),
+            sources: crate::care::sources::Ledger::default(),
+            test_agent: crate::care::test::TestAgent::default(),
+            no_device: false,
         }
     }
 
@@ -602,6 +634,16 @@ impl Core {
         now: Instant,
     ) -> ApiResult {
         self.sessions.touch(session, now);
+        // Every source's agents call in through here (the hooks' plans, the
+        // Codex client, a connected app): this is when each was last heard
+        // from (`sources.list`), by something it did, never by the lease
+        // renewals and reclaims that only keep its agents alive.
+        if crate::care::sources::activity(&req) {
+            self.sources.heard(&self.sessions, session, self.store.ts(now));
+        }
+        if matches!(req, Request::DeviceWsSet { .. }) {
+            self.sources.drew_face(&self.sessions, session);
+        }
         self.logical_push_check(session, &req)?;
         if let Err(refusal) =
             self.guard
@@ -626,6 +668,59 @@ impl Core {
             }
         }
         result
+    }
+
+    /// The owner's `[sources]` switches, applied: every session of a paused
+    /// source is muted (`Command::Mute`), kept and served but off the deck
+    /// (`care::sources`). Worked out again on every config change and every
+    /// session open or close, so a paused app's new connection is muted
+    /// before it can register anything; a set that did not move sends
+    /// nothing.
+    pub(crate) fn apply_pauses(&mut self, now: Instant) {
+        let muted = self
+            .sources
+            .mute(&self.sessions, self.store.snapshot(), &self.config.sources);
+        if let Some(sessions) = muted {
+            tracing::debug!(sessions = sessions.len(), "muted sessions");
+            self.step(Command::Mute { sessions }, now);
+        }
+    }
+
+    /// `sources.list` (`care::sources`): what puts sessions on the deck, as
+    /// counts and times.
+    pub(crate) fn sources_list(&mut self) -> serde_json::Value {
+        let around = crate::care::sources::Around {
+            channels: &self.adapters.claude_channels,
+            channels_on: self.channels_on(),
+            codex_connected: self.adapters.codex_connected(),
+        };
+        self.sources
+            .list(&self.sessions, self.store.snapshot(), &self.config, &around)
+    }
+
+    /// Whether the owner has Claude Channels on (`[sources]
+    /// claude_channels`, resolved against this daemon's plugin when the
+    /// file leaves it unset): what `config.get` publishes, the Claude
+    /// Channels row's switch, and what keeps the channel door open.
+    pub(crate) fn channels_on(&self) -> bool {
+        crate::integrations::claude::channels_on(
+            self.config.sources.claude_channels,
+            &self.paths.data,
+        )
+    }
+
+    /// What a care method needs from here (`crate::care`): copies, so the
+    /// door can walk the disk on the blocking pool while this thread goes
+    /// on.
+    pub(crate) fn care_context(&self) -> crate::care::Context {
+        crate::care::Context {
+            paths: self.paths.clone(),
+            executable: self.executable.clone(),
+            config: self.config.clone(),
+            no_device: self.no_device,
+            codex_connected: self.adapters.codex_connected(),
+            firmware_busy: self.firmware.status().busy(),
+        }
     }
 
     /// A guard refusal: the error for the caller, and for an untrusted
@@ -863,6 +958,11 @@ impl Core {
                     tracing::debug!(session = %id, sessions = self.sessions.len(), "session opened");
                     id
                 });
+                // A session of a paused source is muted before its owner
+                // even has its id, so nothing it registers takes a slot.
+                if opened.is_ok() {
+                    self.apply_pauses(now);
+                }
                 let _ = reply.send(opened);
             }
             CoreMsg::LogicalSession {
@@ -872,7 +972,13 @@ impl Core {
                 scopes,
                 reply,
             } => {
+                // Every HTTP call names its logical session; only a new
+                // one can change what is muted.
+                let fresh = !self.sessions.has_logical(&token, &client);
                 let id = self.logical_session(token, client, principal, scopes, now);
+                if fresh && id.is_ok() {
+                    self.apply_pauses(now);
+                }
                 let _ = reply.send(id);
             }
             CoreMsg::CloseSession(id) => self.close_session(id, now),
@@ -888,12 +994,26 @@ impl Core {
                     mailbox_ttl_s = config.api.mailbox_ttl_s,
                     "config applied"
                 );
-                self.set_config(config);
-                // `[usage] providers` may have changed what is drawn.
-                self.push_usage(now);
+                self.take_config(config, now);
+            }
+            CoreMsg::CareContext(reply) => {
+                let _ = reply.send(self.care_context());
             }
             CoreMsg::Shutdown => {}
         }
+    }
+
+    /// A config taken in, whichever of the three ways it came: the
+    /// watcher's `CoreMsg::Config`, `config.reload` or `config.set`. It is
+    /// set ([`Core::set_config`]), the owner's pauses are worked out again
+    /// (a `[sources]` switch may have moved) and the Usage face is redrawn
+    /// (its `[usage] providers` may have). Taking the config the core
+    /// already holds changes nothing, which is what the watcher's reload of
+    /// a `config.set`'s own write comes to.
+    fn take_config(&mut self, config: Arc<Config>, now: Instant) {
+        self.set_config(config);
+        self.apply_pauses(now);
+        self.push_usage(now);
     }
 
     /// The Usage face from the feeders' latest windows (`crate::usage`),
@@ -971,6 +1091,8 @@ impl Core {
     }
 
     fn close_session(&mut self, id: SessionId, now: Instant) {
+        // The agents it leaves behind keep its source, and with it a pause.
+        self.sources.remember(&self.sessions, id);
         if let Some(mut entry) = self.sessions.close(id) {
             // Whoever was parked on it hears `timeout`, not a dropped channel.
             for (agent, waiter) in entry.waiters.drain() {
@@ -990,6 +1112,7 @@ impl Core {
             // answer: the local final is used at once, not at the budget.
             self.transcribe.fail_session(id);
             self.step(Command::SessionClosed(id), now);
+            self.apply_pauses(now);
         }
     }
 
@@ -1222,6 +1345,9 @@ impl Core {
             return Err(ApiError::rate_limited(crate::core::handle::RETRY_MS));
         }
         let agent = cmd.agent.clone();
+        // A held question is a hook event like any other, but it comes this
+        // way and not through `api_call`.
+        self.sources.heard(&self.sessions, session, self.store.ts(now));
         self.hold_seq += 1;
         let (result, mut events, effects) =
             self.store
@@ -1739,6 +1865,7 @@ impl Core {
         }
         self.route_events(events, now);
         self.note_answer_outcomes(events);
+        self.settle_tests(events, now);
         self.unpin_removed(events);
         self.forget_inboxes(events);
         self.pending.extend(events.iter().cloned());
@@ -1811,6 +1938,15 @@ impl Core {
         tracing::info!(?link, "link");
         self.step(Command::Link(link), now);
         self.write_status(now);
+    }
+
+    /// What the deck said about itself, or why its link is ending: the
+    /// store keeps it, and `status.json` follows whatever changed.
+    pub fn on_device_report(&mut self, report: DeviceReport, now: Instant) {
+        tracing::debug!(?report, "device report");
+        if !self.step(Command::DeviceReport(report), now).is_empty() {
+            self.write_status(now);
+        }
     }
 
     pub fn on_metric(&mut self, metric: Metric, now: Instant) {
@@ -2447,6 +2583,10 @@ impl Core {
             overflows: self.overflows,
             ops_dropped: self.ops_dropped,
             metric: self.metric,
+            transport: snap.device.transport,
+            battery: snap.device.battery,
+            charging: snap.device.charging,
+            board: snap.device.board.clone(),
         }
     }
 
@@ -2489,6 +2629,7 @@ impl Core {
                 self.on_device_line(line, now);
             }
             FromHid::Link(link) => self.on_link(link, now),
+            FromHid::Report(report) => self.on_device_report(report, now),
             FromHid::Metric(m) => self.on_metric(m, now),
         }
     }
@@ -2548,7 +2689,13 @@ pub fn run(opts: RunOptions) -> Result<i32, CoreError> {
     let sid = new_sid();
     let started = Instant::now();
     let mut cfg = StoreConfig::new(started, wall_now(), sid);
-    cfg.port = opts.config.api.port;
+    // With `[api] tcp = false` no door will hold a port, so the snapshot
+    // names none from the start (`api::serve` records the same).
+    cfg.port = if opts.config.api.tcp {
+        opts.config.api.port
+    } else {
+        0
+    };
     cfg.grace_s = opts.config.agents.grace_s;
     cfg.ready_ttl_s = opts.config.cards.ready_ttl_s;
     cfg.hold_s = opts.config.hooks.claude.hold_s;
@@ -2579,8 +2726,19 @@ pub fn run(opts: RunOptions) -> Result<i32, CoreError> {
         clock_local: opts.config.device.clock == "local",
         hardware: !opts.no_device,
         audio: voice_link.as_ref().map(crate::ble::BleAudio::usb_port),
+        status_every: opts.config.device.status_every(),
     });
     let mut core = Core::new(store, state, hid, opts.paths.clone());
+    // `--no-device` never opens the deck, and a firmware check is the one
+    // request that would: it probes USB from a thread of its own, which
+    // `hardware: false` above does not reach, and then fetches the release
+    // manifest. The app sends one on every connection, so here it answers
+    // with the idle status the updater has (B2).
+    if opts.no_device {
+        core.firmware = crate::firmware::Updater::offline();
+    }
+    // …and `care.checks` does not even enumerate HID for its `device` row.
+    core.no_device = opts.no_device;
     // The voice engine (§7). `--no-device` leaves `AudioHandle::none()` in
     // place, which is exactly the daemon the seam pass shipped: every
     // `Effect::Audio` is logged and forgotten and the §7.4 machine still
@@ -2746,9 +2904,22 @@ pub fn run(opts: RunOptions) -> Result<i32, CoreError> {
         // rate-limit windows for the Usage face, polled; Codex's come
         // through the app-server client above.
         let usage_rx = stop_liveness.subscribe();
+        // The Claude Channels door, open while the owner has the bridge on:
+        // the switch in the live config, or the plugin's own helper while
+        // the file leaves it unset, read the way `config.get` reads it.
+        let channels_on = {
+            let (config, data) = (api.config.clone(), api.paths.data.clone());
+            move || {
+                crate::integrations::claude::channels_on(
+                    config.load().sources.claude_channels,
+                    &data,
+                )
+            }
+        };
         let channels = tokio::spawn(crate::claude_channel::serve(
             api.paths.data.clone(),
             api.core.adapters().claude_channels.clone(),
+            channels_on,
             stop_liveness.subscribe(),
         ));
         let system = tokio::spawn(crate::system_status::run(api.core.clone(), stop_liveness.subscribe()));
@@ -3598,6 +3769,61 @@ mod tests {
         assert!(r.result.is_err());
         c.call(admin, "device.sync", serde_json::Value::Null, t0);
         assert_eq!(debug.try_recv(), Ok(HidDebug::Sync));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// What the hid thread reports about the deck reaches the snapshot and
+    /// `status.json` (for `deckd status`); a report about a deck that is not
+    /// linked changes nothing, and the end of the link clears it again.
+    #[test]
+    fn a_device_report_reaches_the_snapshot_and_the_status_file() {
+        use deck_model::Transport;
+        let dir = temp("device-report");
+        let (mut c, _ops, _lines, _debug) = detached(&dir);
+        let t0 = Instant::now();
+        let report = |report| FromHid::Report(report);
+        c.on_from_hid(report(DeviceReport::Board(Some("Rev B".into()))), t0);
+        assert_eq!(c.store.snapshot().device.board, None, "no deck is linked");
+        assert!(
+            Status::read(&dir.join("status.json")).is_none(),
+            "nothing to write"
+        );
+        c.on_from_hid(FromHid::Link(LinkEvent::Linked), t0);
+        c.on_from_hid(report(DeviceReport::Transport(Some(Transport::Usb))), t0);
+        let power = DeviceReport::Power {
+            battery: Some(85),
+            charging: Some(true),
+        };
+        c.on_from_hid(report(power), t0);
+        c.on_from_hid(report(DeviceReport::Board(Some("Rev B".into()))), t0);
+        let device = &c.store.snapshot().device;
+        assert_eq!(device.transport, Some(Transport::Usb));
+        assert_eq!((device.battery, device.charging), (Some(85), Some(true)));
+        assert_eq!(device.board.as_deref(), Some("Rev B"));
+        let s = Status::read(&dir.join("status.json")).unwrap();
+        assert_eq!(
+            (s.transport, s.battery, s.charging, s.board.as_deref()),
+            (Some(Transport::Usb), Some(85), Some(true), Some("Rev B"))
+        );
+        // The link ends: why, then the `Down` that records it and clears
+        // the deck.
+        let removed = DeviceReport::Dropped {
+            why: "removed".into(),
+        };
+        c.on_from_hid(report(removed), t0);
+        c.on_from_hid(FromHid::Link(LinkEvent::Down), t0);
+        let device = &c.store.snapshot().device;
+        assert_eq!(
+            (device.transport, device.battery, device.board.as_deref()),
+            (None, None, None)
+        );
+        assert_eq!(device.drops.len(), 1);
+        assert_eq!(device.drops[0].why, "removed");
+        let s = Status::read(&dir.join("status.json")).unwrap();
+        assert_eq!(
+            (s.transport, s.battery, s.charging, s.board),
+            (None, None, None, None)
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 

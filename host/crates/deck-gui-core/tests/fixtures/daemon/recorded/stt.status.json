@@ -1,0 +1,40 @@
+{
+  "active": false,
+  "download": null,
+  "engine": "apple",
+  "load_error": null,
+  "loaded": false,
+  "loading": false,
+  "model": "large-v3-turbo",
+  "models": [
+    {
+      "about": "multilingual; the accuracy of large-v3 at a fraction of its time",
+      "bytes": 1624555275,
+      "name": "large-v3-turbo"
+    },
+    {
+      "about": "the same in 8-bit: half the download, almost the same accuracy",
+      "bytes": 874188075,
+      "name": "large-v3-turbo-q8_0"
+    },
+    {
+      "about": "the same in 5-bit: a third of the download",
+      "bytes": 574041195,
+      "name": "large-v3-turbo-q5_0"
+    },
+    {
+      "about": "multilingual, fast, noticeably less accurate",
+      "bytes": 487601967,
+      "name": "small"
+    },
+    {
+      "about": "English only, the lightest",
+      "bytes": 147964211,
+      "name": "base.en"
+    }
+  ],
+  "path": "d/caches/stt/ggml-large-v3-turbo.bin",
+  "present": false,
+  "prompted": false,
+  "total": 1624555275
+}

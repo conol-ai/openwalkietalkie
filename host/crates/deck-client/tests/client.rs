@@ -119,6 +119,7 @@ fn config(path: &Path, name: &str) -> ClientConfig {
         subscribe: vec!["card.*".into()],
         snapshot: false,
         reconnect: false,
+        content: None,
     }
 }
 
@@ -143,6 +144,8 @@ async fn hello_round_trip() {
         assert_eq!(params["snapshot"], true);
         assert!(params.get("since").is_none(), "{params}");
         assert!(params.get("token").is_none(), "no token on the uds");
+        // Not asked for: the daemon's own default applies, as it always did.
+        assert!(params.get("content").is_none(), "{params}");
         // close() ends the session: EOF on the server side.
         assert!(peer.read().await.is_none(), "closed after close()");
     });
@@ -162,6 +165,24 @@ async fn hello_round_trip() {
     assert_eq!(client.last_rev(), 7);
     assert!(client.connected());
     assert!(format!("{client:?}").contains("sess_2"));
+    client.close().await;
+    server.await.unwrap();
+    let _ = std::fs::remove_file(&path);
+}
+
+#[tokio::test]
+async fn a_client_that_wants_no_session_text_says_so_in_its_hello() {
+    let path = socket_path("content");
+    let listener = UnixListener::bind(&path).unwrap();
+    let server = tokio::spawn(async move {
+        let mut peer = Peer::accept(&listener).await;
+        let params = peer.hello(1, json!({})).await;
+        assert_eq!(params["content"], false, "{params}");
+        assert!(peer.read().await.is_none(), "closed after close()");
+    });
+    let mut cfg = config(&path, "t");
+    cfg.content = Some(false);
+    let client = Client::connect(cfg).await.unwrap();
     client.close().await;
     server.await.unwrap();
     let _ = std::fs::remove_file(&path);

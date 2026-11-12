@@ -1,34 +1,40 @@
-//! The window's look: one glass material over the blurred desktop, alpha-ink
-//! hairlines and washes instead of grey slabs, three text tones, Geist at
-//! 11–20 px with Medium (not Bold) for emphasis, and one violet accent kept
-//! for focus, switches and "this one is live".
+//! The window's look, taken from the deck's own screen: an opaque window,
+//! greys for surfaces and lines, three text steps, Geist at 11 to 30 px, and
+//! colour only where something has a state.
 //!
-//! The values are Zeron's (github.com/zeronsh/zeron, MIT), resolved from its
-//! theme crate's seeds rather than copied from screenshots. Two rules carry
-//! most of the look and are worth keeping when a value changes:
+//! The values are the design's tokens (`DARK` and `LIGHT` of the companion
+//! app's design), one field each, so a part drawn from the design reads
+//! `t['text2']` as `p.text2`. Three rules carry the look and are worth
+//! keeping when a value changes:
 //!
-//! * **Lines and fills are ink at an alpha, never a grey hex.** A hairline is
-//!   white at 10 % on dark and black at 12 % on light; a hover is an 11 % /
-//!   6 % wash. Over glass that reads as tinted glass, where a grey would read
-//!   as a slab stuck on top.
-//! * **Light is designed, not inverted.** Each appearance has its own seeds
-//!   (`#303035` text on light, not `#e8e8ea` flipped), and the status colours
-//!   step down to their 600-level hues so they keep their contrast on white.
+//! * **Colour means state.** Nothing else in the window is coloured: the
+//!   primary button, a switch that is on and a selected item are the neutral
+//!   `solid` and `outline`, and keyboard focus is the one blue, `info`.
+//! * **A healthy state is a dot and a word; only trouble gets a tinted
+//!   pill** (`warn_wash`, `bad_wash`, `info_wash`). There is no good wash.
+//! * **Light is designed, not inverted.** Its state colours step down so
+//!   they keep their contrast on white, and a word on a wash takes the
+//!   darker `*_text` step. The amber wash and rim stay on the bright amber
+//!   in both appearances.
 //!
 //! Everything a screen paints comes from [`Palette`]. gpui-component's own
-//! furniture (text fields, tooltips, notifications) reads its `Theme`
+//! furniture (text fields, tooltips, notifications, menus) reads its `Theme`
 //! instead, so [`install`] writes the same values there: the two cannot
 //! drift, and a later `Theme::change` cannot quietly undo them because
 //! [`install`] is what runs on every appearance change.
+use deck_gui_core::i18n::Language;
 use deck_model::Tone;
-use gpui::{px, rgb, rgba, App, Global, Hsla, WindowAppearance};
+use gpui::{
+    px, rgb, rgba, App, Font, FontFallbacks, FontFeatures, FontStyle, FontWeight, Global, Hsla,
+    WindowAppearance,
+};
 use gpui_component::{Theme, ThemeMode};
 use std::borrow::Cow;
 
 /// The sans family every screen is set in.
 pub const SANS: &str = "Geist";
-/// The family for anything an operator might copy: paths, ports, tokens,
-/// commands, log lines.
+/// The family for versions, paths, key names and values: anything that is
+/// read character by character.
 pub const MONO: &str = "Geist Mono";
 
 /// Pins the appearance instead of following the system:
@@ -36,248 +42,219 @@ pub const MONO: &str = "Geist Mono";
 /// one appearance without changing the Mac's.
 pub const APPEARANCE_ENV: &str = "OPENWALKIETALKIE_APPEARANCE";
 
-/// `OPENWALKIETALKIE_GLASS=0` paints the shell opaque instead of over the
-/// blurred desktop.
-pub const GLASS_ENV: &str = "OPENWALKIETALKIE_GLASS";
+/// What Chinese and Japanese are drawn in. Geist has no CJK, so without a
+/// list CoreText would pick the fallback from the Mac's language order and
+/// not from the window's language.
+pub const CJK: [&str; 3] = ["PingFang SC", "PingFang TC", "Hiragino Sans"];
 
-/// The shell tint's alpha over the blurred desktop.
-///
-/// Zeron's is 0.80, but Zeron runs a gpui fork that fixed how a translucent
-/// fill writes the framebuffer's alpha on a transparent window. Stock 0.2.2
-/// blends alpha like colour, so a fill of alpha `a` leaves `a²` behind for
-/// the window server: 0.80 lets 36 % of the desktop through instead of 20 %
-/// (measured 2026-10-04: the dark shell came out `#303030`, not near-black).
-/// 0.894² is 0.80, which puts the look back where Zeron's is.
-pub const GLASS_ALPHA: f32 = 0.894;
+/// Things drawn the way the deck draws them. They are the deck's colours,
+/// not the window's, so they are the same in both appearances.
+pub mod deck_colors {
+    /// A face plate's ground: the deck's screen.
+    pub const PLATE_GROUND: u32 = 0x050506;
+    /// A plate's bars and cells.
+    pub const PLATE_BAR: u32 = 0x5D6068;
+    /// A plate's dots, its title and a meter's fill.
+    pub const PLATE_DOT: u32 = 0x8E9299;
+    /// A plate's empty meter track.
+    pub const PLATE_TRACK: u32 = 0x33363D;
+    /// A macro key's name, centred on the key.
+    pub const KEY_NAME: u32 = 0xF2F2F3;
+    /// The deck button in a macro key's top-left corner.
+    pub const KEY_CORNER: u32 = 0x8E9299;
+    /// The shortcut a macro key types, in its top-right corner.
+    pub const KEY_COMBO: u32 = 0xA6A9AF;
+}
 
-/// Every colour a screen paints, for one appearance.
+/// Every colour a screen paints, for one appearance. The names are the
+/// design's tokens.
 #[derive(Clone, Copy, Debug)]
 pub struct Palette {
     pub dark: bool,
-    /// Whether the window behind the glass is blurred. Without the blur an
-    /// 80 % tint shows the desktop through, unblurred, which is worse than
-    /// no glass at all, so [`Palette::glass`] is opaque then.
-    pub frosted: bool,
-    /// The root fill: the shell tint over the blurred desktop.
-    pub glass: Hsla,
+    // ---- surfaces
+    /// The window, and the main column.
+    pub win: Hsla,
+    /// The sidebar.
+    pub side: Hsla,
+    /// Cards, menus and dialogs.
+    pub surf: Hsla,
+    /// What a control sits in: a field, a popup, a segmented control, a
+    /// quiet button, a tile.
+    pub well: Hsla,
+    /// Behind the deck's picture and a face plate's preview.
+    pub stage: Hsla,
+    // ---- lines
+    /// The rule between rows and around a card.
+    pub line: Hsla,
+    /// A control's edge: at 3:1 or better against the window and a card,
+    /// so a control's outline reads without colour.
+    pub edge: Hsla,
+    /// What is selected: a segment, a radio, a face tile, the page in the
+    /// sidebar. Never a fill.
+    pub outline: Hsla,
+    // ---- text
     pub text: Hsla,
-    /// Secondary text, and icons at rest.
-    pub muted: Hsla,
-    /// Captions, placeholders, the time on a row.
-    pub faint: Hsla,
-    pub border: Hsla,
-    pub border_strong: Hsla,
-    /// Rows and chrome under the pointer.
-    pub hover: Hsla,
-    /// The selected row, nav item and segment.
-    pub selected: Hsla,
-    pub accent: Hsla,
-    pub on_accent: Hsla,
-    /// The primary button's plate: near-white on dark, near-black on light.
-    /// The primary action is neutral; the accent is not a call to action.
+    /// Sub-lines, values, and icons at rest.
+    pub text2: Hsla,
+    /// Section labels and anything quieter than a sub-line.
+    pub text3: Hsla,
+    // ---- the neutral primary
+    /// The primary button, a switch that is on, a radio's dot.
     pub solid: Hsla,
     pub on_solid: Hsla,
-    /// Menus, tooltips and notifications: opaque, because gpui 0.2 has no
-    /// backdrop blur and a translucent plate without one looks muddy.
-    pub popover: Hsla,
-    /// Dialogs, one step up from the popover on dark.
-    pub dialog: Hsla,
-    /// What a dialog dims the window with.
+    // ---- state: the dot, a word on its wash, the wash, the rim
+    pub good: Hsla,
+    pub warn: Hsla,
+    pub bad: Hsla,
+    /// Keyboard focus, and "working".
+    pub info: Hsla,
+    pub good_text: Hsla,
+    pub warn_text: Hsla,
+    pub bad_text: Hsla,
+    pub info_text: Hsla,
+    pub warn_wash: Hsla,
+    /// The rim of something that needs attention.
+    pub warn_line: Hsla,
+    pub bad_wash: Hsla,
+    pub info_wash: Hsla,
+    // ---- deck-shaped things, the same in both appearances
+    /// A macro key's face.
+    pub key_fill: Hsla,
+    pub key_line: Hsla,
+    /// The 1 px ring around a face tile at rest.
+    pub tile_rest: Hsla,
+    /// Not a token of the design: what a dialog dims the window with.
     pub scrim: Hsla,
-    /// The opaque plate behind an outlined button or the composer.
-    pub plate: Hsla,
-    /// The log viewer and code blocks.
-    pub terminal: Hsla,
-    pub danger: Hsla,
-    /// Text on a danger tint.
-    pub danger_muted: Hsla,
-    pub warning: Hsla,
-    pub warning_muted: Hsla,
-    pub success: Hsla,
-    pub success_muted: Hsla,
-    /// The firmware's blue ("working"). Zeron has no info hue; this is its
-    /// blue accent preset.
-    pub blue: Hsla,
-    /// Claude's own orange, the one coloured glyph in the window.
-    pub claude: Hsla,
-    /// The Gemini mark's blue.
-    pub gemini: Hsla,
-    /// The switch track when on, and off.
-    pub switch_on: Hsla,
-    pub switch_off: Hsla,
-    /// The off-white (92 % L) or off-black (10 % L) that washes are made of:
-    /// softer than pure ink, so a hover reads as tinted glass.
-    wash_base: Hsla,
-    /// Pure white or black.
-    ink_base: Hsla,
 }
 
 impl Global for Palette {}
 
-fn hex(value: u32) -> Hsla {
+/// `0xRRGGBB` as a colour.
+pub fn hex(value: u32) -> Hsla {
     rgb(value).into()
 }
 
+/// `0xRRGGBBAA` as a colour.
 fn hexa(value: u32) -> Hsla {
     rgba(value).into()
 }
 
 impl Palette {
-    pub fn dark(frosted: bool) -> Palette {
-        let accent = hex(0x8b7cf6);
+    pub fn dark() -> Palette {
         Palette {
             dark: true,
-            frosted,
-            glass: if frosted {
-                hex(0x0d0d0d).alpha(GLASS_ALPHA)
-            } else {
-                hex(0x0d0d0d)
-            },
-            text: hex(0xe8e8ea),
-            muted: hex(0xa9a9ae),
-            faint: hex(0x85858a),
-            border: hexa(0xffffff1a),
-            border_strong: hexa(0xffffff2e),
-            hover: hexa(0xffffff1c),
-            selected: hexa(0xebebeb1c),
-            accent,
-            on_accent: hex(0x000000),
-            solid: hex(0xebebef),
-            on_solid: hex(0x000000),
-            popover: hex(0x27272a),
-            dialog: hex(0x151516),
+            win: hex(0x0E0E10),
+            side: hex(0x131316),
+            surf: hex(0x17171A),
+            well: hex(0x202024),
+            stage: hex(0x101013),
+            line: hex(0xFFFFFF).alpha(0.08),
+            edge: hex(0x6A6D73),
+            outline: hex(0xE8E9EA),
+            text: hex(0xF2F2F3),
+            text2: hex(0xA6A9AF),
+            text3: hex(0x8E9299),
+            solid: hex(0xEDEDEF),
+            on_solid: hex(0x0E0E10),
+            good: hex(0x3DDC84),
+            warn: hex(0xFFB020),
+            bad: hex(0xFF5C5C),
+            info: hex(0x4C9AFF),
+            good_text: hex(0x3DDC84),
+            warn_text: hex(0xFFB020),
+            bad_text: hex(0xFF5C5C),
+            info_text: hex(0x4C9AFF),
+            warn_wash: hex(0xFFB020).alpha(0.11),
+            warn_line: hex(0xFFB020).alpha(0.34),
+            bad_wash: hex(0xFF5C5C).alpha(0.12),
+            info_wash: hex(0x4C9AFF).alpha(0.13),
+            key_fill: hex(0x0B0B0D),
+            key_line: hex(0x2C2E33),
+            tile_rest: hex(0x3A3D44),
             scrim: hexa(0x00000059),
-            plate: hex(0x27272a),
-            terminal: hex(0x090909),
-            danger: hex(0xf87171),
-            danger_muted: hex(0xf49293),
-            warning: hex(0xfacc15),
-            warning_muted: hex(0xf6d34a),
-            success: hex(0x34d399),
-            success_muted: hex(0x61d8ad),
-            blue: hex(0x60a5fa),
-            claude: hex(0xd97757),
-            gemini: hex(0x7aa2ff),
-            switch_on: hex(0x786bd4),
-            switch_off: hex(0x424242),
-            wash_base: hex(0xebebeb),
-            ink_base: hex(0xffffff),
         }
     }
 
-    pub fn light(frosted: bool) -> Palette {
-        let accent = hex(0x5b43e8);
+    pub fn light() -> Palette {
         Palette {
             dark: false,
-            frosted,
-            glass: if frosted {
-                hex(0xf3f3f5).alpha(GLASS_ALPHA)
-            } else {
-                hex(0xf3f3f5)
-            },
-            text: hex(0x303035),
-            muted: hex(0x62626a),
-            faint: hex(0x797981),
-            border: hexa(0x0000001f),
-            border_strong: hexa(0x00000038),
-            hover: hexa(0x0000000f),
-            selected: hexa(0x1a1a1a0f),
-            accent,
-            on_accent: hex(0xffffff),
-            solid: hex(0x232328),
-            on_solid: hex(0xffffff),
-            popover: hex(0xffffff),
-            dialog: hex(0xfefefe),
+            win: hex(0xF4F4F6),
+            side: hex(0xEBEBEE),
+            surf: hex(0xFFFFFF),
+            well: hex(0xEEEEF1),
+            stage: hex(0xE3E3E7),
+            line: hex(0x000000).alpha(0.10),
+            edge: hex(0x898C91),
+            outline: hex(0x18181A),
+            text: hex(0x18181A),
+            text2: hex(0x56595F),
+            text3: hex(0x63666C),
+            solid: hex(0x18181A),
+            on_solid: hex(0xFFFFFF),
+            good: hex(0x177A42),
+            warn: hex(0x9A5B00),
+            bad: hex(0xC93535),
+            info: hex(0x1D6BD6),
+            good_text: hex(0x136B39),
+            warn_text: hex(0x8A5100),
+            bad_text: hex(0xB42B2B),
+            info_text: hex(0x1A5FC0),
+            // The amber wash and rim are the bright amber's, not the dark
+            // `warn` above: on white a wash of that would read as mud.
+            warn_wash: hex(0xFFB020).alpha(0.18),
+            warn_line: hex(0xFFB020).alpha(0.60),
+            bad_wash: hex(0xC93535).alpha(0.09),
+            info_wash: hex(0x1D6BD6).alpha(0.09),
+            key_fill: hex(0x0B0B0D),
+            key_line: hex(0x2C2E33),
+            tile_rest: hex(0x000000).alpha(0.25),
             scrim: hexa(0x00000030),
-            plate: hex(0xffffff),
-            terminal: hex(0xfafafa),
-            danger: hex(0xdc2626),
-            danger_muted: hex(0xac292a),
-            warning: hex(0xa16207),
-            warning_muted: hex(0x855612),
-            success: hex(0x15803d),
-            success_muted: hex(0x1c6c3b),
-            blue: hex(0x2563eb),
-            claude: hex(0xd97757),
-            gemini: hex(0x3b6fe0),
-            switch_on: hex(0x6e59eb),
-            switch_off: hex(0xd6d6d8),
-            wash_base: hex(0x1a1a1a),
-            ink_base: hex(0x000000),
         }
     }
 
     /// The palette for `appearance`.
-    pub fn for_appearance(appearance: WindowAppearance, frosted: bool) -> Palette {
+    pub fn for_appearance(appearance: WindowAppearance) -> Palette {
         if is_dark(appearance) {
-            Palette::dark(frosted)
+            Palette::dark()
         } else {
-            Palette::light(frosted)
+            Palette::light()
         }
     }
 
-    /// A softened-ink fill at `alpha`: the family hover, selection and
-    /// cards are all drawn from. The alphas are the same in both
-    /// appearances; only hairlines are scaled for light.
-    pub fn wash(&self, alpha: f32) -> Hsla {
-        self.wash_base.alpha(alpha)
-    }
-
-    /// Pure ink at `alpha`.
-    pub fn ink(&self, alpha: f32) -> Hsla {
-        self.ink_base.alpha(alpha)
-    }
-
-    /// A 1 px line at `alpha`. Black needs more alpha than white to read as
-    /// the same weight, so light scales it by 1.35.
-    pub fn hairline(&self, alpha: f32) -> Hsla {
-        if self.dark {
-            self.ink_base.alpha(alpha)
-        } else {
-            self.ink_base.alpha((alpha * 1.35).min(0.5))
-        }
-    }
-
-    /// A section card: a 4.5 % wash, no border, no shadow.
-    pub fn card(&self) -> Hsla {
-        self.wash(0.045)
-    }
-
-    /// The rule between two rows of a card, inset to the text edge.
-    pub fn divider(&self) -> Hsla {
-        self.border.opacity(0.6)
-    }
-
-    /// A text field's well.
-    pub fn field(&self) -> Hsla {
-        self.ink(0.04)
-    }
-
-    /// The accent wash behind an accent word or a live chip.
-    pub fn accent_wash(&self) -> Hsla {
-        self.accent.alpha(if self.dark { 0.22 } else { 0.12 })
-    }
-
-    /// The firmware's five tones (§8.2: a red dot here and a red dot on the
-    /// deck mean the same thing).
+    /// A status dot in the firmware's `tone` (§8.2: a red dot here and a red
+    /// dot on the deck mean the same thing). Gray is the neutral dot, which
+    /// is a control's edge.
     pub fn tone(&self, tone: Tone) -> Hsla {
         match tone {
-            Tone::Blue => self.blue,
-            Tone::Amber => self.warning,
-            Tone::Green => self.success,
-            Tone::Red => self.danger,
-            Tone::Gray => self.faint,
+            Tone::Blue => self.info,
+            Tone::Amber => self.warn,
+            Tone::Green => self.good,
+            Tone::Red => self.bad,
+            Tone::Gray => self.edge,
         }
     }
 
-    /// Text in `tone` that has to sit on that tone's tint and still read.
+    /// A word in `tone`'s own colour, dark enough for its wash. Gray is the
+    /// sub-line colour. (A healthy or neutral state's word is not coloured
+    /// at all: see `ui::status`.)
     pub fn tone_text(&self, tone: Tone) -> Hsla {
         match tone {
-            Tone::Blue => self.blue,
-            Tone::Amber => self.warning_muted,
-            Tone::Green => self.success_muted,
-            Tone::Red => self.danger_muted,
-            Tone::Gray => self.muted,
+            Tone::Blue => self.info_text,
+            Tone::Amber => self.warn_text,
+            Tone::Green => self.good_text,
+            Tone::Red => self.bad_text,
+            Tone::Gray => self.text2,
+        }
+    }
+
+    /// The pill a word in `tone` sits on. `None` for a healthy or neutral
+    /// state, which is a dot and a word and never a pill.
+    pub fn tone_wash(&self, tone: Tone) -> Option<Hsla> {
+        match tone {
+            Tone::Blue => Some(self.info_wash),
+            Tone::Amber => Some(self.warn_wash),
+            Tone::Red => Some(self.bad_wash),
+            Tone::Green | Tone::Gray => None,
         }
     }
 }
@@ -303,14 +280,42 @@ pub fn pinned_appearance() -> Option<bool> {
     }
 }
 
-/// Whether [`GLASS_ENV`] allows the frosted shell.
-pub fn glass_allowed() -> bool {
-    std::env::var(GLASS_ENV).map_or(true, |v| v.trim() != "0")
+/// The CJK families in the order `language` wants them: its own first, so a
+/// character the three share (most of them) is drawn the way that language
+/// draws it.
+pub fn cjk_fallbacks(language: Language) -> Vec<String> {
+    let first = match language {
+        Language::Japanese => "Hiragino Sans",
+        Language::TraditionalChinese => "PingFang TC",
+        Language::English | Language::SimplifiedChinese => "PingFang SC",
+    };
+    std::iter::once(first)
+        .chain(CJK.into_iter().filter(|family| *family != first))
+        .map(str::to_string)
+        .collect()
+}
+
+/// The window's font: Geist, then the CJK families in `language`'s order.
+///
+/// Set once, at the shell's root, because `Styled::font` also sets the
+/// weight and the style: a child changes only what it names, and a child's
+/// `font_family(MONO)` keeps the fallbacks. All three CJK families are in
+/// the list whatever the language, because the language popup names all
+/// three languages at once. Tooltips and notifications are views of their
+/// own and take the theme's family alone.
+pub fn ui_font(language: Language) -> Font {
+    Font {
+        family: SANS.into(),
+        features: FontFeatures::default(),
+        fallbacks: Some(FontFallbacks::from_fonts(cjk_fallbacks(language))),
+        weight: FontWeight::NORMAL,
+        style: FontStyle::Normal,
+    }
 }
 
 /// Load Geist and Geist Mono from the binary. They are registered with the
 /// text system and never served through the `AssetSource`, so a dev build
-/// cannot lose them and the asset bundle stays icons only.
+/// cannot lose them and the asset bundle stays icons and pictures.
 pub fn register_fonts(cx: &mut App) {
     let faces: Vec<Cow<'static, [u8]>> = vec![
         Cow::Borrowed(include_bytes!("../assets/fonts/Geist.ttf").as_slice()),
@@ -339,75 +344,79 @@ pub fn install(palette: Palette, cx: &mut App) {
     };
     Theme::change(mode, None, cx);
     let p = palette;
+    let clear = gpui::transparent_black();
     let theme = Theme::global_mut(cx);
     theme.font_family = SANS.into();
     theme.mono_font_family = MONO.into();
     // One rem stays 16 px (`Root` sets the rem from this), and every
     // screen sets its own sizes in pixels on top of it.
     theme.font_size = px(16.);
-    theme.mono_font_size = px(12.5);
+    theme.mono_font_size = px(12.);
     theme.radius = px(8.);
     theme.radius_lg = px(12.);
-    // Shadows only where there is no frost; the widgets that would get
-    // one here (inputs, buttons) sit on glass.
+    // The window is flat: a card is a fill and a rule, never a shadow.
     theme.shadow = false;
     let c = &mut theme.colors;
-    c.background = p.glass;
+    // `Root` paints this behind the shell, so it is the window's colour.
+    c.background = p.win;
     c.foreground = p.text;
-    c.muted = p.wash(0.06);
-    c.muted_foreground = p.muted;
-    c.border = p.border;
-    c.input = p.hairline(0.08);
-    c.ring = p.accent;
-    c.caret = p.accent;
-    c.selection = p.accent.alpha(if p.dark { 0.35 } else { 0.24 });
-    c.accent = p.hover;
+    c.muted = p.well;
+    c.muted_foreground = p.text2;
+    // Menus, tooltips and notifications are framed like the design's menu.
+    c.border = p.edge;
+    // A text field: its edge, and focus in the one blue.
+    c.input = p.edge;
+    c.ring = p.info;
+    c.caret = p.text;
+    c.selection = p.info.alpha(0.30);
+    // The row under the pointer or the arrow keys in a menu.
+    c.accent = p.well;
     c.accent_foreground = p.text;
-    c.popover = p.popover;
+    c.popover = p.surf;
     c.popover_foreground = p.text;
     c.overlay = p.scrim;
-    c.list = gpui::transparent_black();
-    c.list_hover = p.hover;
-    c.list_active = p.selected;
-    c.list_active_border = gpui::transparent_black();
+    c.list = clear;
+    c.list_hover = p.well;
+    c.list_active = p.well;
+    c.list_active_border = clear;
     c.primary = p.solid;
     c.primary_hover = p.solid.opacity(0.9);
     c.primary_active = p.solid.opacity(0.85);
     c.primary_foreground = p.on_solid;
-    c.secondary = p.wash(0.06);
-    c.secondary_hover = p.wash(0.10);
-    c.secondary_active = p.wash(0.12);
+    c.secondary = p.well;
+    c.secondary_hover = p.well;
+    c.secondary_active = p.well;
     c.secondary_foreground = p.text;
-    c.danger = p.danger;
-    c.danger_hover = p.danger.opacity(0.9);
-    c.danger_active = p.danger.opacity(0.85);
+    c.danger = p.bad;
+    c.danger_hover = p.bad.opacity(0.9);
+    c.danger_active = p.bad.opacity(0.85);
     c.danger_foreground = gpui::white();
-    c.warning = p.warning;
+    c.warning = p.warn;
     c.warning_foreground = p.on_solid;
-    c.success = p.success;
+    c.success = p.good;
     c.success_foreground = p.on_solid;
-    c.info = p.blue;
+    c.info = p.info;
     c.info_foreground = p.on_solid;
-    c.link = p.accent;
-    c.link_hover = p.accent.opacity(0.85);
-    c.sidebar = p.wash(0.05);
-    c.sidebar_border = p.border;
-    c.sidebar_accent = p.selected;
+    c.link = p.text2;
+    c.link_hover = p.text;
+    c.sidebar = p.side;
+    c.sidebar_border = p.line;
+    c.sidebar_accent = p.well;
     c.sidebar_accent_foreground = p.text;
     c.sidebar_foreground = p.text;
-    c.title_bar = gpui::transparent_black();
-    c.title_bar_border = gpui::transparent_black();
-    c.window_border = gpui::transparent_black();
-    c.skeleton = p.ink(0.04);
-    c.scrollbar = gpui::transparent_black();
+    c.title_bar = clear;
+    c.title_bar_border = clear;
+    c.window_border = clear;
+    c.skeleton = p.well;
+    c.scrollbar = clear;
     c.scrollbar_thumb = p.text.alpha(0.30);
     c.scrollbar_thumb_hover = p.text.alpha(0.42);
-    c.switch = p.switch_off;
-    c.switch_thumb = gpui::white();
-    c.progress_bar = p.accent;
-    c.tab_active = p.wash(0.10);
-    c.drag_border = p.accent;
-    c.drop_target = p.accent_wash();
+    c.switch = p.edge;
+    c.switch_thumb = p.on_solid;
+    c.progress_bar = p.text;
+    c.tab_active = p.well;
+    c.drag_border = p.info;
+    c.drop_target = p.info_wash;
     cx.set_global(palette);
 }
 
@@ -415,67 +424,142 @@ pub fn install(palette: Palette, cx: &mut App) {
 mod tests {
     use super::*;
 
+    /// WCAG relative luminance of an opaque colour.
+    fn luminance(c: Hsla) -> f32 {
+        let rgb = c.to_rgb();
+        let lin = |v: f32| {
+            if v <= 0.039_28 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * lin(rgb.r) + 0.7152 * lin(rgb.g) + 0.0722 * lin(rgb.b)
+    }
+
+    fn contrast(a: Hsla, b: Hsla) -> f32 {
+        let (la, lb) = (luminance(a), luminance(b));
+        (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
+    }
+
     #[test]
-    fn both_appearances_keep_text_well_clear_of_the_glass_they_sit_on() {
-        // WCAG relative luminance, enough to catch a palette edit that
-        // swapped a light seed into the dark set or the other way round.
-        fn luminance(c: Hsla) -> f32 {
-            let rgb = c.to_rgb();
-            let lin = |v: f32| {
-                if v <= 0.039_28 {
-                    v / 12.92
-                } else {
-                    ((v + 0.055) / 1.055).powf(2.4)
-                }
-            };
-            0.2126 * lin(rgb.r) + 0.7152 * lin(rgb.g) + 0.0722 * lin(rgb.b)
-        }
-        fn contrast(a: Hsla, b: Hsla) -> f32 {
-            let (la, lb) = (luminance(a), luminance(b));
-            (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
-        }
-        for p in [Palette::dark(false), Palette::light(false)] {
-            assert!(contrast(p.text, p.glass) > 10.0, "{p:?}");
-            assert!(contrast(p.muted, p.glass) > 4.5, "{p:?}");
-            assert!(contrast(p.faint, p.glass) > 3.5, "{p:?}");
+    fn every_text_step_stays_well_clear_of_every_surface_it_sits_on() {
+        for p in [Palette::dark(), Palette::light()] {
+            for (name, ground) in [
+                ("win", p.win),
+                ("side", p.side),
+                ("surf", p.surf),
+                ("well", p.well),
+            ] {
+                assert_eq!(ground.a, 1.0, "{name} is opaque: the window has no glass");
+                assert!(contrast(p.text, ground) > 10.0, "text on {name}: {p:?}");
+                assert!(contrast(p.text2, ground) > 4.5, "text2 on {name}: {p:?}");
+                // The label step is the quietest text and still body-legible.
+                assert!(contrast(p.text3, ground) > 4.5, "text3 on {name}: {p:?}");
+            }
             assert!(contrast(p.on_solid, p.solid) > 10.0, "{p:?}");
+            // The caption under the deck's picture sits on the stage.
+            assert!(contrast(p.text2, p.stage) > 4.5, "{p:?}");
         }
     }
 
     #[test]
-    fn the_glass_is_translucent_only_when_something_blurs_behind_it() {
-        // What the window server ends up blending is alpha squared (see
-        // `GLASS_ALPHA`): Zeron's 80 %.
-        assert!((GLASS_ALPHA * GLASS_ALPHA - 0.80).abs() < 0.01);
-        assert!(Palette::dark(true).glass.a < 1.0);
-        assert!(Palette::light(true).glass.a < 1.0);
-        assert_eq!(Palette::dark(false).glass.a, 1.0);
-        assert_eq!(Palette::light(false).glass.a, 1.0);
+    fn a_controls_edge_reads_without_colour() {
+        // The edge is the only thing that outlines a secondary button, a
+        // switch that is off and a popup, so it carries 3:1 against what
+        // those sit on: the window and a card.
+        for p in [Palette::dark(), Palette::light()] {
+            assert!(contrast(p.edge, p.win) >= 3.0, "edge on win: {p:?}");
+            assert!(contrast(p.edge, p.surf) >= 3.0, "edge on surf: {p:?}");
+        }
+        // Against a well it is 3:1 in dark and 2.9:1 in light, as the design
+        // draws it. Where an edge rims a well (a popup, a keycap, a field)
+        // the same edge meets the card outside at 3.4:1, so the control's
+        // outline still reads.
+        assert!(contrast(Palette::dark().edge, Palette::dark().well) >= 3.0);
+        assert!(contrast(Palette::light().edge, Palette::light().well) >= 2.9);
     }
 
     #[test]
-    fn lines_and_washes_are_ink_at_an_alpha_and_light_lines_weigh_more() {
-        let (dark, light) = (Palette::dark(true), Palette::light(true));
-        for p in [dark, light] {
-            assert!(p.border.a < 0.2 && p.hover.a < 0.2 && p.selected.a < 0.2);
-            assert!((p.wash(0.11).a - 0.11).abs() < 1e-6);
+    fn colour_is_kept_for_state_and_selection_is_the_neutral_outline() {
+        for p in [Palette::dark(), Palette::light()] {
+            // Selection and the primary are greys: no hue at all.
+            for (name, grey) in [("solid", p.solid), ("outline", p.outline), ("edge", p.edge)] {
+                assert!(grey.s < 0.12, "{name} has no hue: {grey:?}");
+            }
+            // A line is ink at an alpha, so it reads the same on every
+            // surface; the washes are their hue at an alpha.
+            assert!(p.line.a < 0.2);
+            for wash in [p.warn_wash, p.bad_wash, p.info_wash] {
+                assert!(wash.a > 0.05 && wash.a < 0.25, "{wash:?}");
+            }
+            assert!(
+                p.warn_line.a > p.warn_wash.a,
+                "the rim is stronger than its wash"
+            );
+            // A deck's key is the deck's, not the window's.
+            assert_eq!(p.key_fill, hex(0x0B0B0D));
+            assert_eq!(p.key_line, hex(0x2C2E33));
         }
-        assert!(light.hairline(0.08).a > dark.hairline(0.08).a);
-        assert!(
-            light.hairline(0.9).a <= 0.5,
-            "a light hairline never goes past half black"
-        );
+        // The amber wash is the bright amber's in light too.
+        let (dark, light) = (Palette::dark(), Palette::light());
+        assert_eq!(light.warn_wash.h, dark.warn.h);
+        assert_ne!(light.warn.to_rgb(), dark.warn.to_rgb());
     }
 
     #[test]
     fn the_firmwares_five_tones_stay_five_different_colours() {
-        for p in [Palette::dark(true), Palette::light(true)] {
+        for p in [Palette::dark(), Palette::light()] {
             let tones = [Tone::Blue, Tone::Amber, Tone::Green, Tone::Red, Tone::Gray];
             for (i, a) in tones.iter().enumerate() {
                 for b in &tones[i + 1..] {
                     assert_ne!(p.tone(*a), p.tone(*b), "{a:?} and {b:?}");
+                    assert_ne!(p.tone_text(*a), p.tone_text(*b), "{a:?} and {b:?}");
                 }
             }
+            // Healthy and neutral are a dot and a word; the rest a pill.
+            assert_eq!(p.tone_wash(Tone::Green), None);
+            assert_eq!(p.tone_wash(Tone::Gray), None);
+            assert_eq!(p.tone_wash(Tone::Amber), Some(p.warn_wash));
+            assert_eq!(p.tone_wash(Tone::Red), Some(p.bad_wash));
+            assert_eq!(p.tone_wash(Tone::Blue), Some(p.info_wash));
+            assert_eq!(p.tone(Tone::Gray), p.edge, "the neutral dot is an edge");
+            // A word on a wash keeps 4.5:1 against the wash over a card.
+            for tone in [Tone::Amber, Tone::Red, Tone::Blue] {
+                let wash = p.tone_wash(tone).unwrap();
+                let ground = p.surf.blend(wash);
+                assert!(contrast(p.tone_text(tone), ground) > 4.5, "{tone:?}: {p:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_window_font_puts_the_languages_own_cjk_family_first_and_keeps_all_three() {
+        assert_eq!(
+            cjk_fallbacks(Language::English),
+            ["PingFang SC", "PingFang TC", "Hiragino Sans"]
+        );
+        assert_eq!(
+            cjk_fallbacks(Language::SimplifiedChinese),
+            ["PingFang SC", "PingFang TC", "Hiragino Sans"]
+        );
+        assert_eq!(
+            cjk_fallbacks(Language::TraditionalChinese),
+            ["PingFang TC", "PingFang SC", "Hiragino Sans"]
+        );
+        assert_eq!(
+            cjk_fallbacks(Language::Japanese),
+            ["Hiragino Sans", "PingFang SC", "PingFang TC"]
+        );
+        for language in Language::ALL {
+            let font = ui_font(language);
+            assert_eq!(font.family.as_ref(), SANS);
+            assert_eq!(font.weight, FontWeight::NORMAL);
+            let fallbacks = font.fallbacks.expect("a CJK list");
+            assert_eq!(
+                fallbacks.fallback_list(),
+                cjk_fallbacks(language).as_slice()
+            );
         }
     }
 }

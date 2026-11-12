@@ -104,8 +104,10 @@ fn parse_wav(bytes: &[u8]) -> Result<(u32, Vec<f32>), String> {
             }
             let end = if size == 0 || size == 0xFFFF_FFFF || body + size > bytes.len() { bytes.len() } else { body + size };
             let pcm = bytes[body..end]
-                .chunks_exact(2)
-                .map(|p| f32::from(i16::from_le_bytes([p[0], p[1]])) / 32768.0)
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|p| f32::from(i16::from_le_bytes(*p)) / 32768.0)
                 .collect();
             return Ok((rate, pcm));
         }

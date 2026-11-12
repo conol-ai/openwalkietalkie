@@ -46,6 +46,10 @@ pub struct ClientConfig {
     pub snapshot: bool,
     /// Reconnect with `since: last rev` on read error/EOF.
     pub reconnect: bool,
+    /// `Some(false)`: ask the daemon to show this session no session text
+    /// (titles, cards, replies, transcripts) whatever its scopes grant.
+    /// `None` sends nothing, so the daemon's default applies.
+    pub content: Option<bool>,
 }
 
 impl ClientConfig {
@@ -59,6 +63,7 @@ impl ClientConfig {
             subscribe: Vec::new(),
             snapshot: false,
             reconnect: true,
+            content: None,
         }
     }
 
@@ -333,6 +338,9 @@ async fn open_session(config: &ClientConfig, since: Option<u64>) -> Result<Opene
     }
     if let Some(since) = since {
         params["since"] = since.into();
+    }
+    if let Some(content) = config.content {
+        params["content"] = content.into();
     }
     let request = serde_json::json!({
         "jsonrpc": "2.0",

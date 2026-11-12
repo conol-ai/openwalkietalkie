@@ -478,6 +478,34 @@ mod tests {
         );
     }
 
+    /// A Macropad key is a button's label and keystroke, not anything said
+    /// in a session: an observe-only reader sees the keys in the snapshot
+    /// and in `device.macros`, as it sees the strip.
+    #[test]
+    fn an_observe_only_reader_sees_the_macropad_keys() {
+        let mut snap = snap();
+        let layout = crate::MacroLayout {
+            src: Some("app".into()),
+            keys: vec![crate::MacroKey {
+                label: "build".into(),
+                binding: Some(crate::Binding::Left),
+                keys: Some("cmd+b".into()),
+            }],
+        };
+        snap.macros.insert(3, layout.clone());
+        let observed = redact(&snap, OBSERVER);
+        assert!(
+            observed.agents[&AgentId("ag_1".into())].redacted,
+            "the session is"
+        );
+        assert_eq!(observed.macros, snap.macros, "the keys are not");
+        let said = event(
+            EventKind::DeviceMacros,
+            serde_json::json!({"f": 3, "src": layout.src, "keys": layout.keys}),
+        );
+        assert_eq!(redact_event(&said, OBSERVER, false), Some(said.clone()));
+    }
+
     #[test]
     fn state_events_pass_untouched() {
         for (kind, data) in [

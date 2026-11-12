@@ -784,6 +784,15 @@ pub async fn pid_tick(api: &Api) -> Tick {
     tick
 }
 
+/// Whether the roster poll seeds Claude sessions it has seen no hook from:
+/// `[liveness] seed`, and never while the owner has Claude Code paused
+/// (`[sources]`). Its hooks are answered `{}` meanwhile, and a seed would
+/// put back what the pause keeps out.
+#[must_use]
+pub fn seeds(config: &crate::config::Config) -> bool {
+    config.liveness.seed && config.sources.claude_live()
+}
+
 /// Both pollers, until `stop`. One task: the two periods are 5 s and 2 s
 /// and neither tick ever blocks the other (the roster probe is on the
 /// blocking pool), so a second task would buy nothing.
@@ -803,7 +812,10 @@ pub async fn run(api: Arc<Api>, mut stop: tokio::sync::watch::Receiver<bool>) {
         tokio::select! {
             _ = stop.changed() => break,
             _ = roster.tick() => {
-                let cfg = api.config.load().liveness.clone();
+                let (cfg, seed) = {
+                    let config = api.config.load();
+                    (config.liveness.clone(), seeds(&config))
+                };
                 if !cfg.enabled {
                     continue;
                 }
@@ -824,13 +836,13 @@ pub async fn run(api: Arc<Api>, mut stop: tokio::sync::watch::Receiver<bool>) {
                 // liveness — a crashed CLI leaves its file behind — so a
                 // non-empty one still runs the real probe.)
                 let idle = !on_roster
-                    && (!cfg.seed || !claude_dir().is_some_and(|dir| sessions_registered(&dir)));
+                    && (!seed || !claude_dir().is_some_and(|dir| sessions_registered(&dir)));
                 if was_idle != Some(idle) {
                     was_idle = Some(idle);
                     tracing::debug!(
                         idle,
                         on_roster,
-                        seed = cfg.seed,
+                        seed,
                         "roster poll {}",
                         if idle { "paused: nothing to reconcile or seed" } else { "running" }
                     );
@@ -840,7 +852,7 @@ pub async fn run(api: Arc<Api>, mut stop: tokio::sync::watch::Receiver<bool>) {
                     continue;
                 }
                 let probe = Probe::new(cfg.claude_bin.clone());
-                let tick = roster_tick(&api, &probe, &mut misses, cfg.seed).await;
+                let tick = roster_tick(&api, &probe, &mut misses, seed).await;
                 if !tick.released.is_empty() || !tick.seeded.is_empty() {
                     tracing::info!(
                         seen = tick.seen,
@@ -1158,5 +1170,24 @@ mod tests {
         // A binary that prints something else is inconclusive too.
         let probe = Probe::new("/bin/echo");
         assert!(probe.rows().is_err());
+    }
+
+    /// The seed puts nothing on the roster while the owner has Claude Code
+    /// paused, with everything or on its own (`[sources]`), and follows
+    /// `[liveness] seed` otherwise.
+    #[test]
+    fn the_roster_seed_waits_while_claude_code_is_paused() {
+        let mut config = crate::config::Config::default();
+        assert!(seeds(&config), "on by default");
+        config.sources.paused = true;
+        assert!(!seeds(&config), "everything paused");
+        config.sources.paused = false;
+        config.sources.claude = false;
+        assert!(!seeds(&config), "Claude Code switched off");
+        config.sources.claude = true;
+        config.sources.apps_paused = vec!["Conol".into()];
+        assert!(seeds(&config), "an app paused is not Claude Code");
+        config.liveness.seed = false;
+        assert!(!seeds(&config), "and the seed's own key still rules");
     }
 }

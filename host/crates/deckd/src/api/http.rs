@@ -65,25 +65,33 @@ pub async fn bind(port: u16) -> std::io::Result<TcpListener> {
     TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], port))).await
 }
 
-/// The `/v1/info` object (§4.1).
-pub fn info(api: &Api) -> serde_json::Value {
-    let service = api.bus.snapshot().service.clone();
-    // Both degradations mean the port is not ours right now.
-    let port = if matches!(
+/// The port this daemon holds, as the core recorded it. `None` while no
+/// door is bound — `[api] tcp = false`, or an ephemeral port whose bind is
+/// not reported yet — and while the port is somebody else's: the bind
+/// failed (`port_in_use`) or a stranger answers on it (`hooks_hijack_risk`,
+/// §4.1 D8). `service.info`, `/v1/info` and the `Host` check all ask this,
+/// so none of them names a port that sends a client to a squatter or to
+/// nobody.
+pub fn held_port(service: &deck_model::ServiceState) -> Option<u16> {
+    if matches!(
         service.degraded.as_deref(),
         Some(DEGRADED_PORT_IN_USE | DEGRADED_HIJACK_RISK)
     ) {
-        None
-    } else {
-        Some(service.port)
-    };
+        return None;
+    }
+    (service.port != 0).then_some(service.port)
+}
+
+/// The `/v1/info` object (§4.1).
+pub fn info(api: &Api) -> serde_json::Value {
+    let service = api.bus.snapshot().service.clone();
     serde_json::json!({
         "api": "1",
         "daemon": crate::core::dispatch::VERSION,
         "platform": crate::core::dispatch::platform(),
         "capabilities": crate::core::dispatch::CAPABILITIES,
         "uds": api.paths.socket,
-        "port": port,
+        "port": held_port(&service),
         "mcp": serde_json::Value::Null,
         "degraded": service.degraded,
     })
@@ -159,14 +167,7 @@ async fn host_and_origin(State(state): State<HttpState>, req: Request, next: Nex
 /// bind has not been reported yet or the door is degraded — the port on
 /// the wire is then not ours to compare a `Host` against.
 fn bound_port(api: &Api) -> Option<u16> {
-    let service = api.bus.snapshot().service.clone();
-    if matches!(
-        service.degraded.as_deref(),
-        Some(DEGRADED_PORT_IN_USE | DEGRADED_HIJACK_RISK)
-    ) {
-        return None;
-    }
-    (service.port != 0).then_some(service.port)
+    held_port(&api.bus.snapshot().service)
 }
 
 /// `127.0.0.1` or `localhost`, and — when the `Host` carries a port —
@@ -336,6 +337,7 @@ async fn rpc_handler(
             name: client,
             version: String::new(),
         },
+        content: wants_content(&requests),
     };
     let answers =
         futures_util::future::join_all(requests.into_iter().map(|req| answer_http(api, &ctx, req)))
@@ -449,6 +451,18 @@ fn requested_scopes(requests: &[RpcRequest], maximum: &[Scope]) -> Result<Vec<Sc
     session::resolve(&requested, maximum, false)
 }
 
+/// Whether this body's calls may be shown content: not when a
+/// `session.hello` in it says `"content": false`, which answers them as for
+/// a principal without content, as the line doors do.
+fn wants_content(requests: &[RpcRequest]) -> bool {
+    requests
+        .iter()
+        .find(|r| r.method == "session.hello")
+        .and_then(|r| r.params.get("content"))
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(true)
+}
+
 /// Every answerable request in the body refused with the same error: the
 /// hello could not be established, so nothing beside it may run either.
 /// The malformed members keep their own `-32600`.
@@ -500,8 +514,11 @@ async fn answer_http(api: &Api, ctx: &ConnCtx, req: RpcRequest) -> Option<RpcRes
             "session": ctx.session,
             "rev": snapshot.rev,
         });
+        if !ctx.content {
+            reply["content"] = false.into();
+        }
         // §4.5: the reply carries the snapshot when the hello asks for it,
-        // redacted for this caller's scopes exactly as on the line doors.
+        // redacted for this caller exactly as on the line doors.
         if req
             .params
             .get("snapshot")
@@ -509,7 +526,7 @@ async fn answer_http(api: &Api, ctx: &ConnCtx, req: RpcRequest) -> Option<RpcRes
             .unwrap_or(false)
         {
             reply["snapshot"] =
-                serde_json::to_value(redact_for(&snapshot, &ctx.scopes, &BTreeSet::new()))
+                serde_json::to_value(redact_for(&snapshot, &ctx.seen_as(), &BTreeSet::new()))
                     .unwrap_or(serde_json::Value::Null);
         }
         Ok(reply)
@@ -943,7 +960,9 @@ async fn report_bind(
     degraded: Option<&str>,
     listener: Option<serde_json::Value>,
 ) {
-    super::write_port_file(&api.paths.port, port);
+    // Port 0 is no door at all (`tcp_off`): the core records it, the
+    // file names no port.
+    super::write_port_file(&api.paths.port, port.filter(|&port| port != 0));
     let reply = api
         .core
         .call(
@@ -1002,6 +1021,15 @@ pub async fn tcp_door(
             (None, tokio::spawn(retry_bind(api, configured, stop)))
         }
     }
+}
+
+/// No TCP door (`[api] tcp = false`, D3): nothing is bound, so nothing can
+/// collide and no degrade is raised. The core records port 0, which
+/// [`held_port`] reads as none, and the port file is emptied, so a port an
+/// earlier run left in it never sends a client to whatever holds it now.
+pub async fn tcp_off(api: &Api) {
+    tracing::info!("no tcp door: [api] tcp = false, the socket is the only door");
+    report_bind(api, Some(0), None, None).await;
 }
 
 /// Probe the squatter, then retry the bind every `RETRY_EVERY`; a late
@@ -1544,6 +1572,85 @@ pub(crate) mod tests {
         )
         .await;
         assert!(body["result"].get("snapshot").is_none(), "{body}");
+        served.shutdown().await;
+    }
+
+    /// R2 on this door: a `session.hello{content:false}` in a body answers
+    /// the whole body as for a principal without content — the hello's
+    /// snapshot and a `state.get` beside it — and the hello says so. The
+    /// same body without the flag, from the same `admin` token, still sees
+    /// the content.
+    #[tokio::test]
+    async fn a_hello_without_content_over_rpc_answers_its_body_without_any() {
+        let daemon = test_api("http-hello-no-content", FakeVerifier::default());
+        let gui = daemon.token("gui", &[Scope::Admin]);
+        let session = daemon
+            .api
+            .core
+            .open_session(OpenSession {
+                kind: SessionKind::Observer,
+                principal: Principal::Uid(501),
+                scopes: vec![Scope::Agent],
+                trusted: false,
+                client: ClientInfo::default(),
+            })
+            .await
+            .unwrap();
+        let registered = daemon
+            .api
+            .core
+            .api(
+                Principal::Uid(501),
+                session,
+                false,
+                Request::AgentRegister(crate::core::testkit::register("bot", Some("k"))),
+            )
+            .await
+            .unwrap();
+        let agent: AgentId = serde_json::from_value(registered["agent"].clone()).unwrap();
+        daemon
+            .api
+            .core
+            .api(
+                Principal::Uid(501),
+                session,
+                false,
+                Request::CardSet(crate::core::testkit::card(&agent, "CARD-SECRET?")),
+            )
+            .await
+            .unwrap();
+        let served = crate::api::serve(daemon.api.clone()).await;
+        let port = served.port.unwrap();
+        let body = |flag: &str| {
+            format!(
+                r#"[{{"id":1,"method":"session.hello","params":{{"client":{{"name":"gui"}},"snapshot":true{flag}}}}},{{"id":2,"method":"state.get"}}]"#
+            )
+        };
+        let bearer = format!("Bearer {gui}");
+        let answer = |reply: &serde_json::Value, id: u64| {
+            reply
+                .as_array()
+                .and_then(|all| all.iter().find(|one| one["id"] == id))
+                .cloned()
+                .unwrap_or_else(|| panic!("no answer {id}: {reply}"))
+        };
+        let (status, blind) = http(
+            port,
+            "POST",
+            "/v1/rpc",
+            &[("Authorization", &bearer)],
+            &body(r#","content":false"#),
+        )
+        .await;
+        assert_eq!(status, 200, "{blind}");
+        assert!(!blind.to_string().contains("CARD-SECRET"), "{blind}");
+        assert_eq!(answer(&blind, 1)["result"]["content"], false, "{blind}");
+        let state = answer(&blind, 2);
+        let card = &state["result"]["snapshot"]["agents"][&agent.0]["card"];
+        assert_eq!(card["redacted"], true, "{blind}");
+        let (_, seeing) = http(port, "POST", "/v1/rpc", &[("Authorization", &bearer)], &body("")).await;
+        assert!(seeing.to_string().contains("CARD-SECRET"), "{seeing}");
+        assert!(answer(&seeing, 1)["result"].get("content").is_none(), "{seeing}");
         served.shutdown().await;
     }
 
@@ -2188,6 +2295,100 @@ pub(crate) mod tests {
         assert!(is_ours(&info, &daemon.api), "our own object is ours");
         served.shutdown().await;
         answering.abort();
+    }
+
+    /// D3: with `[api] tcp = false` the daemon serves its socket and binds
+    /// no TCP port. The configured port is this test's the whole time, so a
+    /// door that so much as tried it would have degraded `port_in_use`; this
+    /// one records no port and no degrade, empties the port file an earlier
+    /// run left behind, and answers on the socket with `port: null`.
+    #[tokio::test]
+    async fn with_the_tcp_door_off_only_the_socket_is_served() {
+        let held = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .unwrap();
+        let port = held.local_addr().unwrap().port();
+        let daemon =
+            crate::api::testkit::test_api_on("http-tcp-off", FakeVerifier::default(), port);
+        let mut config = (**daemon.api.config.load()).clone();
+        config.api.tcp = false;
+        daemon.api.config.store(Arc::new(config));
+        std::fs::write(&daemon.api.paths.port, "47201").unwrap();
+        let served = crate::api::serve(daemon.api.clone()).await;
+        assert!(served.uds, "the socket bound");
+        assert_eq!(served.port, None, "no tcp door");
+        assert_eq!(
+            std::fs::read_to_string(&daemon.api.paths.port).unwrap(),
+            "",
+            "no port named, the stale one included"
+        );
+        let service = daemon.api.bus.snapshot().service.clone();
+        assert_eq!((service.port, service.degraded.as_deref()), (0, None));
+        assert_eq!(held_port(&service), None);
+        assert_eq!(info(&daemon.api)["port"], serde_json::Value::Null);
+        let stream = tokio::net::UnixStream::connect(&daemon.api.paths.socket)
+            .await
+            .unwrap();
+        let (r, mut w) = stream.into_split();
+        let mut r = BufReader::new(r);
+        w.write_all(
+            b"{\"id\":1,\"method\":\"session.hello\",\"params\":{\"client\":{\"name\":\"t\",\"version\":\"0\"},\"scopes\":[\"observe\"]}}\n\
+              {\"id\":2,\"method\":\"service.info\"}\n",
+        )
+        .await
+        .unwrap();
+        let reply = loop {
+            let mut line = String::new();
+            let read = tokio::time::timeout(Duration::from_secs(3), r.read_line(&mut line))
+                .await
+                .expect("an answer within 3 s")
+                .unwrap();
+            assert_ne!(read, 0, "the socket closed");
+            let value: serde_json::Value = serde_json::from_str(&line).unwrap();
+            if value["id"] == 2 {
+                break value;
+            }
+        };
+        assert_eq!(reply["result"]["port"], serde_json::Value::Null, "{reply}");
+        assert_eq!(
+            reply["result"]["degraded"],
+            serde_json::Value::Null,
+            "{reply}"
+        );
+        drop(w);
+        served.shutdown().await;
+        drop(held);
+    }
+
+    /// D3: the door is on unless a file turns it off. The default daemon
+    /// binds as it always did, and so does the gate's own API daemon
+    /// (`tools/host-test.sh`: `[api] port = 0` and no switch).
+    #[tokio::test]
+    async fn the_default_daemon_and_the_gates_own_still_bind_their_door() {
+        let gate = crate::config::Config::parse(
+            "[api]\nport = 0\nallowed_origins = [\"http://localhost:5173\"]\n\n[liveness]\nseed = false\n\n[codex]\ndaemon = false\n",
+        )
+        .unwrap();
+        for (name, config) in [("http-tcp-default", None), ("http-tcp-gate", Some(gate))] {
+            let daemon = test_api(name, FakeVerifier::default());
+            if let Some(config) = config {
+                daemon.api.config.store(Arc::new(config));
+            }
+            assert!(daemon.api.config.load().api.tcp, "{name}");
+            let served = crate::api::serve(daemon.api.clone()).await;
+            let port = served.port.expect("the door is bound");
+            assert_eq!(
+                std::fs::read_to_string(&daemon.api.paths.port)
+                    .unwrap()
+                    .trim(),
+                port.to_string(),
+                "{name}"
+            );
+            let (status, body) = http(port, "GET", "/v1/info", &[], "").await;
+            assert_eq!(status, 200, "{name}: {body}");
+            assert_eq!(body["port"], port, "{name}");
+            served.shutdown().await;
+        }
     }
 
     #[test]

@@ -1,7 +1,7 @@
 //! Link and pacer statistics (`metrics.get`): the hid thread reports a
 //! `Metric` every 30 s (`FromHid::Metric`), the core logs it and mirrors
 //! it with the device state into `status.json`, which `deckd status` reads.
-use deck_model::{ErrCounts, Link, SessionState, Ts};
+use deck_model::{ErrCounts, Link, SessionState, Transport, Ts};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::time::Duration;
@@ -75,6 +75,18 @@ pub struct Metric {
     /// round trip, which is what the deck actually waits for.
     pub answer_to_clear_wire_us: u32,
     pub answer_to_clear_wire_max_us: u32,
+    /// Channel-2 requests for the deck's board and charge
+    /// (`device::status`): handed to the writer, answered (refusals
+    /// included), given up unanswered, and channel-2 lines that could not
+    /// be read.
+    #[serde(default)]
+    pub status_polls: u32,
+    #[serde(default)]
+    pub status_replies: u32,
+    #[serde(default)]
+    pub status_timeouts: u32,
+    #[serde(default)]
+    pub status_errors: u32,
 }
 
 impl Metric {
@@ -85,7 +97,7 @@ impl Metric {
     /// One log line's worth.
     pub fn summary(&self) -> String {
         format!(
-            "session={:?} pace={}ms{} depth={} (p0={} p1={} p2={} p3={} barrier={}) reports tx={} rx={} lines tx={} rx={} hello tx={} rx={} misses={} link_drops={} barriers={} err={} (size={} parse={} range={} unknown={}) decode_err={} encode_err={} ch2={} ch4={} ch7={} flood={}/{} backoffs={} write avg={}us max={}us slow={} in_flight_max={} stalls={} answer→clear host={}us (max {}) wire={}us (max {})",
+            "session={:?} pace={}ms{} depth={} (p0={} p1={} p2={} p3={} barrier={}) reports tx={} rx={} lines tx={} rx={} hello tx={} rx={} misses={} link_drops={} barriers={} err={} (size={} parse={} range={} unknown={}) decode_err={} encode_err={} ch2={} ch4={} ch7={} status polls={} replies={} timeouts={} errors={} flood={}/{} backoffs={} write avg={}us max={}us slow={} in_flight_max={} stalls={} answer→clear host={}us (max {}) wire={}us (max {})",
             self.session,
             self.pace_ms,
             if self.backoff { " (backoff)" } else { "" },
@@ -114,6 +126,10 @@ impl Metric {
             self.ch2_reports,
             self.ch4_reports,
             self.voice_reports,
+            self.status_polls,
+            self.status_replies,
+            self.status_timeouts,
+            self.status_errors,
             self.flood_sent,
             self.flood_sent + self.flood_remaining,
             self.pace_backoffs,
@@ -158,6 +174,16 @@ pub struct Status {
     #[serde(default)]
     pub ops_dropped: u64,
     pub metric: Metric,
+    /// What the linked deck says about itself (`device.status`); all
+    /// `None` while it is not linked or has not said.
+    #[serde(default)]
+    pub transport: Option<Transport>,
+    #[serde(default)]
+    pub battery: Option<u8>,
+    #[serde(default)]
+    pub charging: Option<bool>,
+    #[serde(default)]
+    pub board: Option<String>,
 }
 
 impl Status {

@@ -1,0 +1,64 @@
+{
+  "api": {
+    "port": 47201,
+    "allowed_origins": [],
+    "uds_default_scope": "observe",
+    "uds_max_scope": "admin",
+    "mailbox_ttl_s": 600,
+    "max_held_hooks": 64,
+    "tcp": true
+  },
+  "codex": {
+    "daemon": true,
+    "daemon_socket": null
+  },
+  "hooks": {
+    "enabled": true,
+    "claude.hold_s": 120,
+    "claude.tool_titles": false,
+    "claude.report_via": "http",
+    "claude.desk_presence": false,
+    "codex.hold_s": 120,
+    "gemini.permission": "notify"
+  },
+  "sources": {
+    "paused": false,
+    "claude": true,
+    "claude_channels": true,
+    "apps_paused": []
+  },
+  "usage": {
+    "providers": ["codex"]
+  },
+  "voice": {
+    "transport": "ble",
+    "device_uid": null,
+    "fallback_output": "none",
+    "fallback_input": "none",
+    "mic_warm": "card_pending",
+    "speak_over_sco": true,
+    "slow_sco_ms": 1500,
+    "commands": true,
+    "announce_questions": false,
+    "stt.engine": "whisper",
+    "stt.locale": "en-GB",
+    "stt.allow_server": false,
+    "stt.model": "",
+    "stt.language": "en",
+    "stt.threads": 0,
+    "stt.prompted": true,
+    "stt.companion": true,
+    "tts.engine": "kokoro",
+    "tts.announce_max_chars": 120,
+    "tts.provider": "openai",
+    "tts.api_key": "",
+    "tts.model": "",
+    "tts.voices": [],
+    "tts.lang": "auto",
+    "tts.instruct": null,
+    "tts.python": null,
+    "tts.interval_s": 0.32,
+    "tts.threads": 0,
+    "voices.default_pool": ["Samantha", "Daniel", "Karen", "Rishi"]
+  }
+}

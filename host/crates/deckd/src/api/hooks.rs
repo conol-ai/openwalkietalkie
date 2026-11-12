@@ -202,8 +202,11 @@ pub async fn ingest(
     let payload = HookPayload(params.payload);
     let event = payload.event().to_string();
     // `[hooks] enabled = false` is the operator saying "stop answering":
-    // the CLIs keep their own dialogs and nothing reaches the deck.
-    if !adapters.enabled() {
+    // the CLIs keep their own dialogs and nothing reaches the deck. A
+    // source the owner paused (`[sources]`) is answered the same way: its
+    // sessions are kept, off the deck (`care::sources`), and nothing new of
+    // it arrives until it is resumed.
+    if !adapters.answering(cli) {
         return empty();
     }
     // What a hook is, never what it says (rule 3): the event, the session's
@@ -250,7 +253,8 @@ pub async fn ingest(
         // (`adapters::rt::handle`), so the door hands it the call whole
         // rather than walking a plan here. Everything around that call is
         // the same on both layers: the same scope gate, the same
-        // `[hooks] enabled` switch, and `{}` on every failure.
+        // `[hooks] enabled` and `[sources]` switches, and `{}` on every
+        // failure.
         if is_codex(cli) {
             let call = rt::HookCall {
                 payload: payload.0,
@@ -820,6 +824,7 @@ mod tests {
             trusted: false,
             client: ClientInfo::default(),
             adapters: Arc::new(Adapters::new(Arc::new(arc_swap::ArcSwap::from_pointee(config)))),
+            content: true,
         }
     }
 
@@ -1012,12 +1017,23 @@ mod tests {
     }
 
     /// The status line's `rate_limits` reach the core as usage windows
-    /// before the adapter reads the line, and a line without them (an API
-    /// key account, a build without the field) feeds nothing.
+    /// before the adapter reads the line, once the owner has switched the
+    /// Claude bars on (`[usage] providers`, opt-in since D3); and a line
+    /// without them (an API key account, a build without the field) feeds
+    /// nothing.
     #[tokio::test]
     async fn the_status_line_feeds_the_usage_face() {
         let (core, rx) = CoreHandle::detached();
         let ctx = ctx(core, &[Scope::HooksIngest]);
+        let usage = |usage: crate::config::UsageCfg| {
+            let mut config = (**ctx.adapters.config.load()).clone();
+            config.usage = usage;
+            ctx.adapters.config.store(Arc::new(config));
+        };
+        usage(crate::config::UsageCfg {
+            providers: vec!["claude".into(), "codex".into()],
+            ..Default::default()
+        });
         let line = serde_json::json!({"payload": {
             "session_id": "abc123",
             "_openwalkietalkie_account": "work@example.com",
@@ -1029,7 +1045,7 @@ mod tests {
                 "seven_day": {"used_percentage": 8, "resets_at": 1_791_900_000}
             }
         }});
-        let reply = ingest(&ctx.adapters, &ctx.core, "claude_statusline", line).await;
+        let reply = ingest(&ctx.adapters, &ctx.core, "claude_statusline", line.clone()).await;
         assert_eq!(reply.result.unwrap(), serde_json::json!({}));
         let msg = rx.try_recv().expect("the windows reach the core first");
         match msg {
@@ -1056,6 +1072,16 @@ mod tests {
         let reply = ingest(&ctx.adapters, &ctx.core, "claude_statusline", bare).await;
         assert_eq!(reply.result.unwrap(), serde_json::json!({}));
         // Whatever the deferred plan sent, no usage message came of it.
+        tokio::task::yield_now().await;
+        while let Ok(msg) = rx.try_recv() {
+            assert!(!matches!(msg, CoreMsg::Usage { .. }), "{msg:?}");
+        }
+        // The default names Codex alone, and then the same line feeds
+        // nothing: the usage message is sent before `ingest` returns, so
+        // none queued now means none at all.
+        usage(crate::config::UsageCfg::default());
+        let reply = ingest(&ctx.adapters, &ctx.core, "claude_statusline", line).await;
+        assert_eq!(reply.result.unwrap(), serde_json::json!({}));
         tokio::task::yield_now().await;
         while let Ok(msg) = rx.try_recv() {
             assert!(!matches!(msg, CoreMsg::Usage { .. }), "{msg:?}");
@@ -1388,5 +1414,65 @@ mod tests {
         let reply = dispatch(&ctx, "hooks.claude", payload("SessionStart")).await;
         assert_eq!(reply.result.unwrap(), serde_json::json!({}));
         assert!(rx.try_recv().is_err(), "nothing reached the core");
+    }
+
+    /// A paused source (`[sources]`) is answered `{}` and nothing of it
+    /// reaches the core: every CLI while everything is paused, Claude's two
+    /// doors alone while Claude Code is switched off — Codex's door still
+    /// goes to the core then.
+    #[tokio::test]
+    async fn a_paused_source_answers_its_hooks_empty_and_reaches_nothing() {
+        let door = |sources: crate::config::Sources| {
+            let (core, rx) = CoreHandle::detached();
+            let config = crate::config::Config {
+                sources,
+                ..Default::default()
+            };
+            let mut ctx = ctx(core, &[Scope::HooksIngest]);
+            ctx.adapters = Arc::new(Adapters::new(Arc::new(arc_swap::ArcSwap::from_pointee(
+                config,
+            ))));
+            (ctx, rx)
+        };
+        let (ctx, rx) = door(crate::config::Sources {
+            paused: true,
+            ..Default::default()
+        });
+        for method in [
+            "hooks.claude",
+            "hooks.claude_statusline",
+            "hooks.codex",
+            "hooks.codex_notify",
+        ] {
+            let reply = dispatch(&ctx, method, payload("SessionStart")).await;
+            assert_eq!(reply.result.unwrap(), serde_json::json!({}), "{method}");
+            assert!(reply.after_write.is_none(), "{method}");
+            assert!(rx.try_recv().is_err(), "{method} reached the core");
+        }
+        let (ctx, rx) = door(crate::config::Sources {
+            claude: false,
+            ..Default::default()
+        });
+        for method in ["hooks.claude", "hooks.claude_statusline"] {
+            let reply = dispatch(&ctx, method, payload("SessionStart")).await;
+            assert_eq!(reply.result.unwrap(), serde_json::json!({}), "{method}");
+            assert!(rx.try_recv().is_err(), "{method} reached the core");
+        }
+        // Codex is not Claude Code: its hook goes on to open the adapter's
+        // session. The core refuses it at once, so the door answers `{}`
+        // without waiting out its budget.
+        let answerer = std::thread::spawn(move || match rx.recv() {
+            Ok(CoreMsg::OpenSession { open, reply }) => {
+                let _ = reply.send(Err(ApiError::internal("no core in this test")));
+                open.principal
+            }
+            other => panic!("{other:?}"),
+        });
+        let reply = dispatch(&ctx, "hooks.codex", payload("SessionStart")).await;
+        assert_eq!(reply.result.unwrap(), serde_json::json!({}));
+        assert_eq!(
+            answerer.join().unwrap(),
+            Principal::Adapter(deck_model::AdapterKind::Codex)
+        );
     }
 }

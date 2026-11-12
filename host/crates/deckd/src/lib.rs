@@ -7,6 +7,7 @@ pub mod apidoc;
 pub mod audio;
 pub mod ble;
 pub mod bus;
+pub mod care;
 mod chat;
 mod chat_images;
 mod claude_workflows;

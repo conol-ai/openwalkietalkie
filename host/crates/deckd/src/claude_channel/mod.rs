@@ -2,6 +2,8 @@
 //! MCP children receive them over an authenticated, local, receive-only door.
 //! A nonce acknowledged through MCP proves Claude accepted channel notifications.
 //! An uncertain write is never retried through the inbox (that would duplicate it).
+//! The bridge is the owner's opt-in (`[sources] claude_channels`): the door is
+//! open only while it is switched on.
 mod mcp;
 
 use crate::desktop::{DesktopError, FromDesktop};
@@ -21,6 +23,10 @@ use tokio::sync::{mpsc, watch};
 
 const BUDGET: Duration = Duration::from_secs(5);
 const MAX_LINE: usize = 128 * 1024;
+/// How often the door reads the owner's switch: a change to it, or to the
+/// plugin that decides it while the config leaves it unset, takes effect
+/// within this. A helper retries every 2 s, so it never waits much longer.
+const SWITCH_POLL: Duration = Duration::from_secs(1);
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 struct Identity {
@@ -155,6 +161,12 @@ impl Hub {
         self.stale.lock().expect("channel hub").remove(&pid);
     }
 
+    /// The door closed: no helper is linked, and none is being refused.
+    fn close(&self) {
+        self.entries.lock().expect("channel hub").clear();
+        self.stale.lock().expect("channel hub").clear();
+    }
+
     /// Channel helpers refused because they run a different (or vanished)
     /// `deckd` executable than this daemon, e.g. left over from before an
     /// update, or this daemon being the odd one out. Entries age out, and a
@@ -167,6 +179,14 @@ impl Hub {
     }
 
     pub fn ready(&self, agent: &Agent) -> bool { self.sender(agent).is_some() }
+
+    /// Claude sessions whose helper is attached and has proved that Claude
+    /// takes its notifications: what `sources.list` counts as the Claude
+    /// Channels row's sessions (`care::sources`).
+    pub fn ready_count(&self) -> usize {
+        let entries = self.entries.lock().expect("channel hub");
+        entries.values().filter(|e| e.ready && !e.sender.is_closed()).count()
+    }
 
     pub fn status(&self) -> Value {
         let entries = self.entries.lock().expect("channel hub");
@@ -349,33 +369,105 @@ async fn write<W: AsyncWrite + Unpin>(output: &mut W, value: &Value) -> io::Resu
     .await?
 }
 
+/// Why an open door closed.
+#[derive(Debug)]
+enum Closed {
+    /// The daemon is stopping.
+    Stopped,
+    /// The owner switched Claude Channels off.
+    SwitchedOff,
+    /// The socket cannot be served: the inbox is the only route.
+    Unavailable,
+}
+
 /// The daemon already owns its single-instance lock before opening this socket.
-pub async fn serve(data: PathBuf, hub: Arc<Hub>, mut stop: watch::Receiver<bool>) {
-    let path = socket(&data);
+///
+/// The door is open only while `on` says the owner has Claude Channels
+/// switched on (`integrations::claude::channels_on`). Switched off, the
+/// socket is closed and removed and every helper's link with it, so the
+/// core's orders take the inbox; a helper still running in an open session
+/// then finds no door, which it already treats as a daemon that is not
+/// running: it retries quietly, and links again by itself once the switch
+/// is back on.
+pub async fn serve(
+    data: PathBuf,
+    hub: Arc<Hub>,
+    on: impl Fn() -> bool + Send + Sync + 'static,
+    stop: watch::Receiver<bool>,
+) {
+    serve_every(data, hub, on, SWITCH_POLL, stop).await;
+}
+
+/// [`serve`], reading the switch every `poll`.
+async fn serve_every(
+    data: PathBuf,
+    hub: Arc<Hub>,
+    on: impl Fn() -> bool + Send + Sync,
+    poll: Duration,
+    mut stop: watch::Receiver<bool>,
+) {
+    // A socket an earlier run left behind is no door either.
+    let _ = std::fs::remove_file(socket(&data));
+    let mut switch = tokio::time::interval(poll);
+    switch.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    // Connection numbers run on across openings, so an entry can never be
+    // taken for one of an earlier opening's.
+    let mut next = 0u64;
+    loop {
+        tokio::select! {
+            _ = stop.changed() => return,
+            _ = switch.tick() => {}
+        }
+        if !on() {
+            continue;
+        }
+        match door(&data, &hub, &on, &mut switch, &mut next, &mut stop).await {
+            Closed::SwitchedOff => {
+                tracing::info!("Claude Channels switched off: the channel door is closed");
+            }
+            Closed::Stopped | Closed::Unavailable => return,
+        }
+    }
+}
+
+/// The open door: helpers are accepted until the daemon stops or the switch
+/// goes off. Whatever ends it, every link ends with it and the socket goes.
+async fn door(
+    data: &Path,
+    hub: &Arc<Hub>,
+    on: &(impl Fn() -> bool + Sync),
+    switch: &mut tokio::time::Interval,
+    next: &mut u64,
+    stop: &mut watch::Receiver<bool>,
+) -> Closed {
+    let path = socket(data);
     let _ = std::fs::remove_file(&path);
     let listener = match UnixListener::bind(&path) {
         Ok(listener) => listener,
         Err(error) => {
             tracing::warn!(%error, "Claude channel door unavailable; using inbox");
-            return;
+            return Closed::Unavailable;
         }
     };
     if std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).is_err() {
         let _ = std::fs::remove_file(&path);
-        return;
+        return Closed::Unavailable;
     }
     let mut connections = tokio::task::JoinSet::new();
-    let mut next = 0u64;
-    loop {
+    let closed = loop {
         tokio::select! {
-            _ = stop.changed() => break,
+            _ = stop.changed() => break Closed::Stopped,
+            _ = switch.tick() => if !on() { break Closed::SwitchedOff },
             Some(_) = connections.join_next(), if !connections.is_empty() => {},
             accepted = listener.accept() => {
-                let Ok((stream, _)) = accepted else { break };
+                let Ok((stream, _)) = accepted else { break Closed::Unavailable };
                 if connections.len() >= 64 { continue; }
                 let pid = match peer(&stream) {
                     Ok(pid) => { hub.clear_stale(pid); pid }
                     Err(refusal) => {
+                        if let PeerError::Rejected(error) = &refusal {
+                            tracing::debug!(%error, "claude channel peer refused");
+                        }
                         if let Some(pid) = std::env::current_exe().ok()
                             .and_then(|own| refusal.other_deckd(&own)) { hub.note_stale(pid); }
                         continue;
@@ -384,19 +476,20 @@ pub async fn serve(data: PathBuf, hub: Arc<Hub>, mut stop: watch::Receiver<bool>
                 let cli_pid = crate::hook::walk::resolve(pid, &crate::hook::walk::MacProcs,
                     crate::hook::walk::MAX_HOPS).cli_pid;
                 let Some(cli_pid) = cli_pid else { continue };
-                next += 1;
-                let hub = hub.clone();
+                *next += 1;
+                let (hub, number) = (hub.clone(), *next);
                 connections.spawn(async move {
-                    let _ = connection(stream, cli_pid, next, &hub).await;
-                    hub.entries.lock().expect("channel hub").retain(|_, e| e.connection != next);
+                    let _ = connection(stream, cli_pid, number, &hub).await;
+                    hub.entries.lock().expect("channel hub").retain(|_, e| e.connection != number);
                 });
             }
         }
-    }
+    };
     connections.abort_all();
     while connections.join_next().await.is_some() {}
-    hub.entries.lock().expect("channel hub").clear();
+    hub.close();
     let _ = std::fs::remove_file(&path);
+    closed
 }
 
 async fn connection(stream: UnixStream, pid: u32, number: u64, hub: &Hub) -> io::Result<()> {
@@ -491,6 +584,76 @@ mod tests {
         assert_eq!(hub.stale_count(), 1);
         hub.clear_stale(std::process::id());
         assert_eq!(hub.stale_count(), 0);
+    }
+
+    /// D4: the door is there only while the owner's switch is on. Off, a
+    /// helper's connect finds no socket, not even one an earlier run left;
+    /// on, the socket comes back within a poll, the owner's alone; off
+    /// again, it goes, and with it every link and every refusal the door was
+    /// counting. Stopping the daemon takes it down too.
+    #[tokio::test]
+    async fn the_door_is_open_only_while_the_switch_is_on() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        async fn until(what: &str, done: impl Fn() -> bool) {
+            tokio::time::timeout(BUDGET, async {
+                while !done() {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .unwrap_or_else(|_| panic!("{what}"));
+        }
+        // Short, for `sun_path`'s 103 bytes.
+        let dir = std::env::temp_dir().join(format!("dkch{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = socket(&dir);
+        // What an earlier run left behind.
+        std::fs::write(&path, b"").unwrap();
+        let on = Arc::new(AtomicBool::new(false));
+        let hub = Arc::new(Hub::default());
+        let (stop, stopped) = watch::channel(false);
+        let switch = {
+            let on = on.clone();
+            move || on.load(Ordering::SeqCst)
+        };
+        let poll = Duration::from_millis(20);
+        let door = tokio::spawn(serve_every(dir.clone(), hub.clone(), switch, poll, stopped));
+
+        tokio::time::sleep(poll * 5).await;
+        assert!(!path.exists(), "no door while the switch is off");
+        assert!(UnixStream::connect(&path).await.is_err());
+
+        on.store(true, Ordering::SeqCst);
+        until("the door opens", || path.exists()).await;
+        assert!(UnixStream::connect(&path).await.is_ok());
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600);
+        // A linked helper and a refused one, as the open door keeps them
+        // (pid 1 is alive and never this test's own connections).
+        let linked = hub.test_channel(42, "one");
+        hub.note_stale(1);
+        assert_eq!((hub.ready_count(), hub.stale_count()), (1, 1));
+
+        on.store(false, Ordering::SeqCst);
+        until("the door closes", || !path.exists()).await;
+        assert!(UnixStream::connect(&path).await.is_err());
+        assert_eq!((hub.ready_count(), hub.stale_count()), (0, 0));
+        assert_eq!(hub.status(), json!([]));
+        let ended = tokio::task::spawn_blocking(move || linked.recv_timeout(BUDGET))
+            .await
+            .unwrap();
+        assert!(ended.is_err(), "the helper's link ended with the door");
+
+        on.store(true, Ordering::SeqCst);
+        until("the door opens again", || path.exists()).await;
+        stop.send(true).unwrap();
+        tokio::time::timeout(BUDGET, door)
+            .await
+            .expect("the door stops with the daemon")
+            .unwrap();
+        assert!(!path.exists());
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

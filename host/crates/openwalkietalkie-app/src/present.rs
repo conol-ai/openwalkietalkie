@@ -1,58 +1,63 @@
-//! Every string and tone the window shows, as a pure function of the mirror
-//! and of the admin replies (§8.2's Deck, Integrations and Service rows).
+//! The words the pages share, as pure functions of the mirror, of the
+//! service's replies and of a language.
 //!
-//! Nothing in here touches `gpui`, and nothing in here decides anything: the
-//! screens above it (`deck.rs`, `integrations.rs`, `service.rs`) only lay
-//! these answers out, and every button they draw is a
+//! Nothing in here touches `gpui`, and nothing in here decides anything: a
+//! page lays these answers out, and every button it draws is a
 //! [`UiAction`](deck_gui_core::UiAction). A function that returns a string
-//! cannot answer a card, install a hook or stop a service.
+//! cannot install a hook or stop a service.
 //!
-//! Week 6 added the second and third screens' words below the Deck's. They
-//! are here and not in `deck-gui-core` for the same reason the Deck's are:
-//! `deck-gui-core` holds the *shapes* the daemon answers with
-//! ([`deck_gui_core::admin`]) and this module holds the sentences the window
+//! **The shared formatters come first**, and every page says the same things
+//! with them: [`now`] (which the harness pins with [`set_fixed_now`]), [`ago`]
+//! for how long ago something happened, [`day_and_time`] and [`local_clock`]
+//! for when, [`size_text`] for a size on disk, [`fw_text`] for the deck's
+//! firmware and [`home_short`] for a path. Their words are rows of
+//! `crate::i18n::kit`, so "4 s ago" reads the same on every page.
+//!
+//! Then what two pages must say alike, so one place says it: the
+//! installer's words ([`status_help`], [`plan_headline_localized`]); the one
+//! rule for a run the service could not finish by itself, and the command
+//! that finishes it ([`Leftover`], [`finished`], [`finish_command`],
+//! amendment B4), which the Integrations page and first run both follow;
+//! and the test question's line ([`test_line`]), which both show. Last come
+//! the sentences one page reads out of a reply (the service's degraded
+//! state, the voice test, a permission prompt) and the login item's status.
+//!
+//! They are here and not in `deck-gui-core` because `deck-gui-core` holds
+//! the *shapes* the service answers with ([`deck_gui_core::admin`],
+//! [`deck_gui_core::care`]) and this module holds the sentences the window
 //! reads them out in, which is the half a designer edits.
-//!
-//! Two rules it exists to keep. The first: the deck and the window must agree.
-//! An operator looking at a red dot on the device and an amber one in the
-//! window has been told two different things about one agent, so
-//! [`state_tone`] and [`age`] are ports of the firmware's own
-//! `ui::theme::agent_state` and `ui::kit::age_label` (`src/ui/theme.rs:73`,
-//! `src/ui/kit.rs:482`) rather than a second opinion. The second: nothing
-//! here decides anything. A function that returns a string cannot answer a
-//! card; the decisions are [`UiAction`](deck_gui_core::UiAction)s in
-//! `deck.rs`, and the two that need judgement ([`allow_choice`],
-//! [`deny_choice`]) are answered with `deck_model::guard`'s own vocabulary,
-//! so the GUI's idea of "allow" is the daemon's.
-use deck_gui_core::admin::{ApiConfig, Change, Detected, Hijack, Info, Status, TokenRow, Verb};
+use deck_client::ClientError;
+use deck_gui_core::admin::{Status, Verb};
+use deck_gui_core::care::{QuestionTest, TestState};
 use deck_gui_core::i18n::Language;
-use deck_gui_core::voice::{Engine, Prompt, TestReport};
-use deck_gui_core::{Level, OrderEntry, Transcript};
-use deck_model::{
-    guard, Agent, AgentState, Caps, Card, CardStatus, Deliver, Kind, Link, Origin, OriginKind,
-    Permission, Principal, Route, SessionInfo, SessionState, Slot, Snapshot, Source, Tone, Ts,
-    VoiceTransport, DISCONNECTED,
-};
-use std::time::Duration;
+use deck_gui_core::voice::{Prompt, TestReport};
+use deck_model::{Tone, Ts};
+use serde_json::Value;
+use std::path::Path;
+use std::sync::{Mutex, PoisonError};
 
 /// Custom Channels still require Claude's interactive preview opt-in.
 pub const CLAUDE_CHANNEL_COMMAND: &str =
     "claude --dangerously-load-development-channels plugin:openwalkietalkie@openwalkietalkie";
-pub const CLAUDE_CHANNEL_DOCS: &str =
-    "https://code.claude.com/docs/en/channels-reference#test-during-the-research-preview";
 
-/// The slot badge of an agent the daemon has not put on the deck (§8.2).
-pub const NOT_ON_DECK: &str = "not on deck";
+// ---------------------------------------------------------------------
+// The shared formatters: every page says these things the same way
+// ---------------------------------------------------------------------
 
-/// What a content field reads as when the reader's scope nulled it (§4.3).
-/// The GUI asks for `observe:content`, so this is only ever seen on an
-/// object the daemon redacted for another reason.
-pub const REDACTED: &str = "(redacted)";
+/// The moment [`now`] answers instead of this Mac's clock, while the harness
+/// has pinned one ([`set_fixed_now`]).
+static FIXED_NOW: Mutex<Option<Ts>> = Mutex::new(None);
 
-/// The wall clock, for the ages and countdowns below. The reducer may not
-/// read a clock (`deck-model` is pure and `HostState` folds what it is
-/// given); a view drawing "2m" has no other way to know what minute it is.
+/// The wall clock, for ages and times of day. The reducer may not read a
+/// clock (`deck-model` is pure and `HostState` folds what it is given); a
+/// page that says "4 s ago" has no other way to know what second it is.
+///
+/// While the harness has pinned a moment it is that moment, so a board's
+/// "4 s ago" and "today, 09:41" come out the same in every capture.
 pub fn now() -> Ts {
+    if let Some(fixed) = *FIXED_NOW.lock().unwrap_or_else(PoisonError::into_inner) {
+        return fixed;
+    }
     let millis = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis())
@@ -60,437 +65,246 @@ pub fn now() -> Ts {
     Ts::from_millis(u64::try_from(millis).unwrap_or(u64::MAX))
 }
 
-/// The roster dot (§8.2), and the firmware's rule for it: a stale agent is
-/// gray whatever its state, because a dot that still says "working" for a
-/// session that has gone is the one thing worse than no dot.
-pub const fn state_tone(state: AgentState, stale: bool) -> Tone {
-    if stale {
-        return Tone::Gray;
-    }
-    match state {
-        AgentState::Working => Tone::Blue,
-        AgentState::Question => Tone::Red,
-        AgentState::Ready => Tone::Green,
-        AgentState::Error => Tone::Amber,
-        AgentState::Idle => Tone::Gray,
-    }
+/// Pin [`now`] to `at`, or (`None`) hand it back to this Mac's clock. The
+/// harness pins the boards' minute for each staged scene and lets go for a
+/// live one (`crate::shots`); nothing else has a reason to.
+pub fn set_fixed_now(at: Option<Ts>) {
+    *FIXED_NOW.lock().unwrap_or_else(PoisonError::into_inner) = at;
 }
 
-/// An agent whose session went away. The `Snapshot` carries no `stale` flag
-/// (the firmware keeps its own); what the daemon does on the orphan path is
-/// take the title away and put [`DISCONNECTED`] there instead
-/// (`roster.rs:359`), so that title *is* the flag on this side.
-pub fn stale(agent: &Agent) -> bool {
-    agent.title.as_deref() == Some(DISCONNECTED)
-}
-
-/// The state, spelled the way the deck spells it.
-pub const fn state_word(state: AgentState) -> &'static str {
-    match state {
-        AgentState::Working => "Working",
-        AgentState::Question => "Question",
-        AgentState::Ready => "Ready",
-        AgentState::Error => "Error",
-        AgentState::Idle => "Idle",
+/// How long before `now` the moment `ts` was: `just now`, `4 s ago`,
+/// `1 min ago`, `3 h ago`, `2 d ago`.
+///
+/// Each count is whole and rounded down, so a row never says a thing
+/// happened later than it did. A stamp a little after `now` — the service's
+/// clock and this one differ by a moment — is `just now`, never a negative
+/// age.
+pub fn ago(ts: Ts, now: Ts, language: Language) -> String {
+    let seconds = now.millis().saturating_sub(ts.millis()) / 1_000;
+    match seconds {
+        0 => language.text("just now").to_string(),
+        1..=59 => language.format("{0} s ago", &[&seconds.to_string()]),
+        60..=3_599 => language.format("{0} min ago", &[&(seconds / 60).to_string()]),
+        3_600..=86_399 => language.format("{0} h ago", &[&(seconds / 3_600).to_string()]),
+        _ => language.format("{0} d ago", &[&(seconds / 86_400).to_string()]),
     }
 }
 
-/// The kind icon (§8.2). A glyph and not an SVG: the bundle's `assets/lucide`
-/// is the device's alpha-mask set, there is no vector icon for "Claude", and
-/// a letter in a chip is legible at 11 px where a traced logo is not.
-pub const fn kind_icon(kind: Kind) -> &'static str {
-    match kind {
-        Kind::Claude => "\u{2733}",
-        Kind::Codex => "\u{25ce}",
-        Kind::Gemini => "\u{2726}",
-        Kind::Other => "\u{25aa}",
-        Kind::Conol => "\u{25a6}",
+/// `ts` on this Mac's clock, through `localtime_r`: the year, the month (1
+/// to 12), the day, the hour (0 to 23) and the minute, in its time zone and
+/// with its summer time. A stamp the zone cannot place is read in UTC.
+pub fn local_clock(ts: Ts) -> (i32, u32, u32, u32, u32) {
+    let seconds = libc::time_t::try_from(ts.millis() / 1_000).unwrap_or(libc::time_t::MAX);
+    // SAFETY: `tm` is plain C data, and all zeroes (a null `tm_zone` among
+    // them) is a value of it; `localtime_r` only writes to it.
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    // SAFETY: both pointers are valid for the call, and `localtime_r` writes
+    // through the second alone. It keeps no pointer to either.
+    if unsafe { libc::localtime_r(&seconds, &mut tm) }.is_null() {
+        return utc_clock(ts);
+    }
+    let field = |value: libc::c_int| u32::try_from(value).unwrap_or_default();
+    (
+        tm.tm_year.saturating_add(1_900),
+        field(tm.tm_mon) + 1,
+        field(tm.tm_mday),
+        field(tm.tm_hour),
+        field(tm.tm_min),
+    )
+}
+
+/// The minute `hour:minute` of `year-month-day` on this Mac's clock, as a
+/// stamp: [`local_clock`] the other way round, through `mktime`, which lets
+/// the time zone say whether summer time is on.
+///
+/// `None` for a date no calendar has (a 13th month, 30 February) or a time
+/// no clock shows (a 25th hour). A minute a summer-time change skips is
+/// moved past the change, as `mktime` moves it.
+pub fn local_ts(year: i32, month: u32, day: u32, hour: u32, minute: u32) -> Option<Ts> {
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) || hour > 23 || minute > 59 {
+        return None;
+    }
+    let int = |value: u32| libc::c_int::try_from(value).ok();
+    // SAFETY: as in `local_clock`; every field `mktime` reads is set below.
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    tm.tm_year = year.checked_sub(1_900)?;
+    tm.tm_mon = int(month)? - 1;
+    tm.tm_mday = int(day)?;
+    tm.tm_hour = int(hour)?;
+    tm.tm_min = int(minute)?;
+    // The zone says whether summer time is on, not the caller.
+    tm.tm_isdst = -1;
+    // SAFETY: `tm` is valid for reads and writes for the call, and `mktime`
+    // keeps no pointer to it.
+    let seconds = unsafe { libc::mktime(&mut tm) };
+    // `mktime` carries a day past the month's end into the next month; a
+    // date it moved was not a date.
+    if tm.tm_mday != int(day)? || tm.tm_mon != int(month)? - 1 {
+        return None;
+    }
+    // A stamp counts from 1970: anything before is none, and so is `-1`,
+    // which is how `mktime` says it failed.
+    let seconds = u64::try_from(seconds).ok()?;
+    Some(Ts::from_millis(seconds.saturating_mul(1_000)))
+}
+
+/// When `ts` was, at `now`, the way a page captions a moment:
+/// `today, 09:41`, `yesterday, 09:41`, or `2026-11-09, 09:41` for any other
+/// day, on this Mac's clock.
+///
+/// Yesterday is the calendar day before `now`'s, not the 24 hours before
+/// it, so it is still right on the night summer time begins or ends.
+pub fn day_and_time(ts: Ts, now: Ts, language: Language) -> String {
+    let (year, month, day, hour, minute) = local_clock(ts);
+    let (now_year, now_month, now_day, _, _) = local_clock(now);
+    let time = format!("{hour:02}:{minute:02}");
+    match days_from_civil(now_year, now_month, now_day) - days_from_civil(year, month, day) {
+        0 => language.format("today, {0}", &[&time]),
+        1 => language.format("yesterday, {0}", &[&time]),
+        _ => language.format(
+            "{0}, {1}",
+            &[&format!("{year:04}-{month:02}-{day:02}"), &time],
+        ),
     }
 }
 
-pub const fn kind_label(kind: Kind) -> &'static str {
-    match kind {
-        Kind::Claude => "Claude",
-        Kind::Codex => "Codex",
-        Kind::Gemini => "Gemini",
-        Kind::Other => "Agent",
-        Kind::Conol => "Conol",
-    }
-}
-
-/// `Slot 3`, or "not on deck" for an agent the slot policy left off (§8.2).
-pub fn slot_badge(slot: Option<Slot>) -> String {
-    slot_badge_localized(slot, Language::English)
-}
-
-/// The live title (§8.2), which is content and may have been nulled.
-pub fn live_title(agent: &Agent) -> &str {
-    live_title_localized(agent, Language::English)
-}
-
-/// `now`, `2m`, `3h`, `12d` — the firmware's granularity, so a row that
-/// reads "2m" on the deck reads "2m" here (`src/ui/kit.rs:482`). A stamp
-/// from the future (a clock that stepped back, a `since` the daemon rounded
-/// up) is "now" and never a negative age.
-pub fn age(now: Ts, since: Ts) -> String {
-    age_localized(now, since, Language::English)
-}
-
-/// The state age of a row: how long the agent has been in this state. `None`
-/// for an idle or stale agent, where the deck shows nothing either — the age
-/// of "nothing is happening" is not news.
-pub fn state_age(agent: &Agent, now: Ts) -> Option<String> {
-    state_age_localized(agent, now, Language::English)
-}
-
-/// The owner/source badge and §8.2's four words for it. `source` says which
-/// door the agent came in by; for the API door the principal behind it is
-/// what distinguishes a third party reporting itself (§4.15) from a token
-/// running a script.
-pub fn owner_source(agent: &Agent) -> &'static str {
-    match (agent.source, &agent.owner.principal) {
-        (Source::Hook, _) => "hook",
-        (Source::Mcp, _) => "mcp",
-        (_, Principal::Adapter(deck_model::AdapterKind::Mcp)) => "mcp",
-        (Source::Api, Principal::Token(_)) => "script",
-        (Source::Api, _) => "self-reported",
-    }
-}
-
-/// The card's own name: `#17.1/2` — card 17, page 1 of 2 (§8.2). The deck
-/// pages a card the operator's thumb cannot fit on one screen; the window
-/// shows every choice at once and still names the page, because that is the
-/// `#` an operator reads out over a call.
-pub fn card_ref(card: &Card) -> String {
-    if card.page.count > 1 {
-        format!(
-            "#{}.{}/{}",
-            card.id,
-            card.page.index.saturating_add(1),
-            card.page.count
-        )
+/// A size on disk as Finder writes it, in thousands: `4 KB`, `428 MB`,
+/// `2.1 GB`.
+///
+/// Kilobytes and megabytes are whole and gigabytes carry one decimal, each
+/// rounded to the nearest, and the unit steps up where the rounded number
+/// would reach a thousand (`1.0 GB`, never `1000 MB`). A file that is not
+/// empty is never `0 KB`.
+pub fn size_text(bytes: u64) -> String {
+    if bytes < 999_500 {
+        let kilobytes = (bytes + 500) / 1_000;
+        format!("{} KB", kilobytes.max(u64::from(bytes > 0)))
+    } else if bytes < 999_500_000 {
+        format!("{} MB", (bytes + 500_000) / 1_000_000)
     } else {
-        format!("#{}", card.id)
+        let tenths = bytes.saturating_add(50_000_000) / 100_000_000;
+        format!("{}.{} GB", tenths / 10, tenths % 10)
     }
 }
 
-/// The card text, which is content and may have been nulled (§4.3).
-pub fn card_text(card: &Card) -> &str {
-    card_text_localized(card, Language::English)
-}
+/// What the deck's firmware adds to its version (`src/link/mod.rs`).
+const FW_SUFFIX: &str = "-openwalkietalkie";
 
-/// One choice, with the recommendation marked. `choice_map` is B10's
-/// shown → sent mapping: when the owner offered more options than the deck
-/// can draw, the index the *agent* knows is not the index of this row, and
-/// an operator reading a log next to this window needs both.
-pub fn choice_label(card: &Card, shown: u8) -> String {
-    choice_label_localized(card, shown, Language::English)
-}
-
-/// How this card's answer gets home (§4.8), for the detail pane's route line.
-pub const fn route(deliver: Deliver) -> &'static str {
-    match deliver {
-        Deliver::Hold => "hold",
-        Deliver::Push => "push",
-        Deliver::Poll => "poll",
-        Deliver::Focus => "focus",
-        Deliver::None => "none",
+/// The deck's firmware as the pages print it, in mono: `0.13.0 · Rev B`, or
+/// the version alone while the deck has not named its board.
+///
+/// The deck calls its build `0.13.0-openwalkietalkie`; the suffix tells the
+/// owner nothing, so it is dropped.
+pub fn fw_text(fw: &str, board: Option<&str>) -> String {
+    let fw = fw.trim();
+    let version = fw.strip_suffix(FW_SUFFIX).unwrap_or(fw);
+    match board.map(str::trim).filter(|board| !board.is_empty()) {
+        Some(board) if version.is_empty() => board.to_string(),
+        Some(board) => format!("{version} \u{b7} {board}"),
+        None => version.to_string(),
     }
 }
 
-/// The hold countdown (§8.2): how long before the parked hook is released
-/// with no decision. `None` when the card does not expire.
-pub fn hold_countdown(card: &Card, now: Ts) -> Option<String> {
-    hold_countdown_localized(card, now, Language::English)
+/// The longest path [`home_short`] prints whole, in characters.
+pub const PATH_MAX: usize = 50;
+
+/// A path as the pages print it: the home directory as `~` and, past
+/// [`PATH_MAX`] characters, the folders after the first given up for `…`,
+/// nearest the head first, until it fits:
+/// `~/Library/…/OpenWalkieTalkie/claude-marketplace`.
+///
+/// The name at the end is never cut. A path whose last part alone is too
+/// long stays too long, because a name that is not the whole name points at
+/// nothing.
+pub fn home_short(path: &str) -> String {
+    let home = std::env::var("HOME").ok();
+    shorten(path, home.as_deref())
 }
 
-/// The `failed` reason (§8.2), `None` on every other status.
-pub fn failed_reason(card: &Card) -> Option<&str> {
-    match &card.status {
-        CardStatus::Failed { reason } => Some(reason.as_str()),
-        _ => None,
-    }
-}
-
-/// `degraded` with its "focused at" (§8.2): the moment ENTER took the
-/// operator to the terminal, which is the only thing that happened to a hold
-/// that was never answered. `Some(None)` is degraded and not yet focused.
-pub fn degraded_at(card: &Card) -> Option<Option<String>> {
-    match &card.status {
-        CardStatus::Degraded { focused_at } => Some(focused_at.map(clock)),
-        _ => None,
-    }
-}
-
-/// The time of day of a stamp, `19:42:03Z`. UTC and labelled as such: `Ts`
-/// renders RFC 3339 in UTC and this workspace carries no timezone database,
-/// so a local time here would be a guess dressed as a fact.
-pub fn clock(ts: Ts) -> String {
-    let rendered = ts.to_string();
-    match (rendered.find('T'), rendered.find('.')) {
-        (Some(t), Some(dot)) if t + 1 < dot => format!("{}Z", &rendered[t + 1..dot]),
-        _ => rendered,
-    }
-}
-
-/// What the answering operator chose, for a card mid-flight.
-pub fn answering(card: &Card) -> Option<String> {
-    answering_localized(card, Language::English)
-}
-
-/// The `custom`-origin badge (§8.2). Only `custom` gets one: every other
-/// origin is a built-in adapter's, and a badge on all of them is noise —
-/// `custom` is the one that says "a token or a script wrote this card", and
-/// on the deck it is the `\u{bb} ` prefix.
-pub const fn custom_badge(origin: &Origin) -> Option<&'static str> {
-    match origin.kind {
-        OriginKind::Custom => Some("custom"),
-        _ => None,
-    }
-}
-
-/// The origin, for the detail pane's own line (`permission \u{b7} Bash`).
-pub fn origin_line(origin: &Origin) -> String {
-    origin_line_localized(origin, Language::English)
-}
-
-/// Where the agent runs (§8.2's "source (cwd, pid, terminal)"). Content, so
-/// every part of it can be absent.
-pub fn source_line(session: &SessionInfo) -> String {
-    source_line_localized(session, Language::English)
-}
-
-const fn pid_kind(kind: deck_model::PidKind) -> &'static str {
-    match kind {
-        deck_model::PidKind::Cli => "cli",
-        deck_model::PidKind::Shell => "shell",
-        deck_model::PidKind::Unknown => "unknown",
-    }
-}
-
-/// What this agent can be asked to do (§8.2's caps). `focus: false` is worth
-/// a word of its own: §4.15 lets an agent register with `caps:{answer,order}`
-/// alone, and an operator whose Focus button does nothing should be able to
-/// see why before clicking it.
-pub fn caps_line(caps: &Caps) -> String {
-    caps_line_localized(caps, Language::English)
-}
-
-/// One line of the order history (§8.2): "the exact string typed or pushed,
-/// shown before an `inject` executes". The daemon writes
-/// `order.dispatched{text}` *before* it types, so this is the string that is
-/// about to be typed and not a report of what was.
-pub fn order_line(entry: &OrderEntry) -> String {
-    order_line_localized(entry, Language::English)
-}
-
-/// Whether Copy has anything to copy (§8.2's "Copy on `order.failed`").
-pub fn copyable(entry: &OrderEntry) -> Option<&str> {
-    entry.reason.as_ref()?;
-    entry.text.as_deref()
-}
-
-/// Whether the detail pane offers **Retry** on a `failed` card. §4.8: out of
-/// `failed` only a `push`/`poll` card can go back to `answering`; for a
-/// `hold` card the parked response is already gone (Claude timed out or
-/// closed), so Retry would be answered `-32005 bad_state{reason:"hold_gone"}`
-/// and only Release is honest.
-pub fn retry_offered(card: &Card) -> bool {
-    matches!(card.status, CardStatus::Failed { .. })
-        && matches!(card.deliver, Deliver::Push | Deliver::Poll)
-}
-
-/// Whether the detail pane offers **Release to terminal** (§8.2). Every
-/// `failed` card does: releasing is `failed \u{2192} degraded`, the `\u{2328}`
-/// card re-pushed under the same id (§4.8).
-pub fn release_offered(card: &Card) -> bool {
-    matches!(card.status, CardStatus::Failed { .. })
-}
-
-/// The choice the confirmation sheet's **Allow** re-issues (§4.2).
-/// `op.confirm_requested` carries `{agent, card?, order?, principal}` and no
-/// choice (§4.12), so the dialog has to find the allow itself: the card's own
-/// recommendation when that is an allow, else the first allow label, judged
-/// by `deck_model::guard`'s vocabulary and not by a second list kept here.
-/// `None` when the card offers no allow at all, and then the dialog offers no
-/// Allow button either.
-pub fn allow_choice(card: &Card) -> Option<u8> {
-    let is_allow = |n: u8| {
-        card.choices
-            .get(usize::from(n))
-            .is_some_and(|c| guard::label_is_allow(&c.label))
+/// [`home_short`] with the home directory given.
+fn shorten(path: &str, home: Option<&str>) -> String {
+    let home = home
+        .map(|home| home.trim_end_matches('/'))
+        .filter(|home| !home.is_empty());
+    let path = match home {
+        Some(home) if path == home => "~".to_string(),
+        Some(home) => match path.strip_prefix(home) {
+            Some(rest) if rest.starts_with('/') => format!("~{rest}"),
+            _ => path.to_string(),
+        },
+        None => path.to_string(),
     };
-    if card.rec.is_some_and(is_allow) {
-        return card.rec;
+    let parts: Vec<&str> = path.split('/').collect();
+    // The head that stays is where the path starts (`~/Library`, or `/opt`
+    // of an absolute path). At least one folder after it is given up and at
+    // least the name at the end is kept, so there is nothing to shorten in
+    // a path of fewer than four parts.
+    if path.chars().count() <= PATH_MAX || parts.len() < 4 {
+        return path;
     }
-    (0..card.choices.len())
-        .map(|n| u8::try_from(n).unwrap_or(u8::MAX))
-        .find(|n| is_allow(*n))
-}
-
-/// The choice a **dismissed** sheet answers with. Dismissing must deny and
-/// may never allow (§4.2), and the strongest denial available is the card's
-/// own Deny: the first choice whose label reads as a deny word.
-///
-/// Failing that, a **permission** card falls back to the first choice that is
-/// not an allow. That is safe there and only there: `origin.kind:"permission"`
-/// is reserved for the built-in adapters (§4.6), whose choices are a CLI's own
-/// allow/deny prompt, so "Later" or "Stop" withholds the permission exactly
-/// as "Deny" would. An **elicitation**'s choices are the caller's own data
-/// (`["production", "staging"]`), where the first non-allow is not a refusal
-/// but a decision the operator never took — so there the honest answer is to
-/// send nothing, which still refuses: the guarded call was already `-32002`
-/// and the dialog is only the offer to re-issue it.
-pub fn deny_choice(card: &Card) -> Option<u8> {
-    let label = |n: u8| card.choices.get(usize::from(n)).map(|c| c.label.as_str());
-    let indices: Vec<u8> = (0..card.choices.len())
-        .map(|n| u8::try_from(n).unwrap_or(u8::MAX))
-        .collect();
-    indices
-        .iter()
-        .copied()
-        .find(|n| label(*n).is_some_and(guard::text_is_deny))
-        .or_else(|| {
-            if card.origin.kind != OriginKind::Permission {
-                return None;
-            }
-            indices
-                .iter()
-                .copied()
-                .find(|n| label(*n).is_some_and(|l| !guard::label_is_allow(l)))
-        })
-}
-
-/// The group of the sessions that have no working directory.
-pub const NO_PROJECT: &str = "No project";
-
-/// One project of the roster: every agent whose session runs in `cwd`.
-pub struct Project<'a> {
-    /// What the group header reads: the directory's last component, the
-    /// word the deck's page header shows for the same sessions
-    /// (`deck_model::project_label`); `NO_PROJECT` for sessions without one.
-    pub label: String,
-    /// The working directory itself; `None` for the unlabelled group.
-    pub cwd: Option<String>,
-    /// The deck's slots first, in slot order, then every agent the slot
-    /// policy could not fit, newest state first so the one that just asked
-    /// something is at the top of its project.
-    pub agents: Vec<&'a Agent>,
-}
-
-/// The roster grouped by project, the way §8.2 draws it and the deck pages
-/// it. Groups are by the working directory, not its last component, so two
-/// directories of the same name stay apart (the header's tooltip tells them
-/// apart); they come in name order, the unlabelled group last.
-pub fn projects(snapshot: &Snapshot) -> Vec<Project<'_>> {
-    let mut groups: Vec<Project<'_>> = Vec::new();
-    for agent in snapshot.agents.values() {
-        let cwd = agent
-            .session
-            .cwd
-            .as_deref()
-            .map(|cwd| cwd.trim_end_matches('/'))
-            .filter(|cwd| !cwd.is_empty())
-            .map(str::to_string);
-        let (label, cwd) = if let Some(profile) = &agent.companion {
-            (profile.group_label.clone(), None)
-        } else if agent.kind == Kind::Conol {
-            ("Conol".to_string(), None)
-        } else {
-            match cwd.as_deref().and_then(deck_model::project_label) {
-                Some(label) => (label, cwd),
-                None => (NO_PROJECT.to_string(), None),
-            }
-        };
-        match groups.iter_mut().find(|g| {
-            g.cwd == cwd
-                && g.agents
-                    .first()
-                    .is_some_and(|a| match (&a.companion, &agent.companion) {
-                        (Some(left), Some(right)) => {
-                            left.app_id == right.app_id && left.group_id == right.group_id
-                        }
-                        (None, None) => (a.kind == Kind::Conol) == (agent.kind == Kind::Conol),
-                        _ => false,
-                    })
-        }) {
-            Some(group) => group.agents.push(agent),
-            None => groups.push(Project {
-                label,
-                cwd,
-                agents: vec![agent],
-            }),
-        }
+    let head = parts[..2].join("/");
+    let short = |kept: usize| {
+        format!(
+            "{head}/\u{2026}/{}",
+            parts[parts.len() - kept..].join("/")
+        )
+    };
+    // The most parts there are to keep: all but the head and one folder.
+    let most = parts.len() - 3;
+    let mut kept = 1;
+    while kept < most && short(kept + 1).chars().count() <= PATH_MAX {
+        kept += 1;
     }
-    for group in &mut groups {
-        group.agents.sort_by(|a, b| match (a.slot, b.slot) {
-            (Some(x), Some(y)) => x.cmp(&y),
-            (Some(_), None) => std::cmp::Ordering::Less,
-            (None, Some(_)) => std::cmp::Ordering::Greater,
-            (None, None) => b.since.cmp(&a.since).then_with(|| a.id.cmp(&b.id)),
-        });
-    }
-    groups.sort_by(|a, b| match (a.cwd.is_none(), b.cwd.is_none()) {
-        (true, false) => std::cmp::Ordering::Greater,
-        (false, true) => std::cmp::Ordering::Less,
-        _ => a
-            .label
-            .to_lowercase()
-            .cmp(&b.label.to_lowercase())
-            .then_with(|| a.label.cmp(&b.label))
-            .then_with(|| a.cwd.cmp(&b.cwd)),
-    });
-    groups
+    short(kept)
 }
 
-/// A row's name under its project's header: the agent's own, or its kind
-/// alone when the name is the project's — a hook-registered session is named
-/// after its directory, which the header already says. The deck's roster
-/// rows follow the same rule.
-pub fn row_name(agent: &Agent, project: &Project) -> String {
-    row_name_localized(agent, project, Language::English)
+/// The UTC fields of `ts`, for the stamps no time zone can place.
+fn utc_clock(ts: Ts) -> (i32, u32, u32, u32, u32) {
+    let seconds = ts.millis() / 1_000;
+    let (year, month, day) = civil_from_days(i64::try_from(seconds / 86_400).unwrap_or(i64::MAX));
+    let of_day = u32::try_from(seconds % 86_400).unwrap_or_default();
+    (year, month, day, of_day / 3_600, of_day % 3_600 / 60)
 }
 
-/// A row's title line under its project's header: the live title, unless it
-/// is the project's own name — a session with no prompt title yet is titled
-/// after its directory, which the header already says.
-pub fn row_title(agent: &Agent, project: &Project) -> String {
-    row_title_localized(agent, project, Language::English)
+/// The days from 1970-01-01 to a date of the proleptic Gregorian calendar
+/// (Howard Hinnant's `days_from_civil`).
+fn days_from_civil(year: i32, month: u32, day: u32) -> i64 {
+    let (month, day) = (i64::from(month), i64::from(day));
+    let year = i64::from(year) - i64::from(month <= 2);
+    let era = year.div_euclid(400);
+    let year_of_era = year.rem_euclid(400);
+    let day_of_year = (153 * (month + if month > 2 { -3 } else { 9 }) + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    era * 146_097 + day_of_era - 719_468
 }
 
-/// The directory a project header's tooltip shows: the home directory as
-/// `~`, the way the log viewer writes it.
-pub fn project_path(cwd: &str, home: Option<&str>) -> String {
-    match home.map(|home| home.trim_end_matches('/')) {
-        Some(home) if !home.is_empty() && cwd == home => "~".to_string(),
-        Some(home) if !home.is_empty() && cwd.starts_with(&format!("{home}/")) => {
-            format!("~{}", &cwd[home.len()..])
-        }
-        _ => cwd.to_string(),
-    }
+/// The date `days` after 1970-01-01: [`days_from_civil`] the other way round.
+fn civil_from_days(days: i64) -> (i32, u32, u32) {
+    let days = days.saturating_add(719_468);
+    let era = days.div_euclid(146_097);
+    let day_of_era = days.rem_euclid(146_097);
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let shifted = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * shifted + 2) / 5 + 1;
+    let month = if shifted < 10 { shifted + 3 } else { shifted - 9 };
+    let year = year_of_era + era * 400 + i64::from(month <= 2);
+    (
+        i32::try_from(year).unwrap_or(i32::MAX),
+        u32::try_from(month).unwrap_or(1),
+        u32::try_from(day).unwrap_or(1),
+    )
 }
 
 // ---------------------------------------------------------------------
-// The **Integrations** screen (§8.2's Integrations row)
+// The installer's words (the Integrations page, Footprint's Remove…)
 // ---------------------------------------------------------------------
 
-/// The five `integrations.*` targets, in the order §8.2 lists their cards.
-///
-/// The list is kept here and not taken from the daemon's answer so that a
-/// party the daemon did not report still gets a card saying it did not
-/// report — an integration that quietly vanished from the screen is the one
-/// failure mode this list exists to stop.
-pub const TARGETS: [&str; 5] = [
-    "claude",
-    "codex",
-    "codex-desktop",
-    "gemini",
-    "claude-desktop",
-];
-
-/// §8.2's name for a target. The words are ports of the daemon's own
-/// `Target::display_name`, not a second set: the card, the CLI's `--help`
-/// and the log all say "Claude Code" or none of them do.
+/// A target's name as the service's own `Target::display_name` writes it,
+/// so the plan dialog, the CLI's `--help` and the log all say "Claude Code"
+/// or none of them does. A target this build does not know is named as
+/// itself.
 pub fn party_name(target: &str) -> &str {
     match target {
         "claude" => "Claude Code",
@@ -502,51 +316,15 @@ pub fn party_name(target: &str) -> &str {
     }
 }
 
-/// One line saying what this target does with this machine, so a card the
-/// operator has never installed says what installing it would mean.
-pub fn party_what(target: &str) -> &'static str {
-    match target {
-        "claude" => "http hooks in ~/.claude/settings.json, plus the chained statusLine",
-        "codex" => "shared local app-server connection, with command hooks in ~/.codex/hooks.json as fallback",
-        "codex-desktop" => "a launcher in ~/Applications that connects Codex Desktop to the shared local app server",
-        "gemini" => "command hooks in ~/.gemini/settings.json",
-        "claude-desktop" => "the openwalkietalkie-deck stdio entry in claude_desktop_config.json",
-        _ => "",
-    }
-}
-
-/// Whether installing this target can define Claude's `allowedHttpHookUrls`.
-/// Only Claude writes **http** hooks, and the key is Claude's (§5.7) — so
-/// this is the one card that carries [`ALLOWLIST_NOTE`].
-pub fn allowlist_applies(target: &str) -> bool {
-    target == "claude"
-}
-
-/// What defining `allowedHttpHookUrls` does, in the window's own words.
-///
-/// It is shown on every Claude plan, including the ones whose notes do not
-/// mention the key — because "the key already exists, so we only append"
-/// still leaves the operator inside a machine-wide allowlist, and the
-/// contract's requirement is that they see this **before** installing, not
-/// only on the run that happens to create it.
-pub const ALLOWLIST_NOTE: &str = "\u{26a0} allowedHttpHookUrls is a machine-wide switch. Once it \
-     is defined at any settings level, EVERY http hook on this machine \u{2014} yours, a \
-     project's, a plugin's \u{2014} runs only if its URL matches the merged allowlist. deckd \
-     appends its own pattern and never replaces the list, and removes only the exact string it \
-     recorded appending.";
-
-/// The §5.7 status word, exactly as the wire spells it.
-pub fn status_word(status: &Status) -> &str {
-    status.as_str()
-}
-
-/// What the §5.7 status word means, in one sentence. These are the words
-/// the design defines; an unknown one is reported as unreadable rather than
-/// explained, because this build does not know what it means.
+/// What the installer's status word means, in one sentence: the tooltip on
+/// the Integrations page's **Repair**, and what a run that is not done says
+/// is still wrong. A word this build does not know is reported as
+/// unreadable rather than explained, because nothing here knows what it
+/// means.
 pub fn status_help(status: &Status) -> &'static str {
     match status {
         Status::Installed => "deckd's plugin, hook entries, or desktop launcher are in place and current.",
-        Status::Outdated => "what is on disk differs from this build, Claude has not registered the plugin yet, or settings.json still carries the pre-plugin hooks; Update rewrites or migrates it.",
+        Status::Outdated => "what is on disk differs from this build, Claude has not registered the plugin yet, or settings.json still carries the pre-plugin hooks; Repair rewrites or migrates it.",
         Status::Absent => "nothing of deckd's is installed for this integration.",
         Status::Conflict => "a file deckd must read cannot be parsed, or holds a shape the CLI would reject. deckd never overwrites it.",
         Status::PathDrift => "the hooks name a binary that is not this app's any more; Repair rewrites them.",
@@ -558,57 +336,20 @@ pub fn status_help(status: &Status) -> &'static str {
     }
 }
 
-/// The card's dot. Green only for `installed`; grey for a party that is
-/// simply not set up; amber for everything else, including a word this
-/// build cannot read.
-pub fn status_tone(status: &Status) -> Tone {
-    match status {
-        Status::Installed => Tone::Green,
-        Status::Absent => Tone::Gray,
-        _ => Tone::Amber,
-    }
+/// [`status_help`] in the window's language.
+pub fn status_help_localized(status: &Status, language: Language) -> &'static str {
+    language.text(status_help(status))
 }
 
-/// The detected binary and its version (§8.2), or the fact that there is
-/// none — which for `claude-desktop` is normal, since it is not a CLI on
-/// `PATH`.
-pub fn detected_line(target: &str, detected: Option<&Detected>) -> String {
-    detected_line_localized(target, detected, Language::English)
-}
-
-/// §8.2's "last event time".
-///
-/// The daemon declares `last_event_at` on every row and, in this build,
-/// never fills it in — so this says which of the two it is instead of
-/// drawing an empty line and letting the operator read "never" into it.
-pub fn last_event_line(last_event_at: Option<&str>) -> String {
-    last_event_line_localized(last_event_at, Language::English)
-}
-
-/// A backup's own name, for the Restore list. The installer writes
-/// `backups/<file>.<ts>.bak`, so the file name is the whole label.
-pub fn backup_label(path: &str) -> &str {
-    path.rsplit('/').next().unwrap_or(path)
-}
-
-/// §4.1's `hooks_hijack_risk`, named for the Integrations screen (contract
-/// §4) — who holds the port, and what that does to the hooks.
-///
-/// It says "may stall" and not "has stalled": the daemon knows a stranger
-/// answers on the port, and nothing tells it whether a hook has been sent
-/// there yet.
-pub fn hijack_line(hijack: &Hijack) -> String {
-    hijack_line_localized(hijack, Language::English)
-}
-
-/// The heading of the "What this writes" sheet.
-pub fn plan_headline(verb: Verb, target: &str) -> String {
-    plan_headline_localized(verb, target, Language::English)
-}
-
-/// One line of the diff: `update ~/.claude/settings.json`.
-pub fn change_line(change: &Change) -> String {
-    change_line_localized(change, Language::English)
+/// The plan dialog's heading, and what a run is called in its toasts:
+/// `Repair — Claude Code`.
+pub fn plan_headline_localized(verb: Verb, target: &str, language: Language) -> String {
+    let what = match verb {
+        Verb::Install => language.text("Install"),
+        Verb::Uninstall => language.text("Remove"),
+        Verb::Repair => language.text("Repair"),
+    };
+    format!("{what} \u{2014} {}", party_name(target))
 }
 
 /// What a plan that writes nothing says. `install` is idempotent by content,
@@ -617,602 +358,260 @@ pub fn change_line(change: &Change) -> String {
 pub const NOTHING_TO_WRITE: &str = "Nothing to write: these files are already what this run \
      would put in them.";
 
-/// §8.2's **Ghostty Automation** card. It is not an `integrations.*` target:
-/// nothing is installed for it, and what there is to report is the
-/// Automation TCC grant the injector learned by *trying* (§5.5) — which is
-/// why `perm.status` answers `unknown` until something has been injected.
-pub fn automation_line(ghostty: Option<&str>) -> (&'static str, Tone, &'static str) {
-    match ghostty {
-        Some("granted") => (
-            "granted",
-            Tone::Green,
-            "an order with `order inject` types into Ghostty.",
-        ),
-        Some("denied") => (
-            "denied",
-            Tone::Red,
-            "macOS refused this app control of Ghostty. Automation cannot be re-prompted once \
-             denied: it has to be ticked in System Settings \u{203a} Privacy & Security \u{203a} \
-             Automation.",
-        ),
-        _ => (
-            "unknown",
-            Tone::Gray,
-            "nothing has tried to inject yet, so macOS has not been asked. The first `inject` \
-             order is what raises the prompt.",
-        ),
-    }
-}
-
-/// The `x-apple.systempreferences:` pane a *denied* Automation grant can
-/// only be fixed in — the same recourse §7.8 takes for a denied microphone.
-pub const AUTOMATION_SETTINGS: &str =
-    "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation";
-
 // ---------------------------------------------------------------------
-// Tokens (§4.11, §8.2)
+// A run the service could not finish by itself (amendment B4), on the
+// Integrations page and in first run alike
 // ---------------------------------------------------------------------
 
-/// The scopes a token may be created with, as the wire spells them.
-pub fn scope_words() -> Vec<String> {
-    deck_model::Scope::ALL
-        .iter()
-        .filter_map(|s| serde_json::to_value(s).ok())
-        .filter_map(|v| v.as_str().map(str::to_string))
-        .collect()
+/// A next step the service could not run itself: `run: <command>`.
+const RUN: &str = "run:";
+
+/// A next step whose command the service ran and saw fail: `WARNING: …`.
+const WARNING: &str = "WARNING";
+
+/// What an applied install, repair or removal left to the owner, from its
+/// receipt's `next_steps`: the commands the service found no CLI to run
+/// (`run: …`) and the ones that failed when it ran them (`WARNING: …`), as
+/// it wrote them. Every other step only tells — a session already open
+/// loads the plugin after `/reload-plugins`, a word about the Channels
+/// helper, both on every install of the Claude Code plugin — and leaves
+/// nothing undone.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Leftover {
+    /// The commands, without their `run:`.
+    pub commands: Vec<String>,
+    /// The warnings, whole.
+    pub warnings: Vec<String>,
 }
 
-/// A token row's scopes, or the fact that it has none — which is a token
-/// that can do nothing and is worth seeing as such.
-pub fn token_scopes_line(token: &TokenRow) -> String {
-    token_scopes_line_localized(token, Language::English)
-}
-
-/// When the token was made and when it stops working.
-pub fn token_life_line(token: &TokenRow) -> String {
-    token_life_line_localized(token, Language::English)
-}
-
-/// What Revoke on this token would break. The `hooks` token's plaintext is
-/// embedded in the managed blocks, so revoking it stops the hooks until a
-/// `repair` re-embeds the new one — and the operator should read that on
-/// the button and not in the log afterwards.
-pub fn token_embedded_line(token: &TokenRow) -> Option<String> {
-    token_embedded_line_localized(token, Language::English)
-}
-
-/// The sentence over the one-time plaintext (§4.11).
-pub const TOKEN_SHOWN_ONCE: &str = "Copy this now. The daemon keeps only a hash of it, so this \
-     window is the only place it will ever exist \u{2014} closing this dialog is the end of it.";
-
-/// What a created or rotated token is called in a toast.
-///
-/// **It names the token and never carries the plaintext.** Every toast goes
-/// through a `String`, and a `String` that has held a secret is one
-/// screen-share away from being read out loud; the value only ever leaves
-/// [`Secret::reveal`](deck_gui_core::Secret::reveal), inside its dialog.
-pub fn token_made_toast(verb: &str, name: &str) -> String {
-    token_made_toast_localized(verb, name, Language::English)
-}
-
-// ---------------------------------------------------------------------
-// The **Service** screen (§8.2's Service row)
-// ---------------------------------------------------------------------
-
-/// The one-line answer to "is the service up, and which one is it".
-pub fn service_headline(connected: bool, info: &Info) -> String {
-    service_headline_localized(connected, info, Language::English)
-}
-
-/// The port line. §4.1 makes the daemon answer **no port at all** while the
-/// port is somebody else's, so an absent port here is a fact about the
-/// machine and not a missing field.
-pub fn port_line(info: &Info, config: &ApiConfig) -> String {
-    port_line_localized(info, config, Language::English)
-}
-
-/// §8.2's degraded banner, from the mirror's own `service.degraded`.
-pub fn degraded_banner(service: &deck_model::ServiceState) -> Option<String> {
-    degraded_banner_localized(service, Language::English)
-}
-
-/// §4.1's allowed origins. An empty list is the default and means "no
-/// browser origin is allowed", which is a policy and not a gap.
-pub fn origins_line(origins: &[String]) -> String {
-    origins_line_localized(origins, Language::English)
-}
-
-/// §8.2's `curl` example, for the port the daemon actually holds.
-///
-/// It is a `POST /v1/rpc` and not a `GET /v1/info`: `/v1/info` is the one
-/// unauthenticated route (§4.1), so an example built on it would prove
-/// nothing about a token. `deckd ctl` is named beside it because the UDS
-/// door is **not** HTTP and `curl --unix-socket` cannot speak to it.
-pub fn curl_example(port: Option<u16>) -> String {
-    let port = port.unwrap_or(47201);
-    format!(
-        "curl -sS -X POST http://127.0.0.1:{port}/v1/rpc \\\n  \
-         -H 'Authorization: Bearer <token>' \\\n  \
-         -H 'Content-Type: application/json' \\\n  \
-         -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"state.get\",\"params\":{{}}}}'"
-    )
-}
-
-/// The levels the log-tail filter offers. `None` is "everything".
-pub const LOG_LEVELS: [&str; 5] = ["TRACE", "DEBUG", "INFO", "WARN", "ERROR"];
-
-/// Whether a line survives the level filter.
-///
-/// It is a substring test on the upper-cased level word, which is exactly
-/// what the daemon's own `log.tail{level}` does (`l.contains(want)`). Being
-/// the same rule is the point: the screen filters what it already has while
-/// a re-tail is in flight, and a local filter that disagreed with the
-/// server's would make the list flicker between two different answers.
-pub fn log_level_matches(line: &str, level: Option<&str>) -> bool {
-    match level {
-        None => true,
-        Some(level) => line.contains(&level.to_ascii_uppercase()),
-    }
-}
-
-/// The fields [`redact_line`] masks the value of.
-pub const CONTENT_FIELDS: [&str; 10] = [
-    "text",
-    "title",
-    "prompt",
-    "order",
-    "utterance",
-    "transcript",
-    "cwd",
-    "command",
-    "token",
-    "name",
-];
-
-/// The Service screen's content-redaction toggle (§8.2).
-///
-/// §3.7 already promises that nothing logged at `info` or above carries
-/// content, and `log.tail` therefore redacts nothing on the daemon's side.
-/// This is for the other case: the operator turns the level down to `debug`
-/// to chase something, and then shares the window. It masks what is inside
-/// double quotes (where `tracing` puts a `String` field), the value of every
-/// field in [`CONTENT_FIELDS`], and the home directory, which is a login
-/// name.
-///
-/// It is a mask over a log line and not a guarantee about the file, and the
-/// toggle's own label says so.
-pub fn redact_line(line: &str, home: Option<&str>) -> String {
-    let line = match home {
-        Some(home) if !home.is_empty() => line.replace(home, "~"),
-        _ => line.to_string(),
-    };
-    mask_fields(&mask_quoted(&line))
-}
-
-/// Everything between a pair of double quotes becomes one ellipsis. An
-/// unterminated quote masks to the end of the line, which is the safe way
-/// round.
-fn mask_quoted(line: &str) -> String {
-    let mut out = String::with_capacity(line.len());
-    let mut inside = false;
-    for ch in line.chars() {
-        match (ch, inside) {
-            ('"', false) => {
-                out.push_str("\"\u{2026}");
-                inside = true;
+impl Leftover {
+    /// From an applied run's receipt.
+    pub fn of(receipt: &Value) -> Leftover {
+        let mut leftover = Leftover::default();
+        let steps = receipt
+            .get("next_steps")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str);
+        for step in steps {
+            if let Some(command) = step.strip_prefix(RUN) {
+                leftover.commands.push(command.trim().to_string());
+            } else if step.starts_with(WARNING) {
+                leftover.warnings.push(step.to_string());
             }
-            ('"', true) => {
-                out.push('"');
-                inside = false;
-            }
-            (_, false) => out.push(ch),
-            (_, true) => {}
         }
+        leftover
     }
-    out
+
+    pub fn is_empty(&self) -> bool {
+        self.commands.is_empty() && self.warnings.is_empty()
+    }
 }
 
-/// `text=Bash: psql` \u{2192} `text=\u{2026}`, for the fields that carry content
-/// unquoted. Whitespace is preserved exactly: a log line whose columns moved
-/// is harder to read than one whose values are masked.
-fn mask_fields(line: &str) -> String {
-    let mut out = String::with_capacity(line.len());
-    for piece in line.split_inclusive(char::is_whitespace) {
-        let word = piece.trim_end();
-        let tail = &piece[word.len()..];
-        match word.split_once('=') {
-            Some((key, value))
-                if CONTENT_FIELDS.contains(&key)
-                    && !value.is_empty()
-                    && !value.starts_with('"') =>
-            {
-                out.push_str(key);
-                out.push_str("=\u{2026}");
-            }
-            _ => out.push_str(word),
+/// Whether a run is done: it left the owner nothing, and the installer,
+/// read again, says what the run was for — installed after an install or a
+/// repair, absent after a removal. `status` is `None` when that read failed
+/// or has no row for the target, and then the receipt is taken at its word.
+pub fn finished(verb: Verb, leftover: &Leftover, status: Option<&Status>) -> bool {
+    leftover.is_empty()
+        && match (verb, status) {
+            (_, None) => true,
+            (Verb::Uninstall, Some(status)) => *status == Status::Absent,
+            (Verb::Install | Verb::Repair, Some(status)) => *status == Status::Installed,
         }
-        out.push_str(tail);
-    }
-    out
 }
 
-/// What a `-32601` means and what it does **not** mean (contract §3).
+/// The one command that finishes a run from a terminal, where the owner's
+/// own `PATH` finds the CLI the service could not: this app's `deckd` (the
+/// one beside its executable) doing the same verb on the same target again,
+/// which runs what the service left and puts right what the installer still
+/// finds wrong — the command the service's own status detail names. The
+/// service's `run:` lines cannot be pasted as they are (a path under
+/// `Application Support` is not quoted in them), so they are the answer only
+/// for a copy with no `deckd` beside it, one after the other; with none of
+/// those either, the verb for whichever `deckd` the terminal finds.
+pub fn finish_command(
+    deckd: Option<&Path>,
+    verb: Verb,
+    target: &str,
+    commands: &[String],
+) -> String {
+    let verb = verb.method().trim_start_matches("integrations.");
+    match deckd {
+        Some(deckd) => format!(
+            "{} integrations {verb} {}",
+            shell_word(&deckd.to_string_lossy()),
+            shell_word(target)
+        ),
+        None if !commands.is_empty() => commands.join(" && "),
+        None => format!("deckd integrations {verb} {}", shell_word(target)),
+    }
+}
+
+/// `word` as a shell reads it back: as it is when it holds nothing a shell
+/// would split or expand, else in single quotes.
+fn shell_word(word: &str) -> String {
+    let plain = !word.is_empty()
+        && word
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "/._-+,:@%=".contains(c));
+    if plain {
+        word.to_string()
+    } else {
+        format!("'{}'", word.replace('\'', r"'\''"))
+    }
+}
+
+/// Why the service refused a call, in its own words: the installer's
+/// refusal carries them as `data.why`; anything else is the error itself.
+pub fn reason(error: &ClientError) -> String {
+    error
+        .api_error()
+        .and_then(|e| {
+            e.data
+                .get("why")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| error.to_string())
+}
+
+// ---------------------------------------------------------------------
+// The test question (the Integrations page, and first run's last step)
+// ---------------------------------------------------------------------
+
+/// The mark the test question's line leads with.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TestMark {
+    /// Answered on the deck.
+    Done,
+    /// On the deck, waiting for an answer.
+    Waiting,
+    /// Not answered.
+    Missed,
+    /// Nothing went: the deck was not linked.
+    Note,
+}
+
+/// What the line beside **Send a Test Question** says about the last one,
+/// and its mark. Nothing before the first test; nothing for a state this
+/// build does not know, or for one no question is in (`heard` is the voice
+/// test's); and nothing for an answer the service gave no time for, rather
+/// than a time made up.
+pub fn test_line(
+    question: Option<&QuestionTest>,
+    language: Language,
+) -> Option<(String, TestMark)> {
+    let question = question?;
+    Some(match &question.state {
+        TestState::Sent | TestState::Waiting => (
+            language
+                .text("A test question is on the deck. Answer it there.")
+                .to_string(),
+            TestMark::Waiting,
+        ),
+        TestState::Answered => {
+            // Whole seconds, to the nearest, and at least one: a question
+            // answered on the deck took a press.
+            let seconds = question.after_ms?.saturating_add(500) / 1_000;
+            (
+                language.format(
+                    "The last test question arrived on the deck and was answered there after {0} s.",
+                    &[&seconds.max(1).to_string()],
+                ),
+                TestMark::Done,
+            )
+        }
+        TestState::Expired => (
+            language
+                .text("The last test question was not answered on the deck.")
+                .to_string(),
+            TestMark::Missed,
+        ),
+        TestState::NoDeck => (
+            language
+                .text("The deck is not linked, so no test question was sent.")
+                .to_string(),
+            TestMark::Note,
+        ),
+        TestState::Heard | TestState::Unknown(_) => return None,
+    })
+}
+
+// ---------------------------------------------------------------------
+// Sentences one page reads out of a reply
+// ---------------------------------------------------------------------
+
+/// What the service's `degraded` reason means: `None` while it is not
+/// degraded. A reason this build has never seen is still said, as it came.
 ///
-/// Three methods the Service screen calls are being added to the daemon in
-/// parallel this week. A screen that reported "stopped" on a call the daemon
-/// never answered would be claiming something that did not happen, so this
-/// is the one sentence that says which method is missing and that nothing
-/// was done.
-pub fn missing_method_line(method: &str) -> String {
-    missing_method_line_localized(method, Language::English)
+/// The two port words are the local API's alone (the Service page's Local
+/// API row says them): the deck, the Claude Code plugin's hooks and the
+/// connected apps reach the service over its socket, so another program on
+/// the TCP port closes the local API and nothing else.
+pub fn degraded_banner_localized(
+    service: &deck_model::ServiceState,
+    language: Language,
+) -> Option<String> {
+    let reason = service.degraded.as_deref()?;
+    let port = service.port.to_string();
+    Some(match reason {
+        deck_gui_core::admin::HIJACK_RISK => language.format(
+            "Another program answers on port {0}, so the local API is closed and local tools that call the port reach that program. Change the port.",
+            &[&port],
+        ),
+        deck_gui_core::admin::PORT_IN_USE => language.format(
+            "Another program holds port {0}, so the local API is closed until the port is free. Nothing shipped with the deck uses it.",
+            &[&port],
+        ),
+        "shutdown" => language.text("The service is shutting down.").to_string(),
+        other => language.format("The service is degraded: {0}.", &[(other)]),
+    })
 }
-
-/// What `launchctl print` says about the daemon's own agent.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Launchd {
-    /// Loaded and running, with the pid launchd reports.
-    Running(Option<u32>),
-    /// Loaded, not running (a `KeepAlive` agent between runs, or one that
-    /// exited).
-    Loaded,
-    /// launchd has never heard of the label: the agent is not installed,
-    /// which is what the Welcome sheet's `SMAppService.register` fixes.
-    NotLoaded,
-    /// `launchctl` answered something this parser does not recognise.
-    Unknown,
-}
-
-/// Read `launchctl print gui/<uid>/<label>`.
-///
-/// Only three things are taken from it and each is a literal launchd
-/// prints: `Could not find service`, `state = running` and `pid = N`. The
-/// rest of that output is a hundred lines of domain detail that changes
-/// between OS releases, and a parser that depended on it would be reporting
-/// the OS version as a service state.
-pub fn launchd_state(output: &str) -> Launchd {
-    if output.contains("Could not find service") || output.contains("No such process") {
-        return Launchd::NotLoaded;
-    }
-    let field = |key: &str| {
-        output
-            .lines()
-            .map(str::trim)
-            .find_map(|l| l.strip_prefix(key)?.trim().strip_prefix("= "))
-            .map(str::trim)
-    };
-    match field("state") {
-        Some("running") => Launchd::Running(field("pid").and_then(|p| p.parse().ok())),
-        Some(_) => Launchd::Loaded,
-        None => Launchd::Unknown,
-    }
-}
-
-/// The Service screen's line for [`Launchd`].
-pub fn launchd_line(state: &Launchd) -> String {
-    launchd_line_localized(state, Language::English)
-}
-
-/// The two objects the Service screen shows side by side, and why they are
-/// two.
-///
-/// `launchctl print` above is the **daemon's** launchd agent. The login item
-/// beside it is `SMAppService.mainApp` — this **window**, opened with the
-/// Mac. They are different objects with different lifetimes, and an operator
-/// who read one row as the other would turn off the wrong thing.
-pub const LOGIN_ITEM_NOTE: &str =
-    "That is the daemon's launchd agent. The line below is this window's own login item, which is \
-     a different thing: the service runs whether or not this app opens at login. Change it on the \
-     Welcome screen.";
-
-// ---------------------------------------------------------------------------
-// The Voice screen (§8.2's Voice row)
-// ---------------------------------------------------------------------------
-
-/// §7.2's route machine, in the order the diagram draws it: what the deck's
-/// audio is doing right now.
-///
-/// §8.2's Voice row names five states (A2DP, SCO ours, SCO external, stuck,
-/// none) and the machine has **seven**. The two it does not name are the two
-/// the operator is most likely to be looking at when something is wrong —
-/// `Reopening` is the 2.3 s after every press (V1: A2DP resume is 2307 ms
-/// median) and `SystemDefault` is `[voice] fallback_output = "system_default"`,
-/// where the sound is not going to the deck at all — so the diagram draws all
-/// seven. A state the machine can be in and the diagram cannot show is a
-/// window that goes blank exactly when it is needed.
-pub const ROUTE_STEPS: [Route; 7] = [
-    Route::None,
-    Route::A2dp,
-    Route::ScoOurs,
-    Route::Reopening,
-    Route::ScoExternal,
-    Route::ScoStuck,
-    Route::SystemDefault,
-];
-
-/// The same machine over the deck's BLE voice link (`[voice] transport =
-/// "ble"`): it settles as `Ble`, our own capture is `BleOurs`, and nothing
-/// else can flip the rate, so `ScoExternal` is not a state it can be in.
-/// The other four still are — `Reopening` only for the moment between the
-/// release and the speaker's reopening, `ScoStuck` after two failed opens.
-pub const BLE_ROUTE_STEPS: [Route; 6] = [
-    Route::None,
-    Route::Ble,
-    Route::BleOurs,
-    Route::Reopening,
-    Route::ScoStuck,
-    Route::SystemDefault,
-];
-
-/// The diagram for the transport the engine reported. Before that report
-/// arrives, show the current deck's BLE protocol; the legacy diagram needs
-/// an explicit CoreAudio transport report.
-#[must_use]
-pub fn route_steps(transport: Option<VoiceTransport>) -> &'static [Route] {
-    match transport {
-        Some(VoiceTransport::Coreaudio) => &ROUTE_STEPS,
-        _ => &BLE_ROUTE_STEPS,
-    }
-}
-
-pub const fn transport_line(transport: Option<VoiceTransport>) -> &'static str {
-    match transport {
-        Some(VoiceTransport::Ble) => "Bluetooth LE \u{b7} custom audio protocol",
-        Some(VoiceTransport::Coreaudio) => "CoreAudio \u{b7} legacy Bluetooth audio",
-        None => "Bluetooth LE \u{b7} waiting for the service's transport report",
-    }
-}
-
-/// The route's short label, for the diagram's chips.
-pub const fn route_word(route: Route) -> &'static str {
-    match route {
-        Route::None => "None",
-        Route::A2dp => "A2DP",
-        Route::ScoOurs => "SCO (ours)",
-        Route::ScoExternal => "SCO (external)",
-        Route::Reopening => "Reopening",
-        Route::ScoStuck => "Stuck",
-        Route::SystemDefault => "System default",
-        Route::Ble => "BLE",
-        Route::BleOurs => "BLE (ours)",
-    }
-}
-
-/// The route in the window's tones, so an amber route here and an amber dot
-/// on the deck mean the same thing: **something is wrong and nobody is
-/// broken**. Only `ScoStuck` is red, because it is the one the machine
-/// cannot leave on its own.
-pub const fn route_tone(route: Route) -> Tone {
-    match route {
-        Route::A2dp | Route::Ble => Tone::Green,
-        Route::ScoOurs | Route::BleOurs => Tone::Blue,
-        Route::Reopening => Tone::Blue,
-        Route::ScoExternal => Tone::Amber,
-        Route::SystemDefault => Tone::Amber,
-        Route::ScoStuck => Tone::Red,
-        Route::None => Tone::Gray,
-    }
-}
-
-/// What the route means, in one sentence, from §7.2's own account of the
-/// machine — in the transport's own terms where they differ.
-pub const fn route_help(route: Route, transport: Option<VoiceTransport>) -> &'static str {
-    let ble = !matches!(transport, Some(VoiceTransport::Coreaudio));
-    match route {
-        Route::Ble => {
-            "The deck's speaker is open over its custom Bluetooth LE audio protocol, at 16 kHz, \
-             and staying open: announcements and chimes go to the deck as 20 ms packets."
-        }
-        Route::BleOurs => {
-            "Our own capture is streaming the deck's microphone over Bluetooth LE: the deck's \
-             speaker is closed for the press, since nothing cancels its echo, and reopens when it \
-             ends."
-        }
-        Route::None if ble => {
-            "Nothing is open: the deck's Bluetooth LE audio link is not ready (or offers no \
-             speaker), and no capture is running."
-        }
-        Route::Reopening if ble => {
-            "Between the capture and the deck's speaker again. Over Bluetooth LE there is no rate \
-             to wait for, so this passes as soon as the speaker reopens."
-        }
-        Route::ScoStuck if ble => {
-            "Two attempts to open the deck's speaker over Bluetooth LE failed. It is tried again \
-             when the link comes back."
-        }
-        Route::None => {
-            "Nothing is open. The deck's output is closed and no capture is running, which is \
-             where the machine sits between sessions."
-        }
-        Route::A2dp => {
-            "The deck's output is open at 44.1 kHz and staying open: announcements and chimes go \
-             to the deck."
-        }
-        Route::ScoOurs => {
-            "Our own capture holds the link: the output is closed for the duration of the press \
-             and comes back when it ends."
-        }
-        Route::Reopening => {
-            "Between the capture and A2DP again. macOS's SCO teardown is a fixed 2.3 s timer that \
-             cannot be hurried; the output opens at the device's current rate rather than waiting \
-             for 44.1 kHz."
-        }
-        Route::ScoExternal => {
-            "Another app's capture flipped the rate: the deck is the system default input here, \
-             so this is routine rather than an edge case. It can only be waited out."
-        }
-        Route::ScoStuck => {
-            "Two reopens failed: the output is open at the wrong rate and is being resampled. It \
-             recovers on the next rate change."
-        }
-        Route::SystemDefault => {
-            "`[voice] fallback_output = \"system_default\"`: the sound is going to this Mac's own \
-             output and not to the deck."
-        }
-    }
-}
-
-/// One of the two device UIDs, or the one honest sentence for not having it.
-pub fn uid_line(what: &str, uid: Option<&str>) -> String {
-    uid_line_localized(what, uid, Language::English)
-}
-
-/// How long a `voice.level` stays on the meter before the meter goes idle.
-///
-/// The events are per-buffer, so a meter that never expired would hold the
-/// last buffer of the last press at full height for ever. One second is past
-/// any plausible gap between buffers and short enough that a release is
-/// visible as one.
-pub const METER_FRESH: Duration = Duration::from_secs(1);
-
-/// The meter's height, 0.0..=1.0, from a capture RMS.
-///
-/// The scale is dBFS and not linear: a linear meter spends its whole range
-/// on the top 6 dB and shows speech as a twitch near zero. −60 dBFS is the
-/// floor (which is also what an exact digital zero reads as) and 0 dBFS is
-/// full height.
-pub fn meter_level(rms: f32) -> f32 {
-    if !rms.is_finite() || rms <= 0.0 {
-        return 0.0;
-    }
-    let db = 20.0 * rms.log10();
-    ((db + 60.0) / 60.0).clamp(0.0, 1.0)
-}
-
-/// The meter's own caption. Kept scrupulously free of any verdict about the
-/// microphone: V2 measured that a dead mic and a warming SCO link both report
-/// exact digital zero for about a second, so a meter that said "no signal"
-/// would be guessing at hardware from a number that cannot tell.
-pub fn meter_line(level: Option<Level>, now: Ts) -> String {
-    meter_line_localized(level, now, Language::English)
-}
-
-/// Is this level still the live one?
-pub fn fresh(at: Ts, now: Ts) -> bool {
-    now.millis().saturating_sub(at.millis()) <= METER_FRESH.as_millis() as u64
-}
-
-/// The STT or TTS badge: which engine, and whether it runs here.
-pub fn engine_badge(engine: &Engine) -> String {
-    engine_badge_localized(engine, Language::English)
-}
-
-/// The locales an engine will accept, shortened. `voice.engines` reports
-/// **locales and not voices** (§4.9): the per-agent voice pool is
-/// `[voice.voices] default_pool` plus `state.json`, and it is not in this
-/// reply at all.
-pub fn locales_line(locales: &[String], selected: Option<&str>) -> String {
-    locales_line_localized(locales, selected, Language::English)
-}
-
-/// Why there are no engine badges, in the daemon's own terms. A `-32013`
-/// here is a daemon with no audio engine and not a call that failed.
-pub fn engines_missing_line(error: &str) -> String {
-    engines_missing_line_localized(error, Language::English)
-}
-
-/// §7.8's four permission states, spelled the way the daemon spells them.
-pub const fn permission_word(permission: Permission) -> &'static str {
-    match permission {
-        Permission::Unknown => "unknown",
-        Permission::NotDetermined => "not determined",
-        Permission::Granted => "granted",
-        Permission::Denied => "denied",
-    }
-}
-
-pub const fn permission_tone(permission: Permission) -> Tone {
-    match permission {
-        Permission::Granted => Tone::Green,
-        Permission::Denied => Tone::Red,
-        Permission::NotDetermined => Tone::Amber,
-        Permission::Unknown => Tone::Gray,
-    }
-}
-
-/// What each state means here, and — for the two that cannot be fixed from
-/// this window — what can be done instead.
-pub const fn permission_help(permission: Permission) -> &'static str {
-    match permission {
-        Permission::Granted => "macOS has granted this to the daemon's process.",
-        Permission::Denied => {
-            "macOS will not prompt twice for a denied permission, so System Settings is the only \
-             way back."
-        }
-        Permission::NotDetermined => "macOS has not been asked for this yet.",
-        Permission::Unknown => {
-            "The audio side has not reported this yet. With no engine in this build it stays \
-             unknown, which is not the same as `not determined`."
-        }
-    }
-}
-
-/// The Bluetooth row's own note: the one permission this window cannot
-/// ask for, because macOS asks by itself.
-pub const BLUETOOTH_NOTE: &str =
-    "The deck's microphone and speaker use its custom Bluetooth LE protocol. macOS asks for \
-     Bluetooth access when the service first starts the link.";
-
-pub const MAC_MICROPHONE_NOTE: &str =
-    "Microphone access is needed only when capture falls back to this Mac's input. The deck's \
-     own microphone uses Bluetooth access.";
-
-/// The same permission titles and notes are used by Voice and Welcome.
-pub fn permission_title(which: &str, transport: Option<VoiceTransport>) -> &'static str {
-    match which {
-        "microphone" if !matches!(transport, Some(VoiceTransport::Coreaudio)) => {
-            "Mac fallback microphone"
-        }
-        "microphone" => "Microphone",
-        "bluetooth" => "Bluetooth",
-        _ => "Speech recognition",
-    }
-}
-
-pub fn permission_note(which: &str, transport: Option<VoiceTransport>) -> Option<&'static str> {
-    match which {
-        "bluetooth" => Some(BLUETOOTH_NOTE),
-        "microphone" if !matches!(transport, Some(VoiceTransport::Coreaudio)) => {
-            Some(MAC_MICROPHONE_NOTE)
-        }
-        _ => None,
-    }
-}
-
-/// §10.4's standing caveat about **every** permission this screen shows: a
-/// grant belongs to the process that asked, and a daemon spawned from a
-/// terminal is not the daemon that ships.
-pub const PERMISSION_CAVEAT: &str =
-    "A grant reported here is the daemon process's own. A launchd-spawned deckd is its own \
-     responsible process with its own TCC row, so a status read from a terminal-spawned daemon \
-     says nothing about the shipped one.";
 
 /// The `perm.request` reply, said out loud. A `prompt_not_shown` is not a
-/// failure and must not read as one: it is §7.8's own word for a prompt that
-/// did not surface, and the sentences under it are the daemon's.
-pub fn prompt_line(prompt: &Prompt) -> String {
-    prompt_line_localized(prompt, Language::English)
+/// failure and must not read as one: it is the service's own word for a
+/// prompt that did not surface, and the sentences under it are the
+/// service's.
+pub fn prompt_line_localized(prompt: &Prompt, language: Language) -> String {
+    if prompt.not_shown() {
+        return language.format("macOS was not asked for the {0}: this build cannot show that prompt yet, so nothing changed.", &[language.text(&prompt.which)]);
+    }
+    language.format(
+        "{0}: {1}",
+        &[language.text(&prompt.which), language.text(&prompt.status)],
+    )
 }
 
 /// The headline of a `voice.test` result — what was checked and what came of
 /// it, with no claim the reply does not make.
-pub fn test_headline(report: &TestReport) -> String {
-    test_headline_localized(report, Language::English)
+pub fn test_headline_localized(report: &TestReport, language: Language) -> String {
+    match report.what.as_str() {
+        "speaker" => match report.played {
+            Some(true) => language
+                .text("Chime queued on the audio thread")
+                .to_string(),
+            Some(false) => language
+                .text("The audio thread refused the chime")
+                .to_string(),
+            None => language
+                .text("The daemon answered without saying whether it queued anything")
+                .to_string(),
+        },
+        "mic" => language
+            .text("Input as the route machine sees it")
+            .to_string(),
+        "stt" => language
+            .text("The recogniser, as it reported itself at start-up")
+            .to_string(),
+        "tts" => language
+            .text("The synthesiser, as it reported itself at start-up")
+            .to_string(),
+        // A `what` from a newer daemon: named, and nothing claimed for it.
+        other => language.format("{0}: the daemon answered", &[(other)]),
+    }
 }
-
-/// The body of a `voice.test` result: only fields the reply carried.
-pub fn test_lines(report: &TestReport) -> Vec<String> {
-    test_lines_localized(report, Language::English)
-}
-
-/// The **Test** row's own standing note. The daemon puts its caveats in each
-/// reply's `limits` and the screen shows those verbatim; this is the one
-/// sentence that has to be true before a button is pressed, so it sits over
-/// the buttons rather than under a result.
-pub const TEST_NOTE: &str =
-    "Only Speaker makes a sound \u{2014} a 110 ms chime to the deck's own output, at your own \
-     `set speaker` gain. Nothing here changes the system default device or the system volume, \
-     and Mic does not open the microphone: a capture is a PTT session with an owner and a TCC \
-     grant, and a diagnostic may not start one.";
 
 // ---------------------------------------------------------------------------
 // The login item (§10.2, contract §1 M2)
@@ -1270,2020 +669,443 @@ impl LoginItem {
     }
 }
 
-/// What the login item's status says, in the status's own terms and never in
-/// the return value's.
-pub fn login_item_line(status: LoginItem) -> String {
-    login_item_line_localized(status, Language::English)
-}
-
 /// System Settings › General › Login Items, verified against the extension
 /// bundle id on this machine.
 pub const LOGIN_ITEMS_SETTINGS: &str =
     "x-apple.systempreferences:com.apple.LoginItems-Settings.extension";
 
-/// System Settings › Bluetooth, likewise — the Welcome step's "Not seeing
-/// it?".
+/// System Settings › Bluetooth, likewise: where a deck is paired.
 pub const BLUETOOTH_SETTINGS: &str = "x-apple.systempreferences:com.apple.BluetoothSettings";
-
-// ---------------------------------------------------------------------------
-// The Welcome sheet (§8.2's Welcome row)
-// ---------------------------------------------------------------------------
-
-/// The three steps, in order.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Step {
-    Service,
-    Deck,
-    Integrations,
-}
-
-impl Step {
-    pub const ALL: [Step; 3] = [Step::Service, Step::Deck, Step::Integrations];
-
-    pub const fn title(self) -> &'static str {
-        match self {
-            Step::Service => "Start the service",
-            Step::Deck => "Connect the deck and voice",
-            Step::Integrations => "Install the hooks",
-        }
-    }
-
-    pub const fn blurb(self) -> &'static str {
-        match self {
-            Step::Service => {
-                "Everything else talks to the service: it owns the deck's link, the audio and \
-                 every agent on the roster. This window is only a client of it."
-            }
-            Step::Deck => {
-                "Pair OpenWalkieTalkie in Bluetooth settings. The service adopts it and its face \
-                 strip, then opens the deck's custom Bluetooth LE audio protocol. Allow \
-                 Bluetooth access for deck audio; speech permission depends on the recognizer."
-            }
-            Step::Integrations => {
-                "Each CLI reports itself through hooks this app writes for you. Install the ones \
-                 you use, then hold PTT and say hello."
-            }
-        }
-    }
-
-    pub fn next(self) -> Option<Step> {
-        match self {
-            Step::Service => Some(Step::Deck),
-            Step::Deck => Some(Step::Integrations),
-            Step::Integrations => None,
-        }
-    }
-
-    pub fn back(self) -> Option<Step> {
-        match self {
-            Step::Service => None,
-            Step::Deck => Some(Step::Service),
-            Step::Integrations => Some(Step::Deck),
-        }
-    }
-
-    /// `1 of 3`.
-    pub fn counter(self) -> String {
-        let n = Step::ALL.iter().position(|s| *s == self).unwrap_or(0) + 1;
-        format!("{n} of {}", Step::ALL.len())
-    }
-
-    pub fn title_localized(self, language: Language) -> &'static str {
-        language.text(self.title())
-    }
-    pub fn blurb_localized(self, language: Language) -> &'static str {
-        language.text(self.blurb())
-    }
-    pub fn counter_localized(self, language: Language) -> String {
-        let n = Step::ALL.iter().position(|s| *s == self).unwrap_or(0) + 1;
-        language.format(
-            "{0} of {1}",
-            &[&n.to_string(), &Step::ALL.len().to_string()],
-        )
-    }
-}
-
-/// The deck, as step 2 reports it: the link, the firmware and the strip.
-///
-/// `device.link` carries two things and they are not the same: `link` is the
-/// BLE link and `session` is §6.3's session on top of it. A deck that is
-/// linked but whose session is not `Live` yet is connected and not ready, and
-/// a step that called that "connected" would send the operator on to hold
-/// PTT at a deck that cannot answer.
-pub fn deck_line(device: &deck_model::DeviceState) -> String {
-    deck_line_localized(device, Language::English)
-}
-
-/// Whether step 2's "waiting for `device.link`" is over: a deck that is
-/// linked **and** whose session is live.
-pub fn deck_ready(device: &deck_model::DeviceState) -> bool {
-    device.link != Link::Offline && device.session == SessionState::Live
-}
-
-/// The Welcome step's own doctor summary: **what this window can see**, which
-/// is not the same thing as what `deckd doctor` runs.
-///
-/// Saying which it is matters. `deckd doctor` is a CLI command with checks
-/// this app has no method for (it reads the data dir and asks launchd about
-/// both labels); what is here is the service, the launchd agent, the port and
-/// the link as the GUI's own mirror and calls have them. Each line is
-/// something the operator can act on, and the last one names the command that
-/// goes further.
-pub fn doctor_lines(
-    connected: bool,
-    info: &Info,
-    launchd: Option<&Launchd>,
-    device: &deck_model::DeviceState,
-    service: &deck_model::ServiceState,
-) -> Vec<String> {
-    doctor_lines_localized(connected, info, launchd, device, service, Language::English)
-}
-
-/// Step 3's closing line: the exit test, in the words the operator has to
-/// act on.
-pub const SAY_HELLO: &str =
-    "Hold PTT on the deck and say hello. The words appear below as the recogniser sends them.";
-
-/// What the live transcript reads while nothing has been said.
-pub const NO_TRANSCRIPT: &str = "Nothing heard yet.";
-
-/// The live transcript line: partial and final are drawn the same and told
-/// apart by their label, because a partial that looked final would have the
-/// operator believe the recogniser had settled when it had not.
-pub fn transcript_line(transcript: Option<&Transcript>) -> String {
-    transcript_line_localized(transcript, Language::English)
-}
-
-// ---------------------------------------------------------------------------
-// The tray icon (§8.2's tray row)
-// ---------------------------------------------------------------------------
-
-/// The status item's bitmap, in pixels. macOS scales whatever it is given to
-/// 18 pt high, so 36 is exactly 2x on a Retina menu bar and needs no
-/// resampling.
-pub const TRAY_ICON_PX: u32 = 36;
-
-/// The deck glyph and a monochrome status badge, as a black alpha mask.
-/// AppKit tints this template image to match the other menu bar icons.
-/// Status uses shape: question mark, exclamation mark, check, solid dot,
-/// or hollow dot, while the tooltip supplies the complete status text.
-pub fn tray_icon_rgba(dot: Tone) -> Vec<u8> {
-    let size = TRAY_ICON_PX as f32;
-    let mut pixels = vec![0u8; (TRAY_ICON_PX * TRAY_ICON_PX * 4) as usize];
-    // The website radio's silhouette, with its screen and keys cut out.
-    // The existing badge keeps all five aggregate states distinguishable.
-    let radio = include_bytes!("../../../../assets/branding/radio-template.alpha");
-    let dot_c = (size - size * 0.24, size - size * 0.24);
-    let dot_r = size * 0.22;
-    for y in 0..TRAY_ICON_PX {
-        for x in 0..TRAY_ICON_PX {
-            let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
-            let mut alpha = f32::from(radio[(y * TRAY_ICON_PX + x) as usize]) / 255.0;
-            // The aggregate dot sits over the corner, with a hole punched in
-            // the glyph behind it so it reads as a badge and not as a blob.
-            let from_dot = ((px - dot_c.0).powi(2) + (py - dot_c.1).powi(2)).sqrt();
-            alpha *= 1.0 - coverage(dot_r + 2.0 - from_dot);
-            let badge = coverage(dot_r - from_dot)
-                * (1.0 - tray_badge_cutout(dot, px - dot_c.0, py - dot_c.1, dot_r));
-            alpha = alpha.max(badge);
-            let i = ((y * TRAY_ICON_PX + x) * 4) as usize;
-            // Straight (un-premultiplied) RGBA, which is what
-            // `Icon::from_rgba` takes and what the PNG it builds expects.
-            pixels[i + 3] = (alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
-        }
-    }
-    pixels
-}
-
-/// Transparent marks inside the filled badge, in device pixels at 2x.
-fn tray_badge_cutout(tone: Tone, x: f32, y: f32, radius: f32) -> f32 {
-    let stroke = |a: (f32, f32), b: (f32, f32)| {
-        let (ax, ay) = (a.0 * radius, a.1 * radius);
-        let (dx, dy) = ((b.0 - a.0) * radius, (b.1 - a.1) * radius);
-        let t = (((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)).clamp(0.0, 1.0);
-        coverage(1.0 - (x - ax - t * dx).hypot(y - ay - t * dy))
-    };
-    let point = |cy: f32| coverage(1.1 - x.hypot(y - cy * radius));
-    match tone {
-        Tone::Red => {
-            let hook = [
-                (-0.30, -0.26),
-                (-0.24, -0.42),
-                (0.16, -0.42),
-                (0.32, -0.24),
-                (0.24, -0.04),
-                (0.0, 0.10),
-                (0.0, 0.18),
-            ];
-            hook.windows(2).fold(point(0.48), |alpha, pair| {
-                alpha.max(stroke(pair[0], pair[1]))
-            })
-        }
-        Tone::Amber => stroke((0.0, -0.44), (0.0, 0.12)).max(point(0.48)),
-        Tone::Green => {
-            stroke((-0.45, 0.0), (-0.12, 0.33)).max(stroke((-0.12, 0.33), (0.48, -0.34)))
-        }
-        Tone::Blue => 0.0,
-        Tone::Gray => coverage(radius - 2.0 - x.hypot(y)),
-    }
-}
-
-/// Anti-aliasing: a signed distance in pixels to a coverage in 0.0..=1.0.
-fn coverage(distance: f32) -> f32 {
-    (distance + 0.5).clamp(0.0, 1.0)
-}
-
-// Explicitly localized presentation. Values from the host remain template arguments.
-pub fn state_word_localized(state: AgentState, language: Language) -> &'static str {
-    language.text(state_word(state))
-}
-pub fn kind_label_localized(kind: Kind, language: Language) -> &'static str {
-    language.text(kind_label(kind))
-}
-pub fn owner_source_localized(agent: &Agent, language: Language) -> &'static str {
-    language.text(owner_source(agent))
-}
-pub fn route_localized(deliver: Deliver, language: Language) -> &'static str {
-    language.text(route(deliver))
-}
-pub fn custom_badge_localized(origin: &Origin, language: Language) -> Option<&'static str> {
-    custom_badge(origin).map(|text| language.text(text))
-}
-pub fn backup_label_localized(path: &str, _language: Language) -> &str {
-    backup_label(path)
-}
-pub fn party_what_localized(target: &str, language: Language) -> &'static str {
-    language.text(party_what(target))
-}
-pub fn status_word_localized(status: &Status, language: Language) -> &str {
-    match status {
-        Status::Unknown(word) => word,
-        _ => language.text(status_word(status)),
-    }
-}
-pub fn status_help_localized(status: &Status, language: Language) -> &'static str {
-    language.text(status_help(status))
-}
-pub fn automation_line_localized(
-    ghostty: Option<&str>,
-    language: Language,
-) -> (&'static str, Tone, &'static str) {
-    let (word, tone, note) = automation_line(ghostty);
-    (language.text(word), tone, language.text(note))
-}
-pub fn transport_line_localized(
-    transport: Option<VoiceTransport>,
-    language: Language,
-) -> &'static str {
-    language.text(transport_line(transport))
-}
-pub fn route_word_localized(route: Route, language: Language) -> &'static str {
-    language.text(route_word(route))
-}
-pub fn route_help_localized(
-    route: Route,
-    transport: Option<VoiceTransport>,
-    language: Language,
-) -> &'static str {
-    language.text(route_help(route, transport))
-}
-pub fn permission_word_localized(permission: Permission, language: Language) -> &'static str {
-    language.text(permission_word(permission))
-}
-pub fn permission_help_localized(permission: Permission, language: Language) -> &'static str {
-    language.text(permission_help(permission))
-}
-pub fn permission_title_localized(
-    which: &str,
-    transport: Option<VoiceTransport>,
-    language: Language,
-) -> &'static str {
-    language.text(permission_title(which, transport))
-}
-pub fn permission_note_localized(
-    which: &str,
-    transport: Option<VoiceTransport>,
-    language: Language,
-) -> Option<&'static str> {
-    permission_note(which, transport).map(|text| language.text(text))
-}
-pub fn slot_badge_localized(slot: Option<Slot>, language: Language) -> String {
-    match slot {
-        Some(slot) => language.format("Slot {0}", &[&(slot).to_string()]),
-        None => language.text(NOT_ON_DECK).to_string(),
-    }
-}
-
-pub fn live_title_localized(agent: &Agent, language: Language) -> &str {
-    match agent.title.as_deref() {
-        Some(title) => title,
-        None if agent.redacted => language.text(REDACTED),
-        None => "",
-    }
-}
-
-pub fn age_localized(now: Ts, since: Ts, language: Language) -> String {
-    let minutes = now.millis().saturating_sub(since.millis()) / 60_000;
-    match minutes {
-        0 => language.text("now").to_string(),
-        1..=59 => language.format("{0}m", &[&(minutes).to_string()]),
-        60..=1439 => language.format("{0}h", &[&(minutes / 60).to_string()]),
-        _ => language.format("{0}d", &[&(minutes / 1440).to_string()]),
-    }
-}
-
-pub fn state_age_localized(agent: &Agent, now: Ts, language: Language) -> Option<String> {
-    if agent.state == AgentState::Idle || stale(agent) {
-        return None;
-    }
-    Some(age_localized(now, agent.since, language))
-}
-
-pub fn card_text_localized(card: &Card, language: Language) -> &str {
-    match card.text.as_deref() {
-        Some(text) => text,
-        None if card.redacted => language.text(REDACTED),
-        None => "",
-    }
-}
-
-pub fn choice_label_localized(card: &Card, shown: u8, language: Language) -> String {
-    let index = usize::from(shown);
-    let label = card
-        .choices
-        .get(index)
-        .map(|c| c.label.as_str())
-        .unwrap_or(language.text(REDACTED));
-    let mut out = language.format(
-        "{0}. {1}",
-        &[&(shown.saturating_add(1)).to_string(), (label)],
-    );
-    if card.rec == Some(shown) {
-        out.push_str(language.text(" \u{b7} recommended"));
-    }
-    if let Some(sent) = card.choice_map.get(index) {
-        if *sent != shown {
-            out.push_str(&language.format(" · sent as {0}", &[&(sent).to_string()]));
-        }
-    }
-    out
-}
-
-pub fn hold_countdown_localized(card: &Card, now: Ts, language: Language) -> Option<String> {
-    let expires = card.expires?;
-    let left = expires.millis().saturating_sub(now.millis()) / 1000;
-    if expires.millis() <= now.millis() {
-        return Some(language.text("expired").to_string());
-    }
-    Some(if left >= 60 {
-        language.format(
-            "{0}m {1}s left",
-            &[&(left / 60).to_string(), &format!("{:02}", left % 60)],
-        )
-    } else {
-        language.format("{0}s left", &[&(left).to_string()])
-    })
-}
-
-pub fn answering_localized(card: &Card, language: Language) -> Option<String> {
-    let CardStatus::Answering { choice, text } = &card.status else {
-        return None;
-    };
-    if let Some(text) = text {
-        return Some(language.format("“{0}”", &[&(text).to_string()]));
-    }
-    let choice = (*choice)?;
-    Some(
-        card.choices
-            .get(usize::from(choice))
-            .map(|c| c.label.clone())
-            .unwrap_or_else(|| language.format("choice {0}", &[&(choice).to_string()])),
-    )
-}
-
-pub fn origin_line_localized(origin: &Origin, language: Language) -> String {
-    let kind = match origin.kind {
-        OriginKind::Permission => language.text("permission"),
-        OriginKind::Question => language.text("question"),
-        OriginKind::Elicitation => language.text("elicitation"),
-        OriginKind::Custom => language.text("custom"),
-        OriginKind::Ready => language.text("ready"),
-    };
-    let mut out = kind.to_string();
-    if let Some(tool) = &origin.tool {
-        out.push_str(" \u{b7} ");
-        out.push_str(tool);
-    }
-    if let Some(group) = origin.group {
-        out.push_str(&language.format(
-            " · {0} of {1}",
-            &[
-                &(group.index.saturating_add(1)).to_string(),
-                &(group.count).to_string(),
-            ],
-        ));
-    }
-    out
-}
-
-pub fn source_line_localized(session: &SessionInfo, language: Language) -> String {
-    let mut parts: Vec<String> = Vec::new();
-    if let Some(cwd) = &session.cwd {
-        parts.push(cwd.clone());
-    }
-    if let Some(pid) = session.pid {
-        parts.push(match session.pid_kind {
-            Some(kind) => language.format(
-                "pid {0} ({1})",
-                &[&(pid).to_string(), (language.text(pid_kind(kind)))],
-            ),
-            None => language.format("pid {0}", &[&(pid).to_string()]),
-        });
-    }
-    if let Some(terminal) = &session.terminal {
-        let mut term: Vec<&str> = Vec::new();
-        if let Some(program) = &terminal.program {
-            term.push(program.as_str());
-        }
-        if let Some(tty) = &terminal.tty {
-            term.push(tty.as_str());
-        }
-        if let Some(pane) = &terminal.tmux_pane {
-            term.push(pane.as_str());
-        }
-        if !term.is_empty() {
-            parts.push(term.join(" "));
-        }
-    }
-    if parts.is_empty() {
-        return language.text("no source reported").to_string();
-    }
-    parts.join(" \u{b7} ")
-}
-
-pub fn caps_line_localized(caps: &Caps, language: Language) -> String {
-    let answer = match caps.answer {
-        deck_model::AnswerCap::Hold => language.text("hold"),
-        deck_model::AnswerCap::Push => language.text("push"),
-        deck_model::AnswerCap::Poll => language.text("poll"),
-        deck_model::AnswerCap::None => language.text("none"),
-    };
-    let order = match caps.order {
-        deck_model::OrderCap::Inject => language.text("inject"),
-        deck_model::OrderCap::Push => language.text("push"),
-        deck_model::OrderCap::Poll => language.text("poll"),
-        deck_model::OrderCap::None => language.text("none"),
-    };
-    language.format(
-        "answer {0} · order {1} · {2}",
-        &[
-            (answer),
-            (order),
-            (if caps.focus {
-                language.text("focus")
-            } else {
-                language.text("no focus")
-            }),
-        ],
-    )
-}
-
-pub fn order_line_localized(entry: &OrderEntry, language: Language) -> String {
-    let mut out = match &entry.text {
-        Some(text) => language.format("“{0}”", &[&(text).to_string()]),
-        // `order.failed` carries no text (§4.12): an order refused before it
-        // was ever dispatched never had one to keep.
-        None => language.text("(no text)").to_string(),
-    };
-    if let Some(via) = &entry.via {
-        out.push_str(&language.format(" · {0}", &[&(via).to_string()]));
-    }
-    if let Some(reason) = &entry.reason {
-        out.push_str(&language.format(" · failed: {0}", &[&(reason).to_string()]));
-    }
-    out
-}
-
-pub fn row_name_localized(agent: &Agent, project: &Project, language: Language) -> String {
-    if project.cwd.is_some() && agent.name == project.label {
-        language.text(kind_label(agent.kind)).to_string()
-    } else {
-        agent.name.clone()
-    }
-}
-
-pub fn row_title_localized(agent: &Agent, project: &Project, language: Language) -> String {
-    let title = live_title_localized(agent, language);
-    if project.cwd.is_some() && title == project.label {
-        String::new()
-    } else {
-        title.to_string()
-    }
-}
-
-pub fn detected_line_localized(
-    target: &str,
-    detected: Option<&Detected>,
-    language: Language,
-) -> String {
-    match detected {
-        Some(d) if !d.version.is_empty() => language.format(
-            "{0} · {1}",
-            &[&(d.version).to_string(), &(d.path).to_string()],
-        ),
-        Some(d) => d.path.clone(),
-        None if target == "claude-desktop" => language
-            .text("no CLI to detect: this target is a file, not a binary")
-            .to_string(),
-        None if target == "codex-desktop" => language
-            .text("Codex.app was not detected in Applications")
-            .to_string(),
-        None => language.text("not found on PATH").to_string(),
-    }
-}
-
-pub fn last_event_line_localized(last_event_at: Option<&str>, language: Language) -> String {
-    match last_event_at {
-        Some(at) => language.format("last hook event {0}", &[(at)]),
-        None => language
-            .text("last hook event: not reported by this daemon")
-            .to_string(),
-    }
-}
-
-pub fn hijack_line_localized(hijack: &Hijack, language: Language) -> String {
-    let who = match (&hijack.command, hijack.pid) {
-        (Some(command), Some(pid)) => language.format(
-            "pid {0} ({1})",
-            &[&(pid).to_string(), &(command).to_string()],
-        ),
-        (Some(command), None) => command.clone(),
-        (None, Some(pid)) => language.format("pid {0}", &[&(pid).to_string()]),
-        (None, None) => language.text("another process").to_string(),
-    };
-    language.format("Port {0} is held by {1}, and it answers. Claude's installed http hooks POST prompts, tool inputs and the hooks bearer token to whoever holds it, and each held hook blocks Claude for its timeout.", &[&(hijack.port).to_string(), &(who).to_string()])
-}
-
-pub fn plan_headline_localized(verb: Verb, target: &str, language: Language) -> String {
-    let what = match verb {
-        Verb::Install => language.text("Install"),
-        Verb::Uninstall => language.text("Remove"),
-        Verb::Repair => language.text("Repair"),
-    };
-    language.format("{0} — {1}", &[(what), (party_name(target))])
-}
-
-pub fn change_line_localized(change: &Change, language: Language) -> String {
-    let action = match change.action.as_str() {
-        "create" | "update" | "remove" | "restore" => language.text(&change.action),
-        other => other,
-    };
-    language.format("{0} {1}", &[action, &change.path])
-}
-
-pub fn token_scopes_line_localized(token: &TokenRow, language: Language) -> String {
-    if token.scopes.is_empty() {
-        return language.text("no scopes").to_string();
-    }
-    token.scopes.join(", ")
-}
-
-pub fn token_life_line_localized(token: &TokenRow, language: Language) -> String {
-    let created = token
-        .created
-        .as_deref()
-        .map(|at| language.format("created {0}", &[(at)]))
-        .unwrap_or_else(|| language.text("created at an unrecorded time").to_string());
-    match token.expires.as_deref() {
-        Some(at) => language.format("{0} · expires {1}", &[&(created).to_string(), (at)]),
-        None => language.format("{0} · no expiry", &[&(created).to_string()]),
-    }
-}
-
-pub fn token_embedded_line_localized(token: &TokenRow, language: Language) -> Option<String> {
-    if token.embedded_in.is_empty() {
-        return None;
-    }
-    Some(language.format(
-        "embedded in {0} — revoking it stops those hooks until Repair re-embeds a new one",
-        &[&(token.embedded_in.join(", ")).to_string()],
-    ))
-}
-
-pub fn token_made_toast_localized(verb: &str, name: &str, language: Language) -> String {
-    let verb = language.text(verb);
-    language.format(
-        "{0} the token “{1}”. Copy its value now: it is shown once.",
-        &[(verb), (name)],
-    )
-}
-
-pub fn service_headline_localized(connected: bool, info: &Info, language: Language) -> String {
-    if !connected {
-        return language
-            .text("Not running \u{2014} nothing is answering on the socket")
-            .to_string();
-    }
-    let daemon = info
-        .daemon
-        .as_deref()
-        .unwrap_or(language.text("an unknown version"));
-    match info.sessions {
-        Some(1) => language.format("Running · deckd {0} · 1 session", &[(daemon)]),
-        Some(n) => language.format(
-            "Running · deckd {0} · {1} sessions",
-            &[(daemon), &(n).to_string()],
-        ),
-        None => language.format("Running · deckd {0}", &[(daemon)]),
-    }
-}
-
-pub fn port_line_localized(info: &Info, config: &ApiConfig, language: Language) -> String {
-    match (info.port, config.port) {
-        (Some(port), _) => {
-            language.format("http://127.0.0.1:{0} · listening", &[&(port).to_string()])
-        }
-        (None, Some(configured)) => language.format(
-            "{0} is configured and not held: the daemon is on the socket only",
-            &[&(configured).to_string()],
-        ),
-        (None, None) => language
-            .text("no TCP port: the daemon is on the socket only")
-            .to_string(),
-    }
-}
-
-pub fn degraded_banner_localized(
-    service: &deck_model::ServiceState,
-    language: Language,
-) -> Option<String> {
-    let reason = service.degraded.as_deref()?;
-    Some(match reason {
-        deck_gui_core::admin::HIJACK_RISK => {
-            language.format("Port {0} is held by a process that answers, and Claude's http hooks are still pointed at it. Change the port and re-install the hooks.", &[&(service.port).to_string()])
-        }
-        deck_gui_core::admin::PORT_IN_USE => language.format("Port {0} is already bound, so the daemon is on the socket only. http hooks and curl cannot reach it until the port is free or changed.", &[&(service.port).to_string()]),
-        "shutdown" => language.text("The service is shutting down.").to_string(),
-        other => language.format("The service is degraded: {0}.", &[(other)]),
-    })
-}
-
-pub fn origins_line_localized(origins: &[String], language: Language) -> String {
-    if origins.is_empty() {
-        return language
-            .text("none \u{2014} a browser Origin header is refused 403 (the default)")
-            .to_string();
-    }
-    origins.join(", ")
-}
-
-pub fn missing_method_line_localized(method: &str, language: Language) -> String {
-    language.format("This daemon has no `{0}`: it is not in its method table, so nothing happened. The method is week 6's daemon-side work; a daemon that has it will answer this button.", &[(method)])
-}
-
-pub fn launchd_line_localized(state: &Launchd, language: Language) -> String {
-    match state {
-        Launchd::Running(Some(pid)) => {
-            language.format("launchd agent: running, pid {0}", &[&(pid).to_string()])
-        }
-        Launchd::Running(None) => language.text("launchd agent: running").to_string(),
-        Launchd::Loaded => language
-            .text("launchd agent: loaded, not running")
-            .to_string(),
-        Launchd::NotLoaded => language
-            .text("launchd agent: not registered with launchd on this account")
-            .to_string(),
-        Launchd::Unknown => language
-            .text("launchd agent: launchctl said nothing this app can read")
-            .to_string(),
-    }
-}
-
-pub fn uid_line_localized(what: &str, uid: Option<&str>, language: Language) -> String {
-    let what = language.text(what);
-    match uid {
-        Some(uid) => language.format("{0}: {1}", &[(what), (uid)]),
-        None => language.format("{0}: none selected", &[(what)]),
-    }
-}
-
-pub fn meter_line_localized(level: Option<Level>, now: Ts, language: Language) -> String {
-    let Some(level) = level.filter(|l| fresh(l.at, now)) else {
-        return language
-            .text("No capture running. The meter moves while PTT is held.")
-            .to_string();
-    };
-    if level.rms <= 0.0 {
-        return language
-            .text(
-                "Capturing \u{b7} silence (a warming link and a dead microphone read the same \
-                here)",
-            )
-            .to_string();
-    }
-    language.format(
-        "Capturing · {0} dBFS",
-        &[&format!("{:.0}", 20.0 * level.rms.log10())],
-    )
-}
-
-pub fn engine_badge_localized(engine: &Engine, language: Language) -> String {
-    let where_ = if engine.on_device {
-        language.text("on-device")
-    } else {
-        language.text("server")
-    };
-    language.format("{0} · {1}", &[&(engine.id).to_string(), (where_)])
-}
-
-pub fn locales_line_localized(
-    locales: &[String],
-    selected: Option<&str>,
-    language: Language,
-) -> String {
-    if locales.is_empty() {
-        return language.text("no locales reported").to_string();
-    }
-    let head: Vec<&str> = locales.iter().take(4).map(String::as_str).collect();
-    let rest = locales.len().saturating_sub(head.len());
-    let mut line = head.join(", ");
-    if rest > 0 {
-        line.push_str(&language.format(" and {0} more", &[&(rest).to_string()]));
-    }
-    match selected {
-        Some(locale) if locales.iter().any(|l| l == locale) => {
-            language.format("{0} (using {1})", &[&(line).to_string(), (locale)])
-        }
-        // A configured locale the engine did not report is worth saying:
-        // `voice.listen` refuses one without on-device support before
-        // anything opens (§7.6), and this is where that shows up first.
-        Some(locale) => language.format(
-            "{0} · configured {1} is not in this list",
-            &[&(line).to_string(), (locale)],
-        ),
-        None => line,
-    }
-}
-
-pub fn engines_missing_line_localized(error: &str, language: Language) -> String {
-    language.format("No engine report: {0}. `voice.engines` answers from the one report the audio side sends when its engines come up, so this is a daemon started with --no-device, a build without an engine, or the moment before that report lands.", &[(error)])
-}
-
-pub fn prompt_line_localized(prompt: &Prompt, language: Language) -> String {
-    if prompt.not_shown() {
-        return language.format("macOS was not asked for the {0}: this build cannot show that prompt yet, so nothing changed.", &[language.text(&prompt.which)]);
-    }
-    language.format(
-        "{0}: {1}",
-        &[language.text(&prompt.which), language.text(&prompt.status)],
-    )
-}
-
-pub fn test_headline_localized(report: &TestReport, language: Language) -> String {
-    match report.what.as_str() {
-        "speaker" => match report.played {
-            Some(true) => language
-                .text("Chime queued on the audio thread")
-                .to_string(),
-            Some(false) => language
-                .text("The audio thread refused the chime")
-                .to_string(),
-            None => language
-                .text("The daemon answered without saying whether it queued anything")
-                .to_string(),
-        },
-        "mic" => language
-            .text("Input as the route machine sees it")
-            .to_string(),
-        "stt" => language
-            .text("The recogniser, as it reported itself at start-up")
-            .to_string(),
-        "tts" => language
-            .text("The synthesiser, as it reported itself at start-up")
-            .to_string(),
-        // A `what` from a newer daemon: named, and nothing claimed for it.
-        other => language.format("{0}: the daemon answered", &[(other)]),
-    }
-}
-
-pub fn test_lines_localized(report: &TestReport, language: Language) -> Vec<String> {
-    let mut lines = Vec::new();
-    if let Some(transport) = report.transport.as_deref() {
-        lines.push(language.format("transport: {0}", &[(transport)]));
-    }
-    if let Some(route) = report.route.as_deref() {
-        lines.push(language.format("route: {0}", &[(route)]));
-    }
-    if let Some(uid) = report.output_uid.as_deref() {
-        lines.push(language.format("output: {0}", &[(uid)]));
-    }
-    if let Some(uid) = report.input_uid.as_deref() {
-        lines.push(language.format("input: {0}", &[(uid)]));
-    }
-    if let Some(chime) = report.chime.as_deref() {
-        lines.push(language.format("chime: {0}", &[(chime)]));
-    }
-    if let Some(warm) = report.mic_warm.as_deref() {
-        lines.push(language.format("mic_warm: {0}", &[(warm)]));
-    }
-    if let Some(warm) = report.mic_warm_effective.as_deref() {
-        lines.push(language.format("mic_warm_effective: {0}", &[(warm)]));
-    }
-    if let Some(engine) = report.engine.as_ref() {
-        lines.push(language.format(
-            "engine: {0}",
-            &[&(engine_badge_localized(engine, language)).to_string()],
-        ));
-        lines.push(language.format(
-            "locales: {0}",
-            &[&(locales_line_localized(&engine.locales, None, language)).to_string()],
-        ));
-    }
-    if report.listening {
-        lines.push(language.text("a capture is running right now").to_string());
-    }
-    lines
-}
-
-pub fn login_item_line_localized(status: LoginItem, language: Language) -> String {
-    match status {
-        LoginItem::Enabled => language
-            .text("Open at login: on. macOS reports this app as an enabled login item.")
-            .to_string(),
-        LoginItem::RequiresApproval => language
-            .text(
-                "Open at login: waiting for your approval in System Settings \u{203a} General \
-             \u{203a} Login Items.",
-            )
-            .to_string(),
-        LoginItem::NotRegistered => language.text("Open at login: off.").to_string(),
-        LoginItem::NotFound => language
-            .text(
-                "macOS answered `notFound`: it has no record of this login item, so nothing is \
-             registered whatever the last attempt returned.",
-            )
-            .to_string(),
-        LoginItem::Unknown(code) => language.format(
-            "macOS answered status {0}, which this build has no name for.",
-            &[&(code).to_string()],
-        ),
-    }
-}
-
-pub fn deck_line_localized(device: &deck_model::DeviceState, language: Language) -> String {
-    match device.link {
-        Link::Offline => language
-            .text("No deck yet. The service reports one the moment it links.")
-            .to_string(),
-        link => {
-            let fw = device
-                .fw
-                .as_deref()
-                .unwrap_or(language.text("firmware not reported"));
-            let faces = device.faces.len();
-            let what = if link == Link::Degraded {
-                language.text("Deck linked, degraded")
-            } else {
-                language.text("Deck connected")
-            };
-            let session = match device.session {
-                SessionState::Live => String::new(),
-                other => language.format(" · session {0}", &[&format!("{:?}", other)]),
-            };
-            language.format(
-                "{0} · {1} · {2} faces adopted{3}",
-                &[(what), (fw), &(faces).to_string(), &(session).to_string()],
-            )
-        }
-    }
-}
-
-pub fn doctor_lines_localized(
-    connected: bool,
-    info: &Info,
-    launchd: Option<&Launchd>,
-    device: &deck_model::DeviceState,
-    service: &deck_model::ServiceState,
-    language: Language,
-) -> Vec<String> {
-    let mut lines = vec![
-        if connected {
-            language.format(
-                "service: answering on the socket{0}",
-                &[&(info
-                    .daemon
-                    .as_deref()
-                    .map(|v| language.format(" (deckd {0})", &[(v)]))
-                    .unwrap_or_default())
-                .to_string()],
-            )
-        } else {
-            language
-                .text("service: not answering on the socket")
-                .to_string()
-        },
-        launchd_line_localized(launchd.unwrap_or(&Launchd::Unknown), language),
-        match info.port {
-            Some(port) => language.format("http door: listening on {0}", &[&(port).to_string()]),
-            None => language
-                .text("http door: not held \u{2014} the hooks have nowhere to POST")
-                .to_string(),
-        },
-        deck_line_localized(device, language),
-    ];
-    if let Some(reason) = service.degraded.as_deref() {
-        lines.push(language.format("degraded: {0}", &[(reason)]));
-    }
-    lines.push(
-        language.text("`deckd doctor` checks more than this window can see \u{2014} the data dir, the tokens \
-         file and both launchd labels.")
-            .to_string(),
-    );
-    lines
-}
-
-pub fn transcript_line_localized(transcript: Option<&Transcript>, language: Language) -> String {
-    let Some(transcript) = transcript else {
-        return language.text(NO_TRANSCRIPT).to_string();
-    };
-    let text = if transcript.text.is_empty() {
-        "\u{2026}"
-    } else {
-        &transcript.text
-    };
-    let label = if transcript.final_ {
-        language.text("final")
-    } else {
-        language.text("hearing")
-    };
-    match transcript.intent.as_deref() {
-        Some(intent) => language.format("{0}: {1} · matched {2}", &[(label), (text), (intent)]),
-        None => language.format("{0}: {1}", &[(label), (text)]),
-    }
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use deck_model::{Choice, Page, Terminal};
 
-    fn agent() -> Agent {
-        Agent {
-            id: deck_model::AgentId("ag_1".into()),
-            slot: Some(Slot(1)),
-            kind: Kind::Claude,
-            name: "cohdl-api".into(),
-            state: AgentState::Question,
-            title: Some("waiting on psql".into()),
-            title_source: deck_model::TitleSource::Prompt,
-            since: Ts::from_millis(1_000_000),
-            source: Source::Hook,
-            owner: deck_model::Owner {
-                principal: Principal::Adapter(deck_model::AdapterKind::Claude),
-                session: deck_model::SessionId(1),
-                lease_expires: None,
-            },
-            session: SessionInfo::default(),
-            caps: Caps::default(),
-            companion: None,
-            card: None,
-            reply: None,
-            messages: Vec::new(),
-            workflow_runs: Vec::new(),
-            task: None,
-            task_source: None,
-            subagents: 0,
-            workflow: None,
-            chat_rev: 0,
-            reply_rev: 0,
-            voice: None,
-            pinned: false,
-            meta: serde_json::Value::Null,
-            redacted: false,
-        }
+    /// 2026-11-11T10:02:00.000Z.
+    const TEN_TWO_UTC: Ts = Ts(1_794_391_320_000);
+
+    /// `hour:minute` on `year-month-day`, on this Mac's clock.
+    fn local(year: i32, month: u32, day: u32, hour: u32, minute: u32) -> Ts {
+        local_ts(year, month, day, hour, minute).expect("a minute this time zone has")
     }
 
-    fn card() -> Card {
-        Card {
-            id: deck_model::CardId(17),
-            kind: deck_model::CardKind::Q,
-            status: CardStatus::Pending,
-            deliver: Deliver::Hold,
-            origin: Origin {
-                kind: OriginKind::Permission,
-                tool: Some("Bash".into()),
-                request_id: None,
-                group: None,
-            },
-            text: Some("Bash: psql -c 'drop table'".into()),
-            choices: vec![
-                Choice {
-                    label: "Allow".into(),
-                    detail: None,
-                },
-                Choice {
-                    label: "Allow always".into(),
-                    detail: None,
-                },
-                Choice {
-                    label: "Deny".into(),
-                    detail: None,
-                },
-            ],
-            choices_n: 3,
-            choice_map: Vec::new(),
-            rec: Some(0),
-            free_text: true,
-            page: Page { index: 0, count: 1 },
-            created: Ts::from_millis(1_000_000),
-            expires: None,
-            redacted: false,
-        }
-    }
+    // ---- the shared formatters ---------------------------------------
 
     #[test]
-    fn localized_presentation_preserves_catalog_keys_in_host_content() {
-        let supplied = "Ready {0} Settings";
-        let mut agent = agent();
-        agent.title = Some(supplied.into());
-        let mut card = card();
-        card.text = Some(supplied.into());
-        card.choices[0].label = supplied.into();
-        card.origin.tool = Some(supplied.into());
-        let entry = OrderEntry {
-            text: Some(supplied.into()),
-            via: Some("inject".into()),
-            reason: Some(supplied.into()),
-            at: Ts::from_millis(0),
-        };
-        let transcript = Transcript {
-            agent: None,
-            utterance: "1".into(),
-            text: supplied.into(),
-            intent: Some(supplied.into()),
-            final_: true,
-        };
-        let engine = Engine {
-            id: supplied.into(),
-            on_device: true,
-            locales: vec![supplied.into()],
-        };
-        for language in Language::ALL {
-            assert_eq!(live_title_localized(&agent, language), supplied);
-            assert_eq!(card_text_localized(&card, language), supplied);
-            assert!(choice_label_localized(&card, 0, language).contains(supplied));
-            assert!(origin_line_localized(&card.origin, language).contains(supplied));
-            assert_eq!(
-                order_line_localized(&entry, language)
-                    .matches(supplied)
-                    .count(),
-                2
-            );
-            assert_eq!(
-                transcript_line_localized(Some(&transcript), language)
-                    .matches(supplied)
-                    .count(),
-                2
-            );
-            assert!(engine_badge_localized(&engine, language).starts_with(supplied));
-            assert!(
-                locales_line_localized(&engine.locales, Some(supplied), language)
-                    .contains(supplied)
-            );
-            assert!(token_made_toast_localized("Created", supplied, language).contains(supplied));
-            assert_eq!(
-                status_word_localized(&Status::Unknown("Settings".into()), language),
-                "Settings"
-            );
-            assert_eq!(
-                backup_label_localized("/tmp/Settings", language),
-                "Settings"
-            );
-        }
-    }
-
-    #[test]
-    fn localized_setup_and_dynamic_statuses_have_translated_copy() {
-        for language in Language::ALL
-            .into_iter()
-            .filter(|language| *language != Language::English)
-        {
-            assert_ne!(slot_badge_localized(None, language), NOT_ON_DECK);
-            assert_ne!(
-                age_localized(Ts::from_millis(120_000), Ts::from_millis(0), language),
-                "2m"
-            );
-            assert_ne!(Step::Deck.title_localized(language), Step::Deck.title());
-            assert_ne!(Step::Deck.blurb_localized(language), Step::Deck.blurb());
-            assert_ne!(Step::Deck.counter_localized(language), Step::Deck.counter());
-            assert_ne!(
-                permission_help_localized(Permission::Denied, language),
-                permission_help(Permission::Denied)
-            );
-            assert_ne!(
-                transport_line_localized(Some(VoiceTransport::Ble), language),
-                transport_line(Some(VoiceTransport::Ble))
-            );
-            assert_ne!(
-                route_help_localized(Route::Ble, Some(VoiceTransport::Ble), language),
-                route_help(Route::Ble, Some(VoiceTransport::Ble))
-            );
-        }
-    }
-
-    #[test]
-    fn the_roster_dot_is_the_tone_the_deck_draws_and_gray_when_the_session_is_gone() {
-        assert_eq!(state_tone(AgentState::Working, false), Tone::Blue);
-        assert_eq!(state_tone(AgentState::Question, false), Tone::Red);
-        assert_eq!(state_tone(AgentState::Ready, false), Tone::Green);
-        assert_eq!(state_tone(AgentState::Error, false), Tone::Amber);
-        assert_eq!(state_tone(AgentState::Idle, false), Tone::Gray);
-        for state in [
-            AgentState::Working,
-            AgentState::Question,
-            AgentState::Ready,
-            AgentState::Error,
+    fn an_age_is_whole_units_rounded_down_and_never_negative() {
+        let now = TEN_TWO_UTC;
+        let before = |seconds: u64| Ts::from_millis(now.millis() - seconds * 1_000);
+        let english = Language::English;
+        for (seconds, said) in [
+            (0, "just now"),
+            (1, "1 s ago"),
+            // The Integrations board's Claude Code row.
+            (4, "4 s ago"),
+            (59, "59 s ago"),
+            (60, "1 min ago"),
+            (119, "1 min ago"),
+            (3_599, "59 min ago"),
+            (3_600, "1 h ago"),
+            (86_399, "23 h ago"),
+            (86_400, "1 d ago"),
+            (30 * 86_400, "30 d ago"),
         ] {
-            assert_eq!(state_tone(state, true), Tone::Gray, "{state:?} stale");
+            assert_eq!(ago(before(seconds), now, english), said, "{seconds} s");
         }
-    }
-
-    #[test]
-    fn ages_read_the_way_the_deck_reads_them_and_never_go_backwards() {
-        let ts = |ms| Ts::from_millis(ms);
-        assert_eq!(age(ts(59_999), ts(0)), "now");
-        assert_eq!(age(ts(60_000), ts(0)), "1m");
-        assert_eq!(age(ts(59 * 60_000 + 59_999), ts(0)), "59m");
-        assert_eq!(age(ts(60 * 60_000), ts(0)), "1h");
-        assert_eq!(age(ts(1440 * 60_000), ts(0)), "1d");
-        assert_eq!(age(ts(12 * 1440 * 60_000), ts(0)), "12d");
-        // A stamp from the future is "now", not a negative age.
-        assert_eq!(age(ts(0), ts(9_000_000)), "now");
-    }
-
-    #[test]
-    fn a_slot_badge_says_which_slot_or_that_there_is_none() {
-        assert_eq!(slot_badge(Some(Slot(3))), "Slot 3");
-        assert_eq!(slot_badge(None), NOT_ON_DECK);
-    }
-
-    #[test]
-    fn a_card_names_its_page_only_when_there_is_more_than_one() {
-        let mut c = card();
-        assert_eq!(card_ref(&c), "#17");
-        c.page = Page { index: 0, count: 2 };
-        assert_eq!(card_ref(&c), "#17.1/2");
-        c.page = Page { index: 1, count: 2 };
-        assert_eq!(card_ref(&c), "#17.2/2");
-    }
-
-    #[test]
-    fn every_choice_is_listed_with_its_recommendation_and_its_sent_index() {
-        let mut c = card();
-        assert_eq!(choice_label(&c, 0), "1. Allow \u{b7} recommended");
-        assert_eq!(choice_label(&c, 2), "3. Deny");
-        // B10: the deck moved the recommendation to slot 0, so the index the
-        // owner knows is not this row's.
-        c.choice_map = vec![2, 0, 1];
+        // Under a second is not yet a second.
         assert_eq!(
-            choice_label(&c, 0),
-            "1. Allow \u{b7} recommended \u{b7} sent as 2"
+            ago(Ts::from_millis(now.millis() - 999), now, english),
+            "just now"
         );
-        assert_eq!(choice_label(&c, 1), "2. Allow always \u{b7} sent as 0");
-        assert_eq!(choice_label(&c, 9), "10. (redacted)");
+        // The service's clock a moment ahead of this one: not a negative age.
+        assert_eq!(
+            ago(Ts::from_millis(now.millis() + 5_000), now, english),
+            "just now"
+        );
+        assert_eq!(ago(Ts::from_millis(0), Ts::from_millis(0), english), "just now");
     }
 
     #[test]
-    fn a_hold_counts_down_and_then_says_it_expired() {
-        let mut c = card();
-        assert_eq!(hold_countdown(&c, Ts::from_millis(0)), None);
-        c.expires = Some(Ts::from_millis(90_000));
-        assert_eq!(
-            hold_countdown(&c, Ts::from_millis(60_000)).as_deref(),
-            Some("30s left")
-        );
-        assert_eq!(
-            hold_countdown(&c, Ts::from_millis(0)).as_deref(),
-            Some("1m 30s left")
-        );
-        assert_eq!(
-            hold_countdown(&c, Ts::from_millis(90_000)).as_deref(),
-            Some("expired")
-        );
-        assert_eq!(
-            hold_countdown(&c, Ts::from_millis(900_000)).as_deref(),
-            Some("expired")
-        );
+    fn an_age_is_said_in_the_windows_language() {
+        crate::i18n::install();
+        let now = TEN_TWO_UTC;
+        let before = |seconds: u64| Ts::from_millis(now.millis() - seconds * 1_000);
+        assert_eq!(ago(now, now, Language::Japanese), "たった今");
+        assert_eq!(ago(before(4), now, Language::SimplifiedChinese), "4 秒前");
+        assert_eq!(ago(before(60), now, Language::TraditionalChinese), "1 分鐘前");
+        assert_eq!(ago(before(3 * 3_600), now, Language::Japanese), "3 時間前");
+        assert_eq!(ago(before(2 * 86_400), now, Language::SimplifiedChinese), "2 天前");
     }
 
     #[test]
-    fn a_failed_card_names_its_reason_and_a_degraded_one_says_when_it_was_focused() {
-        let mut c = card();
-        assert_eq!(failed_reason(&c), None);
-        assert_eq!(degraded_at(&c), None);
-        c.status = CardStatus::Failed {
-            reason: "timeout".into(),
-        };
-        assert_eq!(failed_reason(&c), Some("timeout"));
-        assert!(release_offered(&c));
-        // A hold card's parked response is gone after a failure (§4.8).
-        assert!(!retry_offered(&c));
-        c.deliver = Deliver::Poll;
-        assert!(retry_offered(&c));
-        c.status = CardStatus::Degraded { focused_at: None };
-        assert_eq!(degraded_at(&c), Some(None));
-        assert!(!retry_offered(&c) && !release_offered(&c));
-        c.status = CardStatus::Degraded {
-            focused_at: Some(Ts::from_millis(1_789_760_523_120)),
-        };
-        assert_eq!(degraded_at(&c), Some(Some("19:42:03Z".into())));
-    }
-
-    #[test]
-    fn an_answering_card_shows_the_label_or_the_text_the_operator_gave() {
-        let mut c = card();
-        assert_eq!(answering(&c), None);
-        c.status = CardStatus::Answering {
-            choice: Some(1),
-            text: None,
-        };
-        assert_eq!(answering(&c).as_deref(), Some("Allow always"));
-        c.status = CardStatus::Answering {
-            choice: Some(9),
-            text: None,
-        };
-        assert_eq!(answering(&c).as_deref(), Some("choice 9"));
-        c.status = CardStatus::Answering {
-            choice: None,
-            text: Some("only the staging table".into()),
-        };
-        assert_eq!(
-            answering(&c).as_deref(),
-            Some("\u{201c}only the staging table\u{201d}")
-        );
-    }
-
-    #[test]
-    fn only_a_custom_card_gets_a_badge_and_every_origin_gets_a_line() {
-        let mut c = card();
-        assert_eq!(custom_badge(&c.origin), None);
-        assert_eq!(origin_line(&c.origin), "permission \u{b7} Bash");
-        c.origin.group = Some(deck_model::Group { index: 0, count: 3 });
-        assert_eq!(
-            origin_line(&c.origin),
-            "permission \u{b7} Bash \u{b7} 1 of 3"
-        );
-        c.origin = Origin::custom();
-        assert_eq!(custom_badge(&c.origin), Some("custom"));
-        assert_eq!(origin_line(&c.origin), "custom");
-    }
-
-    #[test]
-    fn redacted_content_says_so_instead_of_showing_an_empty_row() {
-        let mut c = card();
-        c.text = None;
-        assert_eq!(card_text(&c), "");
-        c.redacted = true;
-        assert_eq!(card_text(&c), REDACTED);
-    }
-
-    #[test]
-    fn the_source_line_names_the_cwd_the_pid_and_the_terminal() {
-        let mut session = SessionInfo {
-            key: Some("claude:abc".into()),
-            cwd: Some("/Users/t/code/api".into()),
-            pid: Some(4242),
-            pid_kind: Some(deck_model::PidKind::Cli),
-            terminal: Some(Terminal {
-                program: Some("Ghostty".into()),
-                tty: Some("/dev/ttys004".into()),
-                ..Terminal::default()
-            }),
-        };
-        assert_eq!(
-            source_line(&session),
-            "/Users/t/code/api \u{b7} pid 4242 (cli) \u{b7} Ghostty /dev/ttys004"
-        );
-        session.pid_kind = None;
-        assert!(source_line(&session).contains("pid 4242 \u{b7}"));
-        assert_eq!(
-            source_line(&SessionInfo::default()),
-            "no source reported",
-            "content the reader cannot see is not an empty line"
-        );
-    }
-
-    #[test]
-    fn the_caps_line_says_what_the_buttons_can_do() {
-        assert_eq!(
-            caps_line(&Caps::default()),
-            "answer none \u{b7} order none \u{b7} no focus"
-        );
-        assert_eq!(
-            caps_line(&Caps {
-                answer: deck_model::AnswerCap::Hold,
-                order: deck_model::OrderCap::Inject,
-                focus: true,
-                transcribe: Default::default(),
-            }),
-            "answer hold \u{b7} order inject \u{b7} focus"
-        );
-    }
-
-    #[test]
-    fn an_order_line_is_the_exact_string_and_copy_only_fires_on_a_failure() {
-        let mut entry = OrderEntry {
-            text: Some("run the smoke tests".into()),
-            via: Some("inject".into()),
-            reason: None,
-            at: Ts::from_millis(0),
-        };
-        assert_eq!(
-            order_line(&entry),
-            "\u{201c}run the smoke tests\u{201d} \u{b7} inject"
-        );
-        assert_eq!(
-            copyable(&entry),
-            None,
-            "a dispatched order is not a failure"
-        );
-        entry.reason = Some("not_foreground".into());
-        assert_eq!(
-            order_line(&entry),
-            "\u{201c}run the smoke tests\u{201d} \u{b7} inject \u{b7} failed: not_foreground"
-        );
-        assert_eq!(copyable(&entry), Some("run the smoke tests"));
-        // Refused before it was dispatched: nothing to copy, and it says so.
-        let refused = OrderEntry {
-            text: None,
-            via: None,
-            reason: Some("dialog_open".into()),
-            at: Ts::from_millis(0),
-        };
-        assert_eq!(order_line(&refused), "(no text) \u{b7} failed: dialog_open");
-        assert_eq!(copyable(&refused), None);
-    }
-
-    #[test]
-    fn the_sheet_finds_the_allow_and_the_deny_in_the_daemons_own_vocabulary() {
-        let mut c = card();
-        assert_eq!(allow_choice(&c), Some(0), "the recommendation is an allow");
-        assert_eq!(deny_choice(&c), Some(2));
-        // A recommendation that is not an allow does not become one.
-        c.rec = Some(2);
-        assert_eq!(allow_choice(&c), Some(0));
-        // No allow at all: the dialog offers no Allow button.
-        c.choices = vec![
-            Choice {
-                label: "Later".into(),
-                detail: None,
-            },
-            Choice {
-                label: "Deny".into(),
-                detail: None,
-            },
-        ];
-        c.rec = None;
-        assert_eq!(allow_choice(&c), None);
-        assert_eq!(deny_choice(&c), Some(1));
-        // No deny word either: the first choice that is not an allow.
-        c.choices = vec![
-            Choice {
-                label: "Allow".into(),
-                detail: None,
-            },
-            Choice {
-                label: "Later".into(),
-                detail: None,
-            },
-        ];
-        assert_eq!(allow_choice(&c), Some(0));
-        assert_eq!(deny_choice(&c), Some(1));
-        // A card with nothing but allows can only be dismissed, never denied.
-        c.choices = vec![Choice {
-            label: "Allow always".into(),
-            detail: None,
-        }];
-        assert_eq!(deny_choice(&c), None);
-        // An **elicitation**'s choices are the caller's own data, so there is
-        // no "first non-allow" to fall back on: `production` is a decision,
-        // not a refusal, and a dismissal must send nothing instead.
-        c.origin.kind = OriginKind::Elicitation;
-        c.choices = ["Yes, deploy", "production", "staging"]
-            .iter()
-            .map(|l| Choice {
-                label: (*l).into(),
-                detail: None,
-            })
-            .collect();
-        assert_eq!(allow_choice(&c), Some(0));
-        assert_eq!(deny_choice(&c), None, "Escape must not answer `production`");
-        // The same labels under a built-in `permission` card still deny with
-        // the first non-allow: those choices are a CLI's own prompt.
-        c.origin.kind = OriginKind::Permission;
-        assert_eq!(deny_choice(&c), Some(1));
-    }
-
-    #[test]
-    fn the_owner_source_badge_tells_a_hook_from_a_script_from_a_third_party() {
-        let mut agent = agent();
-        assert_eq!(owner_source(&agent), "hook");
-        agent.source = Source::Mcp;
-        assert_eq!(owner_source(&agent), "mcp");
-        agent.source = Source::Api;
-        assert_eq!(owner_source(&agent), "self-reported");
-        agent.owner.principal = Principal::Adapter(deck_model::AdapterKind::Virtual);
-        assert_eq!(owner_source(&agent), "self-reported");
-        agent.owner.principal = Principal::Token("mcp".into());
-        assert_eq!(owner_source(&agent), "script");
-        // The MCP adapter is `mcp` whichever door it came in by.
-        agent.owner.principal = Principal::Adapter(deck_model::AdapterKind::Mcp);
-        assert_eq!(owner_source(&agent), "mcp");
-    }
-
-    #[test]
-    fn a_disconnected_title_is_what_makes_a_row_stale_and_hides_its_age() {
-        let mut agent = agent();
-        assert!(!stale(&agent));
-        assert_eq!(live_title(&agent), "waiting on psql");
-        assert_eq!(
-            state_age(&agent, Ts::from_millis(1_120_000)).as_deref(),
-            Some("2m")
-        );
-        // Idle is not news, so the deck shows no age and neither does this.
-        agent.state = AgentState::Idle;
-        assert_eq!(state_age(&agent, Ts::from_millis(1_120_000)), None);
-        agent.state = AgentState::Working;
-        agent.title = Some(DISCONNECTED.into());
-        assert!(stale(&agent));
-        assert_eq!(state_age(&agent, Ts::from_millis(1_120_000)), None);
-        // A title the reader's scope nulled says so rather than reading empty.
-        agent.title = None;
-        agent.redacted = true;
-        assert_eq!(live_title(&agent), REDACTED);
-    }
-
-    #[test]
-    fn conol_is_its_own_group_even_beside_a_directory_named_conol() {
-        let mut snapshot = Snapshot::default();
-        for (id, kind, cwd) in [
-            ("ag_native", Kind::Conol, None),
-            ("ag_native2", Kind::Conol, Some("/ignored")),
-            ("ag_terminal", Kind::Claude, Some("/projects/Conol")),
-            ("ag_other", Kind::Other, None),
+    fn this_macs_clock_reads_a_minute_back_as_the_minute_it_was_made_from() {
+        for minute in [
+            (2026, 11, 11, 10, 2),
+            (2026, 11, 11, 9, 41),
+            (2026, 11, 11, 0, 0),
+            (2027, 1, 1, 0, 30),
+            (2024, 2, 29, 23, 59),
+            (2000, 1, 1, 12, 0),
         ] {
-            let mut a = agent();
-            a.id = deck_model::AgentId(id.into());
-            a.kind = kind;
-            a.session.cwd = cwd.map(String::from);
-            snapshot.agents.insert(a.id.clone(), a);
+            let (year, month, day, hour, minute_of_hour) = minute;
+            let ts = local(year, month, day, hour, minute_of_hour);
+            assert_eq!(local_clock(ts), minute, "{minute:?}");
+            assert_eq!(ts.millis() % 60_000, 0, "on the minute");
         }
-        let groups = projects(&snapshot);
-        assert_eq!(groups.len(), 3);
-        let native = groups
-            .iter()
-            .find(|g| g.agents[0].kind == Kind::Conol)
-            .unwrap();
-        assert_eq!(native.label, "Conol");
-        assert_eq!(native.agents.len(), 2);
-        assert!(native.cwd.is_none());
-    }
-
-    #[test]
-    fn companion_groups_use_app_and_account_identity_independently_of_provider() {
-        use deck_model::companion::{CompanionProfile, CompanionRole};
-        let mut snapshot = Snapshot::default();
-        for (id, app, account, kind) in [
-            ("ag_1", "example", "personal", Kind::Other),
-            ("ag_2", "example", "personal", Kind::Codex),
-            ("ag_3", "example", "work", Kind::Other),
-            ("ag_4", "different", "personal", Kind::Other),
+        // A date no calendar has, or a time no clock shows.
+        for (year, month, day, hour, minute) in [
+            (2026, 13, 1, 0, 0),
+            (2026, 0, 1, 0, 0),
+            (2026, 2, 30, 0, 0),
+            (2025, 2, 29, 0, 0),
+            (2026, 11, 31, 0, 0),
+            (2026, 11, 11, 24, 0),
+            (2026, 11, 11, 10, 60),
+            (2026, 11, 0, 10, 0),
         ] {
-            let mut a = agent();
-            a.id = deck_model::AgentId(id.into());
-            a.kind = kind;
-            a.companion = Some(CompanionProfile {
-                app_id: app.into(),
-                group_id: account.into(),
-                group_label: "Example".into(),
-                role: CompanionRole::Session,
-            });
-            snapshot.agents.insert(a.id.clone(), a);
+            assert_eq!(
+                local_ts(year, month, day, hour, minute),
+                None,
+                "{year}-{month}-{day} {hour}:{minute}"
+            );
         }
-        let groups = projects(&snapshot);
-        assert_eq!(groups.len(), 3);
-        assert!(groups.iter().any(|g| g.agents.len() == 2));
-        assert!(groups
-            .iter()
-            .all(|g| g.label == "Example" && g.cwd.is_none()));
+        // A stamp no time zone can place is still read, in UTC.
+        assert_eq!(utc_clock(TEN_TWO_UTC), (2026, 11, 11, 10, 2));
+        let _ = local_clock(Ts::from_millis(u64::MAX));
     }
 
     #[test]
-    fn the_roster_is_grouped_by_project_each_in_slot_order_then_its_overflow() {
-        let mut snapshot = Snapshot::default();
-        for (id, slot, since, cwd) in [
+    fn a_moment_is_today_yesterday_or_its_date_by_the_calendar() {
+        crate::i18n::install();
+        let english = Language::English;
+        let now = local(2026, 11, 11, 10, 2);
+        for (when, said) in [
+            // The NotLinked board's caption.
+            (local(2026, 11, 11, 9, 41), "today, 09:41"),
+            (local(2026, 11, 11, 0, 0), "today, 00:00"),
+            // A moment later today: the service's clock a little ahead.
+            (local(2026, 11, 11, 10, 3), "today, 10:03"),
+            (local(2026, 11, 10, 23, 59), "yesterday, 23:59"),
+            (local(2026, 11, 10, 0, 5), "yesterday, 00:05"),
+            (local(2026, 11, 9, 9, 41), "2026-11-09, 09:41"),
+            (local(2025, 11, 11, 9, 41), "2025-11-11, 09:41"),
+            (local(2026, 11, 12, 8, 0), "2026-11-12, 08:00"),
+        ] {
+            assert_eq!(day_and_time(when, now, english), said);
+        }
+        // Yesterday by the calendar, across a year's end.
+        assert_eq!(
+            day_and_time(local(2026, 12, 31, 23, 59), local(2027, 1, 1, 0, 30), english),
+            "yesterday, 23:59"
+        );
+        // In the window's language, each placing the time its own way.
+        assert_eq!(
+            day_and_time(local(2026, 11, 11, 9, 41), now, Language::SimplifiedChinese),
+            "今天 09:41"
+        );
+        assert_eq!(
+            day_and_time(local(2026, 11, 10, 9, 41), now, Language::Japanese),
+            "昨日 09:41"
+        );
+        assert_eq!(
+            day_and_time(local(2026, 11, 9, 9, 41), now, Language::TraditionalChinese),
+            "2026-11-09 09:41"
+        );
+    }
+
+    #[test]
+    fn the_calendar_counts_days_both_ways_across_months_years_and_leap_days() {
+        assert_eq!(days_from_civil(1970, 1, 1), 0);
+        assert_eq!(days_from_civil(2026, 11, 11), 20_768);
+        assert_eq!(civil_from_days(20_768), (2026, 11, 11));
+        assert_eq!(civil_from_days(-1), (1969, 12, 31));
+        for days in (-800_000..800_000).step_by(397) {
+            let (year, month, day) = civil_from_days(days);
+            assert_eq!(days_from_civil(year, month, day), days, "{year}-{month}-{day}");
+        }
+        // The day before 1 March, in a leap year and in another.
+        assert_eq!(civil_from_days(days_from_civil(2024, 3, 1) - 1), (2024, 2, 29));
+        assert_eq!(civil_from_days(days_from_civil(2026, 3, 1) - 1), (2026, 2, 28));
+        assert_eq!(civil_from_days(days_from_civil(2100, 3, 1) - 1), (2100, 2, 28));
+        assert_eq!(civil_from_days(days_from_civil(2000, 3, 1) - 1), (2000, 2, 29));
+        assert_eq!(civil_from_days(days_from_civil(2027, 1, 1) - 1), (2026, 12, 31));
+    }
+
+    #[test]
+    fn a_size_is_finders_thousands_and_the_unit_steps_up_at_a_thousand() {
+        for (bytes, said) in [
+            // The Footprint board.
+            (4_096, "4 KB"),
+            (180_000, "180 KB"),
+            (9_400_000, "9 MB"),
+            (77_000_000, "77 MB"),
+            (428_000_000, "428 MB"),
+            (2_100_000_000, "2.1 GB"),
+            // The two downloads, at their real sizes.
+            (1_624_555_275, "1.6 GB"),
+            (364_816_464, "365 MB"),
+            // Nothing is nothing; anything else is at least a kilobyte.
+            (0, "0 KB"),
+            (1, "1 KB"),
+            (499, "1 KB"),
+            (1_499, "1 KB"),
+            (1_500, "2 KB"),
+            // Where the unit steps up.
+            (999_499, "999 KB"),
+            (999_500, "1 MB"),
+            (999_499_999, "999 MB"),
+            (999_500_000, "1.0 GB"),
+            (12_345_000_000, "12.3 GB"),
+        ] {
+            assert_eq!(size_text(bytes), said, "{bytes} bytes");
+        }
+        assert!(size_text(u64::MAX).ends_with(" GB"));
+    }
+
+    #[test]
+    fn the_firmware_reads_as_its_version_and_board_without_the_build_name() {
+        assert_eq!(
+            fw_text("0.13.0-openwalkietalkie", Some("Rev B")),
+            "0.13.0 \u{b7} Rev B"
+        );
+        assert_eq!(fw_text("0.13.0", Some("Rev B")), "0.13.0 \u{b7} Rev B");
+        // The board not named yet, or named as nothing.
+        assert_eq!(fw_text("0.13.0-openwalkietalkie", None), "0.13.0");
+        assert_eq!(fw_text(" 0.12.1-openwalkietalkie ", Some(" ")), "0.12.1");
+        // Only the build name at the end is the deck's own addition.
+        assert_eq!(
+            fw_text("0.13.0-openwalkietalkie-dirty", Some("LilyGo")),
+            "0.13.0-openwalkietalkie-dirty \u{b7} LilyGo"
+        );
+        assert_eq!(fw_text("-openwalkietalkie", Some("Rev A")), "Rev A");
+    }
+
+    #[test]
+    fn a_path_starts_at_home_and_gives_up_the_folders_after_its_head_to_fit() {
+        let home = Some("/Users/owner/");
+        for (path, said) in [
+            // The Footprint board's rows.
             (
-                "ag_deck2",
-                Some(Slot(2)),
-                10,
-                Some("/Users/t/projects/cohdl/"),
+                "/Users/owner/Library/Application Support/OpenWalkieTalkie/claude-marketplace",
+                "~/Library/\u{2026}/OpenWalkieTalkie/claude-marketplace",
             ),
             (
-                "ag_deck1",
-                Some(Slot(1)),
-                20,
-                Some("/Users/t/projects/cohdl"),
+                "/Users/owner/Library/Preferences/ai.cohdl.openwalkietalkie.plist",
+                "~/Library/\u{2026}/ai.cohdl.openwalkietalkie.plist",
             ),
-            ("ag_over_old", None, 30, Some("/Users/t/projects/cohdl")),
-            ("ag_over_new", None, 40, Some("/Users/t/projects/cohdl")),
-            ("ag_alpha", Some(Slot(3)), 50, Some("/srv/Alpha")),
-            ("ag_twin", None, 60, Some("/tmp/cohdl")),
-            ("ag_nowhere", None, 70, None),
-            ("ag_root", None, 80, Some("/")),
+            (
+                "/Users/owner/Library/Caches/OpenWalkieTalkie/tts/kokoro",
+                "~/Library/Caches/OpenWalkieTalkie/tts/kokoro",
+            ),
+            (
+                "/Users/owner/Library/Application Support/OpenWalkieTalkie",
+                "~/Library/Application Support/OpenWalkieTalkie",
+            ),
+            ("/Users/owner/Library/Logs/OpenWalkieTalkie", "~/Library/Logs/OpenWalkieTalkie"),
+            ("/Users/owner", "~"),
+            // A directory that only starts like home is not home.
+            ("/Users/owner2/notes", "/Users/owner2/notes"),
+            // Outside home the head is shortened the same way.
+            (
+                "/opt/homebrew/Cellar/openwalkietalkie/0.13.0/libexec/share/firmware",
+                "/opt/\u{2026}/0.13.0/libexec/share/firmware",
+            ),
+            // The name at the end is never cut.
+            (
+                "/Users/owner/Library/Caches/a-name-that-alone-is-longer-than-fifty-characters.bin",
+                "~/Library/\u{2026}/a-name-that-alone-is-longer-than-fifty-characters.bin",
+            ),
         ] {
-            let mut a = agent();
-            a.id = deck_model::AgentId(id.into());
-            a.slot = slot;
-            a.since = Ts::from_millis(since);
-            a.session.cwd = cwd.map(String::from);
-            snapshot.agents.insert(a.id.clone(), a);
+            assert_eq!(shorten(path, home), said, "{path}");
         }
-        let groups = projects(&snapshot);
-        let ids =
-            |agents: &[&Agent]| -> Vec<String> { agents.iter().map(|a| a.id.0.clone()).collect() };
-        let labels: Vec<(&str, Option<&str>)> = groups
-            .iter()
-            .map(|g| (g.label.as_str(), g.cwd.as_deref()))
-            .collect();
+        // No home to name: the head is all there is to shorten.
         assert_eq!(
-            labels,
-            vec![
-                ("Alpha", Some("/srv/Alpha")),
-                ("cohdl", Some("/Users/t/projects/cohdl")),
-                ("cohdl", Some("/tmp/cohdl")),
-                (NO_PROJECT, None),
-            ],
-            "by name with the case folded, twins apart by directory, the unlabelled last"
+            shorten(
+                "/Users/owner/Library/Application Support/OpenWalkieTalkie/claude-marketplace",
+                None
+            ),
+            "/Users/\u{2026}/OpenWalkieTalkie/claude-marketplace"
         );
-        assert_eq!(
-            ids(&groups[1].agents),
-            vec!["ag_deck1", "ag_deck2", "ag_over_new", "ag_over_old"],
-            "slots first, then the one that just changed state"
-        );
-        assert_eq!(ids(&groups[2].agents), vec!["ag_twin"]);
-        assert_eq!(
-            ids(&groups[3].agents),
-            vec!["ag_root", "ag_nowhere"],
-            "a directory with no last component is no project either"
-        );
-        assert!(projects(&Snapshot::default()).is_empty());
+        for path in [
+            "/Users/owner/Library/Application Support/OpenWalkieTalkie/claude-marketplace",
+            "/var/folders/xy/abcdefghijklmnopqrstuvwxyz0123/T/openwalkietalkie/stt/model.bin",
+        ] {
+            assert!(shorten(path, home).chars().count() <= PATH_MAX, "{path}");
+        }
     }
 
     #[test]
-    fn a_row_named_after_its_project_shows_its_kind_instead() {
-        let group = Project {
-            label: "cohdl".into(),
-            cwd: Some("/x/cohdl".into()),
-            agents: Vec::new(),
-        };
-        let mut a = agent();
-        assert_eq!(row_name(&a, &group), "cohdl-api");
-        a.name = "cohdl".into();
-        assert_eq!(row_name(&a, &group), "Claude");
-        let unlabelled = Project {
-            label: NO_PROJECT.into(),
-            cwd: None,
-            agents: Vec::new(),
-        };
-        a.name = NO_PROJECT.into();
-        assert_eq!(
-            row_name(&a, &unlabelled),
-            NO_PROJECT,
-            "only a real project hides a name"
-        );
-        // The same for a title that is just the directory's name.
-        assert_eq!(row_title(&a, &group), "waiting on psql");
-        a.title = Some("cohdl".into());
-        a.title_source = deck_model::TitleSource::Cwd;
-        assert_eq!(row_title(&a, &group), "");
-        a.title = Some(NO_PROJECT.into());
-        assert_eq!(row_title(&a, &unlabelled), NO_PROJECT);
-        a.title = None;
-        a.redacted = true;
-        assert_eq!(row_title(&a, &group), REDACTED);
-        assert_eq!(
-            project_path("/Users/t/projects/cohdl", Some("/Users/t")),
-            "~/projects/cohdl"
-        );
-        assert_eq!(project_path("/Users/t", Some("/Users/t/")), "~");
-        assert_eq!(
-            project_path("/Users/tony/x", Some("/Users/t")),
-            "/Users/tony/x"
-        );
-        assert_eq!(project_path("/srv/x", None), "/srv/x");
+    fn the_harness_can_pin_the_clock_and_hand_it_back() {
+        let pinned = Ts::from_millis(86_400_000);
+        set_fixed_now(Some(pinned));
+        assert_eq!(now(), pinned);
+        assert_eq!(now(), pinned, "a pinned clock does not move");
+        set_fixed_now(None);
+        assert!(now() > pinned, "this Mac's clock again");
     }
 
-    #[test]
-    fn kinds_have_a_glyph_and_a_word_and_no_two_kinds_share_either() {
-        let kinds = [Kind::Claude, Kind::Codex, Kind::Gemini, Kind::Other];
-        let icons: Vec<&str> = kinds.iter().copied().map(kind_icon).collect();
-        let labels: Vec<&str> = kinds.iter().copied().map(kind_label).collect();
-        for set in [&icons, &labels] {
-            for (i, a) in set.iter().enumerate() {
-                assert!(!a.is_empty());
-                assert!(!set[i + 1..].contains(a), "{a} is used twice");
-            }
-        }
-        assert_eq!(kind_label(Kind::Other), "Agent");
-        assert_eq!(state_word(AgentState::Question), "Question");
-        assert_eq!(route(Deliver::Hold), "hold");
-        assert_eq!(route(Deliver::None), "none");
-    }
-    // ---- the Integrations screen -------------------------------------
+    // ---- the installer's words ---------------------------------------
 
     #[test]
-    fn every_party_has_a_name_a_sentence_and_only_claude_carries_the_allowlist_warning() {
-        for target in TARGETS {
-            let name = party_name(target);
-            assert!(!name.is_empty() && name != target || target == name);
-            assert!(!party_what(target).is_empty(), "{target} says nothing");
-        }
-        assert_eq!(party_name("claude"), "Claude Code");
-        assert_eq!(party_name("claude-desktop"), "Claude Desktop");
-        // A target this build has never heard of is still named, as itself.
-        assert_eq!(party_name("future-cli"), "future-cli");
-        assert_eq!(party_what("future-cli"), "");
-        // Only Claude writes **http** hooks, and the key is Claude's (§5.7).
-        assert!(allowlist_applies("claude"));
-        for other in ["codex", "gemini", "claude-desktop"] {
-            assert!(!allowlist_applies(other), "{other}");
-        }
-        // The one thing the operator has to read before installing.
-        assert!(ALLOWLIST_NOTE.contains("allowedHttpHookUrls"));
-        assert!(ALLOWLIST_NOTE.contains("EVERY http hook"));
-        assert!(ALLOWLIST_NOTE.contains("merged allowlist"));
-    }
-
-    #[test]
-    fn every_status_word_gets_its_own_sentence_and_only_installed_reads_as_healthy() {
+    fn every_installer_word_has_a_sentence_of_its_own_in_every_language() {
+        crate::i18n::install();
+        let mut words = Status::KNOWN.to_vec();
+        words.push(Status::parse("some_future_word"));
         let mut sentences: Vec<&str> = Vec::new();
-        for status in Status::KNOWN {
-            let word = status_word(&status).to_string();
+        for status in words {
             let help = status_help(&status);
-            assert!(!help.is_empty(), "{word} has no sentence");
+            assert!(!help.is_empty(), "{status:?} has no sentence");
             assert!(
                 !sentences.contains(&help),
-                "{word} shares its sentence with another word"
+                "{status:?} shares its sentence with another word"
             );
             sentences.push(help);
-            assert_eq!(
-                status_tone(&status),
-                match status {
-                    Status::Installed => Tone::Green,
-                    Status::Absent => Tone::Gray,
-                    _ => Tone::Amber,
-                }
+            assert!(
+                deck_gui_core::i18n::has_entry(help),
+                "{status:?}'s sentence has no row"
             );
+            for language in [
+                Language::SimplifiedChinese,
+                Language::TraditionalChinese,
+                Language::Japanese,
+            ] {
+                assert_ne!(
+                    status_help_localized(&status, language),
+                    help,
+                    "{status:?} in {language:?}"
+                );
+            }
         }
-        // A word from a newer daemon is amber and says it cannot be read —
-        // never green, and never silently "absent".
+        // A word from a newer service says it cannot be read: never green,
+        // and never quietly "absent".
         let newer = Status::parse("some_future_word");
-        assert_eq!(status_word(&newer), "some_future_word");
-        assert_eq!(status_tone(&newer), Tone::Amber);
         assert!(status_help(&newer).contains("does not know this word"));
     }
 
     #[test]
-    fn the_detected_line_tells_a_missing_cli_from_a_target_that_never_had_one() {
-        let found = Detected {
-            path: "/opt/homebrew/bin/claude".into(),
-            version: "2.1.0".into(),
-        };
-        assert_eq!(
-            detected_line("claude", Some(&found)),
-            "2.1.0 \u{b7} /opt/homebrew/bin/claude"
-        );
-        // A binary whose `--version` said nothing is still a binary.
-        let quiet = Detected {
-            path: "/usr/local/bin/codex".into(),
-            version: String::new(),
-        };
-        assert_eq!(detected_line("codex", Some(&quiet)), "/usr/local/bin/codex");
-        assert_eq!(detected_line("gemini", None), "not found on PATH");
-        // A file, not a CLI: "not found on PATH" would read as a problem
-        // where there is none.
-        assert!(detected_line("claude-desktop", None).contains("not a binary"));
+    fn an_out_of_date_plugin_is_put_right_by_the_button_the_page_has() {
+        crate::i18n::install();
+        // The Integrations page offers **Repair** for every word but
+        // installed and absent, and the sentence names it, in each language
+        // by the button's own word.
+        let help = status_help(&Status::Outdated);
+        assert!(help.ends_with("Repair rewrites or migrates it."), "{help}");
+        assert!(!help.contains("Update"), "{help}");
+        for (language, repair) in [
+            (Language::SimplifiedChinese, "修复"),
+            (Language::TraditionalChinese, "修復"),
+            (Language::Japanese, "修復"),
+        ] {
+            assert_eq!(language.text("Repair"), repair);
+            assert!(
+                status_help_localized(&Status::Outdated, language).contains(repair),
+                "{language:?}"
+            );
+        }
     }
 
     #[test]
-    fn last_event_time_says_whether_it_was_reported_rather_than_showing_nothing() {
+    fn a_plan_heading_is_the_verb_and_the_targets_own_name() {
+        crate::i18n::install();
+        let english = Language::English;
         assert_eq!(
-            last_event_line(Some("2026-09-22T10:14:02Z")),
-            "last hook event 2026-09-22T10:14:02Z"
-        );
-        // This daemon never fills the field in, so the honest line says it
-        // was not reported — and not "never", which would be a claim about
-        // the hooks rather than about the answer.
-        let none = last_event_line(None);
-        assert!(none.contains("not reported"), "{none}");
-        assert!(!none.contains("never"), "{none}");
-    }
-
-    #[test]
-    fn a_backup_is_labelled_by_its_own_name_and_not_by_the_path_to_it() {
-        assert_eq!(
-            backup_label("/Users/t/Library/.../backups/settings.json.1764.bak"),
-            "settings.json.1764.bak"
-        );
-        assert_eq!(backup_label("settings.json.bak"), "settings.json.bak");
-        assert_eq!(backup_label(""), "");
-    }
-
-    #[test]
-    fn the_hijack_line_names_whoever_holds_the_port_and_what_it_does_to_the_hooks() {
-        let full = Hijack {
-            port: 47_201,
-            pid: Some(812),
-            command: Some("node /usr/local/bin/other".into()),
-        };
-        let line = hijack_line(&full);
-        assert!(line.contains("47201"));
-        assert!(line.contains("pid 812"));
-        assert!(line.contains("node /usr/local/bin/other"));
-        assert!(line.contains("bearer token"), "§4.1's actual risk");
-        // `may stall`, not `has stalled`: nothing tells the daemon whether a
-        // hook has been sent there yet.
-        assert!(!line.contains("has stalled"));
-        // `lsof` told us nothing: the port is still somebody's.
-        let blind = Hijack {
-            port: 47_201,
-            pid: None,
-            command: None,
-        };
-        assert!(hijack_line(&blind).contains("another process"));
-        let pid_only = Hijack {
-            port: 1,
-            pid: Some(9),
-            command: None,
-        };
-        assert!(hijack_line(&pid_only).contains("pid 9"));
-    }
-
-    #[test]
-    fn a_plan_headline_and_its_change_lines_read_as_the_verb_that_made_them() {
-        assert_eq!(
-            plan_headline(Verb::Install, "claude"),
+            plan_headline_localized(Verb::Install, "claude", english),
             "Install \u{2014} Claude Code"
         );
         assert_eq!(
-            plan_headline(Verb::Uninstall, "claude-desktop"),
+            plan_headline_localized(Verb::Uninstall, "claude-desktop", english),
             "Remove \u{2014} Claude Desktop"
         );
         assert_eq!(
-            plan_headline(Verb::Repair, "codex"),
+            plan_headline_localized(Verb::Repair, "codex", english),
             "Repair \u{2014} Codex CLI"
         );
+        // A target this build has never heard of is still named, as itself.
         assert_eq!(
-            change_line(&Change {
-                path: "/Users/t/.claude/settings.json".into(),
-                action: "update".into(),
-            }),
-            "update /Users/t/.claude/settings.json"
+            plan_headline_localized(Verb::Install, "future-cli", english),
+            "Install \u{2014} future-cli"
         );
         assert!(NOTHING_TO_WRITE.contains("already"));
+        assert!(deck_gui_core::i18n::has_entry(NOTHING_TO_WRITE));
     }
+
+    // ---- a run the service could not finish ---------------------------
+    //
+    // The rule and the command are tested where the two pages use them
+    // (`tests/integrations_page.rs`, `tests/first_run.rs`); the shell's
+    // quoting, which neither can reach, is here.
 
     #[test]
-    fn the_automation_card_offers_settings_only_where_macos_will_not_prompt_again() {
-        let (word, tone, help) = automation_line(Some("granted"));
-        assert_eq!((word, tone), ("granted", Tone::Green));
-        assert!(help.contains("inject"));
-        let (word, tone, help) = automation_line(Some("denied"));
-        assert_eq!((word, tone), ("denied", Tone::Red));
-        assert!(help.contains("System Settings"), "the only recourse (§7.8)");
-        // Not asked yet, and a word this build does not know, are the same
-        // thing to a card that cannot offer anything: unknown.
-        for unknown in [Some("unknown"), None, Some("something_new")] {
-            let (word, tone, _) = automation_line(unknown);
-            assert_eq!((word, tone), ("unknown", Tone::Gray), "{unknown:?}");
-        }
-        assert!(AUTOMATION_SETTINGS.starts_with("x-apple.systempreferences:"));
-        assert!(AUTOMATION_SETTINGS.contains("Privacy_Automation"));
+    fn a_shell_word_comes_back_as_itself() {
+        assert_eq!(
+            shell_word("/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd"),
+            "/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd"
+        );
+        assert_eq!(
+            shell_word("/Volumes/My Disk/deckd"),
+            "'/Volumes/My Disk/deckd'"
+        );
+        assert_eq!(shell_word("/tmp/it's/deckd"), r"'/tmp/it'\''s/deckd'");
+        assert_eq!(shell_word("$HOME"), "'$HOME'");
+        assert_eq!(shell_word(""), "''");
+        assert_eq!(shell_word("codex-desktop"), "codex-desktop");
     }
 
-    #[test]
-    fn a_token_row_reads_its_scopes_its_life_and_what_revoking_it_would_break() {
-        let mut token = TokenRow {
-            name: "hooks".into(),
-            scopes: vec!["hooks:ingest".into()],
-            created: Some("2026-09-20T10:00:00Z".into()),
-            expires: None,
-            embedded_in: vec!["~/.claude/settings.json".into()],
-            client: None,
-        };
-        assert_eq!(token_scopes_line(&token), "hooks:ingest");
-        assert_eq!(
-            token_life_line(&token),
-            "created 2026-09-20T10:00:00Z \u{b7} no expiry"
-        );
-        let embedded = token_embedded_line(&token).expect("the hooks token is embedded");
-        assert!(embedded.contains("~/.claude/settings.json"));
-        assert!(embedded.contains("Repair"), "and how to get the hooks back");
-        token.expires = Some("2026-12-01T00:00:00Z".into());
-        assert!(token_life_line(&token).contains("expires 2026-12-01T00:00:00Z"));
-        // A token with nothing granted is worth seeing as such.
-        token.scopes.clear();
-        token.embedded_in.clear();
-        token.created = None;
-        assert_eq!(token_scopes_line(&token), "no scopes");
-        assert_eq!(token_embedded_line(&token), None);
-        assert!(token_life_line(&token).contains("unrecorded"));
-        // The scopes a new token may be given are the daemon's own words.
-        let words = scope_words();
-        assert!(words.contains(&"observe".to_string()));
-        assert!(words.contains(&"observe:content".to_string()));
-        assert!(words.contains(&"hooks:ingest".to_string()));
-        assert_eq!(words.len(), deck_model::Scope::ALL.len());
-        // And the toast about one names it and never carries it.
-        assert!(TOKEN_SHOWN_ONCE.contains("only place"));
-        let toast = token_made_toast("Created", "script");
-        assert!(toast.contains("script") && toast.contains("shown once"));
-    }
-
-    // ---- the Service screen ------------------------------------------
-
-    #[test]
-    fn the_service_headline_and_the_port_line_never_claim_a_port_the_daemon_lost() {
-        let info = Info {
-            daemon: Some("0.1.0".into()),
-            port: Some(47_201),
-            sessions: Some(3),
-            ..Info::default()
-        };
-        assert_eq!(
-            service_headline(true, &info),
-            "Running \u{b7} deckd 0.1.0 \u{b7} 3 sessions"
-        );
-        assert!(service_headline(true, &Info::default()).contains("an unknown version"));
-        assert!(service_headline(false, &info).starts_with("Not running"));
-        let one = Info {
-            sessions: Some(1),
-            ..info.clone()
-        };
-        assert!(service_headline(true, &one).ends_with("1 session"));
-
-        let config = ApiConfig {
-            port: Some(47_201),
-            ..ApiConfig::default()
-        };
-        assert_eq!(
-            port_line(&info, &config),
-            "http://127.0.0.1:47201 \u{b7} listening"
-        );
-        // §4.1: while the port is somebody else's, `service.info` answers no
-        // port. The screen must not put the configured one there as if it
-        // were held.
-        let lost = Info {
-            port: None,
-            ..info.clone()
-        };
-        let line = port_line(&lost, &config);
-        assert!(
-            line.contains("47201") && line.contains("not held"),
-            "{line}"
-        );
-        assert!(!line.contains("listening"));
-        assert!(port_line(&lost, &ApiConfig::default()).contains("socket only"));
-    }
+    // ---- sentences read out of a reply -------------------------------
 
     #[test]
     fn the_degraded_banner_tells_a_lost_bind_from_a_stranger_that_answers() {
+        crate::i18n::install();
+        let banner = |service: &deck_model::ServiceState| {
+            degraded_banner_localized(service, Language::English)
+        };
         let mut service = deck_model::ServiceState {
             port: 47_201,
             ..deck_model::ServiceState::default()
         };
-        assert_eq!(degraded_banner(&service), None);
+        assert_eq!(banner(&service), None);
         service.degraded = Some("port_in_use".into());
-        let bound = degraded_banner(&service).unwrap();
-        assert!(bound.contains("already bound") && bound.contains("47201"));
+        let bound = banner(&service).unwrap();
+        assert_eq!(
+            bound,
+            "Another program holds port 47201, so the local API is closed until the port is \
+             free. Nothing shipped with the deck uses it."
+        );
         service.degraded = Some("hooks_hijack_risk".into());
-        let held = degraded_banner(&service).unwrap();
-        assert!(held.contains("a process that answers"));
-        assert!(held.contains("Change the port"));
+        let held = banner(&service).unwrap();
+        assert!(held.starts_with("Another program answers on port 47201"), "{held}");
+        assert!(held.ends_with("Change the port."), "{held}");
+        // Neither says a word about Claude or its hooks, in any language:
+        // they reach the service over its socket, not the port.
+        for reason in ["port_in_use", "hooks_hijack_risk"] {
+            service.degraded = Some(reason.into());
+            for language in Language::ALL {
+                let said = degraded_banner_localized(&service, language).unwrap();
+                assert!(said.contains("47201") && said.contains("API"), "{language:?}: {said}");
+                assert!(!said.contains("Claude"), "{language:?}: {said}");
+                for hooks in ["hook", "钩子", "掛鉤", "フック"] {
+                    assert!(!said.to_lowercase().contains(hooks), "{language:?}: {said}");
+                }
+            }
+        }
         service.degraded = Some("shutdown".into());
-        assert!(degraded_banner(&service).unwrap().contains("shutting down"));
-        // A reason this build has never seen is still said out loud.
-        service.degraded = Some("something_new".into());
-        assert!(degraded_banner(&service).unwrap().contains("something_new"));
-    }
-
-    #[test]
-    fn the_curl_example_is_the_authenticated_door_and_names_the_live_port() {
-        let curl = curl_example(Some(47_202));
-        assert!(curl.contains("http://127.0.0.1:47202/v1/rpc"));
-        assert!(curl.contains("Authorization: Bearer"));
-        assert!(curl.contains("\"method\":\"state.get\""));
-        // `/v1/info` is the one unauthenticated route (§4.1), so an example
-        // built on it would prove nothing about a token.
-        assert!(!curl.contains("/v1/info"));
-        assert!(!curl.contains("--unix-socket"), "the socket is not HTTP");
-        // No port held: the default is still a usable example.
-        assert!(curl_example(None).contains("47201"));
-        assert_eq!(
-            origins_line(&[]),
-            "none \u{2014} a browser Origin header is refused 403 (the default)"
-        );
-        assert_eq!(
-            origins_line(&["http://localhost:5173".to_string()]),
-            "http://localhost:5173"
-        );
-    }
-
-    #[test]
-    fn the_level_filter_is_the_same_substring_test_the_daemon_runs() {
-        let line = "2026-09-22T10:00:00Z  WARN deckd::api: port_in_use";
-        assert!(log_level_matches(line, None), "no filter keeps everything");
-        assert!(log_level_matches(line, Some("WARN")));
-        assert!(
-            log_level_matches(line, Some("warn")),
-            "case does not matter"
-        );
-        assert!(!log_level_matches(line, Some("ERROR")));
-        assert_eq!(LOG_LEVELS.len(), 5);
-        assert_eq!(LOG_LEVELS[0], "TRACE");
-        assert_eq!(LOG_LEVELS[4], "ERROR");
-    }
-
-    #[test]
-    fn redaction_masks_quoted_content_named_fields_and_the_home_directory() {
-        let line = "2026-09-22T10:00:00Z DEBUG deckd::core: card.set agent=ag_1 \
-                    text=\"Bash: psql -f migrate.sql\" cwd=/Users/tony/code/api rev=1202";
-        let masked = redact_line(line, Some("/Users/tony"));
-        assert!(!masked.contains("psql"), "{masked}");
-        assert!(!masked.contains("migrate.sql"), "{masked}");
-        assert!(!masked.contains("/Users/tony"), "{masked}");
-        assert!(!masked.contains("code/api"), "{masked}");
-        // What is left is the structure: the level, the target, the event
-        // and the ids, which is the whole point of reading a log.
-        assert!(masked.contains("DEBUG"));
-        assert!(masked.contains("deckd::core"));
-        assert!(masked.contains("card.set"));
-        assert!(masked.contains("agent=ag_1"));
-        assert!(masked.contains("rev=1202"));
-        assert!(masked.contains("text=\"\u{2026}\""));
-        assert!(masked.contains("cwd=\u{2026}"));
-        // With no home to mask, the path stays and the content still goes:
-        // the two halves are independent, and the toggle is what turns the
-        // whole thing off (the view simply does not call this).
-        let no_home = redact_line(line, None);
-        assert!(no_home.contains("/Users/tony/code/api") || no_home.contains("cwd=\u{2026}"));
-        assert!(!no_home.contains("psql"));
-        // An unterminated quote masks to the end of the line, which is the
-        // safe way round.
-        let torn = redact_line("INFO something text=\"half a prom", None);
-        assert!(!torn.contains("half a prom"), "{torn}");
-        // Nothing to mask is the line itself, spacing and all.
-        let plain = "2026-09-22T10:00:00Z  INFO deckd: ready rev=7";
-        assert_eq!(redact_line(plain, None), plain);
-        for field in CONTENT_FIELDS {
-            let masked = redact_line(&format!("INFO {field}=secretish"), None);
-            assert_eq!(masked, format!("INFO {field}=\u{2026}"));
+        assert!(banner(&service).unwrap().contains("shutting down"));
+        // A reason this build has never seen is still said out loud, and
+        // as it came in every language, even when it reads like a word a
+        // table has.
+        service.degraded = Some("Settings".into());
+        for language in Language::ALL {
+            let said = degraded_banner_localized(&service, language).unwrap();
+            assert!(said.contains("Settings"), "{language:?}: {said}");
         }
     }
 
     #[test]
-    fn a_missing_method_says_which_one_and_that_nothing_happened() {
-        for method in ["config.set", "service.stop", "service.restart"] {
-            let line = missing_method_line(method);
-            assert!(line.contains(method));
-            assert!(line.contains("nothing happened"));
-            // It must never read as a success or as the operator's fault.
-            assert!(!line.contains("stopped"));
-            assert!(!line.contains("restarted"));
-        }
-    }
-
-    #[test]
-    fn launchctl_print_is_read_for_the_three_literals_launchd_promises() {
-        let running = "ai.cohdl.openwalkietalkie.deckd = {\n\tactive count = 1\n\t\
-                       state = running\n\tpid = 1234\n\tlast exit code = 0\n}";
-        assert_eq!(launchd_state(running), Launchd::Running(Some(1234)));
-        assert!(launchd_line(&Launchd::Running(Some(1234))).contains("pid 1234"));
-        let no_pid = "state = running\n";
-        assert_eq!(launchd_state(no_pid), Launchd::Running(None));
-        let waiting = "state = waiting\npid = 0\n";
-        assert_eq!(launchd_state(waiting), Launchd::Loaded);
-        assert!(launchd_line(&Launchd::Loaded).contains("not running"));
-        let gone = "Could not find service \"ai.cohdl.openwalkietalkie.deckd\" in domain for login";
-        assert_eq!(launchd_state(gone), Launchd::NotLoaded);
-        assert!(launchd_line(&Launchd::NotLoaded).contains("not registered"));
-        // `launchctl` could not even be spawned: that is this app's failure
-        // and must not be reported as "not registered".
-        assert_eq!(launchd_state("No such file or directory"), Launchd::Unknown);
-        assert!(launchd_line(&Launchd::Unknown).contains("said nothing this app can read"));
-        // And the line that keeps the daemon's agent and this window's own
-        // login item apart, which are two objects and not one.
-        assert!(LOGIN_ITEM_NOTE.contains("different thing"));
-        assert!(LOGIN_ITEM_NOTE.contains("Welcome"));
+    fn every_word_the_shared_sentences_say_has_a_row() {
+        let source = include_str!("present.rs");
+        assert_eq!(crate::i18n::missing_rows(source), Vec::<String>::new());
+        // Pinned, so a lookup the scanner stopped seeing fails here rather
+        // than passing as a module with less to translate.
+        assert_eq!(crate::i18n::literals(source).len(), 29);
     }
 }

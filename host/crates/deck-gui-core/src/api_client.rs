@@ -2,11 +2,11 @@
 //!
 //! **The UDS only.** An unsandboxed app always has the socket, so there is no
 //! WS fallback and no token on disk — §4.2's "no plaintext all-scope token on
-//! disk" is kept by there being nothing to keep. The hello asks for the five
-//! scopes of §8.1 and names the high-volume types `*` will not match (§4.5),
-//! and the reply says whether this build was verified as §4.2's trusted
-//! principal: `false` on an ad-hoc dev build without `[trust]
-//! dev_requirement`, which is a red badge and not an error.
+//! disk" is kept by there being nothing to keep. The hello asks for the three
+//! scopes of the companion ([`scopes`]) and names the high-volume types `*`
+//! will not match (§4.5), and the reply says whether this build was verified
+//! as §4.2's trusted principal: `false` on an ad-hoc dev build without
+//! `[trust] dev_requirement`, which is not an error.
 //!
 //! Daemon → GUI is [`crate::events::EventSender::post`]. GUI → daemon is
 //! [`ApiClient::call`], which is **not** async: it pushes the call onto a
@@ -54,24 +54,26 @@ pub struct Request {
 /// A queued call and where its reply goes.
 type Queued = (Request, oneshot::Sender<Result<Value, ClientError>>);
 
-/// The five scopes of §8.1. `observe:content` is what makes card text and
-/// transcripts visible at all; `admin` is what the Integrations and Service
-/// screens need. `observe:raw` is **not** asked for: the GUI shows no raw
-/// hook payloads, and §4.2 says it stays off unless ticked deliberately.
+/// What the companion asks for: `voice` and `device` for the deck and its
+/// voice, `admin` for the Integrations and Service pages. The window is
+/// never a session's, so neither `observe:content` (card text, replies,
+/// transcripts) nor `operate` (answers, orders, focus) is asked for. To the
+/// service `admin` still stands for every scope but `observe:raw` (content
+/// included, `Scope::grants_content`), so the list says what the window
+/// uses rather than narrowing what it is sent; the mirror is what drops the
+/// sessions a snapshot carries ([`crate::HostState`]). `observe:raw` is
+/// **not** asked for either: the GUI shows no raw hook payloads, and §4.2
+/// says it stays off unless ticked deliberately.
 pub fn scopes() -> Vec<Scope> {
-    vec![
-        Scope::ObserveContent,
-        Scope::Operate,
-        Scope::Voice,
-        Scope::Device,
-        Scope::Admin,
-    ]
+    vec![Scope::Voice, Scope::Device, Scope::Admin]
 }
 
-/// The subscription of §8.1. `*` deliberately does not match the
-/// high-volume types (§4.5), so the three the GUI does want are named:
-/// `transcript.*` for the live dictation, `voice.level` for the mic meter and
-/// `op.confirm_requested` for the confirmation sheet.
+/// The subscription of §8.1, kept whole although the window folds far less
+/// of it than it once did: every event bumps `rev`, so every kind with a
+/// producer must reach the mirror for a jump in `rev` to keep meaning a
+/// hole. `*` deliberately does not match the high-volume types (§4.5), so
+/// they are named: `transcript.partial`, `voice.level`, `device.key`,
+/// `device.macro` and `op.confirm_requested`.
 pub fn subscribe() -> Vec<String> {
     // Every high-volume kind is named one by one, and `"transcript.*"` would
     // not do: the bus keeps high-volume kinds out of a prefix glob as well as
@@ -105,6 +107,11 @@ pub fn config(socket: PathBuf) -> ClientConfig {
         // the window counts down (`host_state::Backoff`), and every attempt
         // has to post a `Connected`/`Disconnected` the mirror can fold.
         reconnect: false,
+        // The window shows counts and times, never a session (decision 1):
+        // the daemon is asked not to send session text at all, rather than
+        // the mirror dropping it on arrival. An older daemon ignores the
+        // field, and the mirror still drops it then.
+        content: Some(false),
     }
 }
 
@@ -356,7 +363,7 @@ async fn serve(
 
 /// Wait out the back-off, failing anything the operator clicks meanwhile. A
 /// click while the daemon is down has to fail now: silently firing it minutes
-/// later, at whatever the roster has become, is worse than an error.
+/// later, at whatever the deck has become, is worse than an error.
 async fn wait_failing_calls(wait: std::time::Duration, queue: &mut mpsc::Receiver<Queued>) -> Stop {
     let deadline = tokio::time::Instant::now() + wait;
     loop {
@@ -377,7 +384,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_hello_is_the_uds_only_with_the_five_scopes_and_the_named_types() {
+    fn the_hello_is_the_uds_only_with_three_scopes_and_the_named_types() {
         let config = config(PathBuf::from("/tmp/deckd-gui-core.sock"));
         assert!(matches!(config.transport, Transport::Uds(_)));
         assert_eq!(config.client_name, "OpenWalkieTalkie");
@@ -385,18 +392,21 @@ mod tests {
         assert!(!config.reconnect, "this crate owns the reconnect");
         assert_eq!(
             config.scopes,
-            vec![
-                Scope::ObserveContent,
-                Scope::Operate,
-                Scope::Voice,
-                Scope::Device,
-                Scope::Admin,
-            ]
+            vec![Scope::Voice, Scope::Device, Scope::Admin]
         );
+        // Never a session: no card text to read and no card to answer.
+        for session in [Scope::ObserveContent, Scope::Operate, Scope::Agent] {
+            assert!(!config.scopes.contains(&session), "{session:?}");
+        }
+        // And the daemon is asked to send no session text at all, although
+        // admin would grant it.
+        assert_eq!(config.content, Some(false));
         assert!(
             !config.scopes.contains(&Scope::ObserveRaw),
             "§4.2: raw hook payloads are not the GUI's"
         );
+        // The subscription is the whole stream it always was: `rev` counts
+        // every event, so an unsubscribed kind would be a hole.
         assert_eq!(
             config.subscribe,
             vec![

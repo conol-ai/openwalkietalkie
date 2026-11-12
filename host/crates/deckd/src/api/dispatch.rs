@@ -47,6 +47,9 @@ pub const METHODS: &[MethodSpec] = &[
     m("device.get", Some(Scope::Observe), false),
     m("voice.get", Some(Scope::Observe), false),
     m("service.info", Some(Scope::Observe), false),
+    // What puts sessions on the deck: counts, times and switches per
+    // source, never a session (`care::sources`).
+    m("sources.list", Some(Scope::Observe), false),
     m("agent.register", Some(Scope::Agent), true),
     m("agent.heartbeat", Some(Scope::Agent), true),
     m("agent.update", Some(Scope::Agent), true),
@@ -124,6 +127,23 @@ pub const METHODS: &[MethodSpec] = &[
     m("integrations.install", Some(Scope::Admin), false),
     m("integrations.uninstall", Some(Scope::Admin), false),
     m("integrations.repair", Some(Scope::Admin), false),
+    // The Service and Footprint pages (`crate::care`): the doctor's checks,
+    // what the app has put on this Mac, the support file and the firmware
+    // cache. They walk directories and write or delete files, so they are
+    // answered on the blocking pool as `integrations.*` is, and the two
+    // that write or delete refuse `{}`.
+    m("care.checks", Some(Scope::Admin), false),
+    m("care.footprint", Some(Scope::Admin), false),
+    m("care.support_file", Some(Scope::Admin), false),
+    m("care.cache.clear", Some(Scope::Admin), false),
+    // The test agent (`care::test`): a question or a voice card the daemon
+    // puts on the deck from its own care session, a spoken sample, and how
+    // the last of each went. Core-answered: the core owns that session and
+    // reads the deck's answer off the events.
+    m("care.test.question", Some(Scope::Admin), false),
+    m("care.test.voice", Some(Scope::Admin), false),
+    m("care.test.say", Some(Scope::Admin), false),
+    m("care.test.status", Some(Scope::Admin), false),
     m("log.tail", Some(Scope::Admin), false),
     m("device.flood", Some(Scope::Admin), false),
     m("device.sync", Some(Scope::Admin), false),
@@ -209,14 +229,35 @@ pub struct ConnCtx {
     /// windows — has to outlive one request and be the same on both
     /// doors.
     pub adapters: std::sync::Arc<crate::adapters::Adapters>,
+    /// `false` when the hello said `"content": false`: everything this
+    /// session is shown — snapshots, events, the reads that return them — is
+    /// redacted as for a principal without content, whatever its scopes
+    /// grant (§4.3). For a client that shows no session and wants none of it
+    /// in its process. `true`, today's behaviour, for every hello that does
+    /// not say so.
+    pub content: bool,
 }
 
 impl ConnCtx {
+    /// The scopes this session's view is redacted for: its own, or with
+    /// `content: false` the same without any that grant content. Never the
+    /// scopes it may call with, which [`check_scope`] reads from `scopes`.
+    pub fn seen_as(&self) -> std::borrow::Cow<'_, [Scope]> {
+        if self.content {
+            std::borrow::Cow::Borrowed(&self.scopes)
+        } else {
+            std::borrow::Cow::Owned(Scope::without_content(&self.scopes))
+        }
+    }
+
+    /// A core-answered call: the method's scope was checked at the door,
+    /// so the scopes the core is given are the ones the answer is redacted
+    /// for ([`ConnCtx::seen_as`]).
     pub fn call_ctx(&self) -> CallCtx {
         CallCtx {
             principal: self.principal.clone(),
             session: self.session,
-            scopes: self.scopes.clone(),
+            scopes: self.seen_as().into_owned(),
             trusted: self.trusted,
             own: BTreeSet::new(),
         }
@@ -333,6 +374,15 @@ pub async fn dispatch(ctx: &ConnCtx, method: &str, params: serde_json::Value) ->
         }
         return Reply {
             result,
+            after_write: None,
+        };
+    }
+    // The care methods that walk directories, run the doctor, or write and
+    // delete files: on the blocking pool too, after one round trip to the
+    // core for where this daemon keeps its things (`crate::care`).
+    if crate::care::pooled(method) {
+        return Reply {
+            result: crate::care::api_dispatch(&ctx.core, method, params).await,
             after_write: None,
         };
     }
@@ -504,6 +554,7 @@ mod tests {
             trusted: false,
             client: ClientInfo::default(),
             adapters: std::sync::Arc::default(),
+            content: true,
         };
         let mut unanswered = Vec::new();
         for spec in METHODS.iter().filter(|m| !m.name.starts_with("hooks.")) {
@@ -520,6 +571,160 @@ mod tests {
             unanswered.is_empty(),
             "advertised in /v1/schema but answered by nobody: {unanswered:?}"
         );
+        // …and the sweep reached nothing outside (O16): the firmware check
+        // answered with its idle status, and the two downloads with the
+        // reason they did not start, so nothing was probed, fetched or
+        // written under the caches.
+        let firmware = dispatch(&ctx, "firmware.status", serde_json::json!({}))
+            .await
+            .result
+            .unwrap();
+        assert_eq!(firmware["phase"], "idle", "{firmware}");
+        let caches = daemon.core.dir.join("caches");
+        for what in ["firmware", "stt", "tts"] {
+            assert!(!caches.join(what).exists(), "{what} was written");
+        }
+    }
+
+    /// `sources.list` is counts and times, never a session, so the least
+    /// scope reads it, with `{}`; a session holding no scope at all is
+    /// refused at the door.
+    #[tokio::test]
+    async fn sources_list_answers_an_observer_with_empty_params() {
+        let daemon =
+            crate::api::testkit::test_api("sources-list", crate::trust::FakeVerifier::default());
+        let session = daemon
+            .api
+            .core
+            .open_session(crate::core::handle::OpenSession {
+                kind: crate::core::handle::SessionKind::Observer,
+                principal: Principal::Uid(501),
+                scopes: vec![Scope::Observe],
+                trusted: false,
+                client: ClientInfo::default(),
+            })
+            .await
+            .unwrap();
+        let mut ctx = ConnCtx {
+            core: daemon.api.core.clone(),
+            principal: Principal::Uid(501),
+            session,
+            scopes: vec![Scope::Observe],
+            trusted: false,
+            client: ClientInfo::default(),
+            adapters: std::sync::Arc::default(),
+            content: true,
+        };
+        assert_eq!(method("sources.list").unwrap().scope, Some(Scope::Observe));
+        let reply = dispatch(&ctx, "sources.list", serde_json::json!({}))
+            .await
+            .result
+            .unwrap();
+        assert_eq!(reply["paused"], false);
+        assert_eq!(reply["other"], 0);
+        let rows = reply["sources"].as_array().unwrap();
+        let ids: Vec<&str> = rows.iter().map(|row| row["id"].as_str().unwrap()).collect();
+        assert_eq!(ids, ["claude", "claude_channels", "codex"]);
+        ctx.scopes.clear();
+        let err = dispatch(&ctx, "sources.list", serde_json::json!({}))
+            .await
+            .result
+            .unwrap_err();
+        assert_eq!(err.code, ApiError::FORBIDDEN);
+        assert_eq!(err.data["need"], "observe");
+    }
+
+    /// The four care methods the door answers on the blocking pool: admin
+    /// only, their params read before the core hears of them (the two that
+    /// write or delete refuse `{}`), then answered from the daemon's own
+    /// directories — a temp dir here, never this Mac's.
+    #[tokio::test]
+    async fn the_care_methods_read_their_params_first_and_use_the_daemons_own_dirs() {
+        use serde_json::{json, Value};
+        let (core, rx) = CoreHandle::detached();
+        for (method, params) in [
+            ("care.support_file", json!({})),
+            ("care.cache.clear", json!({})),
+            ("care.cache.clear", json!({"what": "stt"})),
+            ("care.support_file", json!({"to": "relative/dir"})),
+            ("care.checks", json!({"detect": true})),
+        ] {
+            let reply = dispatch(&ctx(core.clone(), &[Scope::Admin]), method, params).await;
+            assert_eq!(
+                reply.result.unwrap_err().code,
+                ApiError::INVALID_PARAMS,
+                "{method}"
+            );
+        }
+        for name in crate::care::POOLED {
+            assert_eq!(method(name).unwrap().scope, Some(Scope::Admin), "{name}");
+            let reply = dispatch(
+                &ctx(core.clone(), &[Scope::Observe, Scope::Device]),
+                name,
+                json!({}),
+            )
+            .await;
+            assert_eq!(reply.result.unwrap_err().code, ApiError::FORBIDDEN, "{name}");
+        }
+        assert!(rx.try_recv().is_err(), "nothing reached the core");
+
+        let daemon = crate::api::testkit::test_api("care", crate::trust::FakeVerifier::default());
+        let firmware = daemon.core.dir.join("caches/firmware");
+        std::fs::create_dir_all(firmware.join("bootloader-backups")).unwrap();
+        std::fs::write(firmware.join("release-manifest.json"), b"{}").unwrap();
+        std::fs::write(firmware.join("bootloader-backups/F657.bin"), b"bootloader").unwrap();
+        let admin = ctx(daemon.api.core.clone(), &[Scope::Admin]);
+        let cleared = dispatch(&admin, "care.cache.clear", json!({"what": "firmware"}))
+            .await
+            .result
+            .unwrap();
+        assert_eq!(cleared, json!({"removed_bytes": 2}));
+        assert!(!firmware.join("release-manifest.json").exists());
+        assert!(firmware.join("bootloader-backups/F657.bin").exists());
+        let checks = dispatch(&admin, "care.checks", Value::Null)
+            .await
+            .result
+            .unwrap();
+        let rows = checks["checks"].as_array().unwrap();
+        assert_eq!(rows[0]["name"], "data dir");
+        assert_eq!(
+            rows[0]["detail"],
+            daemon.core.dir.display().to_string(),
+            "the daemon's own data dir"
+        );
+        let device = rows.iter().find(|row| row["name"] == "device").unwrap();
+        assert_eq!(device["ok"], Value::Null, "{device}");
+    }
+
+    /// The test agent's four methods are `admin` and the core's (never the
+    /// blocking pool's), take `{}`, and answer through the door: with no
+    /// deck linked a test is `no_deck` at once, and the status says so.
+    #[tokio::test]
+    async fn the_test_agent_answers_an_admin_with_empty_params() {
+        use serde_json::{json, Value};
+        let daemon =
+            crate::api::testkit::test_api("care-test", crate::trust::FakeVerifier::default());
+        let others = [Scope::Observe, Scope::Agent, Scope::Voice, Scope::Device];
+        for name in [
+            "care.test.question",
+            "care.test.voice",
+            "care.test.say",
+            "care.test.status",
+        ] {
+            assert_eq!(method(name).unwrap().scope, Some(Scope::Admin), "{name}");
+            assert!(!crate::care::pooled(name), "{name}");
+            let reply = dispatch(&ctx(daemon.api.core.clone(), &others), name, json!({})).await;
+            assert_eq!(reply.result.unwrap_err().code, ApiError::FORBIDDEN, "{name}");
+        }
+        let admin = ctx(daemon.api.core.clone(), &[Scope::Admin]);
+        let status = dispatch(&admin, "care.test.status", json!({})).await;
+        assert_eq!(status.result.unwrap(), json!({"question": null, "voice": null}));
+        let sent = dispatch(&admin, "care.test.question", json!({})).await;
+        assert_eq!(sent.result.unwrap(), json!({"state": "no_deck"}));
+        let status = dispatch(&admin, "care.test.status", Value::Null).await;
+        let status = status.result.unwrap();
+        assert_eq!(status["question"]["state"], "no_deck");
+        assert_eq!(status["voice"], Value::Null);
     }
 
     fn ctx(core: CoreHandle, scopes: &[Scope]) -> ConnCtx {
@@ -531,6 +736,7 @@ mod tests {
             trusted: false,
             client: ClientInfo::default(),
             adapters: std::sync::Arc::default(),
+            content: true,
         }
     }
 
