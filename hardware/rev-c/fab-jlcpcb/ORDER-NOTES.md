@@ -7,13 +7,22 @@ from header metadata
 KiCad 10.0.7 DRC with zones refilled, all severities: 0 violations,
 0 unconnected.
 
-**Do not order from this placement file as it stands.** A preview package
-derived from it went through JLCPCB's placement preview on 2026-11-12
-([record](../preview/2026-11-12/README.md)); nothing was ordered. That
-preview shows 13 rows of `main-cpl-jlcpcb.csv` to be wrong and left seven
-parts unread. See "What the 2026-11-12 preview found" below, and read "What
-the BOM and CPL rest on" before using the placement file. The files in this
-directory have not been changed since.
+**What is and is not verified in the placement file.** Two placement
+previews at JLCPCB on 2026-11-12 read 118 of the 125 placements in
+`main-cpl-jlcpcb.csv`, each with the row that is in this file, and all 118
+read right ([first record](../preview/2026-11-12/README.md),
+[second](../preview/2026-11-12-iteration-2/README.md)). Nothing was ordered.
+
+- **Seven placements are not verified and cannot be assembled at JLCPCB as
+  the BOM stands:** U5 (the MCU), Y1, AE1, R32, SW3, SW4 and MK1. They could
+  not pass the BOM step, so the preview did not draw them. Their CPL rows
+  are unchecked convention values. Do not order assembly of these seven
+  from this file without reading their placement first.
+- A preview reading is JLCPCB's drawn model against our pads. It is not a
+  built board, and it has not been compared with what was placed on Rev B.
+- The order needs the **Standard** PCBA type.
+
+See "What the placement previews found" below.
 
 This package covers the main board only. The encoder board did not change:
 order r6's `encoder/` (or `encoder-wheel/`) package from
@@ -57,7 +66,8 @@ In Rev C each row has one stated source, listed per designator in
 - **Fallback table (118 placements).** The LCSC number comes from
   [`../source/main/supplier-fallback.csv`](../source/main/supplier-fallback.csv),
   copied per designator from Rev B's order BOM. The position is the
-  footprint origin and the rotation is the convention angle, as in Rev B.
+  footprint origin and the rotation is the convention angle, as in Rev B,
+  unless the row carries a board-local mapping; see (b).
 - **No LCSC part (Y1).** As in Rev B; see below.
 
 Three things follow.
@@ -71,34 +81,43 @@ Three things follow.
 
 These are the kind of correction that was made by hand at order time, but
 **they have not been confirmed against the actual order.** The library's
-readings were taken on other boards. Check both parts in the preview: U4's
+readings were taken on other boards; the previews of 2026-11-12 confirmed
+both on this one. What to see in the preview: U4's
 pin 1 must land toward the lower left seen from the top (pad at
 (29.012, −16.105)), and J5's shell pegs must sit in their holes.
 
-**(b) The other 123 rows are uncorrected.** They are the same values as in
-Rev B's committed CPL: footprint origin, top rotation = KiCad angle, bottom
-rotation = 180 − KiCad angle. For the four bound capacitors that is also
-what the library says. For the 119 unbound parts nothing has checked the
-angle or origin against JLC's part model, exactly as in Rev B. They still
-need the preview check below.
+**(b) The other 119 rows start from the convention values**, as in Rev B's
+committed CPL: footprint origin, top rotation = KiCad angle, bottom rotation
+= 180 − KiCad angle. The placement previews then decided each one
+([`../source/main/placement-evidence.csv`](../source/main/placement-evidence.csv),
+keyed by LCSC number and footprint; `main-placement-sources.csv` gives the
+basis and the record per row):
+
+- **Board-local mapping, 13 rows:** the preview read the convention value
+  wrong, and the row now carries a rotate and offset that the preview read
+  right. Board-local means the mapping is kept in this repository, not in
+  the CoHDL library.
+- **Convention value confirmed by preview, 99 rows.**
+- **Not previewed, 7 rows:** unchanged and unchecked.
 
 **(c) The as-ordered files are requested.** The maintainer has been asked
 for the BOM and CPL as exported from JLC's order history. Those would
-replace the guesswork in (a) and (b). Until they arrive, treat this package
-as Rev B's with two rows improved, not as a record of a known-good order.
+show whether these rows match what was placed on Rev B. Until they arrive,
+this file rests on the previews, not on a record of a known-good order.
 
-## What the 2026-11-12 preview found
+## What the placement previews found
 
-The preview used this package's Gerbers, and its BOM and CPL without seven
-parts and with three candidate rotations applied
-([`../preview/README.md`](../preview/README.md)).
+Two preview packages derived from this one went through JLCPCB's placement
+preview on 2026-11-12, stopped at Component Placements
+([`../preview/README.md`](../preview/README.md)). They used this package's
+Gerbers, and its BOM and CPL without seven parts.
 
 **PCBA type: Standard.** On this four-layer board JLCPCB's Economic PCBA
 type offers one assembly side; Both Sides is disabled. The board has parts
 on both sides, so the order needs Standard.
 
-**Parts JLCPCB cannot assemble as the BOM stands** (read at the BOM step on
-2026-11-11 and 2026-11-12; stock changes):
+**Parts JLCPCB cannot assemble as the BOM stands, and whose placement is
+unread** (BOM step on 2026-11-11 and 2026-11-12; stock changes):
 
 | Part | LCSC | Why |
 |---|---|---|
@@ -110,36 +129,47 @@ on both sides, so the order needs Standard.
 | MK1 MP34DT05TR-A | C2688664 | The BOM step matched no part to this number. |
 
 Each needs stock, a substitute, global sourcing or consignment before an
-order, and none of the seven has had its placement read: a part that cannot
-pass the BOM step is not drawn in the preview.
+order. A part that cannot pass the BOM step is not drawn in the preview, so
+none of the seven has had its placement read.
 
-The other 41 part numbers were detected and confirmed with no stock warning.
-C147972 (U7, U8; 50 in stock on 2026-11-11), C115365 (the four side
-switches; 155) and C15220 (U6; 687) were low.
+The other 41 part numbers were detected and confirmed with no stock warning
+in both runs. C147972 (U7, U8; 50 in stock on 2026-11-11), C115365 (the four
+side switches; 155) and C15220 (U6; 687) were low.
 
-**CPL rows that are wrong as committed.** Rotations are JLC rotations;
-positions are CPL coordinates.
+**Rows that carry a board-local mapping** (13). "Was" is the convention
+value, which is also Rev B's row.
 
-| Part | Row here | Should be | State |
-|---|---|---|---|
-| U1 NS4150B | rotation 270 | 180 | confirmed in the preview |
-| U2 TPS22918DBVR | 270 | 90 | confirmed |
-| U10 TPS22918DBVR | 90 | 270 | confirmed |
-| U20 USBLC6-2SC6 | 270 | 180 | confirmed |
-| U7, U8 RT6150BGQW | 90 | 0 | read; not yet previewed with the change |
-| U3 display connector | 180 | 0 | read; not yet previewed with the change |
-| J1 53261-0271 | (33.0000, −84.9000), 90 | about (32.0500, −84.9000), 270 | read; offset estimated |
-| J3 53261-0371 | (17.0000, −16.5000), 0 | about (17.0000, −15.3500), 0 | read; offset estimated |
-| SW1, SW2, SW6 SKTDLDE010 | x 3.7600, 270 | about x 4.3100, 90 | read by eye; offset estimated |
-| SW5 SKTDLDE010 | x 52.2400, 90 | about x 51.6900, 270 | read by eye; offset estimated |
+| Part | Was | Now | Mapping | Read with the mapping applied |
+|---|---|---|---|---|
+| U1 NS4150B (C189961) | rotation 270 | 180 | rotate 270 | both previews: pin 1 mark 5.9° from pad 1 |
+| U2 TPS22918DBVR (C131941) | 270 | 90 | rotate 180 | both: 357.5° |
+| U10 TPS22918DBVR (C131941) | 90 | 270 | rotate 180 | both: 358.9° |
+| U20 USBLC6-2SC6 (C7519) | 270 | 180 | rotate 270 | both: 11.7° |
+| U7, U8 RT6150BGQW (C147972) | 90 | 0 | rotate 270 | second: 353.0° and 352.8°; terminal rows on our pad rows |
+| U3 display connector (C55247264) | 180 | 0 | rotate 180 | second: 4.4°; ears and the 16-lead row on their pads; the 15-pad row is hidden |
+| J1 53261-0271 (C177225) | (33.0000, −84.9000), 90 | (32.0500, −84.9000), 270 | rotate 180, offset (0, −0.95) | second: leads on pads 1–2, 1.02 mm of each on its pad, centred across within 0.012 mm |
+| J3 53261-0371 (C293630) | (17.0000, −16.5000), 0 | (17.0000, −15.3500), 0 | offset (0, −1.15) | second: leads on pads 1–3, 1.04 mm on the pad, centred within 0.006 mm |
+| SW1, SW2, SW6 SKTDLDE010 (C115365) | x 3.7600, 270 | x 4.3100, 90 | rotate 180, offset (0, −0.55) | second, by eye: actuator outboard, terminals on pads 1 and 2 |
+| SW5 SKTDLDE010 (C115365) | x 52.2400, 90 | x 51.6900, 270 | the same | the same |
 
-The rows for U4 and J5, which Rev C changed against Rev B on the library's
-evidence, are confirmed on this board: U4's pin 1 is on pad 1, and J5's
-shell pegs are within 0.15 mm of their holes. With them, 105 previewed rows
-are confirmed as committed. The nine "read" rows need a second preview with
-the change applied before this file is corrected; the table for it is
-[`../preview/corrections.csv`](../preview/corrections.csv) (rows whose state
-is "under test").
+Offsets are in the footprint's own frame, in millimetres.
+
+**Rows confirmed as they were** (105): U4 and J5, which Rev C changed
+against Rev B on the library's evidence (U4's pin 1 is on pad 1; J5's shell
+pegs are within 0.15 mm of their holes); C12, C19, C20 and C22, also bound;
+and 99 convention values: every chip resistor and capacitor (92 more), L1–L5,
+U6 and J2.
+
+**Limits of these readings.**
+
+- Along their leads, J1 and J3 are placed so that the model's fitting nails
+  lie on the ML/MR pads (within 0.03 mm) and each lead covers 1.0 mm of its
+  1.6 mm pad. The preview cannot say to better than a few tenths of a
+  millimetre where the manufacturer intends the lead on the land.
+- The switch reading has no pin 1 mark behind it; it is the model's shape.
+- Not seen: U3's 15-pad row (under the actuator) and J2's contact row.
+- A chip body reading is blind to a half turn, which does not matter for
+  these parts.
 
 ## PCB order options
 
@@ -189,19 +219,20 @@ Open or tented vias there would wick solder:
   - bottom-side parts: X not mirrored, rotation = 180 − KiCad angle
   - top-side parts: rotation = KiCad angle
 - Positions are footprint origins, except J5, which is at the library's
-  mapped origin. `main-orientation-check.csv` lists, for every polarized part:
-  - the JLC rotation, and whether it comes from a library binding or is the
+  mapped origin, and J1, J3 and SW1/SW2/SW5/SW6, which carry a board-local
+  offset. `main-orientation-check.csv` lists, for every polarized part:
+  - the JLC rotation, and whether it comes from a library binding, a
+    board-local mapping, a convention angle the preview confirmed, or an
     unverified convention angle
   - the footprint origin, and where pin 1 must land, seen from the top
   - the offset from the origin to the centre of the bounding box of all pads,
     locating holes included: J5 1.48 mm, J1/J3 0.60 mm, SW1/SW2/SW5/SW6
     0.55 mm, J2 0.10 mm, U3 0.03 mm, as on r6
 
-  **Check every listed part in JLC's placement preview.** Every IC and the
-  crystal has a silkscreen pin-1 mark: a dot, except U6, which has the
-  footprint's corner triangle. Two library readings on other parts show that
-  JLC's SOT-23-6 models do not all sit at the convention angle, so look
-  closely at U2, U10 and U20.
+  **Look at every listed part again in JLC's placement preview when
+  ordering**, above all the seven that are unread. Every IC and the crystal
+  has a silkscreen pin-1 mark: a dot, except U6, which has the footprint's
+  corner triangle.
 - J5 (USB-C) has through-hole shell tabs, as on r6.
 - USB-C and the side switches overhang the outline, as on r6, and there are
   no fiducials. JLC will add process rails; they must clear the overhangs.

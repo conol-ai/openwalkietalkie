@@ -77,6 +77,7 @@ BOARD = ROOT / "main/main-revc.kicad_pcb"
 NAME = "owt-revc"
 LIBRARY, BOARD4, REVC, NONE = "library binding", "board-4 raw reading", "Rev C preview 2026-11-12", "none"
 CONFIRMED, UNDER_TEST = "confirmed", "under test"
+BOARD_LOCAL = "board-local mapping"  # build_fab.py's MAPPED
 KICAD_PYTHON = "/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/Current/bin/python3"
 BINDING_MAP = re.compile(r"binding map at \(([-\d.]+)mm, ([-\d.]+)mm\) rotate (\d+) on ")
 
@@ -224,7 +225,13 @@ def build(tool_path):
     used = set()
     cpl, checklist = [], []
     for ref in kept:
-        fab, src, fp = fab_cpl[ref], sources[ref], fps.get(ref)
+        order, src, fp = fab_cpl[ref], sources[ref], fps.get(ref)
+        # A row the order CPL carries a board-local mapping on starts here from
+        # its footprint origin and convention angle, as before that mapping
+        # was adopted; corrections.csv applied to it must give the order row.
+        mapped = src["Placement basis"] == BOARD_LOCAL
+        fab = dict(order, **{"Mid X": src["Footprint origin X"], "Mid Y": src["Footprint origin Y"],
+                             "Rotation": src["Convention rotation"]}) if mapped else order
         if fp is None:
             problems.append(f"{ref}: not on the board")
             continue
@@ -266,6 +273,8 @@ def build(tool_path):
                 problems.append(f"{ref}: unknown evidence {evidence!r}")
         elif bound:
             problems.append(f"{ref}: bound by the library but missing from corrections.csv")
+        if mapped and (x, y, str(rotation)) != (order["Mid X"], order["Mid Y"], order["Rotation"]):
+            problems.append(f"{ref}: the order CPL carries a board-local mapping that corrections.csv does not give")
         cpl.append([ref, x, y, fab["Layer"], str(rotation)])
         checklist.append({"ref": ref, "side": fab["Layer"], "pn": src["LCSC Part #"], "fpid": fp["fpid"],
                           "x": x, "y": y, "fab": [fab["Mid X"], fab["Mid Y"], int(fab["Rotation"])], "bound": bound,

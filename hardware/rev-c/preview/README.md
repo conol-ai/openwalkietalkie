@@ -11,53 +11,40 @@ orders.
 Uploading a package is the owner's decision, per package, by its SHA-256.
 The preview never saves to the cart, quotes or orders.
 
-## Status: first preview read on 2026-11-12; second package defined, not uploaded
+## Status: two previews read on 2026-11-12; all 118 previewed placements confirmed
 
-Package v2 (SHA-256 `8254b63a…5847`, built at commit 9b3e7dd) went through
-the preview on 2026-11-12 with the owner's approval and stopped at Component
-Placements. The record, with both exports, every measurement and the crops,
-is [`2026-11-12/`](2026-11-12/README.md).
+| Package | Run | Record | Outcome |
+|---|---|---|---|
+| v2, SHA-256 `8254b63a…5847`, built at 9b3e7dd | 2026-11-12 | [`2026-11-12/`](2026-11-12/README.md) | 109 placements confirmed; 9 read wrong (U7, U8, U3, J1, J3, SW1, SW2, SW5, SW6) |
+| v3, SHA-256 `2c2e9171…f9dd`, built at 343bd21 | 2026-11-12 | [`2026-11-12-iteration-2/`](2026-11-12-iteration-2/README.md) | the nine read right with their mapping applied; the 109 read as before |
 
-- **109 of the 118 previewed placements are confirmed**, 36 part numbers:
-  all 96 chip bodies, the five inductors and ferrites, U6, J2, the library
-  bindings for U4 and J5, and the three candidate rotations (U20 rotate 270,
-  U2/U10 rotate 180, U1 rotate 270) with the mapping applied.
-- **Nine placements, five part numbers, read wrong** and need a mapping this
-  preview did not carry: U7/U8 rotate 270, U3 rotate 180, J1 rotate 180 with
-  an offset, J3 an offset, SW1/SW2/SW5/SW6 rotate 180 with an offset. The
-  rotations are read; the three offsets are estimates.
-- **Seven parts were not previewed** and stay unmeasured: U5, Y1, AE1, R32,
-  SW3, SW4, MK1.
-
+Both ran with the owner's approval and stopped at Component Placements.
 (Earlier runs the same day used the first package, with AE1, R32, SW3, SW4
 and MK1 still in it, and stopped at or before the BOM step.)
 
-**Second iteration (package v3): defined here, not uploaded.**
-[`corrections.csv`](corrections.csv), [`manifest.json`](manifest.json) and
-[`CHECKLIST.md`](CHECKLIST.md) now describe the package for a second
-preview. It tests the nine placements that read wrong, with their mapping
-applied:
+- **All 118 previewed placements are confirmed.** 13 of them needed a
+  mapping: U20 rotate 270, U2/U10 rotate 180, U1 rotate 270, U7/U8 rotate
+  270, U3 rotate 180, J1 rotate 180 with offset (0, −0.95), J3 offset
+  (0, −1.15), SW1/SW2/SW5/SW6 rotate 180 with offset (0, −0.55).
+- **The order CPL now carries those 13**, from
+  [`../source/main/placement-evidence.csv`](../source/main/placement-evidence.csv),
+  and equals package v3's CPL row for row. `build_preview.py` checks that.
+- **Seven parts were not previewed** and stay unmeasured: U5, Y1, AE1, R32,
+  SW3, SW4, MK1. They need a third preview once they can pass the BOM step.
+  No third package is needed for anything else.
 
-| LCSC | Parts | Mapping under test | CPL row in this package (fab row) | Look at |
-|---|---|---|---|---|
-| C147972 | U7, U8 | rotate 270 | rotation 0 (90) | pin 1 mark at pad 1 |
-| C55247264 | U3 | rotate 180 | rotation 0 (180) | mount ears and the 16-lead row on their pads |
-| C177225 | J1 | rotate 180, offset (0, −0.95) | (32.0500, −84.9000) 270 ((33.0000, −84.9000) 90) | leads on pads 1–2 |
-| C293630 | J3 | offset (0, −1.15) | (17.0000, −15.3500) 0 ((17.0000, −16.5000) 0) | leads on pads 1–3 |
-| C115365 | SW1, SW2, SW6 | rotate 180, offset (0, −0.55) | x 4.3100, 90 (x 3.7600, 270) | actuator outboard, terminals on pads 1 and 2 |
-| C115365 | SW5 | the same | x 51.6900, 270 (x 52.2400, 90) | the same |
-
-The other 109 placements are placed as on 2026-11-12, when they were
-confirmed. The seven parts left out are still left out and still unmeasured.
-The run needs the Standard PCBA type; `jlc_preview.py` selects it. Uploading
-it needs the owner's approval for that package, by its SHA-256.
+[`corrections.csv`](corrections.csv) and [`CHECKLIST.md`](CHECKLIST.md) are
+still package v3's, the last package run: the five rows marked "under test"
+are the ones the second record confirmed, and the checklist's "fab row" is
+the order row as it was before the mapping moved into the order CPL.
+[`manifest.json`](manifest.json) differs from v3's only in the hash of the
+order CPL it starts from. No package has been built since, and nothing has
+been uploaded since.
 
 The table package v2 applied is kept, byte for byte, as
-[`2026-11-12/package/corrections.csv`](2026-11-12/package/corrections.csv);
-the last column of `corrections.csv` says what changed against it per row.
-In short: 36 part numbers keep their mapping, now confirmed (the three IC
-rotations among them: C7519 rotate 270, C131941 rotate 180, C189961 rotate
-270); five get the mapping above.
+[`2026-11-12/package/corrections.csv`](2026-11-12/package/corrections.csv),
+and v3's as
+[`2026-11-12-iteration-2/package/corrections.csv`](2026-11-12-iteration-2/package/corrections.csv).
 
 ### How a mapping becomes a CPL row
 
@@ -74,9 +61,9 @@ worked by hand from the compiler's rules. **No bottom-side offset has been
 read on a board yet**; this package has none either (U3, U7 and U8 are
 rotations only).
 
-The fab CPL in `../fab-jlcpcb/` is unchanged, and 13 of its rows are now
-known to be wrong as they stand
-([the list](2026-11-12/README.md#rows-of-the-committed-cpl-this-shows-to-be-wrong)).
+The 13 rows the first record showed to be wrong
+([the list](2026-11-12/README.md#rows-of-the-committed-cpl-this-shows-to-be-wrong))
+are corrected in the order CPL in `../fab-jlcpcb/`.
 
 ## What the package is
 
@@ -87,7 +74,7 @@ the form CoHDL's `tools/frame_boards/jlc_preview.py` reads:
 |---|---|
 | `owt-revc-gerbers.zip` | `../fab-jlcpcb/main-revc-jlcpcb-gerber.zip`, byte for byte |
 | `owt-revc-lcsc-bom.csv` | the fab BOM without the rows left out, one line per LCSC number |
-| `owt-revc-lcsc-cpl.csv` | the fab CPL without the rows left out, with [`corrections.csv`](corrections.csv) applied |
+| `owt-revc-lcsc-cpl.csv` | the fab CPL without the rows left out, with [`corrections.csv`](corrections.csv) applied; a row that already carries a board-local mapping in the fab CPL starts from its footprint origin and convention angle, and must come out as the fab row |
 | `board.json` | `measure_preview.py board` of `../main/main-revc.kicad_pcb`, limited to the previewed placements |
 | `CHECKLIST.md` | [the checklist](CHECKLIST.md): what was left out, the corrections, every placement |
 | `verification.json`, `README.txt`, `SHA256SUMS`, and the three tables here | the record |

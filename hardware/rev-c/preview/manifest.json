@@ -568,7 +568,7 @@
  "inputs_sha256": {
   "main/main-revc.kicad_pcb": "0cc240b99af0713cda7510ce15641477036f4aba85542c33661119e14033f824",
   "fab-jlcpcb/main-bom-jlcpcb.csv": "8c876ae3a877f48760547c09e221f44d38316d06cdc4d78201518837a3837a49",
-  "fab-jlcpcb/main-cpl-jlcpcb.csv": "aaecf3a529b07dd68dd2127db708ec4add24ac50d04c878f85c4757003a0deb2",
+  "fab-jlcpcb/main-cpl-jlcpcb.csv": "7a2acb91f598b37726c3ef5931a6c6b75968caeb38108d6f00df14cd7a096cad",
   "measure_preview.py": "47f1efe27b5172db7bd660c866c81d65f9c15f1ddd985e6c23483612bfb7fae6"
  }
 }

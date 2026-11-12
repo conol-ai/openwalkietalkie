@@ -173,7 +173,8 @@ a mapping with the mapping this record implies, marked "under test". The
 table this preview's package applied is
 [`package/corrections.csv`](package/corrections.csv), byte for byte the
 member of the ZIP. Whether a second package has been run is stated in
-[`../README.md`](../README.md), not here.
+[`../README.md`](../README.md), not here. (It has:
+[`../2026-11-12-iteration-2/`](../2026-11-12-iteration-2/README.md).)
 
 [`SHA256SUMS`](SHA256SUMS) covers every other file in this directory.
 

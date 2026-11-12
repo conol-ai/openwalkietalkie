@@ -82,7 +82,7 @@ binary gives byte-identical output was not tested.
 | CoHDL source | [`source/main/src/main.cohdl`](source/main/src/main.cohdl); [build and checks](source/README.md) |
 | Routed board (KiCad 10, fabrication authority) | [`main/main-revc.kicad_pcb`](main/main-revc.kicad_pcb) with `.kicad_pro` and `.kicad_dru` copied from Rev B |
 | JLCPCB order package | [`fab-jlcpcb/`](fab-jlcpcb/ORDER-NOTES.md). **Read ORDER-NOTES first.** |
-| Placement preview before ordering | [`preview/`](preview/README.md): what goes through JLCPCB's assembly preview so that orientations are measured first. First preview read on 2026-11-12: [record](preview/2026-11-12/README.md). 109 of 118 placements confirmed, 9 need a mapping and a second preview, 7 parts not previewed. The package for the second preview is defined (the nine with their mapping applied) and has not been uploaded. |
+| Placement preview before ordering | [`preview/`](preview/README.md): what goes through JLCPCB's assembly preview so that orientations are measured first. Two previews read on 2026-11-12 ([first](preview/2026-11-12/README.md), [second](preview/2026-11-12-iteration-2/README.md)): all 118 previewed placements confirmed, 13 of them with a board-local mapping that is now in the order CPL; 7 parts could not be previewed. |
 | Design BOM / KiCad positions | [`main/assembly/bom.csv`](main/assembly/bom.csv), [`main/assembly/positions-kicad-all.csv`](main/assembly/positions-kicad-all.csv) |
 | Verification reports | [`verification/`](verification/) |
 | Scripts | [`scripts/`](scripts/README.md) |
@@ -155,12 +155,14 @@ Specific to Rev C:
 2. **Only two CPL rows carry a checked frame.** U4 and J5 come out of the
    library binding and differ from Rev B's file. The other 123 rows are the
    same uncorrected convention values as Rev B (119 of them for unbound
-   parts, 4 for bound capacitors whose map is zero). The placement preview
-   of 2026-11-12 ([record](preview/2026-11-12/README.md)) confirmed 105 of
-   the 118 rows it could read, U4 and J5 among them, and showed 13 to be
-   wrong (U1, U2, U10, U20, U7, U8, U3, J1, J3, SW1, SW2, SW5, SW6). The
-   CPL has not been corrected yet: nine of the 13 need a second preview
-   first, and seven parts were not read at all.
+   parts, 4 for bound capacitors whose map is zero). Two placement previews
+   on 2026-11-12 ([first](preview/2026-11-12/README.md),
+   [second](preview/2026-11-12-iteration-2/README.md)) read 118 rows. 105
+   were right; 13 were wrong (U1, U2, U10, U20, U7, U8, U3, J1, J3, SW1,
+   SW2, SW5, SW6) and now carry a board-local mapping from
+   [`source/main/placement-evidence.csv`](source/main/placement-evidence.csv),
+   read right with it applied. Seven rows (U5, Y1, AE1, R32, SW3, SW4, MK1)
+   were not read at all.
 3. **The library evidence for U4 and J5 was taken on other boards**
    (preview records dated 2026-10-30). The 2026-11-12 preview confirmed
    both on this board. Neither has been compared with what was actually

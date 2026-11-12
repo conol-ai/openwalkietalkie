@@ -11,7 +11,7 @@ scripts that produce and check Rev C. All are MIT-licensed software.
 | `build_source.py` | CoHDL, KiCad Python | `cohdl install` and `cohdl build` with the LCSC supplier selected, then applies `assembly.json` to the generated board and BOM. |
 | `check_source.py` | KiCad Python | Source parity against the Rev C board, including the board-frame pad comparison. |
 | `test_source_parity.py` | KiCad Python | Mutation tests for the parity check; run from this directory after `../check.sh`. |
-| `build_fab.py` | KiCad Python | Writes the JLC BOM, CPL, orientation list, sourcing record and coverage report; `--check` compares them with the committed files. |
+| `build_fab.py` | KiCad Python | Writes the JLC BOM, CPL, orientation list, sourcing record and coverage report, applying the board-local mappings of `source/main/placement-evidence.csv` to the CPL; `--check` compares them with the committed files. |
 | `export_fab.sh` | kicad-cli | Plots Gerbers, paste, drill and positions into the ignored `build/fab/` and zips the 13 order files. |
 | `compare_fab.py` | Python 3 | Compares the order zip with Rev B's plots, allowing only header metadata to differ. |
 | `build_preview.py` | Python 3, KiCad Python, CoHDL's `measure_preview.py` | Writes the placement-preview manifest and checklist, and with `--out` the preview package for JLCPCB's assembly preview; see [`../preview/README.md`](../preview/README.md). Uploads nothing. |
