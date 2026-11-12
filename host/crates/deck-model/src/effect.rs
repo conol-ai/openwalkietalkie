@@ -1,7 +1,8 @@
 //! Every observable change (`Event`) and every side effect (`Effect`) the
 //! reducer produces, as data (design §3).
 use crate::{
-    AgentId, Answer, CardId, Deliver, DeviceOp, FaceEntry, Principal, SetKey, Slot, Ts, Usage,
+    AgentId, Answer, CardId, Deliver, DeviceOp, FaceEntry, LastLinked, Principal, SetKey, Slot,
+    Ts, Usage,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -56,8 +57,9 @@ pub enum Release {
     AgentGone,
     /// The card was taken **off** the deck under the parked hook:
     /// `agent.card.clear`, a new card retiring this one, `op.ack`, a Ready
-    /// card's TTL, or the agent being removed for good. Nothing is left
-    /// behind — unlike every variant above, there is no degraded card.
+    /// card's TTL, the agent being removed for good, or its session being
+    /// muted (a paused source). Nothing is left behind — unlike every
+    /// variant above, there is no degraded card.
     Cleared,
     /// The daemon is shutting down: every parked hook is answered `{}` so
     /// the CLIs show their own dialogs. Nothing is degraded, because
@@ -326,6 +328,9 @@ pub enum StatePatch {
         voice: String,
     },
     Usage(Usage),
+    /// The deck as it was last linked (`device.last`), so a restart still
+    /// knows when it was last seen and what it ran.
+    LastLinked(LastLinked),
 }
 
 /// Every side effect, executed by the core after `apply`.
@@ -417,6 +422,11 @@ pub enum EventKind {
     DeviceLink,
     #[serde(rename = "device.session")]
     DeviceSession,
+    /// The deck's transport, battery, charging, board, last link or drops
+    /// changed (`device.status`). Every event carries all six keys: null
+    /// when unknown, `[]` for no drops.
+    #[serde(rename = "device.status")]
+    DeviceStatus,
     #[serde(rename = "device.face")]
     DeviceFace,
     #[serde(rename = "device.faces")]
@@ -430,6 +440,11 @@ pub enum EventKind {
     /// The deck's own key editor changed a slot (`device.macro.edit`).
     #[serde(rename = "device.macro.edit")]
     DeviceMacroEdit,
+    /// A Macropad face's keys changed, by `device.macro.set` or the deck's
+    /// own editor (`device.macros`): `{f, src, keys}`, the whole layout as
+    /// `snapshot.macros[f]` now holds it.
+    #[serde(rename = "device.macros")]
+    DeviceMacros,
     #[serde(rename = "device.ws")]
     DeviceWs,
     #[serde(rename = "device.refresh")]
@@ -459,7 +474,7 @@ pub enum EventKind {
 }
 
 impl EventKind {
-    pub const ALL: [EventKind; 49] = [
+    pub const ALL: [EventKind; 51] = [
         EventKind::SessionSettingsRequested,
         EventKind::AgentAdded,
         EventKind::AgentChanged,
@@ -490,12 +505,14 @@ impl EventKind {
         EventKind::VoiceLevel,
         EventKind::DeviceLink,
         EventKind::DeviceSession,
+        EventKind::DeviceStatus,
         EventKind::DeviceFace,
         EventKind::DeviceFaces,
         EventKind::DeviceSet,
         EventKind::DeviceKey,
         EventKind::DeviceMacro,
         EventKind::DeviceMacroEdit,
+        EventKind::DeviceMacros,
         EventKind::DeviceWs,
         EventKind::DeviceRefresh,
         EventKind::DeviceRaw,
@@ -544,12 +561,14 @@ impl EventKind {
             EventKind::VoiceLevel => "voice.level",
             EventKind::DeviceLink => "device.link",
             EventKind::DeviceSession => "device.session",
+            EventKind::DeviceStatus => "device.status",
             EventKind::DeviceFace => "device.face",
             EventKind::DeviceFaces => "device.faces",
             EventKind::DeviceSet => "device.set",
             EventKind::DeviceKey => "device.key",
             EventKind::DeviceMacro => "device.macro",
             EventKind::DeviceMacroEdit => "device.macro.edit",
+            EventKind::DeviceMacros => "device.macros",
             EventKind::DeviceWs => "device.ws",
             EventKind::DeviceRefresh => "device.refresh",
             EventKind::DeviceRaw => "device.raw",
@@ -645,6 +664,16 @@ mod tests {
         assert!(!EventKind::CardSet.is_high_volume());
         assert!(EventKind::ReplySet.has_content());
         assert!(!EventKind::DeviceLink.has_content());
+        // The deck's status reaches every `*` subscriber unredacted: it says
+        // nothing about any session, and a window that had to name it would
+        // miss it.
+        assert!(!EventKind::DeviceStatus.is_high_volume());
+        assert!(!EventKind::DeviceStatus.has_content());
+        // So do the Macropad keys: a label and a keystroke name a button,
+        // not anything said in a session, and `*` must carry every change
+        // or a mirror of `snapshot.macros` would go stale.
+        assert!(!EventKind::DeviceMacros.is_high_volume());
+        assert!(!EventKind::DeviceMacros.has_content());
     }
 
     /// The one thing an adapter asks a `Release`: is there still a card on

@@ -128,7 +128,12 @@ struct Inner {
 pub struct Installer {
     inner: Arc<Mutex<Inner>>,
     curl: PathBuf,
+    /// Never start curl: see [`Installer::offline`].
+    offline: bool,
 }
+
+/// The error an offline installer reports for the download it did not start.
+pub const OFFLINE: &str = "downloads are off in this daemon: nothing was fetched";
 
 impl Default for Installer {
     fn default() -> Self {
@@ -138,6 +143,7 @@ impl Default for Installer {
                 child: None,
             })),
             curl: PathBuf::from("curl"),
+            offline: false,
         }
     }
 }
@@ -151,6 +157,20 @@ impl std::fmt::Debug for Installer {
 }
 
 impl Installer {
+    /// An installer that never downloads. `start` answers the way a failed
+    /// fetch ends (not running, not done, the reason as its error), so a
+    /// `stt.status`/`tts.status` poll stops instead of waiting, and nothing
+    /// is spawned or written. Every unit-test core has one (O16): the API
+    /// tests call `stt.install` and `tts.install` with no model named,
+    /// which is the 1.6 GB recogniser and the 365 MB voice.
+    #[must_use]
+    pub fn offline() -> Self {
+        Installer {
+            offline: true,
+            ..Installer::default()
+        }
+    }
+
     /// The curl to run (tests point this at a fake).
     #[must_use]
     pub fn with_curl(mut self, curl: impl Into<PathBuf>) -> Self {
@@ -165,7 +185,7 @@ impl Installer {
 
     /// Start `job`, unless a download is already running (then that one's
     /// progress is returned). A result already on disk is reported `done`
-    /// at once.
+    /// at once; an [offline](Installer::offline) installer starts nothing.
     pub fn start(&self, job: &Job) -> Result<Progress, String> {
         {
             let st = self.inner.lock().unwrap();
@@ -182,6 +202,20 @@ impl Installer {
                 running: false,
                 done: true,
                 error: None,
+            };
+            self.inner.lock().unwrap().progress = Some(progress.clone());
+            return Ok(progress);
+        }
+        // What is on disk needed no fetch; anything else would.
+        if self.offline {
+            let progress = Progress {
+                model: job.name.clone(),
+                path: job.path().to_path_buf(),
+                total: job.total,
+                bytes: std::fs::metadata(&job.part).map_or(0, |m| m.len()),
+                running: false,
+                done: false,
+                error: Some(OFFLINE.into()),
             };
             self.inner.lock().unwrap().progress = Some(progress.clone());
             return Ok(progress);
@@ -503,6 +537,32 @@ with open(out, "ab") as f:
         assert!(!job.part.exists());
         job.remove().unwrap();
         assert!(!job.present() && !into.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// O16: an offline installer answers `start` the way a failed fetch
+    /// ends and spawns nothing; a model already on disk is still `done`,
+    /// because reporting it needs no fetch.
+    #[test]
+    fn an_offline_installer_never_starts_curl_and_says_why() {
+        let dir = std::env::temp_dir()
+            .join(format!("deckd-download-offline-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // The fake, not the real curl: had this regressed, it would write
+        // the part file rather than reach the network.
+        let installer = Installer::offline().with_curl(fake_curl(&dir));
+        let job = crate::stt::job(&dir.join("models"), "tiny");
+        let progress = installer.start(&job).unwrap();
+        assert!(!progress.running && !progress.done, "{progress:?}");
+        assert_eq!(progress.error.as_deref(), Some(OFFLINE));
+        assert_eq!(installer.status(), Some(progress), "what `stt.status` reports");
+        assert!(!dir.join("models").exists(), "no part file, not even its directory");
+        let local = crate::stt::job(&dir.join("local"), "custom");
+        std::fs::create_dir_all(dir.join("local")).unwrap();
+        std::fs::write(local.path(), b"weights").unwrap();
+        let progress = installer.start(&local).unwrap();
+        assert!(progress.done && progress.error.is_none(), "{progress:?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

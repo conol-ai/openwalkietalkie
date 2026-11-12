@@ -2,9 +2,10 @@
 //! unsent card + clear, title bucket, line sizes — live with the outbox).
 use crate::testkit::{card_set, claude_adapter, register, Sim, UID};
 use crate::{
-    AgentId, AgentState, AgentUpdate, AnswerCap, CardKind, Command, Control, Deliver, DeviceLine,
-    DeviceOp, Effect, FocusReport, FocusSource, Group, HoldId, HostLine, Key, LinkEvent, OrderCap,
-    Origin, OriginKind, Request, SessionId, StatePatch, StoreConfig,
+    AgentId, AgentState, AgentUpdate, AnswerCap, AudioCmd, CardKind, CardStatus, Command, Control,
+    Deliver, DeviceLine, DeviceOp, Effect, FocusReport, FocusSource, Group, HoldId, HostLine, Key,
+    Kind, LinkEvent, OrderCap, Origin, OriginKind, Principal, ReplySet, Request, SessionId, Slot,
+    StatePatch, StoreConfig,
 };
 use proptest::prelude::*;
 use std::collections::BTreeMap;
@@ -349,6 +350,171 @@ proptest! {
                 .iter()
                 .any(|op| matches!(op, DeviceOp::Put(Key::Focus, _)));
             prop_assert_eq!(in_barrier, pc_focus);
+        }
+    }
+}
+
+/// One step of a run in which sessions are muted: agents of two client
+/// sessions and of the Claude adapter's, whose questions are parked holds.
+#[derive(Clone, Debug)]
+enum MuteStep {
+    Register(u8),
+    State(u8, AgentState),
+    Ask(u8),
+    Reply(u8),
+    Answer(u8),
+    Release(u8),
+    /// Bits 0, 1 and 2 mute session 1, session 2 and the adapter's.
+    Mute(u8),
+    Tick(u64),
+}
+
+fn mute_steps() -> impl Strategy<Value = Vec<MuteStep>> {
+    let step = prop_oneof![
+        (0..12u8).prop_map(MuteStep::Register),
+        (0..12u8, states()).prop_map(|(a, s)| MuteStep::State(a, s)),
+        (0..12u8).prop_map(MuteStep::Ask),
+        (0..12u8).prop_map(MuteStep::Reply),
+        (0..12u8).prop_map(MuteStep::Answer),
+        (0..12u8).prop_map(MuteStep::Release),
+        (0..8u8).prop_map(MuteStep::Mute),
+        (0..3000u64).prop_map(MuteStep::Tick),
+    ];
+    proptest::collection::vec(step, 1..60)
+}
+
+/// Who owns agent `n`: one of two client sessions, or the Claude adapter.
+fn owner_of(n: u8) -> (Principal, SessionId) {
+    match n % 3 {
+        0 => (UID, SessionId(1)),
+        1 => (UID, SessionId(2)),
+        _ => (claude_adapter(), SessionId(100)),
+    }
+}
+
+proptest! {
+    /// However the sessions behave and the muted set moves, an agent of a
+    /// muted session holds no slot and is never heard, a question parked for
+    /// one is handed back to its tool by the next tick, and no slot stays
+    /// free while an agent that may take it waits.
+    #[test]
+    fn a_muted_session_is_never_on_the_deck_and_never_heard(steps in mute_steps()) {
+        let mut sim = Sim::new();
+        let mut ids: BTreeMap<u8, AgentId> = BTreeMap::new();
+        let mut sessions: BTreeMap<AgentId, SessionId> = BTreeMap::new();
+        for step in &steps {
+            // The step spoke for an agent whose session is muted.
+            let mut quiet = false;
+            match step {
+                MuteStep::Register(n) => {
+                    if !ids.contains_key(n) {
+                        let (principal, session) = owner_of(*n);
+                        let mut r = register(&format!("a{n}"), Some(&format!("k:{n}")));
+                        if principal == claude_adapter() {
+                            r.kind = Kind::Claude;
+                            r.caps.answer = AnswerCap::Hold;
+                            r.caps.order = OrderCap::Inject;
+                        }
+                        let res = sim.api(principal, session, Request::AgentRegister(r)).unwrap();
+                        let id = AgentId(res["agent"].as_str().unwrap().into());
+                        sessions.insert(id.clone(), session);
+                        ids.insert(*n, id);
+                    }
+                }
+                MuteStep::State(n, state) => {
+                    if let Some(id) = ids.get(n) {
+                        let (principal, session) = owner_of(*n);
+                        quiet = sim.store.muted.contains(&session);
+                        let _ = sim.api(principal, session, update(id, *state));
+                    }
+                }
+                MuteStep::Ask(n) => {
+                    if let Some(id) = ids.get(n) {
+                        let (principal, session) = owner_of(*n);
+                        quiet = sim.store.muted.contains(&session);
+                        if principal == claude_adapter() {
+                            let mut c = card_set(id, CardKind::Q, Deliver::Hold, &["Allow", "Deny"]);
+                            c.origin.kind = OriginKind::Permission;
+                            let _ = sim.hold(c, HoldId(u64::from(*n)));
+                            sim.drain();
+                        } else {
+                            let c = card_set(id, CardKind::Q, Deliver::Poll, &["a", "b"]);
+                            let _ = sim.api(principal, session, Request::CardSet(c));
+                        }
+                    }
+                }
+                MuteStep::Reply(n) => {
+                    if let Some(id) = ids.get(n) {
+                        let (principal, session) = owner_of(*n);
+                        quiet = sim.store.muted.contains(&session);
+                        let said = ReplySet {
+                            agent: id.clone(),
+                            text: "Done here.".into(),
+                            speak: true,
+                            announce: None,
+                            lane: None,
+                            message: None,
+                        };
+                        let _ = sim.api(principal, session, Request::Reply(said));
+                    }
+                }
+                MuteStep::Answer(n) => {
+                    if let Some(slot) = ids.get(n).and_then(|id| sim.slot_of(id)) {
+                        let card = sim.store.snapshot().agents[&ids[n]]
+                            .card
+                            .as_ref()
+                            .map_or(1, |c| c.id.0);
+                        sim.apply(Command::Device(DeviceLine::Answer { slot: slot.0, card, choice: 0 }));
+                    }
+                }
+                MuteStep::Release(n) => {
+                    if let Some(id) = ids.remove(n) {
+                        let (principal, session) = owner_of(*n);
+                        let _ = sim.api(principal, session, Request::AgentRelease { agent: id, reason: None });
+                    }
+                }
+                MuteStep::Mute(bits) => {
+                    let muted: Vec<SessionId> = [SessionId(1), SessionId(2), SessionId(100)]
+                        .into_iter()
+                        .enumerate()
+                        .filter(|(i, _)| bits & (1 << i) != 0)
+                        .map(|(_, session)| session)
+                        .collect();
+                    sim.mute(&muted);
+                }
+                MuteStep::Tick(ms) => sim.advance(Duration::from_millis(*ms)),
+            }
+            let store = &sim.store;
+            let snapshot = store.snapshot();
+            for agent in snapshot.agents.values() {
+                let muted = store.muted.contains(&agent.owner.session);
+                prop_assert!(!(muted && agent.slot.is_some()), "{} is muted and on the deck after {step:?}", agent.id.0);
+                let parked = agent.card.as_ref().is_some_and(|c| {
+                    c.deliver == Deliver::Hold
+                        && matches!(c.status, CardStatus::Pending | CardStatus::Snoozed)
+                });
+                if matches!(step, MuteStep::Tick(_)) {
+                    prop_assert!(!(muted && parked), "{} is muted and its question still parked after a tick", agent.id.0);
+                }
+            }
+            for effect in &sim.effects {
+                if let Effect::Audio(AudioCmd::Say { agent: Some(id), .. }) = effect {
+                    prop_assert!(!store.muted.contains(&sessions[id]), "{} is muted and was heard after {step:?}", id.0);
+                }
+            }
+            if quiet {
+                prop_assert!(
+                    !sim.effects.iter().any(|e| matches!(e, Effect::Audio(_))),
+                    "a muted agent's {step:?} made a sound: {:?}",
+                    sim.effects
+                );
+            }
+            let free = (1..=snapshot.device.capacity()).any(|s| snapshot.agent_at(Slot(s)).is_none());
+            let waiting = snapshot
+                .agents
+                .values()
+                .any(|a| a.slot.is_none() && !store.muted.contains(&a.owner.session));
+            prop_assert!(!(free && waiting), "a slot stays free while an agent waits, after {step:?}");
         }
     }
 }

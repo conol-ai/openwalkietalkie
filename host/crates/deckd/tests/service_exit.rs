@@ -53,10 +53,11 @@ impl Daemon {
         // Port 0: an ephemeral port, so a gate run never collides with the
         // operator's own daemon on 47201. No roster seeding and no Codex
         // daemon client: this daemon must not reach the operator's own live
-        // sessions.
+        // sessions. No usage probe either: it would read the operator's
+        // Claude login from the Keychain and ask api.anthropic.com.
         std::fs::write(
             dir.join("config.toml"),
-            "[api]\nport = 0\n\n[log]\nlevel = \"warn\"\n\n[liveness]\nseed = false\n\n[codex]\ndaemon = false\n",
+            "[api]\nport = 0\n\n[log]\nlevel = \"warn\"\n\n[liveness]\nseed = false\n\n[codex]\ndaemon = false\n\n[usage]\nproviders = []\n",
         )
         .expect("the daemon's config");
         let child = Command::new(deckd())

@@ -12,6 +12,7 @@ mod devapi;
 #[cfg(test)]
 mod language_tests;
 mod device;
+mod device_status;
 mod effect;
 pub mod guard;
 mod ids;
@@ -40,6 +41,7 @@ pub use cards::{AnswerInput, MAX_CHOICES};
 pub use redact::{redact, redact_event, redact_for};
 pub use roster::{project_label, DISCONNECTED};
 pub use store::{DELIVERY_BUDGET, FINALIZE_BUDGET, PTT_CAP, USAGE_REFRESH_GRACE};
+pub use device_status::{LINK_DROPS_KEPT, LINK_DROP_WINDOW};
 
 pub use agent::{
     ChatImage, ChatMessage, ChatRole, MessageMeta,
@@ -48,8 +50,9 @@ pub use agent::{
     Terminal, TitleSource, TranscribeCap,
 };
 pub use command::{
-    AgentRegister, AgentUpdate, CardClear, CardSet, Command, DeviceSet, FocusReport, LinkEvent,
-    OpAnswer, OpOrder, ReplySet, Request, UtterancePhase, VoiceIn, VoiceListen, VoiceSay,
+    AgentRegister, AgentUpdate, CardClear, CardSet, Command, DeviceReport, DeviceSet, FocusReport,
+    LinkEvent, OpAnswer, OpOrder, ReplySet, Request, UtterancePhase, VoiceIn, VoiceListen,
+    VoiceSay,
 };
 pub use device::{Control, DeviceOp, FaceId, Key, Lane, SyncReason};
 pub use effect::{
@@ -58,11 +61,11 @@ pub use effect::{
 pub use ids::{AgentId, BadSessionId, CardId, HoldId, SessionId, Slot};
 pub use principal::{AdapterKind, Principal, Scope};
 pub use snapshot::{
-    DeviceState, ErrCounts, Focus, FocusSource, Link, Listener, Permission, Permissions, PttInfo,
-    Route, ServiceState, SessionState, Settings, Snapshot, Speaking, SttInfo, TtsInfo, Usage,
-    VoiceState, VoiceTransport,
+    DeviceState, ErrCounts, Focus, FocusSource, LastLinked, Link, LinkDrop, Listener, MacroLayout,
+    Permission, Permissions, PttInfo, Route, ServiceState, SessionState, Settings, Snapshot,
+    Speaking, SttInfo, Transport, TtsInfo, Usage, VoiceState, VoiceTransport,
 };
-pub use store::{project, MacroLayout, Persisted, PinConfig, SlotMemory, Store, StoreConfig};
+pub use store::{project, Persisted, PinConfig, SlotMemory, Store, StoreConfig};
 pub use time::Ts;
 
 /// `hello.rx` the device must report.

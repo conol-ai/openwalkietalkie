@@ -1,0 +1,59 @@
+{
+  "checks": [
+    {
+      "name": "data dir",
+      "ok": true,
+      "detail": "/Users/you/Library/Application Support/OpenWalkieTalkie"
+    },
+    {
+      "name": "config.toml",
+      "ok": true,
+      "detail": "valid"
+    },
+    {
+      "name": "state.json",
+      "ok": true,
+      "detail": "valid"
+    },
+    {
+      "name": "service",
+      "ok": true,
+      "detail": "running"
+    },
+    {
+      "name": "socket",
+      "ok": true,
+      "detail": "/Users/you/Library/Application Support/OpenWalkieTalkie/deckd.sock answers session.ping"
+    },
+    {
+      "name": "tcp",
+      "ok": true,
+      "detail": "127.0.0.1:47201/v1/info answers and is ours"
+    },
+    {
+      "name": "tokens.toml",
+      "ok": true,
+      "detail": "mode 0600, 1 token(s)"
+    },
+    {
+      "name": "device",
+      "ok": true,
+      "detail": "OpenWalkieTalkie present (1 interfaces: bluetooth)"
+    },
+    {
+      "name": "launchd deckd",
+      "ok": true,
+      "detail": "running, pid 812"
+    },
+    {
+      "name": "legacy launch agent",
+      "ok": true,
+      "detail": "none"
+    },
+    {
+      "name": "codex daemon",
+      "ok": true,
+      "detail": "connected"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "available": false,
+  "bootloader_warning": false,
+  "device": null,
+  "error": null,
+  "message": "Connect your deck with USB to update its firmware.",
+  "phase": "idle",
+  "progress": 0,
+  "release": null
+}

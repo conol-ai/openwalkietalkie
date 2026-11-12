@@ -167,6 +167,18 @@ impl Scope {
     pub fn grants_raw(scopes: &[Scope]) -> bool {
         scopes.contains(&Scope::ObserveRaw)
     }
+
+    /// `scopes` as redaction sees a holder that wants no content: every
+    /// scope that grants it (`observe:content`, `operate`, `admin`,
+    /// `observe:raw`) left out, the rest kept. For redacting only: what the
+    /// holder may call is still its scopes' to say.
+    pub fn without_content(scopes: &[Scope]) -> Vec<Scope> {
+        scopes
+            .iter()
+            .copied()
+            .filter(|scope| !Scope::grants_content(&[*scope]))
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -210,5 +222,31 @@ mod tests {
         assert!(!Scope::grants_content(&[Scope::Observe, Scope::Agent]));
         assert!(Scope::grants_raw(&[Scope::ObserveRaw]));
         assert!(!Scope::grants_raw(&[Scope::Admin]));
+    }
+
+    /// A holder that wants no content is redacted as one that has none,
+    /// whatever it holds, raw hook payloads included; everything else it
+    /// holds is kept in its order.
+    #[test]
+    fn without_content_leaves_out_every_scope_that_grants_it() {
+        let seen = Scope::without_content(&Scope::ALL);
+        assert!(!Scope::grants_content(&seen));
+        assert!(!Scope::grants_raw(&seen));
+        assert_eq!(
+            seen,
+            [
+                Scope::Observe,
+                Scope::HooksIngest,
+                Scope::Agent,
+                Scope::Voice,
+                Scope::Device
+            ]
+        );
+        let app = [Scope::Voice, Scope::Device, Scope::Admin];
+        assert_eq!(
+            Scope::without_content(&app),
+            [Scope::Voice, Scope::Device]
+        );
+        assert!(Scope::without_content(&[]).is_empty());
     }
 }

@@ -1,5 +1,5 @@
 //! The one `Snapshot` (§4.13) and its parts.
-use crate::{Agent, AgentId, FaceEntry, SetKey, Ts, UsageItem};
+use crate::{Agent, AgentId, FaceEntry, MacroKey, SetKey, Ts, UsageItem};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -151,6 +151,35 @@ pub struct ErrCounts {
     pub unknown: u32,
 }
 
+/// How the deck is linked to this computer: the bus the hid thread opened
+/// it on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum Transport {
+    Usb,
+    Bluetooth,
+}
+
+/// The deck as it was the last time it was linked, kept in `state.json`:
+/// while the deck is away, even across a restart, the service can still say
+/// when it was last seen and what it ran.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct LastLinked {
+    /// When the link went live while it is up; when it ended after that.
+    pub at: Ts,
+    pub fw: Option<String>,
+    pub board: Option<String>,
+    pub transport: Option<Transport>,
+}
+
+/// A link drop: when it happened, and the hid thread's reason (`read`,
+/// `write`, `write_stall`, `removed`, `misses`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct LinkDrop {
+    pub at: Ts,
+    pub why: String,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct DeviceState {
     #[serde(default)]
@@ -175,6 +204,30 @@ pub struct DeviceState {
     /// deck has said, and a deck that predates the field holds 8.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sessions: Option<u8>,
+    // What the deck says about itself while it is linked. All of it is
+    // optional on the wire, so a reader built before these fields and a
+    // service that predates them both keep working.
+    /// The bus the linked deck is on; `None` while unlinked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transport: Option<Transport>,
+    /// Charge in percent as the deck last reported it. `None` while
+    /// unlinked and while the deck does not know, which it sends as 0.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub battery: Option<u8>,
+    /// Whether the cell is taking current, as the deck last reported it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub charging: Option<bool>,
+    /// The board as the deck names it (`Rev A`, `Rev B`, `LilyGo`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub board: Option<String>,
+    /// The last deck that went live here (the linked one, while it is
+    /// linked); kept across restarts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last: Option<LastLinked>,
+    /// The link's recent drops, oldest first: at most 60, none more than an
+    /// hour older than the newest. Not kept across a restart.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub drops: Vec<LinkDrop>,
 }
 
 impl DeviceState {
@@ -401,6 +454,20 @@ pub struct ServiceState {
     pub listener: Option<Listener>,
 }
 
+/// A Macropad face's keys as the host holds them, set by `device.macro.set`
+/// or by the deck's own editor, and kept in `state.json` so a restart brings
+/// them back. The deck reports single edits and never a whole set, so this
+/// is the only full copy there is.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct MacroLayout {
+    /// The tag the deck shows in the Macropad's header, as last given;
+    /// `None` when none was.
+    pub src: Option<String>,
+    /// Slot 0 first, at most nine. An empty label is an empty slot, which
+    /// keeps the keys after it in their places.
+    pub keys: Vec<MacroKey>,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Snapshot {
     /// Increases only when something observable changed.
@@ -414,6 +481,11 @@ pub struct Snapshot {
     pub settings: Settings,
     /// The last adopted strip (restored on `boot:1`).
     pub faces: Vec<FaceEntry>,
+    /// Each Macropad face's keys, by face id; `device.macros` says every
+    /// change. Absent while no face has any, so a reader that predates the
+    /// field meets nothing new.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub macros: BTreeMap<u8, MacroLayout>,
     pub service: ServiceState,
 }
 
@@ -478,5 +550,91 @@ mod tests {
         assert_eq!(json["device"]["link"], "offline");
         assert_eq!(json["device"]["session"], "absent");
         assert_eq!(json["voice"]["route"], "none");
+    }
+
+    /// An app built before the deck's status fields reads a new service's
+    /// snapshot, and a new app reads an old service's: the fields are absent
+    /// until there is something to say, and absent reads as unknown.
+    #[test]
+    fn a_device_state_without_the_status_fields_reads_and_an_unknown_one_writes_none_of_them() {
+        let unknown = serde_json::to_value(DeviceState::default()).unwrap();
+        for key in ["transport", "battery", "charging", "board", "last", "drops"] {
+            assert!(unknown.get(key).is_none(), "{key} written while unknown");
+        }
+        let old = r#"{"language_supported":true,"link":"connected","session":"live","sid":7,
+            "fw":"0.13.0","boot":false,"face":1,"faces":[],"host_online":true,
+            "settings":{"speaker":6,"mic":6,"announce":1,"chime":1,"autojump":0,
+                        "brightness":5,"idlehome":120,"demo":1},
+            "pace_ms":8,"outbox_depth":0,"err_counts":{"range":0,"parse":0,"size":0,"unknown":0}}"#;
+        let device: DeviceState = serde_json::from_str(old).unwrap();
+        assert_eq!(device.link, Link::Connected);
+        assert_eq!(
+            (device.transport, device.battery, device.charging, device.board.as_deref()),
+            (None, None, None, None)
+        );
+        assert_eq!((device.last.as_ref(), device.drops.len()), (None, 0));
+        let known = DeviceState {
+            transport: Some(Transport::Usb),
+            battery: Some(85),
+            charging: Some(false),
+            board: Some("Rev B".into()),
+            last: Some(LastLinked {
+                at: Ts(1_789_760_523_000),
+                fw: Some("0.13.0".into()),
+                board: Some("Rev B".into()),
+                transport: Some(Transport::Bluetooth),
+            }),
+            drops: vec![LinkDrop { at: Ts(1_789_760_523_000), why: "read".into() }],
+            ..DeviceState::default()
+        };
+        let json = serde_json::to_value(&known).unwrap();
+        assert_eq!(json["transport"], "usb");
+        assert_eq!(json["last"]["transport"], "bluetooth");
+        assert_eq!(json["last"]["at"], "2026-09-18T19:42:03.000Z");
+        assert_eq!(json["drops"][0]["why"], "read");
+        assert_eq!(serde_json::from_value::<DeviceState>(json).unwrap(), known);
+    }
+
+    /// The keys travel by face id, and only once there are some: a service
+    /// that predates them and one that holds none send the same snapshot,
+    /// and both read as no keys at all.
+    #[test]
+    fn a_snapshot_carries_the_macro_layouts_by_face_id_and_nothing_while_there_are_none() {
+        let none = serde_json::to_value(Snapshot::default()).unwrap();
+        assert!(
+            none.get("macros").is_none(),
+            "nothing to say, nothing written"
+        );
+        let old: Snapshot = serde_json::from_value(none).unwrap();
+        assert!(old.macros.is_empty());
+        let mut snapshot = Snapshot::default();
+        snapshot.macros.insert(
+            3,
+            MacroLayout {
+                src: Some("deck.toml".into()),
+                keys: vec![
+                    MacroKey {
+                        label: String::new(),
+                        binding: None,
+                        keys: None,
+                    },
+                    MacroKey {
+                        label: "build".into(),
+                        binding: Some(crate::Binding::Left),
+                        keys: Some("cmd+b".into()),
+                    },
+                ],
+            },
+        );
+        let json = serde_json::to_value(&snapshot).unwrap();
+        // The empty first slot stays, so `build` keeps its place.
+        assert_eq!(
+            json["macros"],
+            serde_json::json!({"3": {"src": "deck.toml", "keys": [
+                {"label": "", "binding": null},
+                {"label": "build", "binding": "left", "keys": "cmd+b"}
+            ]}})
+        );
+        assert_eq!(serde_json::from_value::<Snapshot>(json).unwrap(), snapshot);
     }
 }

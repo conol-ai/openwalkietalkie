@@ -3,8 +3,16 @@
 //! Every icon the window draws is an SVG embedded here: Solar's Linear set
 //! (480 Design, CC BY 4.0) on a 24 px grid with 1.5 px strokes, the same
 //! subset Zeron ships, plus a handful drawn in the same style where Solar
-//! has nothing (the dial, the plug, Bluetooth) and the agents' own marks.
-//! `assets/NOTICE` carries the attributions.
+//! has nothing (the deck and its two states, the dial, the plug, Bluetooth,
+//! the Mac's modifier marks, the timer plate's ring) and the agents' own
+//! marks. `assets/NOTICE` carries the attributions.
+//!
+//! The deck's picture is raster: one PNG per case colour and appearance,
+//! with and without a lit PTT key, drawn from the design's own deck at three
+//! times the size the window shows it, with the shadow in a clear margin.
+//! [`DEVICE`] serves them, the splash first run puts on the deck's screen
+//! and the brand tile, under `device/`. An image path needs its `/`: gpui
+//! fetches a path without one as a URL.
 //!
 //! gpui-component draws some furniture of its own — a notification's
 //! leading glyph, a checkbox tick, a close button — and asks for those by
@@ -15,8 +23,7 @@
 //! missing asset on every frame.
 //!
 //! The fonts are **not** here: they are registered with the text system
-//! straight from the binary (`style::register_fonts`), so this source stays
-//! icons only.
+//! straight from the binary (`style::register_fonts`).
 use gpui::{AssetSource, Result, SharedString};
 use std::borrow::Cow;
 
@@ -32,6 +39,15 @@ macro_rules! embed {
         &[$((
             concat!("icons/", $name, ".svg"),
             include_str!(concat!("../assets/icons/", $name, ".svg")),
+        )),+]
+    };
+}
+
+macro_rules! raster {
+    ($($name:literal),+ $(,)?) => {
+        &[$((
+            concat!("device/", $name, ".png"),
+            include_bytes!(concat!("../assets/device/", $name, ".png")).as_slice(),
         )),+]
     };
 }
@@ -63,6 +79,9 @@ pub const ICONS: &[(&str, &str)] = embed![
     "cohdl-mark",
     "conol-mark",
     "danger-triangle",
+    "deck-care",
+    "deck-off",
+    "deck",
     "dial",
     "document",
     "eye-closed",
@@ -82,11 +101,17 @@ pub const ICONS: &[(&str, &str)] = embed![
     "magic-stick-3",
     "magnifer",
     "microphone",
+    "mod-command",
+    "mod-control",
+    "mod-option",
+    "mod-shift",
     "monitor",
     "moon",
     "more-horizontal",
     "openai-mark",
     "pin",
+    "plate-ring-half",
+    "plate-ring",
     "plug",
     "plus",
     "refresh",
@@ -106,6 +131,22 @@ pub const ICONS: &[(&str, &str)] = embed![
     "volume-loud",
     "widget",
     "wifi-off",
+];
+
+/// The deck's picture in each case colour and appearance (`-ptt`: the PTT
+/// key lit, for first run), the splash on its screen in first run, and the
+/// brand tile, by the path `img(..)` asks for.
+pub const DEVICE: &[(&str, &[u8])] = raster![
+    "brand-tile",
+    "deck-black-dark-ptt",
+    "deck-black-dark",
+    "deck-black-light-ptt",
+    "deck-black-light",
+    "deck-splash",
+    "deck-white-dark-ptt",
+    "deck-white-dark",
+    "deck-white-light-ptt",
+    "deck-white-light",
 ];
 
 /// gpui-component's names for the glyphs it draws itself, and the icon in
@@ -134,12 +175,22 @@ impl Assets {
         }
         path.starts_with("icons/").then_some(FALLBACK)
     }
+
+    /// The picture at `path` under `device/`, if this app carries it. An
+    /// unknown one is absent, not a placeholder: a missing picture is a bug
+    /// to see, where a missing glyph is a dot.
+    pub fn picture(path: &str) -> Option<&'static [u8]> {
+        DEVICE
+            .iter()
+            .find(|(name, _)| *name == path)
+            .map(|(_, png)| *png)
+    }
 }
 
 impl AssetSource for Assets {
     fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
-        if path == "branding/radio.png" {
-            return Ok(Some(Cow::Borrowed(include_bytes!("../../../../assets/branding/radio.png"))));
+        if let Some(png) = Assets::picture(path) {
+            return Ok(Some(Cow::Borrowed(png)));
         }
         Ok(Assets::get(path).map(|svg| Cow::Borrowed(svg.as_bytes())))
     }
@@ -149,6 +200,7 @@ impl AssetSource for Assets {
             .iter()
             .map(|(name, _)| *name)
             .chain(ALIASES.iter().map(|(alias, _)| *alias))
+            .chain(DEVICE.iter().map(|(name, _)| *name))
             .filter(|name| name.starts_with(path))
             .map(SharedString::from)
             .collect())
@@ -158,7 +210,7 @@ impl AssetSource for Assets {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ui::ic;
+    use crate::ui::{ic, Mod, BRAND_TILE};
     use gpui_component::{IconName, IconNamed};
 
     #[test]
@@ -214,9 +266,11 @@ mod tests {
 
     #[test]
     fn every_icon_the_window_names_is_embedded() {
+        let modifiers = Mod::ALL.map(Mod::icon);
         for path in [
             ic::ADD,
             ic::ARCHIVE,
+            ic::ARROW_RIGHT,
             ic::ARROW_UP,
             ic::BELL,
             ic::BLUETOOTH,
@@ -232,8 +286,12 @@ mod tests {
             ic::CLOCK,
             ic::CLOSE,
             ic::CLOSE_CIRCLE,
+            ic::CONOL,
             ic::COPY,
             ic::DANGER,
+            ic::DECK,
+            ic::DECK_CARE,
+            ic::DECK_OFF,
             ic::DIAL,
             ic::DOCUMENT,
             ic::EXTERNAL,
@@ -250,11 +308,18 @@ mod tests {
             ic::LOGOUT,
             ic::MAGIC,
             ic::MICROPHONE,
+            ic::MOD_COMMAND,
+            ic::MOD_CONTROL,
+            ic::MOD_OPTION,
+            ic::MOD_SHIFT,
             ic::MONITOR,
             ic::OPENAI,
             ic::PIN,
+            ic::PLATE_RING,
+            ic::PLATE_RING_HALF,
             ic::PLAY,
             ic::PLUG,
+            ic::PLUS,
             ic::REFRESH,
             ic::RETURN,
             ic::SERVER,
@@ -267,13 +332,95 @@ mod tests {
             ic::TRASH,
             ic::TUNING,
             ic::VOLUME,
+            ic::WIDGET,
             ic::WIFI_OFF,
-        ] {
+        ]
+        .into_iter()
+        .chain(modifiers)
+        {
+            let svg = Assets::get(path);
             assert!(
-                ICONS.iter().any(|(p, _)| *p == path),
+                svg.is_some() && svg != Some(FALLBACK),
                 "{path} is drawn but not embedded"
             );
         }
+    }
+
+    #[test]
+    fn the_drawn_marks_are_the_designs_strokes_on_their_own_grids() {
+        // The deck glyph and its two states share one drawing on the 24 px
+        // grid at 1.5; the states only add to it.
+        let deck = Assets::get(ic::DECK).unwrap();
+        assert!(deck.contains(r#"viewBox="0 0 24 24""#) && deck.contains(r#"stroke-width="1.5""#));
+        let body = deck.trim_end_matches("</svg>");
+        for state in [ic::DECK_OFF, ic::DECK_CARE] {
+            let svg = Assets::get(state).unwrap();
+            assert!(svg.starts_with(body) && svg.len() > deck.len(), "{state}");
+        }
+        // The modifier marks are on a 16 px grid at 1.4.
+        for m in Mod::ALL {
+            let svg = Assets::get(m.icon()).unwrap();
+            assert!(
+                svg.contains(r#"viewBox="0 0 16 16""#) && svg.contains(r#"stroke-width="1.4""#),
+                "{m:?}"
+            );
+        }
+        // The timer's ring and its lit half are one 54 px ring, 6 thick.
+        for ring in [ic::PLATE_RING, ic::PLATE_RING_HALF] {
+            let svg = Assets::get(ring).unwrap();
+            assert!(
+                svg.contains(r#"viewBox="0 0 54 54""#) && svg.contains(r#"stroke-width="6""#),
+                "{ring}"
+            );
+        }
+    }
+
+    /// A PNG's width and height, from its header.
+    fn png_size(png: &[u8]) -> (u32, u32) {
+        assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n", "not a PNG");
+        assert_eq!(&png[12..16], b"IHDR");
+        let word = |at: usize| u32::from_be_bytes(png[at..at + 4].try_into().unwrap());
+        (word(16), word(20))
+    }
+
+    #[test]
+    fn every_picture_loads_at_three_times_the_size_it_is_drawn() {
+        let assets = Assets;
+        for (path, _) in DEVICE {
+            assert!(
+                path.starts_with("device/") && path.ends_with(".png"),
+                "{path}"
+            );
+            let png = assets.load(path).unwrap().expect(path);
+            let size = png_size(&png);
+            match *path {
+                // The 22 px tile beside the app's name.
+                BRAND_TILE => assert_eq!(size, (66, 66)),
+                // The splash on a 149 px screen, under twice its size.
+                "device/deck-splash.png" => assert_eq!(size, (480, 480)),
+                // The 196×315 deck in a 256×375 box with room for its shadow.
+                _ => assert_eq!(size, (768, 1125), "{path}"),
+            }
+        }
+        // Both case colours, both appearances, with and without the lit key.
+        for case in ["white", "black"] {
+            for appearance in ["dark", "light"] {
+                for lit in ["", "-ptt"] {
+                    let path = format!("device/deck-{case}-{appearance}{lit}.png");
+                    assert!(Assets::picture(&path).is_some(), "{path}");
+                }
+            }
+        }
+        assert_eq!(DEVICE.len(), 10);
+        // A picture this app does not carry is absent, not a placeholder.
+        assert_eq!(Assets::picture("device/deck-red-dark.png"), None);
+        assert!(assets.load("device/deck-red-dark.png").unwrap().is_none());
+        assert!(assets.load("deck-white-dark.png").unwrap().is_none());
+        assert_eq!(
+            assets.list("device/").unwrap().len(),
+            DEVICE.len(),
+            "every picture is listed"
+        );
     }
 
     #[test]

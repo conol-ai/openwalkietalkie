@@ -138,9 +138,10 @@ pub fn is_managed_binary(path: &str, exe: &Path) -> bool {
 
 /// Quote a word for a shell command line, exactly as openmicrokbd does
 /// (`agent_integrations.rs:847-867`), so [`decode_shell_word`] can read it
-/// back. This is the one place deckd needs shell quoting: `statusLine` has
-/// no `args` and runs in a shell (C23), and a Codex `command` is a single
-/// shell-interpreted string (C12).
+/// back. This is the quoting deckd writes into a file: `statusLine` has no
+/// `args` and runs in a shell (C23), and a Codex `command` is a single
+/// shell-interpreted string (C12). A command printed for the owner to paste
+/// is quoted by [`super::command_line`] instead.
 pub fn shell_word(word: &str) -> String {
     let bare = !word.is_empty()
         && word

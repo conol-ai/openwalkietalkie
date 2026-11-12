@@ -111,6 +111,13 @@ impl Daemon {
         let (hid, ops, lines, debug) = HidHandle::detached();
         let mut core = Core::new(store, State::default(), hid, paths.clone());
         core.set_config(config.clone());
+        // `--no-device` all the way through, whatever a test calls: no
+        // firmware check opens a deck or fetches the release manifest, no
+        // model download starts, and `care.checks` enumerates no HID.
+        core.firmware = deckd::firmware::Updater::offline();
+        core.stt_install = deckd::download::Installer::offline();
+        core.tts_install = deckd::download::Installer::offline();
+        core.no_device = true;
         let (handle, join) = core.spawn();
         let config = Arc::new(arc_swap::ArcSwap::from(config));
         let api = Arc::new(Api {
@@ -147,6 +154,12 @@ impl Daemon {
     /// `⌨ ` prefix and the `Focus terminal` row are actually applied.
     pub fn device_input(&self, line: deck_model::DeviceLine) {
         self._lines.send(FromHid::Line(line)).unwrap();
+    }
+
+    /// Anything else the hid thread would say: a link event, what the deck
+    /// reported about itself, why a link ended.
+    pub fn hid(&self, message: FromHid) {
+        self._lines.send(message).unwrap();
     }
 
     pub fn device_ops(&self) -> Vec<deck_model::DeviceOp> {

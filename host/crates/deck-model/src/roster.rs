@@ -1,7 +1,8 @@
 //! Agents (§4.6, §4.15): register/update/release, leases with the orphan
 //! grace, `claim`, session closes, the slot policy (pins → memory by key →
 //! memory by `(kind, cwd)` → hint → lowest free → evict the longest-idle
-//! `idle` agent without a pending card), focus and replies.
+//! `idle` agent without a pending card; never an agent of a muted session),
+//! focus and replies.
 use crate::api::{ApiError, ApiResult};
 use crate::store::AgentAux;
 use crate::{
@@ -10,6 +11,7 @@ use crate::{
     Owner, Principal, Reply, ReplySet, SessionId, SessionInfo, Slot, Source, StatePatch, Store,
     TimerKey, TitleSource,
 };
+use std::collections::BTreeSet;
 use std::time::Duration;
 
 /// The title an orphaned agent shows on the deck.
@@ -453,6 +455,7 @@ impl Store {
         if !self.is_orphaned(&id) && !lease_over {
             return Err(ApiError::conflict(&self.snapshot.agents[&id].owner));
         }
+        let was_muted = self.is_muted(&self.snapshot.agents[&id]);
         if let Some(agent) = self.snapshot.agents.get_mut(&id) {
             agent.owner.principal = principal;
             agent.owner.session = session;
@@ -464,6 +467,10 @@ impl Store {
             owner.principal.clone(),
             serde_json::json!({"agent": id, "fields": {"owner": {"principal": owner.principal, "session": owner.session}}}),
         );
+        // The new owner's session can be muted where the old one was not,
+        // or the other way round: a paused app that reconnects claims the
+        // agents its last connection left, slots and all.
+        self.follow_mute(&id, was_muted);
         Ok(self.registration_result(&id))
     }
 
@@ -634,6 +641,16 @@ impl Store {
     /// client does not come through here (§7.6) — a caller that asked for
     /// two sentences and silently got one is worse off than one refused.
     pub(crate) fn say(&mut self, text: String, agent: Option<AgentId>, lane: &str) {
+        // Nothing of a muted agent is spoken. Its replies, questions and
+        // state changes still reach the snapshot and the bus; the speaker is
+        // the one place they would still reach the owner who paused it.
+        let muted = agent
+            .as_ref()
+            .and_then(|id| self.snapshot.agents.get(id))
+            .is_some_and(|a| self.is_muted(a));
+        if muted {
+            return;
+        }
         let text = crate::sanitize::clip_chars(
             &crate::sanitize::clean(&text),
             self.cfg.announce_max_chars,
@@ -739,7 +756,10 @@ impl Store {
     /// owning connection, application and account/workspace. Launchers stay.
     fn promote_companion_chat(&mut self, id: &AgentId) {
         let agent = &self.snapshot.agents[id];
-        if agent.companion.is_none() || agent.slot.is_some() { return; }
+        // A muted chat is never promoted. Its siblings share its session, so
+        // none of them holds a slot to give it, but this path places it
+        // without asking `assign_slot` and says so itself.
+        if agent.companion.is_none() || agent.slot.is_some() || self.is_muted(agent) { return; }
         self.assign_slot(id, None, None);
         let agent = &self.snapshot.agents[id];
         if agent.slot.is_some() { return; }
@@ -909,12 +929,14 @@ impl Store {
             .map(|a| a.id.clone())
     }
 
-    /// Give `id` a slot by the policy; evicts when the deck is full.
+    /// Give `id` a slot by the policy; evicts when the deck is full. Never
+    /// to an agent of a muted session, whoever asks: its registration, its
+    /// question, its state change or a freed slot.
     pub(crate) fn assign_slot(&mut self, id: &AgentId, pin: Option<Slot>, hint: Option<Slot>) {
         let Some(agent) = self.snapshot.agents.get(id) else {
             return;
         };
-        if agent.slot.is_some() {
+        if agent.slot.is_some() || self.is_muted(agent) {
             return;
         }
         let key = agent.session.key.clone();
@@ -1043,13 +1065,15 @@ impl Store {
 
     /// Rankings changed (a state, a question, a companion profile): while a
     /// session off the deck strictly outranks one on it, it takes that slot.
+    /// A muted agent is never one of the waiting, however it ranks: the one
+    /// picked here is placed directly, past `assign_slot`.
     pub(crate) fn rebalance_slots(&mut self) {
         for _ in 0..Slot::MAX {
             let waiting = self
                 .snapshot
                 .agents
                 .values()
-                .filter(|a| a.slot.is_none())
+                .filter(|a| a.slot.is_none() && !self.is_muted(a))
                 .map(|a| (Self::slot_rank(a), a.state != AgentState::Idle, self.aux.get(&a.id).and_then(|x| x.last_active), a.id.clone()))
                 .max_by_key(|(rank, busy, active, id)| (*rank, *busy, *active, std::cmp::Reverse(id.clone())))
                 .map(|(_, _, _, id)| id);
@@ -1061,14 +1085,15 @@ impl Store {
     }
 
     /// A slot freed: the highest-ranked unslotted agent takes it, the most
-    /// recently active among equals.
+    /// recently active among equals. Never a muted one: `assign_slot` would
+    /// refuse it, and the loop below would stop with the slot still free.
     pub(crate) fn fill_free_slots(&mut self) {
         while self.lowest_free().is_some() {
             let Some(next) = self
                 .snapshot
                 .agents
                 .values()
-                .filter(|a| a.slot.is_none())
+                .filter(|a| a.slot.is_none() && !self.is_muted(a))
                 .map(|a| {
                     (
                         Self::slot_rank(a),
@@ -1087,6 +1112,102 @@ impl Store {
             if self.snapshot.agents[&next].slot.is_none() {
                 return;
             }
+        }
+    }
+
+    // ----- muted sessions (paused sources) -----------------------------------
+
+    /// Whether `agent`'s session is muted (`Command::Mute`): the agent is
+    /// kept, served and published, but it is not on the deck and is never
+    /// heard.
+    pub(crate) fn is_muted(&self, agent: &Agent) -> bool {
+        self.muted.contains(&agent.owner.session)
+    }
+
+    /// `Command::Mute`: the core's new set of muted sessions, the sources
+    /// the owner paused. An agent whose session joins the set gives its
+    /// parked question back to its tool and leaves the deck, and the slots
+    /// it frees go to whoever is waiting. One whose session leaves the set
+    /// is given a slot by the policy, the way a newcomer is. Nothing else
+    /// about either changes: both stay registered, their owners' calls keep
+    /// working, and the snapshot and the bus carry them.
+    pub(crate) fn on_mute(&mut self, sessions: BTreeSet<SessionId>) {
+        if sessions == self.muted {
+            return;
+        }
+        let before = std::mem::replace(&mut self.muted, sessions);
+        let hiding: Vec<AgentId> = self
+            .snapshot
+            .agents
+            .values()
+            .filter(|a| self.is_muted(a) && !before.contains(&a.owner.session))
+            .map(|a| a.id.clone())
+            .collect();
+        let mut showing: Vec<&Agent> = self
+            .snapshot
+            .agents
+            .values()
+            .filter(|a| !self.is_muted(a) && before.contains(&a.owner.session))
+            .collect();
+        // Seated as `rebalance_slots` picks the waiting: the highest-ranked
+        // first, then the busy, then the most recently active. So when the
+        // deck cannot take them all, a question or a busy session is never
+        // displaced by an idle one seated after it (`eviction_candidate`).
+        showing.sort_by_key(|a| {
+            std::cmp::Reverse((
+                Self::slot_rank(a),
+                a.state != AgentState::Idle,
+                self.aux.get(&a.id).and_then(|x| x.last_active),
+            ))
+        });
+        let showing: Vec<AgentId> = showing.into_iter().map(|a| a.id.clone()).collect();
+        self.reseat(&hiding, &showing);
+    }
+
+    /// One agent changed owner (`claim`), and maybe with it whether its
+    /// session is muted: it leaves the deck or comes back, as it would have
+    /// if its whole session had joined or left the set.
+    fn follow_mute(&mut self, id: &AgentId, was_muted: bool) {
+        let Some(muted) = self.snapshot.agents.get(id).map(|a| self.is_muted(a)) else {
+            return;
+        };
+        match (was_muted, muted) {
+            (false, true) => self.reseat(std::slice::from_ref(id), &[]),
+            (true, false) => self.reseat(&[], std::slice::from_ref(id)),
+            _ => {}
+        }
+    }
+
+    /// `hiding` agents' sessions joined the muted set and `showing` agents'
+    /// sessions left it. A hiding agent's parked question goes back to its
+    /// tool and the agent leaves the deck; the slots freed go to whoever is
+    /// waiting; then each showing agent is given a slot by the policy, the
+    /// way a newcomer is (its pin, the slot it had, a free one, else one it
+    /// outranks).
+    fn reseat(&mut self, hiding: &[AgentId], showing: &[AgentId]) {
+        // A question still parked for a showing agent (one that reached it
+        // while it was muted, which `card_set` leaves to the next tick) goes
+        // back first, before the fill below or `assign_slot` can seat that
+        // agent: a slot gives its card a new id (§6.5), and the hold parked
+        // under the old one could then be neither answered nor released.
+        for id in showing {
+            self.release_to_tool(id);
+        }
+        for id in hiding {
+            self.release_to_tool(id);
+            self.unslot(id);
+        }
+        if !hiding.is_empty() {
+            self.fill_free_slots();
+        }
+        for id in showing {
+            let pin = self
+                .snapshot
+                .agents
+                .get(id)
+                .and_then(|a| self.pin_for(a.kind, &a.name, a.session.cwd.as_deref()))
+                .and_then(|p| p.slot);
+            self.assign_slot(id, pin, None);
         }
     }
 
@@ -2246,4 +2367,497 @@ mod companion_tests {
         assert_eq!(sim.store.snapshot().agents.values().filter(|a| a.slot.is_some()).count(), 8);
     }
 
+}
+
+/// A muted session (`Command::Mute`, a source the owner paused) is kept and
+/// served, but none of its agents holds a slot, a question parked for one
+/// goes back to its tool, and nothing of it is heard.
+#[cfg(test)]
+mod mute_tests {
+    use super::*;
+    use crate::companion::{CompanionProfile, CompanionRole, CompanionSet};
+    use crate::testkit::{card_set, claude_adapter, register, Sim, UID};
+    use crate::{
+        CardKind, CardSet, CardStatus, Command, Control, HoldId, Origin, OriginKind, PinConfig,
+        Release, Request,
+    };
+
+    fn update(id: &AgentId, state: AgentState) -> Request {
+        Request::AgentUpdate(AgentUpdate {
+            agent: id.clone(),
+            state: Some(state),
+            title: None,
+            title_source: None,
+            since: None,
+            name: None,
+            meta: None,
+            task: None,
+            subagents: None,
+        })
+    }
+
+    /// A reply its owner asks to have spoken.
+    fn reply(id: &AgentId, text: &str) -> Request {
+        Request::Reply(ReplySet {
+            agent: id.clone(),
+            text: text.into(),
+            speak: true,
+            announce: None,
+            lane: None,
+            message: None,
+        })
+    }
+
+    /// A Claude hook agent of the adapter's own session 100: its questions
+    /// are parked holds.
+    fn hook_agent(sim: &mut Sim, name: &str) -> AgentId {
+        let mut r = register(name, Some(&format!("claude:{name}")));
+        r.kind = crate::Kind::Claude;
+        r.caps.answer = AnswerCap::Hold;
+        r.caps.order = OrderCap::Inject;
+        let res = sim
+            .api(claude_adapter(), SessionId(100), Request::AgentRegister(r))
+            .unwrap();
+        AgentId(res["agent"].as_str().unwrap().into())
+    }
+
+    fn permission(agent: &AgentId) -> CardSet {
+        let mut c = card_set(agent, CardKind::Q, Deliver::Hold, &["Allow", "Deny"]);
+        c.text = "Bash: psql".into();
+        c.origin = Origin {
+            kind: OriginKind::Permission,
+            tool: Some("Bash".into()),
+            request_id: None,
+            group: None,
+        };
+        c
+    }
+
+    fn audio(sim: &Sim) -> Vec<&Effect> {
+        sim.effects
+            .iter()
+            .filter(|e| matches!(e, Effect::Audio(_)))
+            .collect()
+    }
+
+    fn releases(sim: &Sim) -> Vec<&Effect> {
+        sim.effects
+            .iter()
+            .filter(|e| matches!(e, Effect::ReleaseHold { .. }))
+            .collect()
+    }
+
+    #[test]
+    fn muting_a_session_takes_its_agents_off_the_deck_and_hands_their_slots_on() {
+        let mut sim = Sim::new();
+        // Seven busy agents of session 1 and one of session 2 fill the deck…
+        let ones: Vec<AgentId> = (0..7)
+            .map(|i| sim.register(UID, SessionId(1), &format!("a{i}"), Some(&format!("k:{i}"))))
+            .collect();
+        let paused = sim.register(UID, SessionId(2), "paused", Some("k:paused"));
+        for id in &ones {
+            sim.api(UID, SessionId(1), update(id, AgentState::Working)).unwrap();
+        }
+        sim.api(UID, SessionId(2), update(&paused, AgentState::Working)).unwrap();
+        let slot = sim.slot_of(&paused).expect("on the deck");
+        // …so a ninth, idle, waits for a slot.
+        let waiting = sim.register(UID, SessionId(1), "waiting", Some("k:waiting"));
+        assert_eq!(sim.slot_of(&waiting), None);
+
+        sim.mute(&[SessionId(2)]);
+        assert_eq!(sim.slot_of(&paused), None, "off the deck");
+        assert!(sim.store.snapshot().agents.contains_key(&paused), "and still registered");
+        assert_eq!(sim.slot_of(&waiting), Some(slot), "its slot went to the one waiting");
+        assert!(sim.effects.contains(&Effect::Device(DeviceOp::Put(
+            Key::AgentGone(slot),
+            HostLine::AgentGone { slot: slot.0 }
+        ))));
+        let moves: Vec<(&str, &serde_json::Value)> = sim
+            .events
+            .iter()
+            .filter(|e| e.kind == EventKind::AgentSlot)
+            .map(|e| (e.data["agent"].as_str().unwrap_or_default(), &e.data["slot"]))
+            .collect();
+        assert_eq!(
+            moves,
+            vec![
+                (paused.0.as_str(), &serde_json::Value::Null),
+                (waiting.0.as_str(), &serde_json::json!(slot)),
+            ]
+        );
+
+        // Its owner's calls keep working, and none of them brings it back.
+        sim.api(UID, SessionId(2), update(&paused, AgentState::Question))
+            .expect("a muted session is served, never refused");
+        assert_eq!(sim.slot_of(&paused), None);
+    }
+
+    #[test]
+    fn unmuting_gives_an_agent_back_the_slot_it_had() {
+        let mut sim = Sim::new();
+        let a = sim.register(UID, SessionId(1), "a", Some("k:a"));
+        let b = sim.register(UID, SessionId(2), "b", Some("k:b"));
+        let c = sim.register(UID, SessionId(1), "c", Some("k:c"));
+        sim.mute(&[SessionId(2)]);
+        assert_eq!(sim.slot_of(&b), None);
+        assert_eq!(sim.store.snapshot().by_slot().len(), 2, "nobody was waiting for it");
+
+        sim.mute(&[]);
+        assert_eq!(sim.slot_of(&b), Some(Slot(2)), "the slot it had, from the slot memory");
+        assert!(sim.events.iter().any(|e| e.kind == EventKind::AgentSlot
+            && e.data["agent"] == b.0
+            && e.data["slot"] == 2));
+        assert_eq!(
+            (sim.slot_of(&a), sim.slot_of(&c)),
+            (Some(Slot(1)), Some(Slot(3))),
+            "nobody else moved"
+        );
+    }
+
+    /// The deck may fill up while a session is paused. Coming back, its
+    /// agent is seated the way a newcomer is: here in the place of the
+    /// longest-idle agent, the one that took its slot.
+    #[test]
+    fn an_agent_coming_back_to_a_full_deck_is_seated_as_a_newcomer_would_be() {
+        let mut sim = Sim::new();
+        let paused = sim.register(UID, SessionId(2), "paused", Some("k:paused"));
+        sim.mute(&[SessionId(2)]);
+        let ids: Vec<AgentId> = (0..8)
+            .map(|i| {
+                sim.advance(Duration::from_secs(1));
+                sim.register(UID, SessionId(1), &format!("a{i}"), Some(&format!("k:{i}")))
+            })
+            .collect();
+        assert_eq!(sim.slot_of(&ids[0]), Some(Slot(1)), "the first one took its slot");
+        assert!(ids.iter().all(|id| sim.slot_of(id).is_some()), "a full deck");
+
+        sim.mute(&[]);
+        assert_eq!(sim.slot_of(&paused), Some(Slot(1)));
+        assert_eq!(sim.slot_of(&ids[0]), None, "the longest idle made room");
+        assert!(ids[1..].iter().all(|id| sim.slot_of(id).is_some()));
+    }
+
+    /// An `[agents]` pin is the first rule of the policy, for an agent coming
+    /// back as for a newcomer: the pinned slot is taken back from whoever
+    /// sat in it, and that one moves to a free slot.
+    #[test]
+    fn a_pinned_agent_coming_back_takes_its_slot_back_from_whoever_sat_in_it() {
+        let mut sim = Sim::with(|cfg| {
+            cfg.pins.insert(
+                "other:pinned".into(),
+                PinConfig {
+                    slot: Some(Slot(3)),
+                    voice: None,
+                    name: None,
+                },
+            );
+        });
+        sim.register(UID, SessionId(1), "a", Some("k:a"));
+        let pinned = sim.register(UID, SessionId(2), "pinned", Some("k:pinned"));
+        assert_eq!(sim.slot_of(&pinned), Some(Slot(3)));
+        sim.mute(&[SessionId(2)]);
+        sim.register(UID, SessionId(1), "b", Some("k:b"));
+        let sitter = sim.register(UID, SessionId(1), "c", Some("k:c"));
+        assert_eq!(sim.slot_of(&sitter), Some(Slot(3)), "the pinned slot was free");
+
+        sim.mute(&[]);
+        assert_eq!(sim.slot_of(&pinned), Some(Slot(3)));
+        assert_eq!(sim.slot_of(&sitter), Some(Slot(4)), "moved, not dropped");
+    }
+
+    #[test]
+    fn a_question_parked_for_an_agent_goes_back_to_its_tool_when_it_is_muted() {
+        let mut sim = Sim::new();
+        let id = hook_agent(&mut sim, "web");
+        let card = sim.hold(permission(&id), HoldId(1)).unwrap();
+        sim.drain();
+        assert_eq!(sim.slot_of(&id), Some(Slot(1)));
+
+        sim.mute(&[SessionId(100)]);
+        assert_eq!(
+            releases(&sim),
+            vec![&Effect::ReleaseHold {
+                agent: id.clone(),
+                card,
+                reason: Release::Cleared,
+            }],
+            "the hook is answered, so the CLI asks in its own dialog"
+        );
+        let cleared = sim
+            .events
+            .iter()
+            .find(|e| e.kind == EventKind::CardCleared)
+            .expect("card.cleared");
+        assert_eq!(cleared.data["reason"], "muted");
+        assert_eq!(cleared.data["delivered"], false);
+        assert!(
+            sim.store.snapshot().agents[&id].card.is_none(),
+            "no `⌨` copy is kept to outlive the question"
+        );
+        assert!(
+            sim.effects.contains(&Effect::Device(DeviceOp::Control(Control::CardClear(
+                Slot(1),
+                card.0
+            )))),
+            "the question leaves the deck before its agent does"
+        );
+        assert_eq!(sim.slot_of(&id), None);
+        // The hold budget has nothing left to release.
+        sim.advance(Duration::from_secs(130));
+        assert!(releases(&sim).is_empty());
+    }
+
+    #[test]
+    fn a_muted_agents_replies_states_and_questions_make_no_sound() {
+        let mut sim = Sim::new();
+        let id = sim.register(UID, SessionId(2), "bot", None);
+        sim.mute(&[SessionId(2)]);
+        sim.api(UID, SessionId(2), reply(&id, "Tests pass. Deploy?")).unwrap();
+        assert_eq!(sim.kinds(), vec![EventKind::ReplySet], "the bus still carries it");
+        assert!(audio(&sim).is_empty(), "{:?}", sim.effects);
+        // Its announced states…
+        for state in [AgentState::Ready, AgentState::Error] {
+            sim.api(UID, SessionId(2), update(&id, state)).unwrap();
+            assert!(audio(&sim).is_empty(), "{state:?}: {:?}", sim.effects);
+        }
+        // …and its question: no chime, no announcement, no microphone
+        // warmed for an answer nobody can give on the deck.
+        sim.set_card(&id, CardKind::Q, Deliver::Poll, vec!["Yes", "No"]);
+        assert!(audio(&sim).is_empty(), "{:?}", sim.effects);
+        assert!(!sim.kinds().contains(&EventKind::VoiceUtterance));
+
+        // Back on the deck, its question warms the microphone and its
+        // replies are heard again.
+        sim.mute(&[]);
+        assert!(sim
+            .effects
+            .contains(&Effect::Audio(AudioCmd::Warm { pending: true })));
+        sim.api(UID, SessionId(2), reply(&id, "Deployed.")).unwrap();
+        assert!(sim.effects.iter().any(|e| matches!(
+            e,
+            Effect::Audio(AudioCmd::Say { text, .. }) if text == "Deployed."
+        )));
+    }
+
+    #[test]
+    fn an_agent_of_another_session_is_untouched_and_the_same_set_again_is_no_change() {
+        let mut sim = Sim::new();
+        let kept = sim.register(UID, SessionId(1), "kept", Some("k:kept"));
+        sim.set_card(&kept, CardKind::Q, Deliver::Poll, vec!["a", "b"]);
+        let paused = sim.register(UID, SessionId(2), "paused", Some("k:paused"));
+        let before = sim.store.snapshot().agents[&kept].clone();
+
+        sim.mute(&[SessionId(2)]);
+        assert_eq!(sim.slot_of(&paused), None);
+        assert_eq!(sim.store.snapshot().agents[&kept], before, "not one field of it moved");
+        assert!(
+            sim.events.iter().all(|e| e.data["agent"] != kept.0),
+            "{:?}",
+            sim.kinds()
+        );
+        sim.api(UID, SessionId(1), reply(&kept, "Done.")).unwrap();
+        assert!(
+            sim.effects
+                .iter()
+                .any(|e| matches!(e, Effect::Audio(AudioCmd::Say { .. }))),
+            "and it is still heard"
+        );
+
+        let rev = sim.store.snapshot().rev;
+        sim.mute(&[SessionId(2)]);
+        assert!(sim.events.is_empty() && sim.effects.is_empty());
+        assert_eq!(sim.store.snapshot().rev, rev);
+    }
+
+    #[test]
+    fn a_question_arriving_for_a_muted_agent_does_not_slot_it() {
+        let mut sim = Sim::new();
+        let id = sim.register(UID, SessionId(2), "bot", Some("k:bot"));
+        sim.mute(&[SessionId(2)]);
+        let card = sim.set_card(&id, CardKind::Q, Deliver::Poll, vec!["Yes", "No"]);
+        assert_eq!(sim.slot_of(&id), None, "every slot is free, and still it is not seated");
+        assert!(sim.store.snapshot().by_slot().is_empty());
+        assert!(sim.puts().is_empty(), "nothing of it reaches the deck: {:?}", sim.puts());
+        let agent = &sim.store.snapshot().agents[&id];
+        assert_eq!(
+            agent.card.as_ref().map(|c| (c.id, c.status.clone())),
+            Some((card, CardStatus::Pending)),
+            "a poll question is kept for its owner, who settles it"
+        );
+        assert_eq!(agent.state, AgentState::Question);
+        assert!(releases(&sim).is_empty());
+    }
+
+    #[test]
+    fn a_held_question_arriving_for_a_muted_agent_goes_back_to_its_tool_on_the_next_tick() {
+        let mut sim = Sim::new();
+        let id = hook_agent(&mut sim, "web");
+        sim.mute(&[SessionId(100)]);
+        let card = sim.hold(permission(&id), HoldId(1)).unwrap();
+        sim.drain();
+        assert_eq!(sim.slot_of(&id), None);
+        // Not in the step that parks it: the core parks a hold only after
+        // it has run that step's effects, so this release would find
+        // nothing parked.
+        assert!(releases(&sim).is_empty(), "{:?}", sim.effects);
+        assert!(
+            sim.effects.contains(&Effect::Timer {
+                key: TimerKey::HoldExpiry(card),
+                at: sim.t,
+            }),
+            "due at once: {:?}",
+            sim.effects
+        );
+        assert!(audio(&sim).is_empty(), "{:?}", sim.effects);
+
+        sim.advance(Duration::ZERO);
+        assert_eq!(
+            releases(&sim),
+            vec![&Effect::ReleaseHold {
+                agent: id.clone(),
+                card,
+                reason: Release::Cleared,
+            }]
+        );
+        assert!(sim.store.snapshot().agents[&id].card.is_none());
+        assert_eq!(sim.slot_of(&id), None);
+    }
+
+    #[test]
+    fn a_held_question_still_parked_when_its_agent_comes_back_is_handed_back_before_it_is_seated() {
+        let mut sim = Sim::new();
+        let id = hook_agent(&mut sim, "web");
+        sim.mute(&[SessionId(100)]);
+        let card = sim.hold(permission(&id), HoldId(1)).unwrap();
+        sim.drain();
+        // Unmuted before the core's next tick.
+        sim.mute(&[]);
+        let released = sim
+            .effects
+            .iter()
+            .position(|e| {
+                *e == Effect::ReleaseHold {
+                    agent: id.clone(),
+                    card,
+                    reason: Release::Cleared,
+                }
+            })
+            .expect("handed back");
+        let seated = sim
+            .effects
+            .iter()
+            .position(|e| matches!(e, Effect::Device(DeviceOp::Put(Key::AgentState(_), _))))
+            .expect("seated");
+        assert!(
+            released < seated,
+            "released under the id it was parked with, before a slot could renumber it"
+        );
+        assert_eq!(sim.slot_of(&id), Some(Slot(1)));
+        assert!(sim.store.snapshot().agents[&id].card.is_none());
+        sim.advance(Duration::ZERO);
+        assert!(releases(&sim).is_empty(), "nothing is left for the tick");
+    }
+
+    /// One set can mute a session and unmute another. The slots the first
+    /// frees are filled before the second's agents are seated by the policy,
+    /// so a question still parked for one of those must be handed back
+    /// before the fill, not after it.
+    #[test]
+    fn a_swap_of_muted_sessions_hands_a_parked_question_back_before_the_fill_seats_its_agent() {
+        let mut sim = Sim::new();
+        let hook = hook_agent(&mut sim, "web");
+        sim.mute(&[SessionId(100)]);
+        let card = sim.hold(permission(&hook), HoldId(1)).unwrap();
+        sim.drain();
+        let other = sim.register(UID, SessionId(2), "other", Some("k:other"));
+        assert_eq!(sim.slot_of(&other), Some(Slot(1)), "it took the hook agent's slot");
+
+        sim.mute(&[SessionId(2)]);
+        let released = sim
+            .effects
+            .iter()
+            .position(|e| {
+                *e == Effect::ReleaseHold {
+                    agent: hook.clone(),
+                    card,
+                    reason: Release::Cleared,
+                }
+            })
+            .expect("handed back");
+        let seated = sim
+            .effects
+            .iter()
+            .position(|e| matches!(e, Effect::Persist(StatePatch::Slot { key, .. }) if key == "claude:web"))
+            .expect("seated");
+        assert!(released < seated, "{:?}", sim.effects);
+        assert_eq!(sim.slot_of(&hook), Some(Slot(1)));
+        assert_eq!(sim.slot_of(&other), None);
+    }
+
+    #[test]
+    fn rebalance_never_slots_a_muted_agent() {
+        let mut sim = Sim::new();
+        let idle: Vec<AgentId> = (0..8)
+            .map(|i| {
+                sim.advance(Duration::from_secs(1));
+                sim.register(UID, SessionId(1), &format!("a{i}"), Some(&format!("k:{i}")))
+            })
+            .collect();
+        sim.mute(&[SessionId(2)]);
+        let asking = sim.register(UID, SessionId(2), "asking", Some("k:asking"));
+        assert_eq!(sim.slot_of(&asking), None, "its registration does not seat it");
+        // A question outranks every idle session on the deck…
+        sim.api(UID, SessionId(2), update(&asking, AgentState::Question)).unwrap();
+        sim.set_card(&asking, CardKind::Q, Deliver::Poll, vec!["Yes"]);
+        assert_eq!(sim.slot_of(&asking), None, "…and still it takes nobody's slot");
+        // …nor does any other ranking change seat it.
+        sim.api(UID, SessionId(1), update(&idle[0], AgentState::Working)).unwrap();
+        assert_eq!(sim.slot_of(&asking), None, "a peer going busy");
+        let profile = CompanionProfile {
+            app_id: "example".into(),
+            group_id: "me".into(),
+            group_label: "Example".into(),
+            role: CompanionRole::Session,
+        };
+        sim.api(
+            UID,
+            SessionId(1),
+            Request::CompanionSet(CompanionSet {
+                agent: idle[1].clone(),
+                profile: Some(profile),
+            }),
+        )
+        .unwrap();
+        assert_eq!(sim.slot_of(&asking), None, "a companion profile");
+        assert!(idle.iter().all(|id| sim.slot_of(id).is_some()));
+
+        // Unmuted, the same question takes the lowest-ranked slot at once.
+        sim.mute(&[]);
+        assert_eq!(sim.slot_of(&asking), Some(Slot(2)));
+        assert_eq!(sim.slot_of(&idle[1]), None, "the companion chat yields");
+    }
+
+    #[test]
+    fn a_claim_carries_an_agent_into_and_out_of_a_muted_session() {
+        let mut sim = Sim::new();
+        let id = sim.register(UID, SessionId(1), "bot", Some("k:1"));
+        sim.mute(&[SessionId(2)]);
+        // Its connection drops; a paused app reconnects as session 2 and
+        // claims it.
+        sim.apply(Command::SessionClosed(SessionId(1)));
+        assert_eq!(sim.slot_of(&id), Some(Slot(1)), "an orphan keeps its slot through the grace");
+        let res = sim
+            .api(UID, SessionId(2), Request::AgentClaim { key: "k:1".into() })
+            .unwrap();
+        assert_eq!(sim.slot_of(&id), None, "claimed into a muted session, it leaves the deck");
+        assert_eq!(res["slot"], serde_json::Value::Null, "and the claim says so");
+
+        // Claimed again from a session that is not muted, it comes back.
+        sim.apply(Command::SessionClosed(SessionId(2)));
+        let res = sim
+            .api(UID, SessionId(3), Request::AgentClaim { key: "k:1".into() })
+            .unwrap();
+        assert_eq!(res["slot"], 1);
+        assert_eq!(sim.slot_of(&id), Some(Slot(1)));
+    }
 }

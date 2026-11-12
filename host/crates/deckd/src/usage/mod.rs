@@ -20,7 +20,9 @@
 //!   (`crate::codexd`).
 //!
 //! `[usage] providers` names the providers to show; a provider that is
-//! not listed is never probed and never drawn.
+//! not listed is never probed and never drawn. Codex alone by default: the
+//! Claude bars read the Claude Code login, so they wait for the owner to
+//! switch them on (the Usage face's panel, `config.set usage.providers`).
 use std::collections::BTreeMap;
 use std::time::Instant;
 
@@ -616,21 +618,22 @@ mod tests {
             Window { label: "week".into(), percent: 100, resets_at: Some(now + 7 * 86400) }];
         let account = Some("one@example.com".into());
         let grants = vec![ResetGrant { count: 1, starts_at: None, expires_at: now + 86400 }];
+        let cfg = both();
         f.set(Provider::Claude, windows.clone(), account.clone());
-        assert!(f.render(&UsageCfg::default(), "", now).unwrap().1.iter().all(|i| i.reset_tip.is_none()));
+        assert!(f.render(&cfg, "", now).unwrap().1.iter().all(|i| i.reset_tip.is_none()));
         f.set_resets(Provider::Claude, grants.clone());
-        let items = f.render(&UsageCfg::default(), "", now).unwrap().1;
+        let items = f.render(&cfg, "", now).unwrap().1;
         assert_eq!(items[0].reset_tip, None);
         assert_eq!(items[1].reset_tip.as_deref(), Some("1 reset expires in 1d 0h"));
         f.set_partial(Provider::Claude, windows.clone(), account.clone(), now);
-        assert!(f.render(&UsageCfg::default(), "", now).unwrap().1[1].reset_tip.is_some());
+        assert!(f.render(&cfg, "", now).unwrap().1[1].reset_tip.is_some());
         f.set_resets(Provider::Claude, Vec::new());
-        assert!(f.render(&UsageCfg::default(), "", now).unwrap().1[1].reset_tip.is_none());
+        assert!(f.render(&cfg, "", now).unwrap().1[1].reset_tip.is_none());
         for identity in [Some("two@example.com".into()), None] {
             f.set(Provider::Claude, windows.clone(), account.clone());
             f.set_resets(Provider::Claude, grants.clone());
             f.set_partial(Provider::Claude, windows.clone(), identity, now);
-            assert!(f.render(&UsageCfg::default(), "", now).unwrap().1.iter().all(|i| i.reset_tip.is_none()));
+            assert!(f.render(&cfg, "", now).unwrap().1.iter().all(|i| i.reset_tip.is_none()));
         }
     }
 
@@ -666,6 +669,12 @@ mod tests {
             providers: providers.iter().map(|p| (*p).to_string()).collect(),
             ..UsageCfg::default()
         }
+    }
+
+    /// The face with the Claude bars switched on beside Codex's: they are
+    /// the owner's to opt into, so the default draws Codex alone.
+    fn both() -> UsageCfg {
+        cfg(&["claude", "codex"])
     }
 
     #[test]
@@ -785,7 +794,7 @@ mod tests {
         f.set(Provider::Claude, windows, Some("claude@example.com".into()));
         f.set(Provider::Codex, vec![Window { label:"session".into(),percent:10,resets_at:None },
             Window { label:"week".into(),percent:20,resets_at:None }], Some("codex@example.com".into()));
-        let items = f.render(&UsageCfg::default(), "usage", 1_999_996_400).unwrap().1;
+        let items = f.render(&both(), "usage", 1_999_996_400).unwrap().1;
         assert_eq!(items.len(),6);
         assert_eq!(items[2].name,"Claude Fable week");
         assert_eq!(items[2].account.as_deref(),Some("claude@example.com"));
@@ -822,7 +831,8 @@ mod tests {
         assert!(Provider::Claude.enabled(&cfg(&["claude-statusline"])));
         assert!(!Provider::Codex.enabled(&cfg(&["claude-statusline"])));
         assert!(!Provider::Claude.enabled(&cfg(&[])));
-        assert!(Provider::Claude.enabled(&UsageCfg::default()));
+        // D3: the Claude bars are opt-in, Codex's are not.
+        assert!(!Provider::Claude.enabled(&UsageCfg::default()));
         assert!(Provider::Codex.enabled(&UsageCfg::default()));
     }
 
@@ -830,7 +840,7 @@ mod tests {
     fn the_feeder_renders_providers_in_order_and_dedupes_pushes() {
         let mut f = Feeder::default();
         assert!(f.is_empty());
-        assert!(f.render(&UsageCfg::default(), "5h / 7d", 0).is_none());
+        assert!(f.render(&both(), "5h / 7d", 0).is_none());
         let now = 1_791_640_000;
         assert!(f.set(
             Provider::Codex,
@@ -848,7 +858,7 @@ mod tests {
             Provider::Codex,
             vec![Window { label: "session".into(), percent: 17, resets_at: Some(now + 3600) }], None
         ));
-        let (period, items) = f.render(&UsageCfg::default(), "5h / 7d", now).unwrap();
+        let (period, items) = f.render(&both(), "5h / 7d", now).unwrap();
         assert_eq!(period, "5h / 7d");
         assert_eq!(
             items.iter().map(|i| (i.name.as_str(), i.percent, i.reset.as_str())).collect::<Vec<_>>(),
@@ -859,19 +869,25 @@ mod tests {
             ]
         );
         assert!(items.iter().all(|i| i.tone.is_none()));
-        // A provider taken out of the config is not drawn.
+        // A provider taken out of the config is not drawn…
         let (_, only) = f.render(&cfg(&["codex"]), "", now).unwrap();
         assert_eq!(only.len(), 1);
         assert_eq!(only[0].name, "Codex session");
+        // …which is what the default does with Claude's windows, however
+        // they arrived (D3: the Claude bars are opt-in).
+        assert_eq!(
+            f.render(&UsageCfg::default(), "", now),
+            f.render(&cfg(&["codex"]), "", now)
+        );
         // An empty tag still gives the face a word.
         assert_eq!(f.render(&cfg(&["codex"]), "  ", now).unwrap().0, "usage");
         // Pushes dedupe on the rendered line, and the countdown moves it.
-        let line = f.render(&UsageCfg::default(), "5h / 7d", now).unwrap();
+        let line = f.render(&both(), "5h / 7d", now).unwrap();
         assert!(!f.already_pushed(&line));
         let t0 = Instant::now();
         f.note_pushed(line.clone(), t0);
         assert!(f.already_pushed(&line));
-        let later = f.render(&UsageCfg::default(), "5h / 7d", now + 120).unwrap();
+        let later = f.render(&both(), "5h / 7d", now + 120).unwrap();
         assert!(!f.already_pushed(&later));
         assert_eq!(later.1[0].reset, "resets now");
         // The tick re-renders once a minute, never before.
@@ -894,7 +910,7 @@ mod tests {
                 .collect(),
             None,
         );
-        let (period, items) = f.render(&UsageCfg::default(), "a period tag that is long", 0).unwrap();
+        let (period, items) = f.render(&both(), "a period tag that is long", 0).unwrap();
         assert_eq!(items.len(), ITEMS_MAX);
         assert_eq!(period.chars().count(), PERIOD_MAX);
         for item in &items {

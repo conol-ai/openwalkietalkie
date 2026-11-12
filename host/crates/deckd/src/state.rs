@@ -1,6 +1,6 @@
 //! `state.json` (design §9): daemon-written, 0600, atomic rename. Corrupt →
 //! renamed `state.json.corrupt` and started empty.
-use deck_model::{FaceEntry, MacroLayout, Settings, SlotMemory, Usage};
+use deck_model::{FaceEntry, LastLinked, MacroLayout, Settings, SlotMemory, Usage};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -26,6 +26,9 @@ pub struct State {
     pub usage: Option<Usage>,
     /// Recent daemon session ids, newest last.
     pub sids: Vec<u32>,
+    /// The deck as it was last linked (`device.last`), so a restart still
+    /// knows when it was last seen and what it ran.
+    pub last_linked: Option<LastLinked>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -99,6 +102,7 @@ impl State {
             voices: self.voices.clone(),
             usage: self.usage.clone(),
             macros: self.macros.clone(),
+            last_linked: self.last_linked.clone(),
         }
     }
 
@@ -153,6 +157,11 @@ impl State {
             StatePatch::Usage(usage) => {
                 let changed = self.usage.as_ref() != Some(usage);
                 self.usage = Some(usage.clone());
+                changed
+            }
+            StatePatch::LastLinked(last) => {
+                let changed = self.last_linked.as_ref() != Some(last);
+                self.last_linked = Some(last.clone());
                 changed
             }
         }
@@ -302,5 +311,93 @@ mod tests {
         assert_eq!(p.card_ids[&2], 4);
         assert_eq!(p.settings.mic, 2);
         assert_eq!(p.slots.len(), 1);
+    }
+
+    fn last_linked(at: u64) -> LastLinked {
+        LastLinked {
+            at: deck_model::Ts(at),
+            fw: Some("0.13.0-openwalkietalkie".into()),
+            board: Some("Rev B".into()),
+            transport: Some(deck_model::Transport::Bluetooth),
+        }
+    }
+
+    #[test]
+    fn the_last_linked_deck_folds_in_once_and_a_file_without_it_reads_as_never_linked() {
+        let d = dir("last-linked");
+        let path = d.join("state.json");
+        let mut state = State::default();
+        assert!(state.apply(&StatePatch::LastLinked(last_linked(1_789_760_523_000))));
+        assert!(!state.apply(&StatePatch::LastLinked(last_linked(1_789_760_523_000))));
+        assert!(state.apply(&StatePatch::LastLinked(last_linked(1_789_760_583_000))));
+        assert_eq!(state.persisted().last_linked, Some(last_linked(1_789_760_583_000)));
+        state.save(&path).unwrap();
+        let (back, loaded) = State::load(&path);
+        assert_eq!(loaded, Loaded::Read);
+        assert_eq!(back.last_linked, Some(last_linked(1_789_760_583_000)));
+        // A state.json written before the field: never linked, nothing lost.
+        std::fs::write(&path, r#"{"card_ids":{"1":5},"sids":[7]}"#).unwrap();
+        let (back, loaded) = State::load(&path);
+        assert_eq!(loaded, Loaded::Read);
+        assert_eq!((back.last_linked, back.card_ids[&1]), (None, 5));
+        std::fs::remove_dir_all(d).unwrap();
+    }
+
+    /// The whole path a restart takes: the store's persist effects folded
+    /// into `state.json`, the file read back, and a new store seeded from it.
+    #[test]
+    fn the_deck_a_store_remembers_is_still_remembered_after_a_restart() {
+        use deck_model::{
+            Command, DeviceLine, DeviceReport, Effect, LinkEvent, Store, StoreConfig, Transport,
+        };
+        use std::time::{Duration, Instant};
+        let d = dir("restart");
+        let path = d.join("state.json");
+        let t0 = Instant::now();
+        let mut store = Store::new(StoreConfig::new(t0, deck_model::Ts(1_789_760_523_000), 7));
+        let mut state = State::default();
+        let hello = DeviceLine::Hello {
+            v: 1,
+            fw: "0.13.0-openwalkietalkie".into(),
+            sid: 7,
+            boot: false,
+            rx: deck_model::LINE_MAX_U16,
+            agents: None,
+            lang: None,
+            lang_rev: None,
+            faces: vec![],
+        };
+        let report = Command::DeviceReport;
+        let lost = Duration::from_secs(90);
+        let steps = [
+            (Duration::ZERO, Command::Link(LinkEvent::Linked)),
+            (Duration::ZERO, report(DeviceReport::Transport(Some(Transport::Usb)))),
+            (Duration::ZERO, Command::Device(hello)),
+            (Duration::ZERO, Command::Link(LinkEvent::Live { sid: 7 })),
+            (Duration::ZERO, report(DeviceReport::Board(Some("Rev B".into())))),
+            (lost, report(DeviceReport::Dropped { why: "removed".into() })),
+            (lost, Command::Link(LinkEvent::Down)),
+        ];
+        for (after, command) in steps {
+            let (_, effects) = store.apply(command, t0 + after);
+            for effect in effects {
+                if let Effect::Persist(patch) = effect {
+                    state.apply(&patch);
+                }
+            }
+        }
+        let remembered = store.snapshot().device.last.clone().expect("a deck went live");
+        assert_eq!(remembered.at, store.ts(t0 + lost), "when it was lost");
+        assert_eq!(remembered.board.as_deref(), Some("Rev B"));
+        state.save(&path).unwrap();
+        let (back, _) = State::load(&path);
+        let mut config = StoreConfig::new(Instant::now(), deck_model::Ts(1_789_760_700_000), 8);
+        config.persisted = back.persisted();
+        let restarted = Store::new(config);
+        assert_eq!(restarted.snapshot().device.last, Some(remembered));
+        // The drops are this run's alone.
+        assert_eq!(store.snapshot().device.drops.len(), 1);
+        assert!(restarted.snapshot().device.drops.is_empty());
+        std::fs::remove_dir_all(d).unwrap();
     }
 }

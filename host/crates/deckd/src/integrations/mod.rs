@@ -282,13 +282,48 @@ pub struct CliCommand {
     pub before_writes: bool,
 }
 
+/// The command as the owner would type it, which is how a `run: …` next
+/// step, a `WARNING` and "What this runs" print it: a [`command_line`].
 impl std::fmt::Display for CliCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.program)?;
-        for arg in &self.args {
-            write!(f, " {arg}")?;
-        }
-        Ok(())
+        let mut words = vec![self.program];
+        words.extend(self.args.iter().map(String::as_str));
+        f.write_str(&command_line(words))
+    }
+}
+
+/// `words` as one line a shell splits back into exactly those words: how
+/// deckd prints a command for the owner to paste into a terminal (a `run: …`
+/// next step, the fix a doctor row names). The marketplace under
+/// `~/Library/Application Support` is the word that needs it.
+///
+/// A plain word is left as it is; any other goes in single quotes, a `'`
+/// inside written `'\''`, which every POSIX shell and zsh read back. Plain
+/// is ASCII letters and digits and `/._-+,:@%`: the set the app quotes its
+/// own commands by, without `=`, because zsh, the macOS login shell,
+/// expands a word that starts with one.
+///
+/// Not [`markers::shell_word`]: that is the quoting deckd writes into a
+/// third-party file and reads back, and installed hooks hold it byte for
+/// byte.
+pub fn command_line<S: AsRef<str>>(words: impl IntoIterator<Item = S>) -> String {
+    words
+        .into_iter()
+        .map(|word| pasted(word.as_ref()))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// One word of a [`command_line`].
+fn pasted(word: &str) -> String {
+    let plain = !word.is_empty()
+        && word
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "/._-+,:@%".contains(c));
+    if plain {
+        word.to_string()
+    } else {
+        format!("'{}'", word.replace('\'', r"'\''"))
     }
 }
 
@@ -363,6 +398,11 @@ pub struct Env {
     pub hold_s: u32,
     /// `[hooks.claude] tool_titles`: install the `PostToolUse` hook at all.
     pub tool_titles: bool,
+    /// `[sources] claude_channels`: whether the Claude plugin carries the
+    /// Claude Channels helper. `None` (the key left out) keeps what the
+    /// installed plugin has (`claude::channels_on`), so a new install has
+    /// no helper.
+    pub channels: Option<bool>,
     /// The home the target paths default to (`HOME`, or a temp one in tests).
     pub home: PathBuf,
     /// `CLAUDE_CONFIG_DIR`, when set.
@@ -450,9 +490,17 @@ impl Env {
             channel_exe,
             data: paths.data.clone(),
             tokens: paths.tokens.clone(),
-            port: bound_port(&paths.port, config.api.port)?,
+            // With the TCP door off (`[api] tcp = false`) there is no bound
+            // port to wait for, and none to name: every hook installed
+            // reaches the daemon over its socket.
+            port: if config.api.tcp {
+                bound_port(&paths.port, config.api.port)?
+            } else {
+                config.api.port
+            },
             hold_s: config.hooks.claude.hold_s,
             tool_titles: config.hooks.claude.tool_titles,
+            channels: config.sources.claude_channels,
             claude_config_dir: nonempty_env_path("CLAUDE_CONFIG_DIR")?,
             codex_home: nonempty_env_path("CODEX_HOME")?,
             home,
@@ -499,7 +547,7 @@ impl Env {
 
 /// `$NAME` as an absolute path; an empty value is "unset" and a relative one
 /// is a hard error rather than a surprise write under the cwd.
-fn nonempty_env_path(name: &str) -> Result<Option<PathBuf>, String> {
+pub(crate) fn nonempty_env_path(name: &str) -> Result<Option<PathBuf>, String> {
     env_path(name, std::env::var_os(name).as_deref())
 }
 
@@ -519,7 +567,8 @@ fn env_path(name: &str, value: Option<&std::ffi::OsStr>) -> Result<Option<PathBu
     }
 }
 
-fn home_dir() -> Result<PathBuf, String> {
+/// This process's `HOME`, which every target path defaults under.
+pub(crate) fn home_dir() -> Result<PathBuf, String> {
     if let Some(home) = std::env::var_os("HOME").filter(|h| !h.is_empty()) {
         return Ok(PathBuf::from(home));
     }
@@ -666,8 +715,9 @@ const CLI_COMMAND_TIMEOUT: Duration = Duration::from_secs(90);
 /// Run one of the plan's CLI commands.
 ///
 /// `Ok(Some(line))` is a success worth a note; `Ok(None)` means this
-/// environment may not run CLIs (`run_clis` off) or the binary is not on
-/// `PATH`, so the caller prints the command as a next step instead;
+/// environment may not run CLIs (`run_clis` off) or [`find_cli`] found the
+/// binary neither on `PATH` nor where its installer puts it, so the caller
+/// prints the command as a next step instead;
 /// `Err(why)` is a real refusal. The command's `--json` result line, when
 /// there is one, decides: `outcome: "ok"` is success, and a `failureCode` or
 /// message naming one of the command's `tolerated` fragments is "already
@@ -677,10 +727,10 @@ pub fn run_cli(env: &Env, command: &CliCommand) -> Result<Option<String>, String
     if !env.run_clis {
         return Ok(None);
     }
-    let Some(binary) = which(command.program) else {
+    let Some(binary) = find_cli(command.program) else {
         return Ok(None);
     };
-    let mut process = std::process::Command::new(&binary);
+    let mut process = cli_command(&binary);
     process
         .args(&command.args)
         .stdin(std::process::Stdio::null())
@@ -931,14 +981,14 @@ pub fn status(env: &Env, only: Option<Target>) -> Vec<Report> {
 const DETECT_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// `claude --version` / `codex --version`, when [`Env::probe_clis`] allows
-/// it. A CLI that is not on `PATH`, does not answer, or takes too long is
-/// simply not detected — it is never an error.
+/// it. A CLI that [`find_cli`] does not find, that does not answer, or that
+/// takes too long is simply not detected — it is never an error.
 pub fn detect_cli(env: &Env, binary: &str) -> Option<Detected> {
     if !env.probe_clis {
         return None;
     }
-    let path = which(binary)?;
-    let mut child = std::process::Command::new(&path)
+    let path = find_cli(binary)?;
+    let mut child = cli_command(&path)
         .arg("--version")
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
@@ -1041,6 +1091,16 @@ fn api_call(
     let config = Config::load(&paths.config).map_err(|e| internal(&e.to_string()))?;
     let mut env = Env::detect(&paths, &config).map_err(|e| conflict(&e))?;
     env.probe_clis = params.detect;
+    // A unit-test build starts no CLI from here (O16). The API tests call
+    // `integrations.status` with `{}`, which asks for the probes: `claude
+    // --version`, `codex --version` and a `codex app-server` for its
+    // `hooks/list`, each the operator's own program on the operator's own
+    // login, and nothing in this crate can keep those off the network.
+    // `status` then answers from the files alone, and its `limits` say so.
+    if cfg!(test) {
+        env.probe_clis = false;
+        env.run_clis = false;
+    }
     match method {
         "status" => Ok(serde_json::json!({
             "targets": status(&env, target),
@@ -1081,21 +1141,103 @@ fn api_call(
 
 /// The first `PATH` entry holding an executable called `binary`.
 pub fn which(binary: &str) -> Option<PathBuf> {
-    let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path)
+    which_in(binary, std::env::var_os("PATH").as_deref())
+}
+
+/// [`which`] over a `PATH` value the caller names.
+fn which_in(binary: &str, path: Option<&std::ffi::OsStr>) -> Option<PathBuf> {
+    std::env::split_paths(path?)
         .map(|dir| dir.join(binary))
-        .find(|candidate| {
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                std::fs::metadata(candidate)
-                    .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
-            }
-            #[cfg(not(unix))]
-            {
-                candidate.is_file()
-            }
-        })
+        .find(|candidate| is_executable(candidate))
+}
+
+/// A regular file this process may run.
+fn is_executable(path: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+    }
+    #[cfg(not(unix))]
+    {
+        path.is_file()
+    }
+}
+
+/// Where Claude Code's and Codex's own installers put the binary, for a
+/// process whose `PATH` does not reach it (B4). A LaunchAgent runs with
+/// launchd's `/usr/bin:/bin:/usr/sbin:/sbin`, and neither installer writes
+/// there: the native installers use `~/.local/bin`, Claude Code's older
+/// local install `~/.claude/local`, and Homebrew `/opt/homebrew/bin` (Apple
+/// silicon) or `/usr/local/bin` (Intel). `~` is this process's `HOME`.
+pub fn cli_dirs(home: Option<&Path>) -> Vec<PathBuf> {
+    let mut dirs = Vec::with_capacity(4);
+    if let Some(home) = home {
+        dirs.push(home.join(".local/bin"));
+        dirs.push(home.join(".claude/local"));
+    }
+    dirs.extend(["/opt/homebrew/bin", "/usr/local/bin"].map(PathBuf::from));
+    dirs
+}
+
+/// The `claude` or `codex` the installer runs: the first on `PATH`, else
+/// the first of [`cli_dirs`] that holds one. Only when neither has it does
+/// an install print the CLI's command as a next step.
+pub fn find_cli(binary: &str) -> Option<PathBuf> {
+    let home = home_dir().ok();
+    find_cli_in(
+        binary,
+        std::env::var_os("PATH").as_deref(),
+        &cli_dirs(home.as_deref()),
+    )
+}
+
+/// [`find_cli`] over a `PATH` value and a list of directories the caller
+/// names, so a test can give it a fake home and nothing of this Mac's.
+fn find_cli_in(binary: &str, path: Option<&std::ffi::OsStr>, dirs: &[PathBuf]) -> Option<PathBuf> {
+    which_in(binary, path).or_else(|| {
+        dirs.iter()
+            .map(|dir| dir.join(binary))
+            .find(|candidate| is_executable(candidate))
+    })
+}
+
+/// The process for a CLI [`find_cli`] returned. One found off this
+/// process's `PATH` runs with [`cli_dirs`] after that `PATH`: an
+/// npm-installed `claude` or `codex` is a `#!/usr/bin/env node` script, and
+/// its `node` sits in one of those directories, not in launchd's four.
+pub fn cli_command(program: &Path) -> std::process::Command {
+    let mut command = std::process::Command::new(program);
+    let inherited = std::env::var_os("PATH");
+    if !on_path(program, inherited.as_deref()) {
+        let home = home_dir().ok();
+        if let Some(path) = extended_path(inherited.as_deref(), &cli_dirs(home.as_deref())) {
+            command.env("PATH", path);
+        }
+    }
+    command
+}
+
+/// Whether `program` is in one of `path`'s directories.
+fn on_path(program: &Path, path: Option<&std::ffi::OsStr>) -> bool {
+    let (Some(dir), Some(path)) = (program.parent(), path) else {
+        return false;
+    };
+    std::env::split_paths(path).any(|entry| entry == dir)
+}
+
+/// `path` with each of `dirs` it lacks appended, in order. `None` when the
+/// result cannot be a `PATH` (a directory name holding a `:`).
+fn extended_path(path: Option<&std::ffi::OsStr>, dirs: &[PathBuf]) -> Option<std::ffi::OsString> {
+    let mut entries: Vec<PathBuf> = path
+        .map(|path| std::env::split_paths(path).collect())
+        .unwrap_or_default();
+    for dir in dirs {
+        if !entries.contains(dir) {
+            entries.push(dir.clone());
+        }
+    }
+    std::env::join_paths(entries).ok()
 }
 
 /// Pretty JSON with a trailing newline — the shape every JSON target is
@@ -1179,6 +1321,8 @@ pub fn test_env(dir: &testdir::TestDir) -> Env {
         port: 47201,
         hold_s: 120,
         tool_titles: false,
+        // A new install: no Claude Channels helper unless a test asks.
+        channels: None,
         home: dir.sub("home"),
         claude_config_dir: Some(dir.sub("claude")),
         codex_home: Some(dir.sub("codex")),
@@ -1213,6 +1357,35 @@ fn write_exe(path: &Path) {
     }
 }
 
+/// The words `shell` splits `line` into, asked of the shell itself: its
+/// `printf` prints each argument it is given on a line of its own. The
+/// environment is emptied and zsh runs with `-f`, so no startup file is
+/// read; nothing but the builtin runs.
+#[cfg(all(test, unix))]
+fn words_read_by(shell: &str, line: &str) -> Vec<String> {
+    let mut command = std::process::Command::new(shell);
+    if shell.ends_with("zsh") {
+        command.arg("-f");
+    }
+    let out = command
+        .arg("-c")
+        .arg(format!("printf '%s\\n' {line}"))
+        .env_clear()
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap_or_else(|e| panic!("cannot run {shell}: {e}"));
+    assert!(
+        out.status.success(),
+        "{shell} could not read {line}: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8(out.stdout)
+        .expect("printf echoes UTF-8 back")
+        .lines()
+        .map(str::to_string)
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1241,6 +1414,45 @@ mod tests {
         std::fs::write(&port_file, "").unwrap();
         assert!(bound_port(&port_file, 0).is_err());
         assert_eq!(bound_port(&port_file, 47201).unwrap(), 47201);
+    }
+
+    /// D3: with the TCP door switched off no port is ever bound, so a
+    /// daemon on `[api] port = 0` installs as readily as one on 47201:
+    /// every hook it writes reaches it over the socket.
+    #[test]
+    fn an_installer_without_a_tcp_door_waits_for_no_port() {
+        let dir = TestDir::new("env-tcp-off");
+        let paths = Paths::from_data_dir(
+            dir.path().to_path_buf(),
+            dir.path().join("logs"),
+            dir.path().join("caches"),
+        );
+        let mut config = Config::default();
+        config.api.port = 0;
+        let error = Env::with_exe(fake_exe(&dir), &paths, &config).unwrap_err();
+        assert!(error.contains("has not bound a port"), "{error}");
+        config.api.tcp = false;
+        let env = Env::with_exe(fake_exe(&dir), &paths, &config).unwrap();
+        assert_eq!(env.port, 0);
+    }
+
+    /// D4: `integrations install|repair` over the CLI or the API take the
+    /// Claude Channels switch from the config as the file has it, unset
+    /// included; what unset means is `claude::channels_on`'s to say.
+    #[test]
+    fn the_installer_takes_the_claude_channels_switch_from_the_config() {
+        let dir = TestDir::new("env-channels");
+        let paths = Paths::from_data_dir(
+            dir.path().to_path_buf(),
+            dir.path().join("logs"),
+            dir.path().join("caches"),
+        );
+        let mut config = Config::default();
+        for switch in [None, Some(true), Some(false)] {
+            config.sources.claude_channels = switch;
+            let env = Env::with_exe(fake_exe(&dir), &paths, &config).unwrap();
+            assert_eq!(env.channels, switch);
+        }
     }
 
     use crate::integrations::testdir::TestDir;
@@ -1434,5 +1646,181 @@ mod tests {
         assert_eq!(reloaded.get(Target::Codex).unwrap()["trust"][0], "k");
         std::fs::write(&path, b"{not json").unwrap();
         assert!(Receipts::load(&path).get(Target::Codex).is_none());
+    }
+
+    /// B4: a LaunchAgent's `PATH` is launchd's four system directories, and
+    /// no installer of `claude` or `codex` writes there. Off `PATH` the
+    /// installer looks where they do write, under the process's `HOME` —
+    /// a fake one here, so nothing of this Mac's is consulted.
+    #[test]
+    fn a_cli_off_path_is_found_where_its_installer_put_it() {
+        let dir = TestDir::new("find-cli");
+        let home = dir.sub("home");
+        let elsewhere = dir.sub("usr-bin");
+        let path = std::env::join_paths([&elsewhere]).unwrap();
+        let dirs = cli_dirs(Some(&home));
+        assert_eq!(
+            dirs,
+            [
+                home.join(".local/bin"),
+                home.join(".claude/local"),
+                PathBuf::from("/opt/homebrew/bin"),
+                PathBuf::from("/usr/local/bin"),
+            ]
+        );
+        assert_eq!(
+            cli_dirs(None),
+            [
+                PathBuf::from("/opt/homebrew/bin"),
+                PathBuf::from("/usr/local/bin")
+            ],
+            "no home, only the system's two"
+        );
+        // The fake home's two: the system's are this Mac's own.
+        let homes = &dirs[..2];
+        assert_eq!(find_cli_in("claude", Some(path.as_os_str()), homes), None);
+        // Claude Code's older local install…
+        let local = home.join(".claude/local/claude");
+        write_exe(&local);
+        assert_eq!(find_cli_in("claude", Some(path.as_os_str()), homes), Some(local));
+        // …gives way to the native installer's, which is looked in first,
+        // and so does a process with no `PATH` at all.
+        let native = home.join(".local/bin/claude");
+        write_exe(&native);
+        assert_eq!(find_cli_in("claude", Some(path.as_os_str()), homes), Some(native.clone()));
+        assert_eq!(find_cli_in("claude", None, homes), Some(native));
+        // A file that may not be run is not a CLI.
+        std::fs::write(home.join(".local/bin/codex"), b"#!/bin/sh\n").unwrap();
+        assert_eq!(find_cli_in("codex", Some(path.as_os_str()), homes), None);
+        // Whatever `PATH` holds comes first.
+        let on_path = elsewhere.join("claude");
+        write_exe(&on_path);
+        assert_eq!(find_cli_in("claude", Some(path.as_os_str()), homes), Some(on_path));
+    }
+
+    /// A CLI found off `PATH` runs with the installers' directories after
+    /// the `PATH` it inherited, each once, so an npm-installed script finds
+    /// the `node` beside it; one found on `PATH` is left as it was.
+    #[test]
+    fn a_cli_found_off_path_gets_the_installers_directories_on_its_own() {
+        let path = std::ffi::OsString::from("/usr/bin:/bin");
+        let dirs = [
+            PathBuf::from("/h/.local/bin"),
+            PathBuf::from("/usr/bin"),
+            PathBuf::from("/opt/homebrew/bin"),
+        ];
+        assert_eq!(
+            extended_path(Some(path.as_os_str()), &dirs).unwrap(),
+            "/usr/bin:/bin:/h/.local/bin:/opt/homebrew/bin"
+        );
+        assert_eq!(extended_path(None, &dirs[..1]).unwrap(), "/h/.local/bin");
+        assert!(on_path(Path::new("/usr/bin/claude"), Some(path.as_os_str())));
+        assert!(!on_path(Path::new("/h/.local/bin/claude"), Some(path.as_os_str())));
+        assert!(!on_path(Path::new("/usr/bin/claude"), None));
+    }
+
+    /// D7: a command printed for the owner to paste (a `run: …` next step,
+    /// when no `claude` was found to run it) quotes exactly the words a
+    /// shell would split or expand. The marketplace under `Application
+    /// Support` is the word that made the unquoted lines fail when pasted.
+    #[test]
+    fn a_printed_command_quotes_only_the_words_a_shell_would_change() {
+        let add = CliCommand {
+            program: "claude",
+            args: [
+                "plugin",
+                "marketplace",
+                "add",
+                "/Users/owner/Library/Application Support/OpenWalkieTalkie/claude-marketplace",
+                "--scope",
+                "user",
+                "--json",
+            ]
+            .map(String::from)
+            .to_vec(),
+            tolerated: Vec::new(),
+            before_writes: false,
+        };
+        assert_eq!(
+            add.to_string(),
+            "claude plugin marketplace add \
+             '/Users/owner/Library/Application Support/OpenWalkieTalkie/claude-marketplace' \
+             --scope user --json"
+        );
+        // A single quote ends the quoting, is escaped, and quoting resumes.
+        assert_eq!(
+            command_line(["/tmp/Owner's deck/deckd", "hook", "claude"]),
+            r"'/tmp/Owner'\''s deck/deckd' hook claude"
+        );
+        assert_eq!(command_line(["it's"]), r"'it'\''s'");
+        // A plain word is left exactly as it is.
+        let plain = [
+            "claude",
+            "plugin",
+            "install",
+            "openwalkietalkie@openwalkietalkie",
+            "--scope",
+            "user",
+            "--json",
+            "/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd",
+            "gui/501",
+            "0.13.0+rev.b",
+            "a,b",
+            "50%",
+            "host:47201",
+        ];
+        assert_eq!(command_line(plain), plain.join(" "));
+        // Anything else is quoted whole, the empty word included.
+        for (word, quoted) in [
+            ("", "''"),
+            ("=claude", "'=claude'"),
+            ("--key=value", "'--key=value'"),
+            ("~", "'~'"),
+            ("$HOME", "'$HOME'"),
+            ("über", "'über'"),
+            ("a\tb", "'a\tb'"),
+        ] {
+            assert_eq!(command_line([word]), quoted, "{word:?}");
+        }
+    }
+
+    /// The same quoting, read back by the shells themselves: `sh`, and bash
+    /// and zsh (the macOS login shell) where this machine has them, split a
+    /// printed line into the very words it was made from, whatever they
+    /// hold.
+    #[cfg(unix)]
+    #[test]
+    fn a_shell_reads_a_printed_command_back_as_its_words() {
+        let words = [
+            "claude",
+            "/Users/owner/Library/Application Support/OpenWalkieTalkie/claude-marketplace",
+            "/tmp/Owner's deck/deckd",
+            "''",
+            "openwalkietalkie@openwalkietalkie",
+            "--scope",
+            "",
+            "=claude",
+            "a=b",
+            "~",
+            "$HOME",
+            "*",
+            "{a,b}",
+            "#not a comment",
+            "!bang",
+            "(parens)",
+            "back\\slash",
+            "\"double\"",
+            "tab\there",
+            "über",
+        ];
+        let line = command_line(words);
+        let shells: Vec<&str> = ["/bin/sh", "/bin/bash", "/bin/zsh"]
+            .into_iter()
+            .filter(|shell| Path::new(shell).exists())
+            .collect();
+        assert!(shells.contains(&"/bin/sh"), "{shells:?}");
+        for shell in shells {
+            assert_eq!(words_read_by(shell, &line), words, "{shell} read {line}");
+        }
     }
 }

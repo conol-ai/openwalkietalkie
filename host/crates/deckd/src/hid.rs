@@ -1,5 +1,6 @@
 //! The `deckd-hid` thread (design §6.2): hidapi read at ≤2 ms, the
-//! `DeviceView`, the outbox with its 8 ms pacer and the framer on channel 5.
+//! `DeviceView`, the outbox with its 8 ms pacer and the framer on channel 5,
+//! and the deck's board and charge asked on channel 2 (`device::status`).
 //! Non-exclusive open so the bench tools (`tools/flash-usb.py`, the
 //! diagnostics channel) can talk to the deck beside the daemon.
 //!
@@ -9,11 +10,14 @@
 //! the hidapi loop.
 use crate::device::outbox::Outbox;
 use crate::device::session::{Action, Input, Session};
+use crate::device::status::StatusPoll;
 use crate::device::view::DeviceView;
 use crate::device::writer::{Writer, Written, CLOSE_BUDGET};
 pub use crate::metrics::Metric;
 use crossbeam_channel::{Receiver, Sender};
-use deck_model::{Control, DeviceLine, DeviceOp, HostLine, Key, LinkEvent, SessionState};
+use deck_model::{
+    Control, DeviceLine, DeviceOp, DeviceReport, HostLine, Key, LinkEvent, SessionState, Transport,
+};
 use deck_proto::{Assembler, ErrWhy, REPORT_ID, REPORT_LEN};
 use hidapi::{HidApi, HidDevice};
 use std::collections::HashMap;
@@ -41,6 +45,10 @@ const DRAIN_MAX: usize = 64;
 pub enum FromHid {
     Line(DeviceLine),
     Link(LinkEvent),
+    /// What the deck said about itself on channel 2, the bus it was opened
+    /// on (each after the link's `Linked`), and why a link is ending (just
+    /// before its `Down`).
+    Report(DeviceReport),
     Metric(Metric),
 }
 
@@ -118,6 +126,10 @@ pub struct HidConfig {
     /// instance opened is the USB one: channel-7 reports in and out,
     /// beside the deck lines. `None` without a voice engine.
     pub audio: Option<crate::ble::UsbPort>,
+    /// How often a live deck is asked its charge on channel 2
+    /// (`device::status`); `None` asks it nothing there at all
+    /// (`[device] status_poll_s = 0`).
+    pub status_every: Option<Duration>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -238,6 +250,13 @@ pub fn pick(found: &[Instance]) -> Option<&Instance> {
         .or_else(|| found.first())
 }
 
+/// The bus of every instance of the deck's vendor collection HID lists
+/// now, in hidapi's order (`deckd probe`). It enumerates on the probe
+/// thread and opens nothing.
+pub fn instance_buses() -> Result<Vec<hidapi::BusType>, HidError> {
+    probe_mut(|api| instances(api).map(|found| found.into_iter().map(|i| i.bus).collect()))?
+}
+
 /// Open the deck's vendor collection, non-exclusively.
 pub fn open_device(api: &mut HidApi) -> Result<HidDevice, HidError> {
     let found = instances(api)?;
@@ -306,9 +325,21 @@ pub struct Link {
     out: Vec<FromHid>,
     /// The voice link's cable port (`HidConfig::audio`).
     audio: Option<crate::ble::UsbPort>,
-    /// The write in flight is a voice report: it is outside the outbox's
-    /// pace and its barrier, so `after_write` leaves those alone.
-    voice_in_flight: bool,
+    /// The deck's board and charge, asked on channel 2 (`device::status`).
+    status: StatusPoll,
+    /// Whose report the write in flight carries.
+    carrying: Carrying,
+}
+
+/// Whose report a write carries. Only the outbox's are paced and make up a
+/// barrier: a voice frame and a channel-2 request ride beside the deck
+/// lines, so `after_write` leaves the pace and the barrier alone for them.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum Carrying {
+    #[default]
+    Line,
+    Voice,
+    Status,
 }
 
 /// A `hid_write` longer than this counts as slow.
@@ -373,7 +404,8 @@ impl Link {
             },
             out: Vec::new(),
             audio: cfg.audio.clone(),
-            voice_in_flight: false,
+            status: StatusPoll::new(cfg.status_every),
+            carrying: Carrying::Line,
         }
     }
 
@@ -452,7 +484,22 @@ impl Link {
         self.drop_handle = false;
         self.assembler.clear();
         self.outbox.clear_link(now);
+        self.status.start(now);
         self.session_step(Input::LinkUp, now);
+    }
+
+    /// The device `link_up` reported was opened on `bus`: the core learns
+    /// the transport after the `Linked` (a report about a deck that is not
+    /// linked is one the store ignores). hidapi names USB and anything
+    /// whose transport starts "Bluetooth"; any other bus is no transport.
+    pub fn opened(&mut self, bus: hidapi::BusType) {
+        let transport = match bus {
+            hidapi::BusType::Usb => Some(Transport::Usb),
+            hidapi::BusType::Bluetooth => Some(Transport::Bluetooth),
+            _ => None,
+        };
+        self.out
+            .push(FromHid::Report(DeviceReport::Transport(transport)));
     }
 
     /// Read/write error or removal: the handle is gone.
@@ -461,16 +508,18 @@ impl Link {
             return;
         }
         tracing::warn!(why, "device link down");
-        self.dropped(now);
+        self.dropped(now, why);
         self.session_step(Input::LinkDown, now);
     }
 
-    /// Bookkeeping shared by every way the link ends.
-    fn dropped(&mut self, now: Instant) {
+    /// Bookkeeping shared by every way the link ends; the core hears `why`
+    /// just before the `Down` that follows.
+    fn dropped(&mut self, now: Instant, why: &str) {
         self.view.set_language_supported(false);
         self.linked = false;
         self.stats.link_drops += 1;
-        self.voice_in_flight = false;
+        self.carrying = Carrying::Line;
+        self.status.stop();
         if let Some(port) = self.audio.as_mut() {
             port.detach(None);
         }
@@ -497,6 +546,10 @@ impl Link {
                     .push(FromHid::Link(LinkEvent::PaceBackoff { pace_ms }));
             }
         }
+        // Last, so it lands just before the `Down`, which records it.
+        let why = why.to_string();
+        self.out
+            .push(FromHid::Report(DeviceReport::Dropped { why }));
     }
 
     fn session_step(&mut self, input: Input, now: Instant) {
@@ -518,7 +571,7 @@ impl Link {
                 Action::Reopen => {
                     tracing::warn!("six hello misses: dropping the handle to re-enumerate");
                     self.stats.reopens += 1;
-                    self.dropped(now);
+                    self.dropped(now, "misses");
                     self.drop_handle = true;
                 }
                 Action::Report(state) => {
@@ -568,7 +621,11 @@ impl Link {
                     }
                 }
             }
-            Some(2) => self.stats.ch2_reports += 1,
+            Some(crate::device::status::CHANNEL) => {
+                self.stats.ch2_reports += 1;
+                let said = self.status.on_report(report, now);
+                self.out.extend(said.into_iter().map(FromHid::Report));
+            }
             Some(4) => self.stats.ch4_reports += 1,
             Some(crate::ble::codec::CHANNEL) => {
                 self.stats.voice_reports += 1;
@@ -651,13 +708,14 @@ impl Link {
         }
     }
 
-    /// Periodic work: the hello timers, and the cable port's LISTEN
-    /// deadline.
+    /// Periodic work: the hello timers, the channel-2 request's timeout,
+    /// and the cable port's LISTEN deadline.
     pub fn tick(&mut self, now: Instant) {
         if !self.linked {
             return;
         }
         self.session_step(Input::Tick, now);
+        self.status.tick(now);
         if let Some(port) = self.audio.as_mut() {
             port.tick(now);
         }
@@ -671,6 +729,16 @@ impl Link {
             return None;
         }
         self.audio.as_mut().and_then(|port| port.next_report(now))
+    }
+
+    /// The channel-2 request that is due, if any: only while the session is
+    /// live, so never before the deck has answered a hello, during a
+    /// barrier, or while it misses them.
+    fn next_status_report(&mut self, now: Instant) -> Option<[u8; REPORT_LEN]> {
+        if !self.linked || self.session.state() != SessionState::Live {
+            return None;
+        }
+        self.status.next_request(now)
     }
 
     /// The next report to write, if the pacer allows one.
@@ -770,8 +838,9 @@ impl Link {
 
     /// Hand the writer its next report while it is idle: a voice report
     /// first (the cable's microphone and speaker keep a beat the deck lines
-    /// do not), else the outbox's next due report. `Some` is the reason the
-    /// link must go down.
+    /// do not), else the outbox's next due report, else a channel-2 request
+    /// that is due — the deck's own lines never wait for one. `Some` is the
+    /// reason the link must go down.
     pub fn pump_writer(
         &mut self,
         writer: &mut crate::device::writer::Writer,
@@ -780,12 +849,15 @@ impl Link {
         if !writer.idle() {
             return None;
         }
-        let (report, voice) = match self.next_voice_report(now) {
-            Some(report) => (report, true),
-            None => (self.next_report(now)?, false),
+        let (report, carrying) = if let Some(report) = self.next_voice_report(now) {
+            (report, Carrying::Voice)
+        } else if let Some(report) = self.next_report(now) {
+            (report, Carrying::Line)
+        } else {
+            (self.next_status_report(now)?, Carrying::Status)
         };
         if writer.write(report, now) {
-            self.voice_in_flight = voice;
+            self.carrying = carrying;
             self.note_handed(&report, now);
             None
         } else {
@@ -796,9 +868,10 @@ impl Link {
 
     /// After a successful write: the wire half of the answer→clear budget
     /// closes here, and a finished barrier makes the session live. A voice
-    /// report was none of the outbox's: its pace and barrier stand.
+    /// report or a channel-2 request was none of the outbox's: its pace and
+    /// barrier stand.
     pub fn after_write(&mut self, now: Instant) {
-        if std::mem::take(&mut self.voice_in_flight) {
+        if std::mem::take(&mut self.carrying) != Carrying::Line {
             return;
         }
         if let Some(at) = self.wire_pending.take() {
@@ -846,6 +919,7 @@ impl Link {
     pub fn metric(&mut self, now: Instant) -> Metric {
         let depth = self.outbox.depths(now);
         let flood = self.outbox.flood_state();
+        let status = self.status.counts();
         Metric {
             session: self.session.state(),
             pace_ms: self.outbox.pace_at(now).as_millis() as u16,
@@ -863,6 +937,10 @@ impl Link {
             flood_sent: flood.sent,
             flood_remaining: flood.remaining,
             write_avg_us: self.write_total_us.checked_div(self.writes).unwrap_or(0) as u32,
+            status_polls: status.polls,
+            status_replies: status.replies,
+            status_timeouts: status.timeouts,
+            status_errors: status.errors,
             ..self.stats
         }
     }
@@ -972,6 +1050,7 @@ fn thread_main(
                         presence_checked = now;
                         last_open_error = None;
                         link.link_up(now);
+                        link.opened(instance.bus);
                         if matches!(instance.bus, hidapi::BusType::Usb) {
                             link.cable_up(instance.serial.as_deref());
                         }
@@ -1186,6 +1265,7 @@ pub(crate) mod tests {
             clock_local: false,
             hardware: false,
             audio: None,
+            status_every: Some(crate::device::status::STATUS_EVERY),
         }
     }
 

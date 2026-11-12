@@ -30,6 +30,7 @@ use super::traits::{
 };
 use block2::RcBlock;
 use crossbeam_channel::Receiver;
+use deck_model::Permission;
 use objc2::rc::Retained;
 use objc2::AnyThread;
 use objc2_avf_audio::{
@@ -39,7 +40,7 @@ use objc2_avf_audio::{
 use objc2_foundation::{NSArray, NSLocale, NSString};
 use objc2_speech::{
     SFSpeechAudioBufferRecognitionRequest, SFSpeechRecognitionResult, SFSpeechRecognitionTask,
-    SFSpeechRecognizer,
+    SFSpeechRecognizer, SFSpeechRecognizerAuthorizationStatus,
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -577,6 +578,34 @@ pub fn engines() -> (EngineInfo, EngineInfo) {
     (AppleStt::new().info(), AppleTts::new().info())
 }
 
+/// Speech Recognition's grant for this process, as macOS has it now
+/// (`+[SFSpeechRecognizer authorizationStatus]`).
+///
+/// A read, and the only call here that may run off `main`: it takes
+/// nothing, calls nothing back (V13 is about the result handlers) and never
+/// shows the prompt, which only `requestAuthorization:` does. It needs no
+/// usage string either: V14's measurements saw `notDetermined` from a
+/// process with no Info.plist at all.
+#[must_use]
+pub fn speech_authorization() -> Permission {
+    // SAFETY: a class method with no arguments that reads this process's
+    // TCC state; it prompts nothing and retains nothing.
+    speech_permission(unsafe { SFSpeechRecognizer::authorizationStatus() })
+}
+
+/// macOS's four answers in the words `perm.status` uses for every grant. A
+/// recogniser the device restricts (a profile, parental controls) is
+/// `denied`: nothing the owner can press here grants it either.
+fn speech_permission(status: SFSpeechRecognizerAuthorizationStatus) -> Permission {
+    match status {
+        SFSpeechRecognizerAuthorizationStatus::Authorized => Permission::Granted,
+        SFSpeechRecognizerAuthorizationStatus::Denied
+        | SFSpeechRecognizerAuthorizationStatus::Restricted => Permission::Denied,
+        SFSpeechRecognizerAuthorizationStatus::NotDetermined => Permission::NotDetermined,
+        _ => Permission::Unknown,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -595,6 +624,34 @@ mod tests {
         // hang rather than fail — which is itself the assertion.
         assert_eq!(std::mem::size_of_val(&tts), 0);
         assert_eq!(std::mem::size_of_val(&stt), 0);
+    }
+
+    /// R2: macOS's four answers about Speech Recognition in `perm.status`'s
+    /// words, a restricted recogniser among the denied, and an answer a
+    /// newer macOS may add as not known.
+    #[test]
+    fn the_speech_grant_is_said_in_the_words_of_every_other_grant() {
+        for (status, said) in [
+            (
+                SFSpeechRecognizerAuthorizationStatus::NotDetermined,
+                Permission::NotDetermined,
+            ),
+            (SFSpeechRecognizerAuthorizationStatus::Denied, Permission::Denied),
+            (SFSpeechRecognizerAuthorizationStatus::Restricted, Permission::Denied),
+            (SFSpeechRecognizerAuthorizationStatus::Authorized, Permission::Granted),
+            (SFSpeechRecognizerAuthorizationStatus(9), Permission::Unknown),
+        ] {
+            assert_eq!(speech_permission(status), said, "{status:?}");
+        }
+    }
+
+    /// The read itself, off `main` as the core makes it: an answer macOS
+    /// gave (never the `unknown` of an answer it did not), and no prompt,
+    /// so nothing waits for a click.
+    #[test]
+    fn the_speech_grant_is_read_off_main_without_a_prompt() {
+        assert!(!mainloop::is_main_thread());
+        assert_ne!(speech_authorization(), Permission::Unknown);
     }
 
     /// The Send bound of V16, checked by the compiler rather than by

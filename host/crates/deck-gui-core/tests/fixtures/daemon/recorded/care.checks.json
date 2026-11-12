@@ -1,0 +1,64 @@
+{
+  "checks": [
+    {
+      "detail": "d",
+      "name": "data dir",
+      "ok": true
+    },
+    {
+      "detail": "valid",
+      "name": "config.toml",
+      "ok": true
+    },
+    {
+      "detail": "valid",
+      "name": "state.json",
+      "ok": true
+    },
+    {
+      "detail": "running",
+      "name": "service",
+      "ok": true
+    },
+    {
+      "detail": "0 s old: link Offline, session Absent, sid 768585774, link drops 0, device err 0",
+      "name": "status.json",
+      "ok": true
+    },
+    {
+      "detail": "d/deckd.sock answers session.ping",
+      "name": "socket",
+      "ok": true
+    },
+    {
+      "detail": "127.0.0.1:61306/v1/info answers and is ours",
+      "name": "tcp",
+      "ok": true
+    },
+    {
+      "detail": "absent (no bearer tokens yet: deckd token create)",
+      "name": "tokens.toml",
+      "ok": true
+    },
+    {
+      "detail": "not looked for: this service runs with --no-device",
+      "name": "device",
+      "ok": null
+    },
+    {
+      "detail": "not looked at: launchd did not start this service, so its agent is not the one answering",
+      "name": "launchd deckd",
+      "ok": null
+    },
+    {
+      "detail": "not looked at: launchd did not start this service, so its agent is not the one answering",
+      "name": "legacy launch agent",
+      "ok": null
+    },
+    {
+      "detail": "off ([codex] daemon = false)",
+      "name": "codex daemon",
+      "ok": null
+    }
+  ]
+}

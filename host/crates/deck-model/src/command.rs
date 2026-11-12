@@ -6,6 +6,7 @@ use crate::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::time::Instant;
 
 /// `agent.card.set{free_text?:true}` (§4.6): dictated free text stays
@@ -338,6 +339,31 @@ pub enum LinkEvent {
     PaceBackoff { pace_ms: u16 },
 }
 
+/// From the hid thread, beside [`LinkEvent`]: what the linked deck said
+/// about itself, and why a link is ending. Internal like [`Command`]; what a
+/// client sees is `DeviceState` and the `device.status` event.
+///
+/// Everything but `Dropped` describes the deck that is linked now, so it is
+/// sent after the link's `Linked` and is ignored once the link is down.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DeviceReport {
+    /// The bus the deck was opened on; `None` for one the hid thread cannot
+    /// tell.
+    Transport(Option<crate::Transport>),
+    /// A `device.status` answer: the charge in percent (the deck sends 0
+    /// when it does not know) and whether the cell is taking current.
+    Power {
+        battery: Option<u8>,
+        charging: Option<bool>,
+    },
+    /// The board a `sys.version` answer named.
+    Board(Option<String>),
+    /// The link is about to be reported `Down`, and the reason: `read`,
+    /// `write`, `write_stall`, `removed`, `misses`, or `firmware_update`
+    /// for the install that closes it on purpose (not a drop).
+    Dropped { why: String },
+}
+
 /// What the audio side reports to the reducer (§7; B1).
 ///
 /// Before this there was **no inbound path at all**: `Command` had no voice
@@ -485,6 +511,8 @@ pub enum Command {
     },
     Device(DeviceLine),
     Link(LinkEvent),
+    /// From the hid thread too: the deck's own status, and why a link ends.
+    DeviceReport(DeviceReport),
     /// From the audio side (B1), the way `Device`/`Link` are from the hid
     /// thread.
     Voice(VoiceIn),
@@ -523,6 +551,14 @@ pub enum Command {
         order: Option<String>,
     },
     SessionClosed(SessionId),
+    /// From the core: the sessions whose source the owner paused, as a
+    /// whole set that replaces the last one. Their agents stay registered
+    /// and their owners' calls keep working, but none of them holds a
+    /// slot, a question parked for one goes back to its tool, and nothing
+    /// of theirs is spoken (`Store::on_mute`).
+    Mute {
+        sessions: BTreeSet<SessionId>,
+    },
     /// The TCP door reports its bind (§4.1): the port it listens on (`None`
     /// while it could not bind) and the degradation reason, if any
     /// (`"port_in_use"`, `"hooks_hijack_risk"`; `None` clears it).

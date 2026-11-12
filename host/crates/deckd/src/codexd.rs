@@ -1442,6 +1442,9 @@ pub async fn run(api: Arc<Api>, mut stop: watch::Receiver<bool>) {
 enum End {
     Closed,
     Stopped,
+    /// `[codex] daemon` was switched off (the Integrations page's Codex
+    /// switch): the connection ends now, not at the next reconnect.
+    Disabled,
     Error(String),
 }
 
@@ -1450,6 +1453,7 @@ impl End {
         match self {
             End::Closed => "the daemon closed the connection".into(),
             End::Stopped => "deckd is stopping".into(),
+            End::Disabled => "[codex] daemon was switched off".into(),
             End::Error(why) => why.clone(),
         }
     }
@@ -1555,6 +1559,8 @@ async fn session(
             break 'run End::Error(format!("initialize: {why}"));
         }
         rpc.notify("initialized", None);
+        // Connected, for `sources.list`'s Codex row, until the end below.
+        adapters.set_codex_connected(true);
         model.catalog = read_models(&rpc).await.unwrap_or_default();
 
         // The account's rate limits: read once here, again on the deck's
@@ -1576,6 +1582,11 @@ async fn session(
                 }
                 _ = stop.changed() => break 'run End::Stopped,
                 published = usage_events.recv() => match published {
+                    // The Codex switch went off (`config.set codex.daemon`,
+                    // an edit of the file): the watcher stored the new
+                    // config before it announced the change.
+                    Ok(p) if p.event.kind == deck_model::EventKind::ConfigChanged
+                        && !api.config.load().codex.daemon => break 'run End::Disabled,
                     Ok(p) if p.event.kind == deck_model::EventKind::UsageRefreshRequested => {
                         read_rate_limits(api, &rpc, &mut usage_read, &mut model).await;
                     }
@@ -1605,6 +1616,11 @@ async fn session(
                     }
                 },
                 _ = roster.tick() => {
+                    // The switch again, for a change whose announcement this
+                    // loop missed (a lagged bus is resubscribed above).
+                    if !api.config.load().codex.daemon {
+                        break 'run End::Disabled;
+                    }
                     // Credit redemption is not included in rate-limit notifications.
                     if usage_read.is_none_or(|at| at.elapsed() >= Duration::from_secs(u64::from(api.config.load().usage.poll_s.max(60)))) {
                         read_rate_limits(api, &rpc, &mut usage_read, &mut model).await;
@@ -1682,6 +1698,7 @@ async fn session(
         }
     };
     reader.abort();
+    adapters.set_codex_connected(false);
     // Whatever ended it, the roster must not keep agents nobody is driving.
     let effects = model.disconnected();
     apply(

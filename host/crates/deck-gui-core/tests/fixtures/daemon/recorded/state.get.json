@@ -1,0 +1,522 @@
+{
+  "rev": 30,
+  "snapshot": {
+    "agents": {
+      "ag_cmwjp4000001": {
+        "caps": {
+          "answer": "poll",
+          "focus": false,
+          "order": "poll"
+        },
+        "card": {
+          "choices": [
+            {
+              "detail": null,
+              "label": "Run on staging"
+            },
+            {
+              "detail": null,
+              "label": "Skip migrations"
+            },
+            {
+              "detail": null,
+              "label": "Abort task"
+            }
+          ],
+          "choices_n": 3,
+          "created": "2026-11-11T19:47:43.849Z",
+          "deliver": "poll",
+          "expires": null,
+          "free_text": false,
+          "id": 1,
+          "origin": {
+            "group": null,
+            "kind": "question",
+            "request_id": null,
+            "tool": null
+          },
+          "page": {
+            "count": 1,
+            "index": 0
+          },
+          "rec": 0,
+          "status": "pending",
+          "text": "Tests fail on main. Run pending migrations on staging first?",
+          "type": "q"
+        },
+        "chat_rev": 1,
+        "id": "ag_cmwjp4000001",
+        "kind": "codex",
+        "messages": [
+          {
+            "at": "2026-11-11T19:47:43.849Z",
+            "id": "reply-1794426463849-0",
+            "role": "assistant",
+            "streaming": false,
+            "text": "Tests fail on main: 3 pending migrations are not applied on staging."
+          }
+        ],
+        "meta": null,
+        "name": "cohdl-api",
+        "owner": {
+          "lease_expires": null,
+          "principal": "adapter:virtual",
+          "session": "sess_1"
+        },
+        "pinned": false,
+        "reply": {
+          "announce": null,
+          "at": "2026-11-11T19:47:43.849Z",
+          "text": "Tests fail on main: 3 pending migrations are not applied on staging."
+        },
+        "reply_rev": 1,
+        "session": {
+          "cwd": "/Users/demo/projects/cohdl",
+          "key": "demo:cohdl-api",
+          "pid": null,
+          "pid_kind": null,
+          "terminal": null
+        },
+        "since": "2026-11-11T19:45:43.849Z",
+        "slot": 1,
+        "source": "hook",
+        "state": "question",
+        "title": "Run migrations on staging?",
+        "title_source": "api",
+        "voice": "Samantha"
+      },
+      "ag_cmwjp4000002": {
+        "caps": {
+          "answer": "poll",
+          "focus": false,
+          "order": "poll"
+        },
+        "card": {
+          "choices": [
+            {
+              "detail": null,
+              "label": "Run the test suite"
+            },
+            {
+              "detail": null,
+              "label": "Open a pull request"
+            }
+          ],
+          "choices_n": 2,
+          "created": "2026-11-11T19:47:43.849Z",
+          "deliver": "poll",
+          "expires": "2026-11-11T20:02:43.849Z",
+          "free_text": false,
+          "id": 1,
+          "origin": {
+            "group": null,
+            "kind": "ready",
+            "request_id": null,
+            "tool": null
+          },
+          "page": {
+            "count": 1,
+            "index": 0
+          },
+          "rec": null,
+          "status": "pending",
+          "text": "Header refactor done · 34 files",
+          "type": "r"
+        },
+        "chat_rev": 1,
+        "id": "ag_cmwjp4000002",
+        "kind": "claude",
+        "messages": [
+          {
+            "at": "2026-11-11T19:47:43.849Z",
+            "id": "reply-1794426463849-0",
+            "role": "assistant",
+            "streaming": false,
+            "text": "Header refactor done, 34 files changed"
+          }
+        ],
+        "meta": null,
+        "name": "web-ui",
+        "owner": {
+          "lease_expires": null,
+          "principal": "adapter:virtual",
+          "session": "sess_1"
+        },
+        "pinned": false,
+        "reply": {
+          "announce": null,
+          "at": "2026-11-11T19:47:43.849Z",
+          "text": "Header refactor done, 34 files changed"
+        },
+        "reply_rev": 1,
+        "session": {
+          "cwd": "/Users/demo/projects/cohdl",
+          "key": "demo:web-ui",
+          "pid": null,
+          "pid_kind": null,
+          "terminal": null
+        },
+        "since": "2026-11-11T19:47:43.849Z",
+        "slot": 2,
+        "source": "hook",
+        "state": "ready",
+        "title": "Header refactor done · 34 files",
+        "title_source": "api",
+        "voice": "Daniel"
+      },
+      "ag_cmwjp4000003": {
+        "caps": {
+          "answer": "poll",
+          "focus": false,
+          "order": "poll"
+        },
+        "card": null,
+        "chat_rev": 1,
+        "id": "ag_cmwjp4000003",
+        "kind": "codex",
+        "messages": [
+          {
+            "at": "2026-11-11T19:47:43.849Z",
+            "id": "reply-1794426463849-0",
+            "role": "assistant",
+            "streaming": false,
+            "text": "Building the native image for both boards."
+          }
+        ],
+        "meta": null,
+        "name": "firmware",
+        "owner": {
+          "lease_expires": null,
+          "principal": "adapter:virtual",
+          "session": "sess_1"
+        },
+        "pinned": false,
+        "reply": {
+          "announce": null,
+          "at": "2026-11-11T19:47:43.849Z",
+          "text": "Building the native image for both boards."
+        },
+        "reply_rev": 1,
+        "session": {
+          "cwd": "/Users/demo/projects/cohdl",
+          "key": "demo:firmware",
+          "pid": null,
+          "pid_kind": null,
+          "terminal": null
+        },
+        "since": "2026-11-11T19:45:43.849Z",
+        "slot": 3,
+        "source": "hook",
+        "state": "working",
+        "title": "Compiling openmicro",
+        "title_source": "api",
+        "voice": "Karen"
+      },
+      "ag_cmwjp4000004": {
+        "caps": {
+          "answer": "poll",
+          "focus": false,
+          "order": "poll"
+        },
+        "card": null,
+        "chat_rev": 0,
+        "id": "ag_cmwjp4000004",
+        "kind": "gemini",
+        "messages": [],
+        "meta": null,
+        "name": "research",
+        "owner": {
+          "lease_expires": null,
+          "principal": "adapter:virtual",
+          "session": "sess_1"
+        },
+        "pinned": false,
+        "reply": null,
+        "reply_rev": 0,
+        "session": {
+          "cwd": "/Users/demo/projects/openmicro",
+          "key": "demo:research",
+          "pid": null,
+          "pid_kind": null,
+          "terminal": null
+        },
+        "since": "2026-11-11T19:47:43.849Z",
+        "slot": 4,
+        "source": "hook",
+        "state": "idle",
+        "title": "Idle",
+        "title_source": "api",
+        "voice": "Rishi"
+      },
+      "ag_cmwjp4000005": {
+        "caps": {
+          "answer": "poll",
+          "focus": false,
+          "order": "poll"
+        },
+        "card": null,
+        "chat_rev": 1,
+        "id": "ag_cmwjp4000005",
+        "kind": "claude",
+        "messages": [
+          {
+            "at": "2026-11-11T19:47:43.849Z",
+            "id": "reply-1794426463849-0",
+            "role": "assistant",
+            "streaming": false,
+            "text": "terraform apply exited with status 1."
+          }
+        ],
+        "meta": null,
+        "name": "infra",
+        "owner": {
+          "lease_expires": null,
+          "principal": "adapter:virtual",
+          "session": "sess_1"
+        },
+        "pinned": false,
+        "reply": {
+          "announce": null,
+          "at": "2026-11-11T19:47:43.849Z",
+          "text": "terraform apply exited with status 1."
+        },
+        "reply_rev": 1,
+        "session": {
+          "cwd": "/Users/demo/projects/openmicro",
+          "key": "demo:infra",
+          "pid": null,
+          "pid_kind": null,
+          "terminal": null
+        },
+        "since": "2026-11-11T19:47:43.849Z",
+        "slot": 5,
+        "source": "hook",
+        "state": "error",
+        "title": "Deploy failed · exit 1",
+        "title_source": "api",
+        "voice": "Samantha"
+      },
+      "ag_cmwjp4000006": {
+        "caps": {
+          "answer": "hold",
+          "focus": false,
+          "order": "inject"
+        },
+        "card": {
+          "choices": [
+            {
+              "detail": null,
+              "label": "Allow"
+            },
+            {
+              "detail": null,
+              "label": "Allow always"
+            },
+            {
+              "detail": null,
+              "label": "Deny"
+            }
+          ],
+          "choices_n": 3,
+          "created": "2026-11-11T19:47:43.849Z",
+          "deliver": "hold",
+          "expires": "2026-11-11T19:49:43.849Z",
+          "free_text": true,
+          "id": 1,
+          "origin": {
+            "group": null,
+            "kind": "permission",
+            "request_id": "toolu_9",
+            "tool": "Bash"
+          },
+          "page": {
+            "count": 1,
+            "index": 0
+          },
+          "rec": 0,
+          "status": "pending",
+          "text": "Bash: psql -f migrate.sql staging",
+          "type": "q"
+        },
+        "chat_rev": 0,
+        "id": "ag_cmwjp4000006",
+        "kind": "claude",
+        "messages": [],
+        "meta": null,
+        "name": "cohdl-api",
+        "owner": {
+          "lease_expires": null,
+          "principal": "adapter:claude",
+          "session": "sess_1"
+        },
+        "pinned": false,
+        "reply": null,
+        "reply_rev": 0,
+        "session": {
+          "cwd": "/Users/demo/projects/cohdl",
+          "key": "demo:claude:cohdl-api",
+          "pid": null,
+          "pid_kind": null,
+          "terminal": null
+        },
+        "since": "2026-11-11T19:47:43.849Z",
+        "slot": 6,
+        "source": "hook",
+        "state": "question",
+        "task": "Run migrations on staging?",
+        "task_source": "prompt",
+        "title": "Run migrations on staging?",
+        "title_source": "prompt",
+        "voice": "Daniel"
+      }
+    },
+    "device": {
+      "boot": null,
+      "err_counts": {
+        "parse": 0,
+        "range": 0,
+        "size": 0,
+        "unknown": 0
+      },
+      "face": null,
+      "faces": [],
+      "fw": null,
+      "host_online": false,
+      "language_supported": false,
+      "link": "offline",
+      "outbox_depth": 0,
+      "pace_ms": 8,
+      "session": "absent",
+      "settings": {
+        "announce": 1,
+        "arcadesound": 0,
+        "autojump": 0,
+        "brightness": 5,
+        "chime": 1,
+        "demo": 1,
+        "idlehome": 120,
+        "language": 0,
+        "language_revision": 0,
+        "mic": 6,
+        "speaker": 6,
+        "textsize": 1
+      },
+      "sid": 106140337
+    },
+    "faces": [],
+    "focus": {
+      "agent": null,
+      "seq": null,
+      "source": null
+    },
+    "macros": {
+      "3": {
+        "keys": [
+          {
+            "binding": "left",
+            "label": "build"
+          },
+          {
+            "binding": "right",
+            "label": "test"
+          },
+          {
+            "binding": "enter",
+            "label": "deploy"
+          },
+          {
+            "binding": "shift+left",
+            "label": "git push"
+          },
+          {
+            "binding": null,
+            "label": "screenshot"
+          },
+          {
+            "binding": null,
+            "label": "lock"
+          },
+          {
+            "binding": "shift+right",
+            "label": "mute"
+          },
+          {
+            "binding": "shift+enter",
+            "label": "term"
+          }
+        ],
+        "src": "deck.toml"
+      }
+    },
+    "rev": 30,
+    "service": {
+      "degraded": null,
+      "listener": null,
+      "port": 52098,
+      "version": "0.13.0"
+    },
+    "settings": {
+      "announce": 1,
+      "arcadesound": 0,
+      "autojump": 0,
+      "brightness": 5,
+      "chime": 1,
+      "demo": 1,
+      "idlehome": 120,
+      "language": 0,
+      "language_revision": 0,
+      "mic": 6,
+      "speaker": 6,
+      "textsize": 1
+    },
+    "usage": {
+      "at": "2026-11-11T19:47:43.849Z",
+      "items": [
+        {
+          "name": "Claude Pro",
+          "percent": 62,
+          "reset": "resets in 4 days",
+          "tone": null
+        },
+        {
+          "name": "Codex · OpenAI",
+          "percent": 81,
+          "reset": "resets tomorrow",
+          "tone": null
+        },
+        {
+          "name": "Gemini",
+          "percent": 12,
+          "reset": "resets in 11 days",
+          "tone": null
+        }
+      ],
+      "period": "SEP 2026"
+    },
+    "voice": {
+      "input_uid": null,
+      "output_uid": null,
+      "permissions": {
+        "bluetooth": "unknown",
+        "microphone": "unknown",
+        "speech": "unknown"
+      },
+      "ptt": null,
+      "route": "none",
+      "speaking": {
+        "agent": "ag_cmwjp4000006",
+        "lane": "question",
+        "utterance": "ut_3"
+      },
+      "stt": {
+        "engine": "apple",
+        "locale": "en-US",
+        "on_device": true
+      },
+      "transport": null,
+      "tts": {
+        "engine": "apple"
+      }
+    }
+  }
+}

@@ -322,6 +322,7 @@ fn call(
         subscribe: Vec::new(),
         snapshot: false,
         reconnect: false,
+        content: None,
     };
     rt.block_on(async move {
         let client = match tokio::time::timeout(CONNECT_TIMEOUT, Client::connect(config)).await {

@@ -595,6 +595,16 @@ impl Adapters {
         self.config.load().hooks.enabled
     }
 
+    /// Whether the hook doors answer this CLI's hooks right now: `[hooks]
+    /// enabled`, and the owner's `[sources]` switches (a pause stops every
+    /// CLI, Claude Code's own switch only Claude's doors). Read per hook,
+    /// like everything else here, so a switch is in force from the next one.
+    #[must_use]
+    pub fn answering(&self, cli: &str) -> bool {
+        let config = self.config.load();
+        config.hooks.enabled && config.sources.hooks_answer(cli)
+    }
+
     /// Whether `[usage] providers` names `provider` (`crate::usage`).
     #[must_use]
     pub fn usage_enabled(&self, provider: crate::usage::Provider) -> bool {

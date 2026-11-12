@@ -8,11 +8,14 @@
 //! * `rubato` — 5.0.0 is a clean break from 0.x. A loosened pin that resolved
 //!   back to 0.15 would compile a *different* library under the same name.
 //!
-//! And every one of them is macOS-only: CoreAudio, AVFoundation and
-//! Speech.framework exist nowhere else, so they are declared under
-//! `[target.'cfg(target_os = "macos")'.dependencies]` exactly like
-//! `security-framework` — a plain `[dependencies]` entry breaks the Linux
-//! `cargo check` of §13's port plan without anybody noticing on a Mac.
+//! And none of them is unconditional. The Apple bindings (CoreAudio,
+//! AVFoundation, Speech.framework) exist nowhere else, so they are declared
+//! under `[target.'cfg(target_os = "macos")'.dependencies]` exactly like
+//! `security-framework`. The engine's own three crates (`cpal`, `rubato`,
+//! `rtrb`) are shared with the Linux port and sit under the
+//! `cfg(any(target_os = "macos", target_os = "linux"))` section. A plain
+//! `[dependencies]` entry for any of them breaks the other platforms'
+//! `cargo check` without anybody noticing on a Mac.
 //!
 //! This row reads the manifests rather than the resolved graph so that it
 //! fails on the *declaration*, which is what a future edit gets wrong.
@@ -113,20 +116,46 @@ fn the_voice_pins_are_exact_macos_gated_and_resolve_to_one_objc2() {
     // section — a test that only checked the new rows would go green if the
     // section were renamed out from under them.
     let deckd = read("crates/deckd/Cargo.toml");
-    let at = deckd
-        .find("[target.'cfg(target_os = \"macos\")'.dependencies]")
-        .expect("deckd still gates its macOS-only dependencies");
-    let gated = &deckd[at..];
-    let end = gated[1..].find("\n[").map_or(gated.len(), |i| i + 1);
-    let gated = &gated[..end];
+    let section = |header: &str, what: &str| {
+        let at = deckd
+            .find(header)
+            .unwrap_or_else(|| panic!("deckd still declares {what}"));
+        let rest = &deckd[at..];
+        let end = rest[1..].find("\n[").map_or(rest.len(), |i| i + 1);
+        rest[..end].to_string()
+    };
+    let macos = section(
+        "[target.'cfg(target_os = \"macos\")'.dependencies]",
+        "its macOS-only dependencies",
+    );
+    // The Linux port shares the voice engine's own three crates (the device
+    // stream, the resampler and the ring) with Linux. Everything that binds an
+    // Apple framework stays under the macOS-only section.
+    let shared = section(
+        "[target.'cfg(any(target_os = \"macos\", target_os = \"linux\"))'.dependencies]",
+        "the voice engine's dependencies shared with Linux",
+    );
+    let plain = section("[dependencies]", "its unconditional dependencies");
+    const SHARED_WITH_LINUX: [&str; 3] = ["cpal", "rubato", "rtrb"];
     for name in AUDIO_PINS
         .iter()
         .map(|(n, _)| *n)
         .chain(["security-framework"])
     {
+        let (gated, cfg) = if SHARED_WITH_LINUX.contains(&name) {
+            (&shared, "cfg(any(target_os = \"macos\", target_os = \"linux\"))")
+        } else {
+            (&macos, "cfg(target_os = \"macos\")")
+        };
         assert!(
             gated.contains(&format!("\n{name} = ")),
-            "{name} must be declared under cfg(target_os = \"macos\")"
+            "{name} must be declared under {cfg}"
+        );
+        // The failure this row exists for: an unconditional entry compiles on
+        // a Mac and breaks every other platform.
+        assert!(
+            !plain.contains(&format!("\n{name} = ")),
+            "{name} must not be an unconditional dependency"
         );
     }
 

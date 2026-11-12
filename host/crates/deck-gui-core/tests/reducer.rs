@@ -7,15 +7,19 @@
 //! `killing_the_daemon_and_reconnecting_makes_the_mirror_whole_again`,
 //! `a_rev_gap_asks_for_state_get_instead_of_folding_onto_a_stale_mirror`, and
 //! `no_ui_action_can_write_to_the_mirror`.
-use deck_gui_core::host_state::{
-    BLUETOOTH_SETTINGS, MICROPHONE_SETTINGS, ORDER_HISTORY, SPEECH_SETTINGS,
-};
-use deck_gui_core::{ApiEvent, AppEvent, HostEffect, HostState, SheetKind, UiAction};
+//!
+//! So is the rule the companion lives by, never a session:
+//! `every_snapshot_arrives_without_its_sessions` and
+//! `no_agent_card_reply_order_focus_or_transcript_event_reaches_the_mirror`.
+//! The rev rule is sampled with the deck's own events, which are what this
+//! window folds.
+use deck_gui_core::{ApiEvent, AppEvent, HostEffect, HostState, MenuCommand, SheetKind, UiAction};
 use deck_model::{
-    AdapterKind, Agent, AgentId, AgentState, AnswerCap, Caps, Card, CardId, CardKind, CardStatus,
-    Choice, Deliver, Event, EventKind, FaceEntry, FocusSource, Kind, Link, OrderCap, Origin,
-    OriginKind, Owner, Page, Permission, Principal, Route, SessionId, SessionInfo, SessionState,
-    SetKey, Slot, Snapshot, Source, Template, TitleSource, Ts, Usage, UsageItem, VoiceTransport,
+    AdapterKind, Agent, AgentId, AgentState, AnswerCap, Binding, Caps, Card, CardId, CardKind,
+    CardStatus, Choice, Deliver, Event, EventKind, FaceEntry, Focus, FocusSource, Kind,
+    LastLinked, Link, LinkDrop, MacroKey, MacroLayout, OrderCap, Origin, OriginKind, Owner, Page,
+    Permission, Principal, Route, SessionId, SessionInfo, SessionState, SetKey, Snapshot, Source,
+    Template, TitleSource, Transport, Ts, Usage, UsageItem, VoiceTransport,
 };
 use serde_json::{json, Value};
 use std::time::Duration;
@@ -94,7 +98,8 @@ fn card(id: u16) -> Card {
     }
 }
 
-/// A snapshot at `rev` holding one agent, the way a hello answers.
+/// A snapshot at `rev` the way a hello answers: a linked deck, and one agent
+/// the service is serving, which this window never keeps.
 fn snapshot(rev: u64) -> Snapshot {
     let mut snapshot = Snapshot {
         rev,
@@ -108,14 +113,18 @@ fn snapshot(rev: u64) -> Snapshot {
     snapshot
 }
 
-/// The mirror's agent, by id. A `BTreeMap<AgentId, Agent>` does not index by
-/// `&str`, and every test here wants one agent out of the roster.
-fn mirrored<'a>(state: &'a HostState, id: &str) -> &'a Agent {
-    state
-        .mirror()
-        .agents
-        .get(&AgentId(id.to_string()))
-        .unwrap_or_else(|| panic!("{id} is not in the mirror"))
+/// `snapshot` as the mirror holds it: the same, without its sessions.
+fn mirrored(mut snapshot: Snapshot) -> Value {
+    snapshot.agents.clear();
+    snapshot.focus = Focus::default();
+    serde_json::to_value(snapshot).unwrap()
+}
+
+/// The mirror as JSON with `rev` left out, for "nothing changed but the rev".
+fn without_rev(state: &HostState) -> Value {
+    let mut mirror = serde_json::to_value(state.mirror()).unwrap();
+    mirror["rev"] = Value::Null;
+    mirror
 }
 
 fn connected(rev: u64) -> AppEvent {
@@ -134,21 +143,10 @@ fn event(rev: u64, kind: EventKind, data: Value) -> AppEvent {
     }))
 }
 
-/// A state already connected at `rev` with one agent in it.
+/// A state already connected at `rev` to a linked deck.
 fn live(rev: u64) -> HostState {
     let mut state = HostState::detached();
     assert!(state.handle_event(connected(rev)).is_empty());
-    state
-}
-
-/// A state with `ag_1` holding card 17.
-fn live_with_card() -> HostState {
-    let mut state = live(10);
-    state.handle_event(event(
-        11,
-        EventKind::CardSet,
-        json!({"agent": "ag_1", "card": card(17)}),
-    ));
     state
 }
 
@@ -162,8 +160,7 @@ fn a_detached_state_starts_empty_disconnected_and_untrusted() {
     assert!(!state.trusted(), "no client, so nothing was verified");
     assert!(state.client().is_none());
     assert_eq!(state.backoff(), Duration::from_millis(250));
-    assert_eq!(state.orders(&AgentId("ag_1".into())), &[]);
-    assert!(state.transcript().is_none());
+    assert!(state.level().is_none());
 }
 
 #[test]
@@ -176,8 +173,9 @@ fn a_connect_installs_the_snapshot_as_the_mirror_and_says_nothing() {
     );
     assert!(state.connected());
     assert_eq!(state.mirror().rev, 1202);
-    assert_eq!(state.mirror().agents.len(), 1);
+    assert_eq!(state.mirror().device.link, Link::Connected);
     assert_eq!(state.mirror().device.fw.as_deref(), Some("0.1.0"));
+    assert!(state.mirror().agents.is_empty(), "never a session");
 }
 
 #[test]
@@ -202,16 +200,12 @@ fn an_event_the_mirror_already_holds_is_ignored_as_a_replay() {
     // idea of "after" can overlap by one.
     for rev in [1, 9, 10] {
         assert!(state
-            .handle_event(event(
-                rev,
-                EventKind::AgentRemoved,
-                json!({"agent": "ag_1"})
-            ))
+            .handle_event(event(rev, EventKind::DeviceFace, json!({"f": 6})))
             .is_empty());
     }
     assert_eq!(state.mirror().rev, 10);
     assert_eq!(state.folded(), 0);
-    assert_eq!(state.mirror().agents.len(), 1, "the replay changed nothing");
+    assert_eq!(state.mirror().device.face, None, "the replay changed nothing");
 }
 
 #[test]
@@ -220,16 +214,16 @@ fn a_rev_gap_asks_for_state_get_instead_of_folding_onto_a_stale_mirror() {
     // rev 11 never arrived: 12 is a hole, not the next event.
     let effects = state.handle_event(event(
         12,
-        EventKind::AgentRemoved,
-        json!({"agent": "ag_1", "reason": "released"}),
+        EventKind::DeviceLink,
+        json!({"link": "offline", "session": "absent", "fw": null, "host_online": false}),
     ));
     assert_eq!(effects, vec![HostEffect::StateGet]);
     assert_eq!(state.gaps(), 1);
     assert!(state.resyncing());
     assert_eq!(state.mirror().rev, 10, "the mirror did not move");
     assert_eq!(
-        state.mirror().agents.len(),
-        1,
+        (state.mirror().device.link, state.mirror().device.fw.as_deref()),
+        (Link::Connected, Some("0.1.0")),
         "the event was refused, not applied half-way"
     );
     assert_eq!(state.folded(), 0);
@@ -239,36 +233,33 @@ fn a_rev_gap_asks_for_state_get_instead_of_folding_onto_a_stale_mirror() {
 fn only_one_state_get_is_asked_for_while_a_resync_is_outstanding() {
     let mut state = live(10);
     assert_eq!(
-        state.handle_event(event(20, EventKind::CardCleared, json!({"agent": "ag_1"}))),
+        state.handle_event(event(20, EventKind::DeviceFace, json!({"f": 3}))),
         vec![HostEffect::StateGet]
     );
     for rev in 21..30 {
         assert!(
             state
-                .handle_event(event(rev, EventKind::CardCleared, json!({"agent": "ag_1"})))
+                .handle_event(event(rev, EventKind::DeviceFace, json!({"f": 3})))
                 .is_empty(),
             "rev {rev} asked for a second snapshot"
         );
     }
     assert!(state.resyncing());
     assert_eq!(state.folded(), 0, "nothing was folded onto a stale mirror");
+    assert_eq!(state.mirror().device.face, None);
 }
 
 #[test]
 fn the_snapshot_that_answers_a_gap_closes_the_resync() {
     let mut state = live(10);
-    state.handle_event(event(99, EventKind::CardCleared, json!({"agent": "ag_1"})));
+    state.handle_event(event(99, EventKind::DeviceFace, json!({"f": 3})));
     assert!(state.resyncing());
     state.handle_event(connected(120));
     assert!(!state.resyncing());
     assert_eq!(state.mirror().rev, 120);
     // And the mirror folds again from there.
-    state.handle_event(event(
-        121,
-        EventKind::AgentSlot,
-        json!({"agent": "ag_1", "slot": 2}),
-    ));
-    assert_eq!(mirrored(&state, "ag_1").slot, Some(Slot(2)));
+    state.handle_event(event(121, EventKind::DeviceFace, json!({"f": 2})));
+    assert_eq!(state.mirror().device.face, Some(2));
 }
 
 #[test]
@@ -289,8 +280,8 @@ fn a_resync_notification_asks_for_state_get() {
 
 /// A `resync` from a lag, not a hole: the daemon is still sending and the
 /// next event is still the next event. Freezing the mirror there would cost
-/// the operator a roster for no reason, so a contiguous event is folded even
-/// with a `state.get` outstanding.
+/// the owner the deck's state for no reason, so a contiguous event is folded
+/// even with a `state.get` outstanding.
 #[test]
 fn a_contiguous_event_still_folds_while_a_lag_resync_is_outstanding() {
     let mut state = live(10);
@@ -299,13 +290,9 @@ fn a_contiguous_event_still_folds_while_a_lag_resync_is_outstanding() {
         vec![HostEffect::StateGet]
     );
     assert!(state
-        .handle_event(event(
-            11,
-            EventKind::AgentSlot,
-            json!({"agent": "ag_1", "slot": 4}),
-        ))
+        .handle_event(event(11, EventKind::DeviceFace, json!({"f": 4})))
         .is_empty());
-    assert_eq!(mirrored(&state, "ag_1").slot, Some(Slot(4)));
+    assert_eq!(state.mirror().device.face, Some(4));
     assert_eq!(state.mirror().rev, 11);
     assert!(state.resyncing(), "the state.get is still outstanding");
     assert_eq!(state.gaps(), 0, "a lag is not a hole");
@@ -316,7 +303,7 @@ fn a_contiguous_event_still_folds_while_a_lag_resync_is_outstanding() {
 #[test]
 fn a_state_get_reply_closes_the_resync_without_claiming_a_reconnection() {
     let mut state = live(10);
-    state.handle_event(event(40, EventKind::CardCleared, json!({"agent": "ag_1"})));
+    state.handle_event(event(40, EventKind::DeviceFace, json!({"f": 3})));
     assert!(state.resyncing());
     let reply = json!({"rev": 40, "snapshot": snapshot(40)});
     let installed = ApiEvent::snapshot_reply(&reply).expect("a snapshot reply");
@@ -336,7 +323,7 @@ fn a_state_get_reply_closes_the_resync_without_claiming_a_reconnection() {
 #[test]
 fn a_state_get_reply_that_lands_after_the_drop_does_not_claim_the_socket_is_up() {
     let mut state = live(10);
-    state.handle_event(event(40, EventKind::CardCleared, json!({"agent": "ag_1"})));
+    state.handle_event(event(40, EventKind::DeviceFace, json!({"f": 3})));
     assert!(state.resyncing());
     // The socket goes away while the `state.get` is outstanding.
     state.handle_event(AppEvent::Api(ApiEvent::Disconnected));
@@ -367,9 +354,9 @@ fn a_disconnect_keeps_the_last_mirror_and_asks_for_a_reconnect() {
     assert_eq!(
         state.mirror().rev,
         10,
-        "a roster from two seconds ago beats an empty window"
+        "the deck as it was two seconds ago beats an empty window"
     );
-    assert_eq!(state.mirror().agents.len(), 1);
+    assert_eq!(state.mirror().device.fw.as_deref(), Some("0.1.0"));
 }
 
 #[test]
@@ -404,17 +391,13 @@ fn a_connect_resets_the_reconnect_backoff() {
 
 /// §5: "kill the daemon and the GUI recovers". The daemon dies, every
 /// attempt fails on the 250 ms → 5 s schedule, and the snapshot of the
-/// daemon that came back makes the mirror whole — including the agent the
+/// daemon that came back makes the mirror whole — including the deck the
 /// GUI had folded a change onto before the lights went out.
 #[test]
 fn killing_the_daemon_and_reconnecting_makes_the_mirror_whole_again() {
     let mut state = live(10);
-    state.handle_event(event(
-        11,
-        EventKind::AgentSlot,
-        json!({"agent": "ag_1", "slot": 1}),
-    ));
-    assert_eq!(mirrored(&state, "ag_1").slot, Some(Slot(1)));
+    state.handle_event(event(11, EventKind::DeviceFace, json!({"f": 1})));
+    assert_eq!(state.mirror().device.face, Some(1));
 
     // The daemon is killed. Six failed attempts, one `Disconnected` each.
     let mut waits = Vec::new();
@@ -426,26 +409,31 @@ fn killing_the_daemon_and_reconnecting_makes_the_mirror_whole_again() {
         };
         waits.push(after.as_millis() as u64);
         assert!(!state.connected());
-        assert_eq!(state.mirror().agents.len(), 1, "the mirror is kept, greyed");
+        assert_eq!(state.mirror().device.face, Some(1), "the mirror is kept, greyed");
     }
     assert_eq!(waits, vec![250, 500, 1000, 2000, 4000, 5000]);
 
-    // The daemon is back with a snapshot of its own: rev 2000, two agents.
+    // The daemon is back with a snapshot of its own: rev 2000, a deck on
+    // newer firmware, and two agents of its own.
     let mut fresh = snapshot(2000);
+    fresh.device.fw = Some("0.2.0".into());
     let two = agent("ag_2");
     fresh.agents.insert(two.id.clone(), two);
-    let effects = state.handle_event(AppEvent::Api(ApiEvent::Connected { snapshot: fresh }));
+    let effects = state.handle_event(AppEvent::Api(ApiEvent::Connected {
+        snapshot: fresh.clone(),
+    }));
     assert_eq!(
         effects,
         vec![HostEffect::Toast("Service reconnected".into())]
     );
     assert!(state.connected());
     assert_eq!(state.mirror().rev, 2000);
-    assert_eq!(state.mirror().agents.len(), 2);
     assert_eq!(state.backoff(), Duration::from_millis(250));
     // The mirror is the daemon's again, not a merge of what we had: the
-    // slot we folded before the kill is gone because the daemon says so.
-    assert_eq!(mirrored(&state, "ag_1").slot, None);
+    // face we folded before the kill is gone because the daemon says so,
+    // and its sessions are not this window's.
+    assert_eq!(serde_json::to_value(state.mirror()).unwrap(), mirrored(fresh));
+    assert_eq!(state.mirror().device.face, None);
     // And it folds forward from the new rev without a gap.
     assert!(state
         .handle_event(event(2001, EventKind::UsageRefreshRequested, json!({})))
@@ -456,36 +444,28 @@ fn killing_the_daemon_and_reconnecting_makes_the_mirror_whole_again() {
 
 /// §5: "the mirror is not mutated by a UI action path". `send` takes `&self`,
 /// so this is a compile-time fact as much as a test — but the test is what
-/// says so out loud, for every action the Deck screen has.
+/// says so out loud, for every control the Deck page has: each sets one of
+/// the deck's settings, and only the `device.set` that comes back moves the
+/// mirror.
 #[test]
 fn no_ui_action_can_write_to_the_mirror() {
-    let state = live_with_card();
+    let state = live(10);
     let before = serde_json::to_value(state.mirror()).unwrap();
-    let agent = AgentId("ag_1".into());
-    let actions = [
-        UiAction::Answer {
-            agent: agent.clone(),
-            card: CardId(17),
-            choice: Some(0),
-            text: None,
-        },
-        UiAction::Snooze {
-            agent: agent.clone(),
-            card: CardId(17),
-        },
-        UiAction::Ack {
-            agent: agent.clone(),
-            card: CardId(17),
-        },
-        UiAction::Focus {
-            agent: agent.clone(),
-        },
-        UiAction::Order {
-            agent,
-            text: "also run the smoke tests".into(),
-        },
-        UiAction::StateGet,
-    ];
+    let mut actions: Vec<UiAction> = [
+        (SetKey::Speaker, 6),
+        (SetKey::Mic, 7),
+        (SetKey::Announce, 0),
+        (SetKey::Chime, 1),
+        (SetKey::Autojump, 1),
+        (SetKey::Brightness, 4),
+        (SetKey::Idlehome, 120),
+        (SetKey::Textsize, 1),
+        (SetKey::Language, 1),
+    ]
+    .into_iter()
+    .map(|(key, value)| UiAction::DeviceSet { key, value })
+    .collect();
+    actions.push(UiAction::StateGet);
     let mut methods = Vec::new();
     for action in &actions {
         let (method, params) = action.request();
@@ -495,22 +475,157 @@ fn no_ui_action_can_write_to_the_mirror() {
         // of the test is that nothing was written either way.
         assert!(state.send(action).is_none());
     }
-    assert_eq!(
-        methods,
-        vec![
-            "op.answer",
-            "op.snooze",
-            "op.ack",
-            "op.focus",
-            "op.order",
-            "state.get"
-        ]
-    );
+    let mut expected = vec!["device.set"; 9];
+    expected.push("state.get");
+    assert_eq!(methods, expected);
     assert_eq!(
         serde_json::to_value(state.mirror()).unwrap(),
         before,
         "a UI action wrote to the mirror"
     );
+}
+
+/// Never a session: whatever the service's snapshot holds of its sessions —
+/// the agents with their cards, replies and chat, and the focus on one of
+/// them — is dropped on the way into the mirror, however the snapshot comes:
+/// the hello, a `state.get` reply, a reconnection. The rest of it is
+/// installed as the service sent it.
+#[test]
+fn every_snapshot_arrives_without_its_sessions() {
+    let busy = |rev: u64| {
+        let mut snapshot = snapshot(rev);
+        let mut asking = agent("ag_2");
+        asking.state = AgentState::Question;
+        asking.card = Some(card(17));
+        snapshot.agents.insert(asking.id.clone(), asking);
+        snapshot.focus = Focus {
+            agent: Some(AgentId("ag_2".into())),
+            seq: Some(41),
+            source: Some(FocusSource::Device),
+        };
+        snapshot
+    };
+    let mut state = HostState::detached();
+    // The hello.
+    state.handle_event(AppEvent::Api(ApiEvent::Connected {
+        snapshot: busy(10),
+    }));
+    assert_eq!(serde_json::to_value(state.mirror()).unwrap(), mirrored(busy(10)));
+    assert!(state.mirror().agents.is_empty());
+    assert_eq!(state.mirror().focus, Focus::default());
+    // A `state.get` reply, closing a hole.
+    state.handle_event(event(12, EventKind::DeviceFace, json!({"f": 3})));
+    assert!(state.resyncing());
+    let reply = json!({"rev": 30, "snapshot": busy(30)});
+    let installed = ApiEvent::snapshot_reply(&reply).expect("a snapshot reply");
+    assert!(state.handle_event(AppEvent::Api(installed)).is_empty());
+    assert!(!state.resyncing());
+    assert_eq!(serde_json::to_value(state.mirror()).unwrap(), mirrored(busy(30)));
+    // A reconnection.
+    state.handle_event(AppEvent::Api(ApiEvent::Disconnected));
+    state.handle_event(AppEvent::Api(ApiEvent::Connected {
+        snapshot: busy(40),
+    }));
+    assert_eq!(serde_json::to_value(state.mirror()).unwrap(), mirrored(busy(40)));
+    // Nothing the window holds names a session or says what it was doing.
+    let held = serde_json::to_string(state.mirror()).unwrap();
+    for word in ["ag_1", "ag_2", "cohdl-api", "Compiling", "psql"] {
+        assert!(!held.contains(word), "{word} is in the mirror: {held}");
+    }
+}
+
+/// Never a session, the other half: the service goes on sending every event
+/// about its sessions, because the subscription stays whole for the rev
+/// rule, and each one advances the mirror's `rev` and nothing else. No toast
+/// for a failed order, no window raised and no sheet for a confirmation.
+#[test]
+fn no_agent_card_reply_order_focus_or_transcript_event_reaches_the_mirror() {
+    let mut state = live(10);
+    let before = without_rev(&state);
+    let mut asking = agent("ag_2");
+    asking.state = AgentState::Question;
+    let script = [
+        (EventKind::AgentAdded, json!({"agent": asking})),
+        (
+            EventKind::AgentChanged,
+            json!({"agent": "ag_2", "fields": {"state": "question",
+                   "title": "Run migrations on staging?"}}),
+        ),
+        (EventKind::AgentSlot, json!({"agent": "ag_2", "slot": 1})),
+        (EventKind::CardSet, json!({"agent": "ag_2", "card": card(17)})),
+        (
+            EventKind::FocusChanged,
+            json!({"agent": "ag_2", "slot": 1, "seq": 41, "source": "device"}),
+        ),
+        (
+            EventKind::TranscriptPartial,
+            json!({"agent": "ag_2", "ctx": "answer", "text": "allow", "utterance": "ut_7"}),
+        ),
+        (
+            EventKind::TranscriptFinal,
+            json!({"agent": "ag_2", "ctx": "answer", "text": "allow always",
+                   "utterance": "ut_7", "intent": "allow"}),
+        ),
+        (
+            EventKind::CardAnswered,
+            json!({"agent": "ag_2", "card": 17, "choice": 0, "label": "Allow",
+                   "text": null, "via": "hold", "source": "deck", "principal": "device"}),
+        ),
+        (
+            EventKind::CardDelivered,
+            json!({"agent": "ag_2", "card": 17, "via": "hold"}),
+        ),
+        (
+            EventKind::CardFailed,
+            json!({"agent": "ag_2", "card": 17, "reason": "link"}),
+        ),
+        (EventKind::CardSnoozed, json!({"agent": "ag_2", "card": 17})),
+        (
+            EventKind::CardDegraded,
+            json!({"agent": "ag_2", "card": 17, "reason": "snooze"}),
+        ),
+        (EventKind::CardFocused, json!({"agent": "ag_2", "card": 17})),
+        (EventKind::CardAcked, json!({"agent": "ag_2", "card": 17})),
+        (EventKind::CardExpired, json!({"agent": "ag_2", "card": 17})),
+        (
+            EventKind::CardCleared,
+            json!({"agent": "ag_2", "card": 17, "delivered": true, "reason": "ack"}),
+        ),
+        (
+            EventKind::ReplySet,
+            json!({"agent": "ag_2", "text": "Migrations applied.", "announce": "applied"}),
+        ),
+        (
+            EventKind::OrderDispatched,
+            json!({"agent": "ag_2", "via": "inject", "text": "also run the smoke tests"}),
+        ),
+        (
+            EventKind::OrderFailed,
+            json!({"agent": "ag_2", "reason": "not_foreground", "text_kept": true}),
+        ),
+        (
+            EventKind::OpConfirmRequested,
+            json!({"agent": "ag_2", "card": 17, "order": null,
+                   "principal": "token:mcp", "need": "trusted"}),
+        ),
+        (
+            EventKind::AgentRemoved,
+            json!({"agent": "ag_1", "reason": "released"}),
+        ),
+    ];
+    let count = script.len() as u64;
+    for (rev, (kind, data)) in (11..).zip(script) {
+        let effects = state.handle_event(event(rev, kind, data));
+        assert!(effects.is_empty(), "{kind:?} raised {effects:?}");
+    }
+    assert_eq!(state.mirror().rev, 10 + count);
+    assert_eq!(
+        (state.folded(), state.gaps()),
+        (count, 0),
+        "each advanced the rev and none was a hole"
+    );
+    assert!(!state.resyncing());
+    assert_eq!(without_rev(&state), before, "a session reached the mirror");
 }
 
 /// The same property for week 6's actions, which matter for a second reason:
@@ -520,7 +635,7 @@ fn no_ui_action_can_write_to_the_mirror() {
 /// so the mirror is untouched by construction, and this is what says so.
 #[test]
 fn no_integrations_or_service_action_can_write_to_the_mirror_either() {
-    let state = live_with_card();
+    let state = live(10);
     let before = serde_json::to_value(state.mirror()).unwrap();
     let actions = [
         UiAction::IntegrationsStatus { detect: true },
@@ -589,376 +704,6 @@ fn no_integrations_or_service_action_can_write_to_the_mirror_either() {
 }
 
 #[test]
-fn agent_added_changed_and_removed_fold_into_the_roster() {
-    let mut state = live(10);
-    let two = agent("ag_2");
-    state.handle_event(event(11, EventKind::AgentAdded, json!({"agent": two})));
-    assert_eq!(state.mirror().agents.len(), 2);
-    assert_eq!(mirrored(&state, "ag_2").state, AgentState::Working);
-
-    // `changed` carries only the changed fields, plus keys that are not
-    // `Agent` fields at all (`orphaned`, `reason`) — ignored, not fatal.
-    state.handle_event(event(
-        12,
-        EventKind::AgentChanged,
-        json!({"agent": "ag_2", "fields": {
-            "state": "question", "title": "Run migrations on staging?",
-            "orphaned": false, "reason": null,
-        }}),
-    ));
-    let changed = &mirrored(&state, "ag_2");
-    assert_eq!(changed.state, AgentState::Question);
-    assert_eq!(changed.title.as_deref(), Some("Run migrations on staging?"));
-    assert_eq!(
-        changed.name, "cohdl-api",
-        "untouched fields survive a merge"
-    );
-    assert_eq!(changed.caps.order, OrderCap::Inject);
-
-    state.handle_event(event(
-        13,
-        EventKind::AgentRemoved,
-        json!({"agent": "ag_2", "reason": "released"}),
-    ));
-    assert_eq!(state.mirror().agents.len(), 1);
-    assert!(!state.mirror().agents.contains_key(&AgentId("ag_2".into())));
-}
-
-#[test]
-fn agent_slot_assigns_a_slot_and_a_null_slot_evicts_it() {
-    let mut state = live(10);
-    state.handle_event(event(
-        11,
-        EventKind::AgentSlot,
-        json!({"agent": "ag_1", "slot": 3}),
-    ));
-    assert_eq!(mirrored(&state, "ag_1").slot, Some(Slot(3)));
-    assert_eq!(state.mirror().by_slot().len(), 1);
-    state.handle_event(event(
-        12,
-        EventKind::AgentSlot,
-        json!({"agent": "ag_1", "slot": null}),
-    ));
-    assert_eq!(mirrored(&state, "ag_1").slot, None, "not on deck");
-}
-
-#[test]
-fn card_set_folds_the_whole_card_and_card_cleared_takes_it_away() {
-    let mut state = live(10);
-    state.handle_event(event(
-        11,
-        EventKind::CardSet,
-        json!({"agent": "ag_1", "card": card(17)}),
-    ));
-    let held = mirrored(&state, "ag_1").card.as_ref().unwrap();
-    assert_eq!(held.id, CardId(17));
-    assert_eq!(held.origin.kind, OriginKind::Permission);
-    assert_eq!(held.choices.len(), 2);
-    assert_eq!(
-        held.text.as_deref(),
-        Some("Bash: psql -f migrate.sql staging")
-    );
-
-    state.handle_event(event(
-        12,
-        EventKind::CardCleared,
-        json!({"agent": "ag_1", "card": 17, "delivered": true, "reason": "ack"}),
-    ));
-    assert!(mirrored(&state, "ag_1").card.is_none());
-}
-
-#[test]
-fn a_card_lifecycle_event_for_a_card_that_was_replaced_is_ignored() {
-    let mut state = live_with_card();
-    // Card 17 is gone and 18 is up; a late `card.delivered` for 17 belongs
-    // to nothing and must not mark 18 delivered.
-    state.handle_event(event(
-        12,
-        EventKind::CardSet,
-        json!({"agent": "ag_1", "card": card(18)}),
-    ));
-    state.handle_event(event(
-        13,
-        EventKind::CardDelivered,
-        json!({"agent": "ag_1", "card": 17, "via": "hold"}),
-    ));
-    let held = mirrored(&state, "ag_1").card.as_ref().unwrap();
-    assert_eq!(held.id, CardId(18));
-    assert_eq!(held.status, CardStatus::Pending);
-    // …and for an agent that is not there at all.
-    state.handle_event(event(
-        14,
-        EventKind::CardDelivered,
-        json!({"agent": "ag_absent", "card": 18, "via": "hold"}),
-    ));
-    assert_eq!(state.mirror().rev, 14);
-}
-
-#[test]
-fn the_card_status_machine_folds_answering_delivered_failed_and_snoozed() {
-    let mut state = live_with_card();
-    state.handle_event(event(
-        12,
-        EventKind::CardAnswered,
-        json!({"agent": "ag_1", "card": 17, "choice": 0, "label": "Allow",
-               "text": null, "via": "hold", "source": "deck", "principal": "device"}),
-    ));
-    assert_eq!(
-        mirrored(&state, "ag_1").card.as_ref().unwrap().status,
-        CardStatus::Answering {
-            choice: Some(0),
-            text: None
-        }
-    );
-    state.handle_event(event(
-        13,
-        EventKind::CardDelivered,
-        json!({"agent": "ag_1", "card": 17, "via": "hold"}),
-    ));
-    assert_eq!(
-        mirrored(&state, "ag_1").card.as_ref().unwrap().status,
-        CardStatus::Delivered
-    );
-    state.handle_event(event(
-        14,
-        EventKind::CardFailed,
-        json!({"agent": "ag_1", "card": 17, "reason": "link"}),
-    ));
-    assert_eq!(
-        mirrored(&state, "ag_1").card.as_ref().unwrap().status,
-        CardStatus::Failed {
-            reason: "link".into()
-        }
-    );
-    state.handle_event(event(
-        15,
-        EventKind::CardSnoozed,
-        json!({"agent": "ag_1", "card": 17}),
-    ));
-    assert_eq!(
-        mirrored(&state, "ag_1").card.as_ref().unwrap().status,
-        CardStatus::Snoozed
-    );
-}
-
-#[test]
-fn a_degraded_card_becomes_a_focus_card_and_card_focused_stamps_it() {
-    let mut state = live_with_card();
-    state.handle_event(event(
-        12,
-        EventKind::CardDegraded,
-        json!({"agent": "ag_1", "card": 17, "reason": "snooze"}),
-    ));
-    let held = mirrored(&state, "ag_1").card.as_ref().unwrap();
-    assert_eq!(held.status, CardStatus::Degraded { focused_at: None });
-    assert_eq!(held.deliver, Deliver::Focus, "⌨ Focus terminal");
-    assert!(held.expires.is_none());
-
-    state.handle_event(event(
-        13,
-        EventKind::CardFocused,
-        json!({"agent": "ag_1", "card": 17}),
-    ));
-    assert_eq!(
-        mirrored(&state, "ag_1").card.as_ref().unwrap().status,
-        CardStatus::Degraded {
-            focused_at: Some(TS)
-        },
-        "kept for the GUI until the hook flow ends"
-    );
-}
-
-#[test]
-fn a_neutralised_card_loses_its_choices_and_its_route() {
-    let mut state = live_with_card();
-    state.handle_event(event(
-        12,
-        EventKind::CardDegraded,
-        json!({"agent": "ag_1", "card": 17, "reason": "owner_gone", "deliver": "none"}),
-    ));
-    let held = mirrored(&state, "ag_1").card.as_ref().unwrap();
-    assert_eq!(held.deliver, Deliver::None, "informational");
-    assert!(held.choices.is_empty());
-    assert!(held.rec.is_none());
-    assert_eq!(
-        held.status,
-        CardStatus::Pending,
-        "the status is not touched"
-    );
-}
-
-#[test]
-fn reply_set_folds_the_reply_text_and_its_stamp() {
-    let mut state = live(10);
-    state.handle_event(event(
-        11,
-        EventKind::ReplySet,
-        json!({"agent": "ag_1", "text": "Tests fail on main.", "announce": "tests fail"}),
-    ));
-    let reply = mirrored(&state, "ag_1").reply.as_ref().unwrap();
-    assert_eq!(reply.text.as_deref(), Some("Tests fail on main."));
-    assert_eq!(reply.announce.as_deref(), Some("tests fail"));
-    assert_eq!(reply.at, TS);
-    assert!(!reply.redacted);
-}
-
-#[test]
-fn an_order_is_kept_in_the_history_with_the_exact_string_and_its_route() {
-    let mut state = live(10);
-    state.handle_event(event(
-        11,
-        EventKind::OrderDispatched,
-        json!({"agent": "ag_1", "via": "inject",
-               "text": "also run the smoke tests after the migration",
-               "card": null, "utterance": "ut_31"}),
-    ));
-    let history = state.orders(&AgentId("ag_1".into()));
-    assert_eq!(history.len(), 1);
-    assert_eq!(
-        history[0].text.as_deref(),
-        Some("also run the smoke tests after the migration"),
-        "§8.2: shown before an inject executes"
-    );
-    assert_eq!(history[0].via.as_deref(), Some("inject"));
-    assert!(history[0].reason.is_none());
-    assert_eq!(history[0].at, TS);
-}
-
-#[test]
-fn order_failed_marks_the_last_order_in_the_history_and_toasts() {
-    let mut state = live(10);
-    state.handle_event(event(
-        11,
-        EventKind::OrderDispatched,
-        json!({"agent": "ag_1", "via": "inject", "text": "run the migration"}),
-    ));
-    let effects = state.handle_event(event(
-        12,
-        EventKind::OrderFailed,
-        json!({"agent": "ag_1", "reason": "not_foreground", "text_kept": true}),
-    ));
-    assert_eq!(
-        effects,
-        vec![HostEffect::Toast(
-            "Order not delivered: not_foreground".into()
-        )]
-    );
-    let history = state.orders(&AgentId("ag_1".into()));
-    assert_eq!(
-        history.len(),
-        1,
-        "the failure landed on the order it failed"
-    );
-    assert_eq!(history[0].reason.as_deref(), Some("not_foreground"));
-    assert_eq!(
-        history[0].text.as_deref(),
-        Some("run the migration"),
-        "§4.12: order.failed carries no text, so Copy needs the history"
-    );
-}
-
-#[test]
-fn an_order_refused_before_it_was_dispatched_is_its_own_entry_with_no_text() {
-    let mut state = live(10);
-    // §5.5 guard 2: a permission dialog is open, so nothing was typed and
-    // there is no `order.dispatched` before this.
-    let effects = state.handle_event(event(
-        11,
-        EventKind::OrderFailed,
-        json!({"agent": "ag_1", "reason": "dialog_open", "text_kept": true}),
-    ));
-    assert_eq!(
-        effects,
-        vec![HostEffect::Toast("Order not delivered: dialog_open".into())]
-    );
-    let history = state.orders(&AgentId("ag_1".into()));
-    assert_eq!(history.len(), 1);
-    assert!(history[0].text.is_none());
-    assert!(history[0].via.is_none());
-    assert_eq!(history[0].reason.as_deref(), Some("dialog_open"));
-}
-
-#[test]
-fn the_order_history_is_capped_and_keeps_the_newest() {
-    let mut state = live(0);
-    for n in 1..=(ORDER_HISTORY as u64 + 5) {
-        state.handle_event(event(
-            n,
-            EventKind::OrderDispatched,
-            json!({"agent": "ag_1", "via": "push", "text": format!("order {n}")}),
-        ));
-    }
-    let history = state.orders(&AgentId("ag_1".into()));
-    assert_eq!(history.len(), ORDER_HISTORY);
-    assert_eq!(history[0].text.as_deref(), Some("order 6"));
-    assert_eq!(
-        history[ORDER_HISTORY - 1].text.as_deref(),
-        Some(&*format!("order {}", ORDER_HISTORY + 5))
-    );
-}
-
-#[test]
-fn op_confirm_requested_shows_the_window_and_raises_the_confirmation_sheet() {
-    let mut state = live(10);
-    let effects = state.handle_event(event(
-        11,
-        EventKind::OpConfirmRequested,
-        json!({"agent": "ag_1", "card": 17, "order": null,
-               "principal": "token:mcp", "need": "trusted"}),
-    ));
-    assert_eq!(effects.len(), 2);
-    assert_eq!(effects[0], HostEffect::ShowWindow);
-    let HostEffect::RaisePermissionSheet(SheetKind::Confirm(ref ask)) = effects[1] else {
-        panic!("a guarded operation raises the confirmation sheet: {effects:?}");
-    };
-    assert_eq!(ask.agent, Some(AgentId("ag_1".into())));
-    assert_eq!(ask.card, Some(CardId(17)));
-    assert!(ask.order.is_none());
-    assert_eq!(ask.principal, Some(Principal::Token("mcp".into())));
-
-    // The `inject` case carries the exact order text instead of a card.
-    let effects = state.handle_event(event(
-        12,
-        EventKind::OpConfirmRequested,
-        json!({"agent": "ag_1", "card": null, "order": "rm -rf build",
-               "principal": "uid:501", "need": "trusted"}),
-    ));
-    let HostEffect::RaisePermissionSheet(SheetKind::Confirm(ref ask)) = effects[1] else {
-        panic!("{effects:?}");
-    };
-    assert_eq!(ask.order.as_deref(), Some("rm -rf build"));
-    assert!(ask.card.is_none());
-}
-
-#[test]
-fn transcripts_fold_into_the_live_dictation_and_not_into_the_snapshot() {
-    let mut state = live(10);
-    let before = serde_json::to_value(state.mirror()).unwrap();
-    state.handle_event(event(
-        11,
-        EventKind::TranscriptPartial,
-        json!({"agent": "ag_1", "ctx": "answer", "text": "allow", "utterance": "ut_7"}),
-    ));
-    let live = state.transcript().unwrap();
-    assert_eq!(live.text, "allow");
-    assert_eq!(live.utterance, "ut_7");
-    assert!(!live.final_);
-    state.handle_event(event(
-        12,
-        EventKind::TranscriptFinal,
-        json!({"agent": "ag_1", "ctx": "answer", "text": "allow always",
-               "utterance": "ut_7", "intent": "allow"}),
-    ));
-    let live = state.transcript().unwrap();
-    assert_eq!(live.text, "allow always");
-    assert!(live.final_);
-    assert_eq!(live.intent.as_deref(), Some("allow"));
-    let mut after = serde_json::to_value(state.mirror()).unwrap();
-    after["rev"] = before["rev"].clone();
-    assert_eq!(after, before, "§4.3 keeps no transcript in the snapshot");
-}
-
-#[test]
 fn the_ptt_session_opens_on_arming_goes_live_on_listening_and_closes_on_ended() {
     let mut state = live(10);
     state.handle_event(event(
@@ -984,19 +729,71 @@ fn the_ptt_session_opens_on_arming_goes_live_on_listening_and_closes_on_ended() 
     ));
     assert!(state.mirror().voice.ptt.as_ref().unwrap().live);
 
+    // The capture's level is the meter's; the words heard are not this
+    // window's to hold (never a session), and still advance the rev.
+    state.handle_event(event(13, EventKind::VoiceLevel, json!({"rms": 0.4})));
+    assert_eq!(state.level().map(|level| level.at), Some(TS));
     state.handle_event(event(
-        13,
+        14,
         EventKind::TranscriptPartial,
         json!({"agent": "ag_1", "ctx": "talk", "text": "hello", "utterance": "ut_9"}),
     ));
+    assert_eq!(state.mirror().rev, 14);
+    assert!(state.mirror().voice.ptt.as_ref().unwrap().live);
     state.handle_event(event(
-        14,
+        15,
         EventKind::VoiceState,
         json!({"state": "ended", "agent": "ag_1", "ctx": "talk", "empty": false,
                "principal": "device", "utterance": "ut_9"}),
     ));
     assert!(state.mirror().voice.ptt.is_none());
-    assert!(state.transcript().is_none(), "the session is over");
+    assert!(state.level().is_none(), "the session is over");
+}
+
+#[test]
+fn a_press_and_a_spoken_reply_are_kept_without_whom_they_are_for() {
+    // Never a session: the press's own facts are kept (its context, who
+    // pressed, the utterance, whether it is live), and the agent, the card
+    // it answers and the caller's session are not.
+    let mut state = live(10);
+    state.handle_event(event(
+        11,
+        EventKind::VoiceState,
+        json!({"state": "listening", "agent": "ag_1", "ctx": "answer", "card": 17,
+               "principal": "uid:501", "session": 7, "utterance": "ut_9"}),
+    ));
+    let ptt = state.mirror().voice.ptt.as_ref().unwrap();
+    assert_eq!((&ptt.agent, &ptt.card, &ptt.session), (&None, &None, &None));
+    assert_eq!(ptt.principal, Principal::Uid(501));
+    assert_eq!(ptt.utterance, "ut_9");
+    assert!(ptt.live);
+
+    // A snapshot that names them, as the hello's does, is kept the same way.
+    let mut named = snapshot(20);
+    named.voice.ptt = Some(deck_model::PttInfo {
+        device_press: None,
+        agent: Some(AgentId("ag_1".into())),
+        ctx: deck_model::PttCtx::Answer,
+        card: Some(CardId(17)),
+        principal: Principal::Device,
+        session: Some(SessionId(7)),
+        utterance: "ut_10".into(),
+        live: true,
+        since: TS,
+        companion: false,
+    });
+    named.voice.speaking = Some(deck_model::Speaking {
+        utterance: "ut_11".into(),
+        lane: "ready".into(),
+        agent: Some(AgentId("ag_1".into())),
+    });
+    state.handle_event(AppEvent::Api(ApiEvent::Snapshot { snapshot: named }));
+    let voice = &state.mirror().voice;
+    let ptt = voice.ptt.as_ref().unwrap();
+    assert_eq!((&ptt.agent, &ptt.card, &ptt.session), (&None, &None, &None));
+    assert_eq!((ptt.utterance.as_str(), ptt.live), ("ut_10", true));
+    let speaking = voice.speaking.as_ref().unwrap();
+    assert_eq!((speaking.utterance.as_str(), &speaking.agent), ("ut_11", &None));
 }
 
 #[test]
@@ -1032,50 +829,57 @@ fn voice_route_and_voice_utterance_fold_the_voice_mirror() {
 }
 
 #[test]
-fn a_not_determined_permission_raises_a_sheet_and_a_denied_one_opens_settings() {
+fn only_speech_not_yet_asked_raises_a_sheet_and_nothing_opens_settings_unasked() {
     let mut state = live(10);
+    // The Mac's microphone is no voice path of this app any more (owner
+    // decision 11): not asked yet, it is folded and raises nothing.
     let effects = state.handle_event(event(
         11,
         EventKind::PermChanged,
         json!({"microphone": "not_determined", "speech": "granted"}),
     ));
-    assert_eq!(
-        effects,
-        vec![HostEffect::RaisePermissionSheet(SheetKind::Microphone)]
-    );
+    assert_eq!(effects, vec![]);
     assert_eq!(
         state.mirror().voice.permissions.microphone,
         Permission::NotDetermined
     );
     assert_eq!(state.mirror().voice.permissions.speech, Permission::Granted);
 
-    // macOS will not prompt twice, so a denial is a trip to System Settings.
+    // Speech recognition that has not been asked for is the one sheet.
     let effects = state.handle_event(event(
         12,
         EventKind::PermChanged,
-        json!({"microphone": "denied", "speech": "denied"}),
+        json!({"microphone": "not_determined", "speech": "not_determined"}),
     ));
     assert_eq!(
         effects,
-        vec![
-            HostEffect::OpenUrl(MICROPHONE_SETTINGS.into()),
-            HostEffect::OpenUrl(SPEECH_SETTINGS.into()),
-        ]
+        vec![HostEffect::RaisePermissionSheet(SheetKind::Speech)]
     );
-    // Re-emitting the same permissions says nothing new.
+
+    // A denial is lifted in System Settings, which the Voice page opens
+    // when the owner presses Open Settings, never by itself.
+    let effects = state.handle_event(event(
+        13,
+        EventKind::PermChanged,
+        json!({"microphone": "denied", "speech": "denied"}),
+    ));
+    assert_eq!(effects, vec![]);
+    assert_eq!(state.mirror().voice.permissions.microphone, Permission::Denied);
+    assert_eq!(state.mirror().voice.permissions.speech, Permission::Denied);
+    // Re-emitting the same permissions says nothing new either.
     assert!(state
         .handle_event(event(
-            13,
+            14,
             EventKind::PermChanged,
             json!({"microphone": "denied", "speech": "denied"}),
         ))
         .is_empty());
 
     // Bluetooth (the BLE voice transport): macOS asks by itself, so a
-    // not-determined grant raises no sheet; a denial is System Settings.
+    // not-determined grant raises no sheet, and a denial opens nothing.
     assert!(state
         .handle_event(event(
-            14,
+            15,
             EventKind::PermChanged,
             json!({"microphone": "denied", "speech": "denied", "bluetooth": "not_determined"}),
         ))
@@ -1084,15 +888,14 @@ fn a_not_determined_permission_raises_a_sheet_and_a_denied_one_opens_settings() 
         state.mirror().voice.permissions.bluetooth,
         Permission::NotDetermined
     );
-    let effects = state.handle_event(event(
-        15,
-        EventKind::PermChanged,
-        json!({"microphone": "denied", "speech": "denied", "bluetooth": "denied"}),
-    ));
-    assert_eq!(
-        effects,
-        vec![HostEffect::OpenUrl(BLUETOOTH_SETTINGS.into())]
-    );
+    assert!(state
+        .handle_event(event(
+            16,
+            EventKind::PermChanged,
+            json!({"microphone": "denied", "speech": "denied", "bluetooth": "denied"}),
+        ))
+        .is_empty());
+    assert_eq!(state.mirror().voice.permissions.bluetooth, Permission::Denied);
 }
 
 #[test]
@@ -1186,25 +989,322 @@ fn device_faces_replaces_the_strip_and_device_face_moves_the_cursor() {
     assert_eq!(state.mirror().device.face, Some(6));
 }
 
+/// A linked deck's `device.status`, as the store writes it.
+fn status_linked() -> Value {
+    json!({
+        "transport": "bluetooth", "battery": 85, "charging": false, "board": "Rev B",
+        "last": {"at": "2026-11-11T09:41:00.000Z", "fw": "0.13.0-openwalkietalkie",
+                 "board": "Rev B", "transport": "bluetooth"},
+        "drops": [{"at": "2026-11-11T09:36:00.000Z", "why": "write_stall"}]
+    })
+}
+
+/// 2026-11-11T09:41:00.000Z and 09:36:00.000Z.
+const LIVE_AT: Ts = Ts(1_794_390_060_000);
+const DROP_AT: Ts = Ts(1_794_389_760_000);
+
 #[test]
-fn focus_changed_folds_the_agent_the_sequence_and_the_source() {
+fn device_status_replaces_all_six_fields_at_once() {
     let mut state = live(10);
-    state.handle_event(event(
-        11,
-        EventKind::FocusChanged,
-        json!({"agent": "ag_1", "slot": 1, "seq": 41, "source": "device"}),
-    ));
-    let focus = &state.mirror().focus;
-    assert_eq!(focus.agent, Some(AgentId("ag_1".into())));
-    assert_eq!(focus.seq, Some(41));
-    assert_eq!(focus.source, Some(FocusSource::Device));
-    // The focused agent going away takes the focus with it.
+    assert!(state
+        .handle_event(event(11, EventKind::DeviceStatus, status_linked()))
+        .is_empty());
+    let last = LastLinked {
+        at: LIVE_AT,
+        fw: Some("0.13.0-openwalkietalkie".into()),
+        board: Some("Rev B".into()),
+        transport: Some(Transport::Bluetooth),
+    };
+    let device = &state.mirror().device;
+    assert_eq!(device.transport, Some(Transport::Bluetooth));
+    assert_eq!((device.battery, device.charging), (Some(85), Some(false)));
+    assert_eq!(device.board.as_deref(), Some("Rev B"));
+    assert_eq!(device.last, Some(last.clone()));
+    assert_eq!(
+        device.drops,
+        vec![LinkDrop {
+            at: DROP_AT,
+            why: "write_stall".into()
+        }]
+    );
+    // The next one replaces all six: what it calls null is unknown now,
+    // not the old value kept.
     state.handle_event(event(
         12,
-        EventKind::AgentRemoved,
-        json!({"agent": "ag_1", "reason": "released"}),
+        EventKind::DeviceStatus,
+        json!({"transport": "usb", "battery": null, "charging": true, "board": null,
+               "last": last, "drops": []}),
     ));
-    assert_eq!(state.mirror().focus.agent, None);
+    let device = &state.mirror().device;
+    assert_eq!(device.transport, Some(Transport::Usb));
+    assert_eq!((device.battery, device.charging), (None, Some(true)));
+    assert_eq!(device.board, None);
+    assert_eq!(device.last, Some(last));
+    assert!(device.drops.is_empty());
+    // What the status does not carry is the link's, and stays.
+    assert_eq!(device.link, Link::Connected);
+    assert_eq!(device.fw.as_deref(), Some("0.1.0"));
+}
+
+#[test]
+fn device_macros_replaces_one_faces_keys_whole_and_leaves_the_others() {
+    let mut state = live(10);
+    let build = MacroKey {
+        label: "build".into(),
+        binding: Some(Binding::Left),
+        keys: Some("cmd+b".into()),
+    };
+    let empty = MacroKey {
+        label: String::new(),
+        binding: None,
+        keys: None,
+    };
+    let shot = MacroKey {
+        label: "shot".into(),
+        binding: None,
+        keys: Some("cmd+shift+4".into()),
+    };
+    state.handle_event(event(
+        11,
+        EventKind::DeviceMacros,
+        json!({"f": 3, "src": null, "keys": [build, empty, shot]}),
+    ));
+    assert_eq!(
+        state.mirror().macros[&3],
+        MacroLayout {
+            src: None,
+            keys: vec![build.clone(), empty.clone(), shot.clone()],
+        }
+    );
+    let mute = MacroKey {
+        label: "mute".into(),
+        binding: Some(Binding::Cw),
+        keys: None,
+    };
+    state.handle_event(event(
+        12,
+        EventKind::DeviceMacros,
+        json!({"f": 6, "src": "deck.toml", "keys": [mute]}),
+    ));
+    assert_eq!(state.mirror().macros.len(), 2);
+    assert_eq!(state.mirror().macros[&6].src.as_deref(), Some("deck.toml"));
+    assert_eq!(state.mirror().macros[&3].keys.len(), 3, "face 3 untouched");
+    // Replaced, never merged: the slots the new layout does not have are
+    // gone, and its tag is the new one.
+    state.handle_event(event(
+        13,
+        EventKind::DeviceMacros,
+        json!({"f": 3, "src": "app", "keys": [build]}),
+    ));
+    assert_eq!(
+        state.mirror().macros[&3],
+        MacroLayout {
+            src: Some("app".into()),
+            keys: vec![build],
+        }
+    );
+    // A face the deck emptied keeps its (empty) layout, as the store does.
+    state.handle_event(event(
+        14,
+        EventKind::DeviceMacros,
+        json!({"f": 6, "src": "deck.toml", "keys": []}),
+    ));
+    assert!(state.mirror().macros[&6].keys.is_empty());
+    assert_eq!(state.mirror().macros.len(), 2);
+}
+
+#[test]
+fn a_malformed_status_or_key_layout_advances_the_rev_and_changes_nothing() {
+    let mut state = live(10);
+    state.handle_event(event(11, EventKind::DeviceStatus, status_linked()));
+    state.handle_event(event(
+        12,
+        EventKind::DeviceMacros,
+        json!({"f": 3, "src": null,
+               "keys": [{"label": "build", "binding": "left", "keys": "cmd+b"}]}),
+    ));
+    let before = serde_json::to_value(state.mirror()).unwrap();
+    // One field wrong spoils the status: it is never applied in half.
+    let spoiled = |key: &str, value: Value| {
+        let mut status = status_linked();
+        status[key] = value;
+        status
+    };
+    let mut no_drops = status_linked();
+    no_drops.as_object_mut().unwrap().remove("drops");
+    let samples = [
+        (EventKind::DeviceStatus, json!({})),
+        (EventKind::DeviceStatus, json!("usb")),
+        (EventKind::DeviceStatus, no_drops),
+        (EventKind::DeviceStatus, spoiled("transport", json!("carrier pigeon"))),
+        (EventKind::DeviceStatus, spoiled("battery", json!("full"))),
+        (EventKind::DeviceStatus, spoiled("battery", json!(300))),
+        (EventKind::DeviceStatus, spoiled("charging", json!(1))),
+        (EventKind::DeviceStatus, spoiled("last", json!({"at": "yesterday"}))),
+        (EventKind::DeviceStatus, spoiled("drops", json!([{"why": "read"}]))),
+        (EventKind::DeviceMacros, json!({"src": null, "keys": []})),
+        (EventKind::DeviceMacros, json!({"f": 300, "src": null, "keys": []})),
+        (EventKind::DeviceMacros, json!({"f": 3, "src": null, "keys": "cmd+b"})),
+        (EventKind::DeviceMacros, json!({"f": 3, "src": 7, "keys": []})),
+        (EventKind::DeviceMacros, json!({"f": 3, "src": null, "keys": [{"binding": "left"}]})),
+        (EventKind::DeviceMacros, json!({"f": 3, "src": null})),
+    ];
+    let count = samples.len() as u64;
+    for (rev, (kind, data)) in (13..).zip(samples) {
+        assert!(
+            state.handle_event(event(rev, kind, data)).is_empty(),
+            "{kind:?} produced an effect"
+        );
+    }
+    assert_eq!(state.mirror().rev, 12 + count);
+    assert_eq!(state.folded(), 2 + count);
+    let mut after = serde_json::to_value(state.mirror()).unwrap();
+    after["rev"] = before["rev"].clone();
+    assert_eq!(after, before);
+}
+
+#[test]
+fn a_link_that_goes_offline_clears_what_described_the_deck_on_it() {
+    let mut linked = snapshot(10);
+    linked.device.fw = Some("0.13.0-openwalkietalkie".into());
+    linked.device.face = Some(1);
+    linked.device.language_supported = true;
+    let mut state = HostState::detached();
+    state.handle_event(AppEvent::Api(ApiEvent::Connected { snapshot: linked }));
+    state.handle_event(event(11, EventKind::DeviceStatus, status_linked()));
+    // A silent link is still the same deck: nothing is cleared.
+    state.handle_event(event(
+        12,
+        EventKind::DeviceLink,
+        json!({"link": "degraded", "session": "degraded", "host_online": false}),
+    ));
+    let device = &state.mirror().device;
+    assert_eq!(device.fw.as_deref(), Some("0.13.0-openwalkietalkie"));
+    assert_eq!((device.face, device.transport), (Some(1), Some(Transport::Bluetooth)));
+    // The store says the link went down with the firmware it still held,
+    // then clears it: the mirror ends where the store does.
+    state.handle_event(event(
+        13,
+        EventKind::DeviceLink,
+        json!({"link": "offline", "sid": 314159, "fw": "0.13.0-openwalkietalkie",
+               "boot": false, "host_online": false, "session": "absent"}),
+    ));
+    let device = &state.mirror().device;
+    assert_eq!(device.link, Link::Offline);
+    assert_eq!(device.fw, None);
+    assert_eq!(device.face, None);
+    assert!(!device.language_supported);
+    assert_eq!(
+        (device.transport, device.battery, device.charging, device.board.as_deref()),
+        (None, None, None, None)
+    );
+    // The remembered deck and the drops are the status's to change, and
+    // the status that follows the drop says what they are now.
+    assert_eq!(device.last.as_ref().map(|last| last.at), Some(LIVE_AT));
+    assert_eq!(device.drops.len(), 1);
+    // A link word this build cannot read clears nothing.
+    let mut state = live(10);
+    state.handle_event(event(11, EventKind::DeviceLink, json!({"link": "gone"})));
+    assert_eq!(state.mirror().device.link, Link::Connected);
+    assert_eq!(state.mirror().device.fw.as_deref(), Some("0.1.0"));
+}
+
+#[test]
+fn seen_is_false_until_the_service_first_answers_and_true_for_good_after() {
+    let mut state = HostState::detached();
+    assert!(!state.seen());
+    state.handle_event(AppEvent::Api(ApiEvent::Disconnected));
+    assert!(!state.seen(), "a failed dial is not an answer");
+    state.handle_event(connected(10));
+    assert!(state.seen() && state.connected());
+    state.handle_event(AppEvent::Api(ApiEvent::Disconnected));
+    assert!(state.seen(), "a service that went away was still there once");
+    assert!(!state.connected());
+}
+
+#[test]
+fn a_menu_click_folds_nothing_and_asks_for_nothing() {
+    let mut state = live(10);
+    let before = serde_json::to_value(state.mirror()).unwrap();
+    for command in MenuCommand::ALL {
+        assert!(
+            state.handle_event(AppEvent::Menu(command)).is_empty(),
+            "{command:?}"
+        );
+    }
+    assert_eq!(serde_json::to_value(state.mirror()).unwrap(), before);
+    assert_eq!(state.folded(), 0);
+}
+
+/// The same property for the companion's actions: none of them is an event,
+/// so none can reach the mirror.
+#[test]
+fn no_companion_action_can_write_to_the_mirror() {
+    let state = live(10);
+    let before = serde_json::to_value(state.mirror()).unwrap();
+    let actions = [
+        UiAction::DeviceFacesSet {
+            list: vec![FaceEntry {
+                f: 1,
+                t: Template::Agents,
+                n: "Agents".into(),
+            }],
+        },
+        UiAction::DeviceMacroSet {
+            f: 3,
+            layout: "app".into(),
+            src: None,
+            keys: Vec::new(),
+        },
+        UiAction::ConfigPatch {
+            entries: vec![(
+                "sources.paused".into(),
+                deck_gui_core::ConfigValue::Bool(true),
+            )],
+        },
+        UiAction::SourcesList,
+        UiAction::TestQuestion,
+        UiAction::TestVoice,
+        UiAction::TestSay,
+        UiAction::TestStatus,
+        UiAction::CareChecks,
+        UiAction::CareFootprint,
+        UiAction::CareSupportFile {
+            to: "desktop".into(),
+        },
+        UiAction::CareCacheClear {
+            what: "firmware".into(),
+        },
+    ];
+    let mut methods = Vec::new();
+    for action in &actions {
+        let (method, params) = action.request();
+        methods.push(method);
+        assert!(params.is_object(), "{method} has no params object");
+        assert!(state.send(action).is_none(), "{method} on a detached state");
+    }
+    assert_eq!(
+        methods,
+        vec![
+            "device.faces.set",
+            "device.macro.set",
+            "config.set",
+            "sources.list",
+            "care.test.question",
+            "care.test.voice",
+            "care.test.say",
+            "care.test.status",
+            "care.checks",
+            "care.footprint",
+            "care.support_file",
+            "care.cache.clear",
+        ]
+    );
+    assert_eq!(
+        serde_json::to_value(state.mirror()).unwrap(),
+        before,
+        "a companion action wrote to the mirror"
+    );
 }
 
 #[test]
@@ -1238,10 +1338,13 @@ fn a_hijacked_port_is_toasted_once_by_name_and_clears_when_it_recovers() {
         json!({"reason": "hooks_hijack_risk", "port": 47201,
                "listener": {"pid": 991, "command": "python3"}}),
     ));
+    // What the lost port takes away is the local API, and nothing of the
+    // plugin's hooks, which reach the service over its socket.
     assert_eq!(
         effects,
         vec![HostEffect::Toast(
-            "Port 47201 is held by python3; Claude hooks may stall".into()
+            "Port 47201 is held by python3, so the local API is closed until the port is free."
+                .into()
         )]
     );
     assert_eq!(
@@ -1278,14 +1381,71 @@ fn a_service_shutdown_is_toasted_and_a_plain_degradation_names_its_reason() {
         state.handle_event(event(
             11,
             EventKind::ServiceDegraded,
-            json!({"reason": "port_in_use", "port": 47201, "listener": null}),
+            json!({"reason": "disk_full", "port": 47201, "listener": null}),
         )),
-        vec![HostEffect::Toast("Service degraded: port_in_use".into())]
+        vec![HostEffect::Toast("Service degraded: disk_full".into())]
     );
     assert_eq!(
         state.handle_event(event(12, EventKind::ServiceShutdown, json!({}))),
         vec![HostEffect::Toast("The service is shutting down".into())]
     );
+}
+
+#[test]
+fn a_port_another_program_holds_is_toasted_as_the_local_api_closed_and_never_as_the_hooks() {
+    let mut state = live(10);
+    // The bind lost, and the service could not tell who to: another process.
+    let effects = state.handle_event(event(
+        11,
+        EventKind::ServiceDegraded,
+        json!({"reason": "port_in_use", "port": 47201, "listener": null}),
+    ));
+    assert_eq!(
+        effects,
+        vec![HostEffect::Toast(
+            "Port 47201 is held by another process, so the local API is closed until the port is free."
+                .into()
+        )]
+    );
+    assert_eq!(state.mirror().service.degraded.as_deref(), Some("port_in_use"));
+    // The same program starts answering on it: news, said by name.
+    let effects = state.handle_event(event(
+        12,
+        EventKind::ServiceDegraded,
+        json!({"reason": "hooks_hijack_risk", "port": 47201,
+               "listener": {"pid": 4242, "command": "node"}}),
+    ));
+    assert_eq!(
+        effects,
+        vec![HostEffect::Toast(
+            "Port 47201 is held by node, so the local API is closed until the port is free."
+                .into()
+        )]
+    );
+    // In every language, and never a word about Claude or its hooks.
+    for language in [
+        deck_gui_core::i18n::Language::SimplifiedChinese,
+        deck_gui_core::i18n::Language::TraditionalChinese,
+        deck_gui_core::i18n::Language::Japanese,
+    ] {
+        let mut state = live(10);
+        let mut snapshot = state.mirror().clone();
+        snapshot.rev = 11;
+        snapshot.settings.language = language as u16;
+        state.handle_event(AppEvent::Api(ApiEvent::Snapshot { snapshot }));
+        let effects = state.handle_event(event(
+            12,
+            EventKind::ServiceDegraded,
+            json!({"reason": "port_in_use", "port": 47201,
+                   "listener": {"pid": 4242, "command": "node"}}),
+        ));
+        let [HostEffect::Toast(toast)] = effects.as_slice() else {
+            panic!("{language:?}: {effects:?}");
+        };
+        assert!(toast.contains("47201") && toast.contains("node"), "{toast}");
+        assert!(toast.contains("API"), "{language:?}: {toast}");
+        assert!(!toast.contains("Claude"), "{language:?}: {toast}");
+    }
 }
 
 #[test]
@@ -1327,122 +1487,146 @@ fn an_event_the_gui_does_not_mirror_advances_the_rev_and_nothing_else() {
 #[test]
 fn a_malformed_payload_is_ignored_and_still_advances_the_rev() {
     let mut state = live(10);
+    let before = without_rev(&state);
     // Every one of these is a well-formed envelope with `data` the reducer
     // cannot use. A client that panicked here would be a client the daemon
     // could crash by adding a field.
     for (rev, kind, data) in [
-        (11, EventKind::AgentAdded, json!({"agent": {"id": "ag_9"}})),
-        (12, EventKind::AgentAdded, json!({})),
-        (
-            13,
-            EventKind::AgentChanged,
-            json!({"agent": "ag_1", "fields": 7}),
-        ),
-        (
-            14,
-            EventKind::AgentChanged,
-            json!({"agent": "ag_1", "fields": {"state": "not_a_state"}}),
-        ),
-        (15, EventKind::CardSet, json!({"agent": "ag_1", "card": 17})),
-        (16, EventKind::DeviceSet, json!({"k": "nope", "v": 1})),
-        (17, EventKind::FocusChanged, json!({"source": "nowhere"})),
-        (18, EventKind::UsageUpdated, json!({"usage": "lots"})),
-        (19, EventKind::VoiceState, json!({"state": "arming"})),
+        (11, EventKind::DeviceSet, json!({"k": "nope", "v": 1})),
+        (12, EventKind::DeviceSet, json!({"k": "brightness", "v": "dim"})),
+        (13, EventKind::DeviceLink, json!({"link": 7})),
+        (14, EventKind::DeviceFaces, json!({"list": "all of them"})),
+        (15, EventKind::DeviceFace, json!({"f": "six"})),
+        (16, EventKind::UsageUpdated, json!({"usage": "lots"})),
+        (17, EventKind::VoiceState, json!({"state": "arming"})),
+        (18, EventKind::VoiceRoute, json!({"route": "carrier pigeon"})),
+        (19, EventKind::VoiceUtterance, json!({"phase": 3})),
+        (20, EventKind::PermChanged, json!({"microphone": "maybe"})),
+        (21, EventKind::ServiceDegraded, json!({"reason": 7, "port": "high"})),
     ] {
         assert!(
             state.handle_event(event(rev, kind, data)).is_empty(),
             "{kind:?} produced an effect"
         );
     }
-    assert_eq!(state.mirror().rev, 19);
-    assert_eq!(state.mirror().agents.len(), 1, "no half-applied agent");
-    assert_eq!(
-        mirrored(&state, "ag_1").state,
-        AgentState::Working,
-        "a fields merge that would not parse left the agent alone"
-    );
-    assert!(mirrored(&state, "ag_1").card.is_none());
-    assert!(state.mirror().voice.ptt.is_none());
-    assert_eq!(state.mirror().focus.agent, None);
+    assert_eq!(state.mirror().rev, 21);
+    assert_eq!(state.folded(), 11);
+    assert_eq!(without_rev(&state), before, "nothing was applied half-way");
 }
 
 #[test]
 fn the_whole_script_of_a_days_work_folds_to_the_daemons_own_snapshot() {
     // The reducer is only worth anything if a long script lands where the
     // daemon is: fold the events, then compare against the snapshot the
-    // daemon would have answered `state.get` with.
+    // daemon would have answered `state.get` with — as this window keeps
+    // it, without its sessions. The deck's day, with a session's share of
+    // it in among it folding nothing.
     let mut state = live(10);
-    let mut expected = snapshot(10);
-    let script: Vec<(u64, EventKind, Value)> = vec![
+    let strip = vec![
+        FaceEntry {
+            f: 1,
+            t: Template::Agents,
+            n: "Agents".into(),
+        },
+        FaceEntry {
+            f: 3,
+            t: Template::Macropad,
+            n: "Macropad".into(),
+        },
+        FaceEntry {
+            f: 6,
+            t: Template::Settings,
+            n: "Settings".into(),
+        },
+    ];
+    let build = MacroKey {
+        label: "build".into(),
+        binding: Some(Binding::Left),
+        keys: Some("cmd+b".into()),
+    };
+    let script: Vec<(EventKind, Value)> = vec![
+        (EventKind::DeviceStatus, status_linked()),
+        (EventKind::DeviceFaces, json!({"list": strip})),
+        (EventKind::AgentAdded, json!({"agent": agent("ag_2")})),
+        (EventKind::DeviceFace, json!({"f": 3})),
+        (EventKind::DeviceSet, json!({"k": "speaker", "v": 6})),
         (
-            11,
-            EventKind::AgentSlot,
-            json!({"agent": "ag_1", "slot": 1}),
+            EventKind::DeviceMacros,
+            json!({"f": 3, "src": null, "keys": [build]}),
         ),
         (
-            12,
-            EventKind::AgentChanged,
-            json!({"agent": "ag_1", "fields": {"state": "question"}}),
-        ),
-        (
-            13,
             EventKind::CardSet,
-            json!({"agent": "ag_1", "card": card(17)}),
+            json!({"agent": "ag_2", "card": card(17)}),
         ),
         (
-            14,
-            EventKind::FocusChanged,
-            json!({"agent": "ag_1", "slot": 1, "seq": 41, "source": "device"}),
+            EventKind::VoiceRoute,
+            json!({"route": "ble", "output_uid": "ble:FAKE", "input_uid": "ble:FAKE",
+                   "transport": "ble"}),
         ),
         (
-            15,
-            EventKind::CardAnswered,
-            json!({"agent": "ag_1", "card": 17, "choice": 0, "label": "Allow",
-                   "text": null, "via": "hold", "source": "deck", "principal": "device"}),
+            EventKind::VoiceUtterance,
+            json!({"utterance": "ut_77", "lane": "ready", "phase": "started"}),
         ),
         (
-            16,
-            EventKind::CardDelivered,
-            json!({"agent": "ag_1", "card": 17, "via": "hold"}),
-        ),
-        (
-            17,
-            EventKind::CardCleared,
-            json!({"agent": "ag_1", "card": 17, "delivered": true, "reason": "answered"}),
-        ),
-        (
-            18,
-            EventKind::AgentChanged,
-            json!({"agent": "ag_1", "fields": {"state": "working"}}),
-        ),
-        (
-            19,
             EventKind::ReplySet,
-            json!({"agent": "ag_1", "text": "Migrations applied.", "announce": null}),
+            json!({"agent": "ag_2", "text": "Migrations applied.", "announce": null}),
+        ),
+        (
+            EventKind::VoiceUtterance,
+            json!({"utterance": "ut_77", "lane": "ready", "phase": "ended"}),
+        ),
+        (
+            EventKind::DeviceLink,
+            json!({"link": "degraded", "session": "degraded", "host_online": false}),
+        ),
+        (
+            EventKind::DeviceLink,
+            json!({"link": "connected", "session": "live", "host_online": true}),
         ),
     ];
-    for (rev, kind, data) in script {
+    let count = script.len() as u64;
+    for (rev, (kind, data)) in (11..).zip(script) {
         state.handle_event(event(rev, kind, data));
     }
 
-    expected.rev = 19;
-    let one = expected.agents.get_mut(&AgentId("ag_1".into())).unwrap();
-    one.slot = Some(Slot(1));
-    one.reply = Some(deck_model::Reply {
-        text: Some("Migrations applied.".into()),
-        at: TS,
-        announce: None,
-        redacted: false,
+    let mut expected = snapshot(10);
+    expected.rev = 10 + count;
+    let device = &mut expected.device;
+    device.transport = Some(Transport::Bluetooth);
+    device.battery = Some(85);
+    device.charging = Some(false);
+    device.board = Some("Rev B".into());
+    device.last = Some(LastLinked {
+        at: LIVE_AT,
+        fw: Some("0.13.0-openwalkietalkie".into()),
+        board: Some("Rev B".into()),
+        transport: Some(Transport::Bluetooth),
     });
-    expected.focus = deck_model::Focus {
-        agent: Some(AgentId("ag_1".into())),
-        seq: Some(41),
-        source: Some(FocusSource::Device),
-    };
-    assert_eq!(
-        serde_json::to_value(state.mirror()).unwrap(),
-        serde_json::to_value(&expected).unwrap()
+    device.drops = vec![LinkDrop {
+        at: DROP_AT,
+        why: "write_stall".into(),
+    }];
+    device.faces = strip.clone();
+    device.face = Some(3);
+    device.settings.speaker = 6;
+    device.link = Link::Connected;
+    device.session = SessionState::Live;
+    device.host_online = true;
+    expected.faces = strip;
+    expected.settings.speaker = 6;
+    expected.macros.insert(
+        3,
+        MacroLayout {
+            src: None,
+            keys: vec![build],
+        },
     );
+    let voice = &mut expected.voice;
+    voice.route = Route::Ble;
+    voice.output_uid = Some("ble:FAKE".into());
+    voice.input_uid = Some("ble:FAKE".into());
+    voice.transport = Some(VoiceTransport::Ble);
+    assert_eq!(serde_json::to_value(state.mirror()).unwrap(), mirrored(expected));
     assert_eq!(state.gaps(), 0);
-    assert_eq!(state.folded(), 9);
+    assert_eq!(state.folded(), count);
 }

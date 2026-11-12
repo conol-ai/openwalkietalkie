@@ -1,63 +1,64 @@
-//! The window's components, in the look [`crate::style`] describes: buttons,
-//! rows and cards, badges, strips, a switch, chips, the code block and the
-//! page frame every admin screen sits in.
+//! The window's parts, in the look [`crate::style`] describes: the type
+//! ramp, state words, keycaps and modifier marks, rows, cards and sections,
+//! the page frame, and the controls a page puts on a row.
 //!
-//! They are built from `div`s and not from gpui-component's widgets for two
-//! reasons. gpui-component's `Button` turns its label red on hover and fixes
-//! its own paddings, and its `Sheet`/`Dialog` paint the theme background,
-//! which here is translucent glass. Everything below reads [`Palette`] and
-//! nothing else, so a screen that uses them cannot pick up a stock colour.
+//! They are built from `div`s and not from gpui-component's widgets: its
+//! `Button` fixes its own paddings and recolours its label on hover, and its
+//! `Sheet`/`Dialog` paint the theme's background. Everything below reads
+//! [`Palette`] and nothing else, so a page that uses them cannot pick up a
+//! stock colour.
 //!
-//! Sizes are Zeron's: 13/17 Medium titles over 12/16 muted meta lines,
-//! 32 px controls (26 px small), 16 px icons muted at rest, 8 px radii on
-//! controls and 12 px on cards, rows at least 60 px tall with their
-//! dividers inset to the text edge.
-use crate::style::{palette, Palette, MONO};
-use deck_model::{Kind, Tone};
+//! The numbers are the design's kit: rows 44 high with one line and 56 with
+//! a sub-line, radii 6 on keycaps, 8 on controls and tiles, 12 on cards,
+//! type at 11, 12, 13, 22 and 30 px, and a 764 px content column.
+//! Everything is in pixels, which is also what the design's CSS is in;
+//! heights include borders, as both the design's `border-box` and taffy
+//! count them.
+//!
+//! Which part is which: the words ([`label`], [`mono`], [`hint`],
+//! [`status`], [`code_block`]), the marks ([`dot`], [`keycap`],
+//! [`radio_dot`], [`combo`]), the controls ([`Btn`], [`CopyButton`],
+//! [`Switch`], [`Level`], [`Segmented`], [`PopupButton`], [`Chip`],
+//! [`field`], and [`Press`] for anything else that is pressed), the
+//! containers ([`section`], [`card`], [`Row`], [`tile`], [`bare`],
+//! [`attention`], and a table's [`table_row`], [`cell`] and [`cell_end`])
+//! and the frame ([`brand`], [`nav_item`], [`link_out`], [`Header`],
+//! [`page`]). The deck's own pictures — the device, the face plates, the
+//! battery — are in [`crate::art`].
+//!
+//! **Every control is a stop on the window's Tab order.** It keeps a focus
+//! handle of its own under its id, Return and Space press it (a menu button
+//! opens its menu), a [`Level`] also takes the arrow keys, Home and End, and
+//! while it has the keyboard it draws the one blue, `info`, as a 2 px ring
+//! 2 px outside itself ([`ring`]). A click with the pointer never takes the
+//! keyboard, so a ring always means the keyboard is there. Selection is the
+//! other ring, in `outline`. Two things follow for a page: a control's id
+//! must be unique among the ids around it (its focus is kept under it), and
+//! a control needs 4 px of room before anything that clips (8 around a
+//! selected tile), or its ring is cut.
+use crate::style::{deck_colors, hex, palette, Palette, MONO};
+use deck_model::Tone;
 use gpui::{
-    div, percentage, prelude::*, px, relative, svg, Animation, AnimationExt as _, AnyElement,
-    AnyView, App, ClickEvent, Div, ElementId, FontWeight, Hsla, SharedString, Stateful, Svg,
-    Transformation, Window,
+    canvas, div, percentage, prelude::*, px, svg, AlignItems, Animation, AnimationExt as _,
+    AnyElement, AnyView, App, Bounds, ClickEvent, ClipboardItem, Context, Corner, DismissEvent,
+    Div, DragMoveEvent, ElementId, Entity, EntityId, FocusHandle, Focusable as _, FontFeatures,
+    FontWeight, Hsla, Interactivity, KeyDownEvent, MouseButton, MouseDownEvent, Pixels,
+    SharedString, Stateful, StyleRefinement, Svg, Transformation, Window,
 };
 use gpui_component::input::{Input, InputState};
+use gpui_component::menu::PopupMenu;
+use gpui_component::popover::Popover;
 use gpui_component::tooltip::Tooltip;
-use gpui_component::{h_flex, v_flex};
+use gpui_component::{h_flex, v_flex, Selectable, StyledExt as _};
 use std::rc::Rc;
-use std::time::Duration;
-
-/// The website's pixel radio, shared by every product identity surface.
-pub fn brand_mark(size: f32) -> Div {
-    div().size(px(size)).flex_none().child(
-        gpui::img("branding/radio.png").size_full().object_fit(gpui::ObjectFit::Contain),
-    )
-}
-
-pub fn project_credit(p: &Palette) -> Div {
-    project_credit_localized(p, deck_gui_core::i18n::Language::English)
-}
-
-pub fn project_credit_localized(p: &Palette, language: deck_gui_core::i18n::Language) -> Div {
-    h_flex().gap(px(6.)).text_color(p.muted).ts(11., 16.)
-        .child(icon("icons/cohdl-mark.svg", 17., p.muted))
-        .child(language.text("A COHDL project"))
-}
-
-pub fn brand_lockup(p: &Palette) -> Div {
-    brand_lockup_localized(p, deck_gui_core::i18n::Language::English)
-}
-
-pub fn brand_lockup_localized(p: &Palette, language: deck_gui_core::i18n::Language) -> Div {
-    h_flex().gap(px(12.)).child(brand_mark(44.)).child(
-        v_flex().gap(px(4.))
-            .child(div().ts(17., 22.).medium().child("OpenWalkieTalkie"))
-            .child(project_credit_localized(p, language)),
-    )
-}
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 /// The icons the window draws, by asset path (see [`crate::assets`]).
 pub mod ic {
     pub const ADD: &str = "icons/add-circle.svg";
     pub const ARCHIVE: &str = "icons/archive-minimalistic.svg";
+    pub const ARROW_RIGHT: &str = "icons/arrow-right.svg";
     pub const ARROW_UP: &str = "icons/arrow-up.svg";
     pub const BELL: &str = "icons/bell.svg";
     pub const BLUETOOTH: &str = "icons/bluetooth.svg";
@@ -76,6 +77,12 @@ pub mod ic {
     pub const CLOSE_CIRCLE: &str = "icons/close-circle.svg";
     pub const COPY: &str = "icons/copy.svg";
     pub const DANGER: &str = "icons/danger-triangle.svg";
+    /// The deck: a portrait slab, a square screen and the split key.
+    pub const DECK: &str = "icons/deck.svg";
+    /// The deck with a dot at its corner: it needs the owner.
+    pub const DECK_CARE: &str = "icons/deck-care.svg";
+    /// The deck struck through: not linked.
+    pub const DECK_OFF: &str = "icons/deck-off.svg";
     pub const DIAL: &str = "icons/dial.svg";
     pub const DOCUMENT: &str = "icons/document.svg";
     pub const EXTERNAL: &str = "icons/arrow-up-right.svg";
@@ -92,11 +99,21 @@ pub mod ic {
     pub const LOGOUT: &str = "icons/logout-2.svg";
     pub const MAGIC: &str = "icons/magic-stick-3.svg";
     pub const MICROPHONE: &str = "icons/microphone.svg";
+    /// The Mac's modifier marks, as line icons: Geist has none of ⌃⌥⇧⌘.
+    pub const MOD_COMMAND: &str = "icons/mod-command.svg";
+    pub const MOD_CONTROL: &str = "icons/mod-control.svg";
+    pub const MOD_OPTION: &str = "icons/mod-option.svg";
+    pub const MOD_SHIFT: &str = "icons/mod-shift.svg";
     pub const MONITOR: &str = "icons/monitor.svg";
     pub const OPENAI: &str = "icons/openai-mark.svg";
     pub const PIN: &str = "icons/pin.svg";
+    /// The timer plate's ring, and its lit half drawn over it: gpui gives a
+    /// circle one border colour, so the two halves are two masks.
+    pub const PLATE_RING: &str = "icons/plate-ring.svg";
+    pub const PLATE_RING_HALF: &str = "icons/plate-ring-half.svg";
     pub const PLAY: &str = "icons/action-play.svg";
     pub const PLUG: &str = "icons/plug.svg";
+    pub const PLUS: &str = "icons/plus.svg";
     pub const REFRESH: &str = "icons/refresh.svg";
     pub const RETURN: &str = "icons/return.svg";
     pub const SERVER: &str = "icons/server.svg";
@@ -109,8 +126,18 @@ pub mod ic {
     pub const TRASH: &str = "icons/trash-bin-minimalistic.svg";
     pub const TUNING: &str = "icons/tuning.svg";
     pub const VOLUME: &str = "icons/volume-loud.svg";
+    pub const WIDGET: &str = "icons/widget.svg";
     pub const WIFI_OFF: &str = "icons/wifi-off.svg";
 }
+
+/// The brand tile beside the app's name, by asset path (see
+/// [`crate::assets`]).
+pub const BRAND_TILE: &str = "device/brand-tile.png";
+
+/// A row with one line of text: the kit's rows are 44 or 56 high.
+pub const ROW_ONE_LINE: f32 = 44.;
+/// A row with a sub-line under its title.
+pub const ROW_TWO_LINES: f32 = 56.;
 
 /// An icon at `size` px in `color`. An svg does not inherit the text colour
 /// around it, so the colour is always said.
@@ -122,20 +149,47 @@ pub fn icon(path: &'static str, size: f32, color: Hsla) -> Svg {
         .text_color(color)
 }
 
-/// Text sizes as size/line-height pairs in pixels, and the two weights the
-/// window uses.
+/// Text sizes as size/line-height pairs in pixels, the three weights the
+/// window uses, the mono family and tabular figures — and the one way of
+/// laying out a row that gpui has no word for ([`Type::items_stretch`]).
 pub trait Type: Styled + Sized {
     fn ts(self, size: f32, line: f32) -> Self {
         self.text_size(px(size)).line_height(px(line))
     }
 
-    /// The emphasis weight. Bold is for nothing.
+    /// Row titles, buttons, the page in the sidebar it is not.
     fn medium(self) -> Self {
         self.font_weight(FontWeight::MEDIUM)
     }
 
+    /// Page titles, section labels, the page in the sidebar it is.
+    fn semibold(self) -> Self {
+        self.font_weight(FontWeight::SEMIBOLD)
+    }
+
     fn mono(self) -> Self {
         self.font_family(MONO)
+    }
+
+    /// Figures of one width, so a percentage or a count that changes does
+    /// not shift what follows it. Geist has `tnum`; Geist Mono needs none.
+    /// gpui has no setter for font features, so this writes the text
+    /// style's own field; it changes the features alone and keeps the
+    /// family and the fallbacks it inherits.
+    fn tnum(mut self) -> Self {
+        self.text_style()
+            .get_or_insert_with(Default::default)
+            .font_features = Some(FontFeatures(Arc::new(vec![("tnum".into(), 1)])));
+        self
+    }
+
+    /// Stretch what a flex row holds to the row's own height: cards side by
+    /// side as tall as each other, the shorter one's last row ([`Row::grow`])
+    /// taking the rest. It is what a `div().flex()` row does when nothing
+    /// says otherwise (an `h_flex` centres), said so that it is meant.
+    fn items_stretch(mut self) -> Self {
+        self.style().align_items = Some(AlignItems::Stretch);
+        self
     }
 }
 
@@ -154,44 +208,474 @@ pub fn tip(text: impl Into<SharedString>) -> impl Fn(&mut Window, &mut App) -> A
     }
 }
 
-// ---- buttons ----------------------------------------------------------
+// ---- words and marks --------------------------------------------------
 
-/// What a [`Btn`] looks like.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Look {
-    /// The neutral primary: a text-colour plate. One per view, at most.
-    Solid,
-    /// Text only until the pointer is on it.
-    Quiet,
-    /// An opaque plate with a hairline.
-    Outlined,
-    /// A 6 % wash.
-    Filled,
-    /// The destructive confirm.
-    Danger,
-    /// A destructive action that is not the confirm: red text, no plate.
-    DangerQuiet,
-    /// The accent wash, for the one thing on a row that is new or live.
-    Accent,
+/// A section's label: 12/16, semibold, in the label step.
+pub fn label(text: impl Into<SharedString>, p: &Palette) -> Div {
+    div()
+        .ts(12., 16.)
+        .semibold()
+        .text_color(p.text3)
+        .child(text.into())
 }
 
+/// A version, a path, a key name or a value, in Geist Mono 12/16 on one
+/// line, in `color` (most often the sub-line colour, `text2`).
+pub fn mono(text: impl Into<SharedString>, color: Hsla) -> Div {
+    div()
+        .ts(12., 16.)
+        .mono()
+        .whitespace_nowrap()
+        .text_color(color)
+        .child(text.into())
+}
+
+/// A sentence of explanation under or beside something, wrapping.
+pub fn hint(text: impl Into<SharedString>, p: &Palette) -> Div {
+    div().ts(12., 16.).text_color(p.text2).child(para(text))
+}
+
+/// Something to read exactly or to paste — a command left to run, a `curl`,
+/// a token shown once — in Geist Mono 12/18 on a well, wrapping where it
+/// must. It is as wide as what holds it; a command beside its
+/// [`CopyButton`] takes the rest of the row with `flex_1().min_w_0()`.
+pub fn code_block(text: impl Into<SharedString>, p: &Palette) -> Div {
+    div()
+        .px(px(12.))
+        .py(px(10.))
+        .rounded(px(8.))
+        .bg(p.well)
+        .ts(12., 18.)
+        .mono()
+        .text_color(p.text)
+        .child(para(text))
+}
+
+/// A status dot.
+pub fn dot(color: Hsla, size: f32) -> Div {
+    div().flex_none().size(px(size)).rounded_full().bg(color)
+}
+
+/// A state in a word: a dot and the word for a healthy or neutral one, a
+/// tinted pill for one that needs the owner (`Amber`, `Red`, `Blue`). Only
+/// trouble gets colour behind it.
+pub fn status(text: impl Into<SharedString>, tone: Tone, p: &Palette) -> Div {
+    let state = h_flex()
+        .flex_none()
+        .gap(px(7.))
+        .ts(12., 16.)
+        .whitespace_nowrap()
+        .child(dot(p.tone(tone), 6.));
+    // The word on a pill takes its state's text step; beside a bare dot it
+    // is a sub-line, and only the dot says the state.
+    let state = match p.tone_wash(tone) {
+        Some(wash) => state
+            .h(px(22.))
+            .px(px(9.))
+            .rounded(px(11.))
+            .bg(wash)
+            .medium()
+            .text_color(p.tone_text(tone)),
+        None => state.text_color(p.text2),
+    };
+    state.child(text.into())
+}
+
+/// A key's name on a cap: PTT in a sentence's place, a key in a hint.
+pub fn keycap(text: impl Into<SharedString>, p: &Palette) -> Div {
+    div()
+        .flex_none()
+        .flex()
+        .items_center()
+        .justify_center()
+        .min_w(px(22.))
+        .h(px(22.))
+        .px(px(6.))
+        .rounded(px(6.))
+        .border_1()
+        .border_color(p.edge)
+        .bg(p.well)
+        .ts(12., 16.)
+        .mono()
+        .medium()
+        .text_color(p.text)
+        .child(text.into())
+}
+
+/// A radio's dot: a ring in a control's edge, or the selection outline with
+/// a dot in it. A choice is a [`Row`] led by [`bare`]`(radio_dot(..))`, and
+/// the whole row is what is clicked.
+pub fn radio_dot(on: bool, p: &Palette) -> Div {
+    div()
+        .flex_none()
+        .flex()
+        .items_center()
+        .justify_center()
+        .size(px(16.))
+        .rounded_full()
+        .border(px(1.5))
+        .border_color(if on { p.outline } else { p.edge })
+        .when(on, |radio| radio.child(dot(p.outline, 8.)))
+}
+
+/// A Mac modifier key, as a macro key's shortcut carries it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Mod {
+    Control,
+    Option,
+    Shift,
+    Command,
+}
+
+impl Mod {
+    /// The Mac's own order, the one a shortcut is written in: ⌃⌥⇧⌘.
+    pub const ALL: [Mod; 4] = [Mod::Control, Mod::Option, Mod::Shift, Mod::Command];
+
+    /// Its mark (see [`ic::MOD_SHIFT`]).
+    pub const fn icon(self) -> &'static str {
+        match self {
+            Mod::Control => ic::MOD_CONTROL,
+            Mod::Option => ic::MOD_OPTION,
+            Mod::Shift => ic::MOD_SHIFT,
+            Mod::Command => ic::MOD_COMMAND,
+        }
+    }
+
+    /// Its name as macOS prints it. It is not translated: it is what is
+    /// written on the key.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Mod::Control => "Control",
+            Mod::Option => "Option",
+            Mod::Shift => "Shift",
+            Mod::Command => "Command",
+        }
+    }
+}
+
+/// `mods` in the Mac's order ([`Mod::ALL`]), each once, however they were
+/// given.
+pub fn canonical(mods: &[Mod]) -> Vec<Mod> {
+    Mod::ALL.into_iter().filter(|m| mods.contains(m)).collect()
+}
+
+/// A shortcut the way a macro key's corner draws it: the modifier marks in
+/// the Mac's order, then the key in mono. It sits on a key's own dark face,
+/// so its colour is the deck's and not the window's.
+pub fn combo(mods: &[Mod], key: impl Into<SharedString>) -> Div {
+    let color = hex(deck_colors::KEY_COMBO);
+    h_flex()
+        .flex_none()
+        .gap(px(1.))
+        .children(
+            canonical(mods)
+                .into_iter()
+                .map(|m| icon(m.icon(), 12., color)),
+        )
+        .child(
+            div()
+                .ml(px(1.))
+                .ts(11., 14.)
+                .mono()
+                .text_color(color)
+                .child(key.into()),
+        )
+}
+
+/// A spinning refresh glyph, for "asking the service".
+pub fn spinner(size: f32, color: Hsla) -> impl IntoElement {
+    icon(ic::REFRESH, size, color).with_animation(
+        "spinner",
+        Animation::new(Duration::from_millis(900)).repeat(),
+        |svg, delta| svg.with_transformation(Transformation::rotate(percentage(delta))),
+    )
+}
+
+// ---- the keyboard ---------------------------------------------------------
+
+/// What a click calls.
 type ClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
-/// What a [`Switch`] calls with the value it is being moved to.
+/// What a [`Switch`] or a [`Chip`] calls with the value it is being moved to.
 type ToggleHandler = Rc<dyn Fn(&bool, &mut Window, &mut App)>;
 
-/// A button. `Btn::new(id, label)` is a filled one; the look methods change
-/// that, `icon` leads the label with a glyph, and [`Btn::icon_only`] is the
-/// square icon button.
+/// What a [`Level`] calls with the stop it was moved to.
+type LevelHandler = Rc<dyn Fn(&u16, &mut Window, &mut App)>;
+
+/// What a [`Segmented`] calls with the option chosen.
+type SelectHandler = Rc<dyn Fn(&usize, &mut Window, &mut App)>;
+
+/// What builds a [`PopupButton`]'s menu, each time it opens.
+type MenuBuilder = Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>;
+
+/// Keyboard focus: the ring's width, and its distance outside a control.
+pub const FOCUS_RING: f32 = 2.;
+/// Around a selected tile, focus sits outside the selection's own ring.
+pub const FOCUS_RING_SELECTED: f32 = 6.;
+
+/// What a disabled control is drawn at.
+const DISABLED: f32 = 0.4;
+
+/// The focus handle of the control drawn under `id`: one for each control,
+/// kept for as long as something keeps being drawn under that id.
+fn focus_handle(id: &ElementId, window: &mut Window, cx: &mut App) -> FocusHandle {
+    window
+        .use_keyed_state(id.clone(), cx, |_, cx| cx.focus_handle())
+        .read(cx)
+        .clone()
+}
+
+/// Make `el` a stop on the window's Tab order through `focus`: that is how
+/// the keyboard reaches a control, and how Return and Space press it (gpui
+/// clicks a focused element on either key).
+///
+/// A disabled control keeps its handle and loses its stop: Tab passes it
+/// by, and one that had the keyboard when it was disabled keeps it, so Tab
+/// still moves on from there instead of from nowhere. A click with the
+/// pointer does not take the keyboard — only Tab gives it — so a ring is
+/// only ever drawn where the keyboard is.
+fn keyboard_stop(el: Stateful<Div>, focus: &FocusHandle, enabled: bool) -> Stateful<Div> {
+    el.track_focus(&focus.clone().tab_index(0).tab_stop(enabled))
+        .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
+}
+
+/// A ring around an element: `width` px of `color`, `gap` px outside it,
+/// following its corners. It is the keyboard's (`info`) or the selection's
+/// (`outline`). `radius` is the element's own corner radius and
+/// `own_border` the width of its own border: an absolutely placed child is
+/// measured from inside its parent's border, so the ring is pushed out by
+/// that much more.
+///
+/// It is a child of the element and draws nothing but its rim, so an
+/// ancestor that clips cuts it.
+pub fn ring(gap: f32, width: f32, radius: f32, own_border: f32, color: Hsla) -> Div {
+    let out = -(gap + width + own_border);
+    div()
+        .absolute()
+        .top(px(out))
+        .left(px(out))
+        .right(px(out))
+        .bottom(px(out))
+        .rounded(px(radius + gap + width))
+        .border(px(width))
+        .border_color(color)
+}
+
+/// The keyboard's ring drawn `inset` px inside an element, for one as wide
+/// as its card (a [`Row`]): a ring outside it would cross the card's rim.
+fn inset_ring(inset: f32, radius: f32, color: Hsla) -> Div {
+    div()
+        .absolute()
+        .top(px(inset))
+        .left(px(inset))
+        .right(px(inset))
+        .bottom(px(inset))
+        .rounded(px(radius))
+        .border(px(FOCUS_RING))
+        .border_color(color)
+}
+
+/// Something pressed that is not a [`Btn`]: a face on the strip, a macro
+/// key, a sidebar row, a link, a segment. It is the kit's focus in one
+/// place — its own Tab stop while it has a click, pressed by Return and
+/// Space, the `info` ring 2 px outside it while it has the keyboard — and
+/// the rings of a tile that can be selected: a resting 1 px ring touching
+/// it ([`Press::rest`]), the selection's `outline` ring 2 px outside it
+/// ([`Press::selected`]), and then focus 6 px out.
+///
+/// Its look is otherwise the caller's: it is a `div` to style and to fill,
+/// with every `Styled`, `ParentElement` and interactive method a `div` has.
+/// Its click stops at it, so a press inside a clickable row does not also
+/// press the row.
+#[derive(IntoElement)]
+pub struct Press {
+    id: ElementId,
+    base: Stateful<Div>,
+    radius: f32,
+    own_border: f32,
+    rest: Option<Hsla>,
+    selected: bool,
+    disabled: bool,
+    shown_focused: bool,
+    on_click: Option<ClickHandler>,
+}
+
+impl Press {
+    pub fn new(id: impl Into<ElementId>) -> Press {
+        let id = id.into();
+        Press {
+            base: div().id(id.clone()),
+            id,
+            radius: 8.,
+            own_border: 0.,
+            rest: None,
+            selected: false,
+            disabled: false,
+            shown_focused: false,
+            on_click: None,
+        }
+    }
+
+    /// The corner radius its rings follow: its own. 8 unless said.
+    pub fn radius(mut self, radius: f32) -> Press {
+        self.radius = radius;
+        self
+    }
+
+    /// The width of its own border, so its rings sit outside the border
+    /// and not on it. 0 unless said.
+    pub fn own_border(mut self, width: f32) -> Press {
+        self.own_border = width;
+        self
+    }
+
+    /// The 1 px ring touching it while it is not selected: a face tile's
+    /// edge (`Palette::tile_rest`).
+    pub fn rest(mut self, color: Hsla) -> Press {
+        self.rest = Some(color);
+        self
+    }
+
+    /// Selected: the `outline` ring, 2 px wide and 2 px outside it.
+    pub fn selected(mut self, selected: bool) -> Press {
+        self.selected = selected;
+        self
+    }
+
+    /// Drawn at 40 %, and neither pressed nor reached by Tab.
+    pub fn disabled(mut self, disabled: bool) -> Press {
+        self.disabled = disabled;
+        self
+    }
+
+    /// What pressing it does, with the pointer or with Return or Space. A
+    /// `Press` without one is a picture: no stop, no ring.
+    pub fn on_click(mut self, f: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static) -> Press {
+        self.on_click = Some(Rc::new(f));
+        self
+    }
+
+    /// Draw the keyboard's ring without giving it the keyboard: the Tokens
+    /// scene shows the focused state this way.
+    pub(crate) fn shown_focused(mut self) -> Press {
+        self.shown_focused = true;
+        self
+    }
+}
+
+impl Styled for Press {
+    fn style(&mut self) -> &mut StyleRefinement {
+        self.base.style()
+    }
+}
+
+impl ParentElement for Press {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.base.extend(elements);
+    }
+}
+
+impl InteractiveElement for Press {
+    fn interactivity(&mut self) -> &mut Interactivity {
+        self.base.interactivity()
+    }
+}
+
+impl StatefulInteractiveElement for Press {}
+
+impl RenderOnce for Press {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let p = *palette(cx);
+        let Press {
+            id,
+            base,
+            radius,
+            own_border,
+            rest,
+            selected,
+            disabled,
+            shown_focused,
+            on_click,
+        } = self;
+        let enabled = on_click.is_some() && !disabled;
+        let focus = on_click
+            .is_some()
+            .then(|| focus_handle(&id, window, cx));
+        let focused =
+            shown_focused || (enabled && focus.as_ref().is_some_and(|f| f.is_focused(window)));
+        let base = match &focus {
+            Some(focus) => keyboard_stop(base, focus, enabled),
+            None => base,
+        };
+        let gap = if selected {
+            FOCUS_RING_SELECTED
+        } else {
+            FOCUS_RING
+        };
+        base.when(disabled, |el| el.opacity(DISABLED))
+            .when(enabled, |el| el.cursor_pointer())
+            .when_some(rest.filter(|_| !selected), |el, color| {
+                el.child(ring(0., 1., radius, own_border, color))
+            })
+            .when(selected, |el| {
+                el.child(ring(FOCUS_RING, FOCUS_RING, radius, own_border, p.outline))
+            })
+            .when(focused, |el| {
+                el.child(ring(gap, FOCUS_RING, radius, own_border, p.info))
+            })
+            .when_some(on_click.filter(|_| enabled), |el, f| {
+                el.on_click(move |event, window, cx| {
+                    cx.stop_propagation();
+                    f(event, window, cx);
+                })
+            })
+    }
+}
+
+// ---- buttons ----------------------------------------------------------
+
+/// What a [`Btn`] is, in the design's four kinds.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Kind {
+    /// The neutral primary: the text colour's plate. One in a view at most.
+    Primary,
+    /// Every other button: a control's edge around the words.
+    #[default]
+    Secondary,
+    /// A lesser action beside another: a well behind the words.
+    Quiet,
+    /// What deletes, removes or stops: the error's words inside an edge.
+    /// Its label ends in an ellipsis, and the page asks first.
+    Danger,
+}
+
+impl Kind {
+    /// Its fill, its words and its rim, at rest. The rim is always drawn,
+    /// clear where there is none, so every kind is the same size.
+    pub fn colors(self, p: &Palette) -> (Hsla, Hsla, Hsla) {
+        let clear = gpui::transparent_black();
+        match self {
+            Kind::Primary => (p.solid, p.on_solid, p.solid),
+            Kind::Secondary => (clear, p.text, p.edge),
+            Kind::Quiet => (p.well, p.text, clear),
+            Kind::Danger => (clear, p.bad_text, p.edge),
+        }
+    }
+}
+
+/// A button, 28 high: `Btn::new(id, label)` is a secondary one, and
+/// [`Btn::primary`], [`Btn::quiet`] and [`Btn::danger`] are the other
+/// kinds; [`Btn::icon`] leads the words with a 14 px glyph, and
+/// [`Btn::icon_only`] is the 28 px square with a glyph alone.
 #[derive(IntoElement)]
 pub struct Btn {
     id: ElementId,
     label: Option<SharedString>,
     icon: Option<&'static str>,
-    look: Look,
-    small: bool,
+    kind: Kind,
     disabled: bool,
     tooltip: Option<SharedString>,
+    shown_focused: bool,
     on_click: Option<ClickHandler>,
 }
 
@@ -201,21 +685,21 @@ impl Btn {
             id: id.into(),
             label: Some(label.into()),
             icon: None,
-            look: Look::Filled,
-            small: false,
+            kind: Kind::Secondary,
             disabled: false,
             tooltip: None,
+            shown_focused: false,
             on_click: None,
         }
     }
 
-    /// A square button with a glyph and no label; say what it does with
-    /// [`Btn::tooltip`].
+    /// A square quiet button with a glyph and no words; say what it does
+    /// with [`Btn::tooltip`].
     pub fn icon_only(id: impl Into<ElementId>, icon: &'static str) -> Btn {
         Btn {
             label: None,
             icon: Some(icon),
-            look: Look::Quiet,
+            kind: Kind::Quiet,
             ..Btn::new(id, "")
         }
     }
@@ -225,38 +709,21 @@ impl Btn {
         self
     }
 
-    pub fn look(mut self, look: Look) -> Btn {
-        self.look = look;
+    pub fn kind(mut self, kind: Kind) -> Btn {
+        self.kind = kind;
         self
     }
 
-    pub fn solid(self) -> Btn {
-        self.look(Look::Solid)
+    pub fn primary(self) -> Btn {
+        self.kind(Kind::Primary)
     }
 
     pub fn quiet(self) -> Btn {
-        self.look(Look::Quiet)
-    }
-
-    pub fn outlined(self) -> Btn {
-        self.look(Look::Outlined)
+        self.kind(Kind::Quiet)
     }
 
     pub fn danger(self) -> Btn {
-        self.look(Look::Danger)
-    }
-
-    pub fn danger_quiet(self) -> Btn {
-        self.look(Look::DangerQuiet)
-    }
-
-    pub fn accent(self) -> Btn {
-        self.look(Look::Accent)
-    }
-
-    pub fn small(mut self) -> Btn {
-        self.small = true;
-        self
+        self.kind(Kind::Danger)
     }
 
     pub fn disabled(mut self, disabled: bool) -> Btn {
@@ -264,15 +731,23 @@ impl Btn {
         self
     }
 
+    /// Said when the pointer rests on it, disabled or not: why a disabled
+    /// button is.
     pub fn tooltip(mut self, text: impl Into<SharedString>) -> Btn {
         self.tooltip = Some(text.into());
         self
     }
 
-    /// What a click does. The click stops here: a button on a clickable
-    /// row does not also select the row.
+    /// What a press does. The press stops here: a button on a clickable row
+    /// does not also press the row.
     pub fn on_click(mut self, f: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static) -> Btn {
         self.on_click = Some(Rc::new(f));
+        self
+    }
+
+    /// See [`Press::shown_focused`].
+    pub(crate) fn shown_focused(mut self) -> Btn {
+        self.shown_focused = true;
         self
     }
 }
@@ -280,101 +755,146 @@ impl Btn {
 impl RenderOnce for Btn {
     fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
         let p = *palette(cx);
-        let clear = gpui::transparent_black();
-        let (h, pad, radius, size, glyph) = if self.small {
-            (26., 9., 7., 12., 14.)
-        } else {
-            (32., 12., 8., 12.5, 16.)
-        };
-        // Rest fill, rest text, hover fill, hover text, hairline.
-        let (bg, fg, hover_bg, hover_fg, line) = match self.look {
-            Look::Solid => (p.solid, p.on_solid, p.solid.opacity(0.9), p.on_solid, None),
-            Look::Quiet => (clear, p.muted, p.hover, p.text, None),
-            Look::Outlined => (p.plate, p.text, p.plate, p.text, Some(p.border)),
-            Look::Filled => (p.wash(0.06), p.text, p.wash(0.10), p.text, None),
-            Look::Danger => (
-                p.danger,
-                gpui::white(),
-                p.danger.opacity(0.9),
-                gpui::white(),
-                None,
-            ),
-            Look::DangerQuiet => (clear, p.danger_muted, p.danger.alpha(0.10), p.danger, None),
-            Look::Accent => (
-                p.accent_wash(),
-                p.accent,
-                p.accent.alpha(if p.dark { 0.30 } else { 0.18 }),
-                p.accent,
-                None,
-            ),
-        };
-        let strong = matches!(self.look, Look::Solid | Look::Danger | Look::Accent);
-        let icon_only = self.label.is_none();
+        let kind = self.kind;
+        let (bg, fg, rim) = kind.colors(&p);
         let enabled = !self.disabled && self.on_click.is_some();
-        div()
-            .id(self.id)
-            .group("btn")
+        let square = self.label.is_none();
+        let button = Press::new(self.id)
+            .own_border(1.)
+            .disabled(self.disabled)
             .flex()
             .flex_none()
             .items_center()
             .justify_center()
             .gap(px(6.))
-            .h(px(h))
-            .rounded(px(radius))
-            .ts(size, 16.)
+            .h(px(28.))
+            .rounded(px(8.))
+            .border_1()
+            .border_color(rim)
             .bg(bg)
+            .ts(13., 18.)
+            .medium()
+            .whitespace_nowrap()
             .text_color(fg)
-            .when(strong, |this| this.medium())
-            .map(|this| {
-                if icon_only {
-                    this.w(px(h))
-                } else {
-                    this.px(px(pad))
-                }
-            })
-            .when_some(line, |this, line| {
-                this.border_1().border_color(line).when(enabled, |this| {
-                    this.hover(|s| s.border_color(p.border_strong))
+            .map(|b| if square { b.w(px(28.)) } else { b.px(px(12.)) })
+            .when(enabled, |b| {
+                // The design draws no hover: the plate fades a little, a
+                // button with no fill takes a well, and the one already on a
+                // well takes an edge instead. Pressed, any of them fades more.
+                b.map(|b| match kind {
+                    Kind::Primary => b.hover(|s| s.opacity(0.9)),
+                    Kind::Quiet => b.hover(|s| s.border_color(p.edge)),
+                    Kind::Secondary | Kind::Danger => b.hover(|s| s.bg(p.well)),
                 })
+                .active(|s| s.opacity(0.85))
             })
-            .when(self.disabled, |this| this.opacity(0.4))
-            .when(enabled, |this| {
-                this.cursor_pointer()
-                    .when(line.is_none(), |this| {
-                        this.hover(|s| s.bg(hover_bg).text_color(hover_fg))
-                    })
-                    .active(|s| s.opacity(0.85))
+            .when_some(self.icon, |b, path| b.child(icon(path, 14., fg)))
+            .when_some(self.label.filter(|l| !l.is_empty()), |b, label| {
+                b.child(label)
             })
-            .when_some(self.icon, |this, path| {
-                this.child(icon(path, glyph, fg).group_hover("btn", |s| {
-                    if enabled {
-                        s.text_color(hover_fg)
-                    } else {
-                        s
-                    }
-                }))
-            })
-            .when_some(self.label.filter(|l| !l.is_empty()), |this, label| {
-                this.child(label)
-            })
-            .when_some(self.tooltip, |this, text| this.tooltip(tip(text)))
-            .when_some(self.on_click.filter(|_| !self.disabled), |this, f| {
-                this.on_click(move |event, window, cx| {
-                    cx.stop_propagation();
-                    f(event, window, cx);
+            .when_some(self.tooltip, |b, text| b.tooltip(tip(text)))
+            .when(self.shown_focused, Press::shown_focused);
+        match self.on_click {
+            Some(f) => button.on_click(move |event, window, cx| f(event, window, cx)),
+            None => button,
+        }
+    }
+}
+
+/// How long a [`CopyButton`] says it copied.
+pub const COPIED_FOR: Duration = Duration::from_secs(2);
+
+/// Whether a [`CopyButton`] that last copied at `at` still says so.
+fn says_copied(at: Option<Instant>) -> bool {
+    at.is_some_and(|at| at.elapsed() < COPIED_FOR)
+}
+
+/// What a [`CopyButton`] keeps between frames: when it last copied.
+struct Copied(Option<Instant>);
+
+/// **Copy Command**: a secondary [`Btn`] with the copy glyph that puts
+/// `text` on the clipboard, then says so — `done` in place of `label` — for
+/// [`COPIED_FOR`], so a press that changes nothing else on the window still
+/// shows. The page gives both words in the window's language.
+///
+/// It keeps when it copied under its id, as a control keeps its focus, so a
+/// page holds no state for it; a dialog closed and opened again starts it
+/// afresh.
+#[derive(IntoElement)]
+pub struct CopyButton {
+    id: ElementId,
+    text: SharedString,
+    label: SharedString,
+    done: SharedString,
+}
+
+impl CopyButton {
+    pub fn new(
+        id: impl Into<ElementId>,
+        text: impl Into<SharedString>,
+        label: impl Into<SharedString>,
+        done: impl Into<SharedString>,
+    ) -> CopyButton {
+        CopyButton {
+            id: id.into(),
+            text: text.into(),
+            label: label.into(),
+            done: done.into(),
+        }
+    }
+}
+
+impl RenderOnce for CopyButton {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let copied = window.use_keyed_state(self.id.clone(), cx, |_, _| Copied(None));
+        let label = if says_copied(copied.read(cx).0) {
+            self.done
+        } else {
+            self.label
+        };
+        let text = self.text;
+        Btn::new(self.id, label)
+            .icon(ic::COPY)
+            .on_click(move |_, _, cx| {
+                cx.write_to_clipboard(ClipboardItem::new_string(text.to_string()));
+                copied.update(cx, |copied, cx| {
+                    copied.0 = Some(Instant::now());
+                    cx.notify();
+                });
+                // Its label again once the moment is over, whether or not
+                // anything else redraws the window by then.
+                let copied = copied.clone();
+                cx.spawn(async move |cx| {
+                    cx.background_executor().timer(COPIED_FOR).await;
+                    copied.update(cx, |_, cx| cx.notify()).ok();
                 })
+                .detach();
             })
     }
 }
 
 // ---- switch -----------------------------------------------------------
 
-/// An on/off switch: a 36×20 track, the accent when on, with a pill thumb.
+/// A switch's plate, rim and knob, on and off: the primary's plate with a
+/// knob in its words' colour, or a control's edge with a knob in it.
+pub fn switch_colors(on: bool, p: &Palette) -> (Hsla, Hsla, Hsla) {
+    if on {
+        (p.solid, p.solid, p.on_solid)
+    } else {
+        (gpui::transparent_black(), p.edge, p.edge)
+    }
+}
+
+/// An on/off switch, 34×20, with the knob at the right when on. With
+/// [`Switch::word`] it says its state first, in the sub-line colour ("On" /
+/// "Paused"), and a press on the word moves it too.
 #[derive(IntoElement)]
 pub struct Switch {
     id: ElementId,
     on: bool,
+    word: Option<(SharedString, SharedString)>,
     disabled: bool,
+    shown_focused: bool,
     on_toggle: Option<ToggleHandler>,
 }
 
@@ -383,9 +903,22 @@ impl Switch {
         Switch {
             id: id.into(),
             on,
+            word: None,
             disabled: false,
+            shown_focused: false,
             on_toggle: None,
         }
+    }
+
+    /// The word before the switch: `on_text` while on, `off_text` while
+    /// off, both in the window's language.
+    pub fn word(
+        mut self,
+        on_text: impl Into<SharedString>,
+        off_text: impl Into<SharedString>,
+    ) -> Switch {
+        self.word = Some((on_text.into(), off_text.into()));
+        self
     }
 
     pub fn disabled(mut self, disabled: bool) -> Switch {
@@ -398,37 +931,64 @@ impl Switch {
         self.on_toggle = Some(Rc::new(f));
         self
     }
+
+    /// See [`Press::shown_focused`].
+    pub(crate) fn shown_focused(mut self) -> Switch {
+        self.shown_focused = true;
+        self
+    }
 }
 
 impl RenderOnce for Switch {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let p = *palette(cx);
         let on = self.on;
         let enabled = !self.disabled && self.on_toggle.is_some();
-        div()
+        let focus = self
+            .on_toggle
+            .is_some()
+            .then(|| focus_handle(&self.id, window, cx));
+        let focused = self.shown_focused
+            || (enabled && focus.as_ref().is_some_and(|f| f.is_focused(window)));
+        let (plate, rim, knob) = switch_colors(on, &p);
+        // The knob is placed by flex inside the 1 px rim, 2 px in from it:
+        // 3 px from the outside on every side, and no absolute offset for
+        // the rim to shift. The ring is the switch's, not the word's.
+        let switch = h_flex()
+            .flex_none()
+            .w(px(34.))
+            .h(px(20.))
+            .px(px(2.))
+            .rounded_full()
+            .border_1()
+            .border_color(rim)
+            .bg(plate)
+            .map(|s| if on { s.justify_end() } else { s.justify_start() })
+            .child(dot(knob, 14.))
+            .when(focused, |s| {
+                s.child(ring(FOCUS_RING, FOCUS_RING, 10., 1., p.info))
+            });
+        let word = self.word.map(|(on_text, off_text)| {
+            div()
+                .ts(12., 16.)
+                .text_color(p.text2)
+                .whitespace_nowrap()
+                .child(if on { on_text } else { off_text })
+        });
+        let el = h_flex()
             .id(self.id)
             .flex_none()
-            .relative()
-            .w(px(36.))
-            .h(px(20.))
-            .rounded_full()
-            .bg(if on { p.switch_on } else { p.switch_off })
-            .when(self.disabled, |this| this.opacity(0.4))
-            .when(enabled, |this| this.cursor_pointer())
-            .child(
-                div()
-                    .absolute()
-                    .top(px(2.))
-                    .left(px(if on { 14. } else { 2. }))
-                    .w(px(20.))
-                    .h(px(16.))
-                    .rounded_full()
-                    .bg(gpui::white().opacity(if p.dark { 0.94 } else { 1.0 }))
-                    .border_1()
-                    .border_color(gpui::black().opacity(0.08)),
-            )
-            .when_some(self.on_toggle.filter(|_| enabled), |this, f| {
-                this.on_click(move |_, window, cx| {
+            .gap(px(8.))
+            .children(word)
+            .child(switch);
+        let el = match &focus {
+            Some(focus) => keyboard_stop(el, focus, enabled),
+            None => el,
+        };
+        el.when(self.disabled, |el| el.opacity(DISABLED))
+            .when(enabled, |el| el.cursor_pointer())
+            .when_some(self.on_toggle.filter(|_| enabled), |el, f| {
+                el.on_click(move |_, window, cx| {
                     cx.stop_propagation();
                     f(&!on, window, cx);
                 })
@@ -436,242 +996,1265 @@ impl RenderOnce for Switch {
     }
 }
 
-// ---- small things -----------------------------------------------------
+// ---- level --------------------------------------------------------------
 
-/// How a [`badge`] is tinted.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Tint {
-    Neutral,
-    Success,
-    Warning,
-    Danger,
-    Accent,
-    Blue,
+/// How far in from each end of a [`Level`] its first and last stops are:
+/// the thumb's half, so the thumb never leaves the control.
+const LEVEL_INSET: f32 = 8.;
+
+/// A [`Level`]'s width unless said: the Deck page's.
+pub const LEVEL_WIDTH: f32 = 168.;
+
+/// The stop under a pointer `x` px from a level's left edge, for a level
+/// `width` wide that runs from `min` to `max`. The ends are the first and
+/// last stops' centres, `LEVEL_INSET` in, and a pointer past either is that
+/// end's stop.
+pub fn level_value_at(x: f32, width: f32, min: u16, max: u16) -> u16 {
+    if max <= min {
+        return min;
+    }
+    let travel = (width - 2. * LEVEL_INSET).max(1.);
+    let t = ((x - LEVEL_INSET) / travel).clamp(0., 1.);
+    // `t` is in 0..=1, so the step is in 0..=max-min and fits.
+    min + (t * f32::from(max - min)).round() as u16
 }
 
-impl Tint {
-    /// The firmware tone a badge stands for.
-    pub fn of(tone: Tone) -> Tint {
-        match tone {
-            Tone::Green => Tint::Success,
-            Tone::Amber => Tint::Warning,
-            Tone::Red => Tint::Danger,
-            Tone::Blue => Tint::Blue,
-            Tone::Gray => Tint::Neutral,
+/// Where a key moves a level that shows `value`: Left and Down one stop
+/// down, Right and Up one up, Home to `min`, End to `max`, never past
+/// either end. `None` for any other key.
+pub fn level_key(key: &str, value: u16, min: u16, max: u16) -> Option<u16> {
+    let max = max.max(min);
+    let value = value.clamp(min, max);
+    match key {
+        "left" | "down" => Some(value.saturating_sub(1).max(min)),
+        "right" | "up" => Some(value.saturating_add(1).min(max)),
+        "home" => Some(min),
+        "end" => Some(max),
+        _ => None,
+    }
+}
+
+/// A level's thumb and fill, as the part of its travel `value` is at.
+fn level_fraction(value: u16, min: u16, max: u16) -> f32 {
+    if max <= min {
+        return 0.;
+    }
+    f32::from(value.clamp(min, max) - min) / f32::from(max - min)
+}
+
+/// What a level keeps between frames: its focus, where it was laid out
+/// (the pointer is read against it), and the stop it shows or last sent.
+struct LevelState {
+    focus: FocusHandle,
+    bounds: Bounds<Pixels>,
+    value: u16,
+}
+
+/// The payload of a level's drag; the thumb is the level itself, so it
+/// draws nothing. It carries the level's state, so a drag moves one level
+/// and not every level on the page.
+#[derive(Clone)]
+struct LevelDrag(EntityId);
+
+impl Render for LevelDrag {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        gpui::Empty
+    }
+}
+
+/// One of the deck's stepped settings (speaker, mic gain, brightness): a
+/// rail with a tick for every stop, the part up to the value filled, a
+/// thumb, and the value in mono as the deck prints it.
+///
+/// It holds no value of its own: the page passes the one it shows and gets
+/// [`Level::on_change`] with each new stop, once per stop, as the pointer
+/// presses or drags it or as Left, Right, Up, Down, Home and End move it.
+/// A page shows the stop it sent until the deck agrees, or the thumb would
+/// lag the pointer by a round trip.
+#[derive(IntoElement)]
+pub struct Level {
+    id: ElementId,
+    value: u16,
+    min: u16,
+    max: u16,
+    width: f32,
+    disabled: bool,
+    shown_focused: bool,
+    on_change: Option<LevelHandler>,
+}
+
+impl Level {
+    pub fn new(id: impl Into<ElementId>, value: u16, min: u16, max: u16) -> Level {
+        Level {
+            id: id.into(),
+            value,
+            min,
+            max,
+            width: LEVEL_WIDTH,
+            disabled: false,
+            shown_focused: false,
+            on_change: None,
         }
     }
-}
 
-/// A small filled pill: a status word, a slot, a scope.
-pub fn badge(label: impl Into<SharedString>, tint: Tint, p: &Palette) -> Div {
-    let (bg, fg) = match tint {
-        Tint::Neutral => (p.wash(0.08), p.muted),
-        Tint::Success => (p.success.alpha(0.12), p.success_muted),
-        Tint::Warning => (p.warning.alpha(0.12), p.warning_muted),
-        Tint::Danger => (p.danger.alpha(0.12), p.danger_muted),
-        Tint::Accent => (p.accent_wash(), p.accent),
-        Tint::Blue => (p.blue.alpha(0.14), p.blue),
-    };
-    div()
-        .flex_none()
-        .px(px(7.))
-        .py(px(1.))
-        .rounded_full()
-        .ts(11., 15.)
-        .medium()
-        .bg(bg)
-        .text_color(fg)
-        .whitespace_nowrap()
-        .child(label.into())
-}
-
-/// A status dot.
-pub fn dot(color: Hsla, size: f32) -> Div {
-    div().flex_none().size(px(size)).rounded_full().bg(color)
-}
-
-/// A keycap: the choice number on a card, a shortcut in a hint.
-pub fn keycap(label: impl Into<SharedString>, p: &Palette) -> Div {
-    div()
-        .flex_none()
-        .flex()
-        .items_center()
-        .justify_center()
-        .min_w(px(20.))
-        .h(px(20.))
-        .px(px(5.))
-        .rounded(px(5.))
-        .bg(p.ink(0.06))
-        .ts(11., 14.)
-        .mono()
-        .text_color(p.muted)
-        .child(label.into())
-}
-
-/// A 36×36 tile with a glyph in it, at the head of a row.
-pub fn tile(path: &'static str, color: Hsla, p: &Palette) -> Div {
-    div()
-        .flex_none()
-        .size(px(36.))
-        .rounded(px(10.))
-        .bg(p.wash(0.06))
-        .flex()
-        .items_center()
-        .justify_center()
-        .child(icon(path, 18., color))
-}
-
-/// Fragments joined by a faint "·", wrapping as a sentence would.
-pub fn meta_line(parts: Vec<AnyElement>, p: &Palette) -> Div {
-    let mut line = h_flex()
-        .flex_wrap()
-        .items_center()
-        .gap_x(px(6.))
-        .ts(12., 16.)
-        .text_color(p.muted);
-    for (i, part) in parts.into_iter().enumerate() {
-        if i > 0 {
-            line = line.child(div().text_color(p.muted.opacity(0.45)).child("\u{b7}"));
-        }
-        line = line.child(part);
+    /// The rail's width, 168 unless said; the value takes 26 more.
+    pub fn width(mut self, width: f32) -> Level {
+        self.width = width;
+        self
     }
-    line
-}
 
-/// A plain fragment for [`meta_line`].
-pub fn frag(text: impl Into<SharedString>) -> AnyElement {
-    div().child(text.into()).into_any_element()
-}
+    pub fn disabled(mut self, disabled: bool) -> Level {
+        self.disabled = disabled;
+        self
+    }
 
-/// A fragment in a colour of its own: a status word inside a meta line.
-pub fn word(text: impl Into<SharedString>, color: Hsla) -> AnyElement {
-    div()
-        .text_color(color)
-        .child(text.into())
-        .into_any_element()
-}
+    /// Called with each new stop the owner moves it to.
+    pub fn on_change(mut self, f: impl Fn(&u16, &mut Window, &mut App) + 'static) -> Level {
+        self.on_change = Some(Rc::new(f));
+        self
+    }
 
-/// A muted line of explanation.
-pub fn hint(text: impl Into<SharedString>, p: &Palette) -> Div {
-    div().ts(12., 17.).text_color(p.muted).child(para(text))
-}
-
-/// The glyph and colour for an agent kind (§8.2's kind icon). Claude keeps
-/// its own orange; the others are drawn in the text colour or their own.
-pub fn kind_mark(kind: Kind, p: &Palette) -> (&'static str, Hsla) {
-    match kind {
-        Kind::Claude => (ic::CLAUDE, p.claude),
-        Kind::Codex => (ic::OPENAI, p.text),
-        Kind::Gemini => (ic::GEMINI, p.gemini),
-        Kind::Other => (ic::BOT, p.muted),
-        Kind::Conol => (ic::CONOL, if p.dark { gpui::rgb(0xFFE238).into() } else { p.text }),
+    /// See [`Press::shown_focused`].
+    pub(crate) fn shown_focused(mut self) -> Level {
+        self.shown_focused = true;
+        self
     }
 }
 
-/// The glyph and colour for an integration target.
-pub fn target_mark(target: &str, p: &Palette) -> (&'static str, Hsla) {
-    match target {
-        "claude" | "claude-desktop" => (ic::CLAUDE, p.claude),
-        "codex" => (ic::OPENAI, p.text),
-        "gemini" => (ic::GEMINI, p.gemini),
-        _ => (ic::PLUG, p.muted),
+/// Move the level whose state is `state` to `value`, and say so if it moved.
+fn level_moved(
+    state: &Entity<LevelState>,
+    value: u16,
+    on_change: &LevelHandler,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    let moved = state.update(cx, |level, _| {
+        let moved = level.value != value;
+        level.value = value;
+        moved
+    });
+    if moved {
+        on_change(&value, window, cx);
     }
 }
 
-/// A spinning refresh glyph, for "asking the service".
-pub fn spinner(size: f32, color: Hsla) -> impl IntoElement {
-    icon(ic::REFRESH, size, color).with_animation(
-        "spinner",
-        Animation::new(Duration::from_millis(900)).repeat(),
-        |svg, delta| svg.with_transformation(Transformation::rotate(percentage(delta))),
-    )
-}
-
-/// A 4 px bar, filled to `fraction` with the accent.
-pub fn progress(fraction: f32, p: &Palette) -> Div {
-    div().w_full().h(px(4.)).rounded_full().bg(p.border).child(
-        div()
-            .h_full()
-            .w(relative(fraction.clamp(0.04, 1.0)))
+impl RenderOnce for Level {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let p = *palette(cx);
+        let (min, max, width) = (self.min, self.max.max(self.min), self.width);
+        let value = self.value.clamp(min, max);
+        let state = window.use_keyed_state(self.id.clone(), cx, |_, cx| LevelState {
+            focus: cx.focus_handle(),
+            bounds: Bounds::default(),
+            value,
+        });
+        // What the page shows now is what the next key moves from.
+        state.update(cx, |level, _| level.value = value);
+        let focus = state.read(cx).focus.clone();
+        let enabled = !self.disabled && self.on_change.is_some();
+        let focused = self.shown_focused || (enabled && focus.is_focused(window));
+        let travel = (width - 2. * LEVEL_INSET).max(0.);
+        let reach = travel * level_fraction(value, min, max);
+        let steps = max - min;
+        // Ticks first, so the rail covers their middle and they show a
+        // pixel above and below it; then the fill and the thumb.
+        let ticks = (0..=steps).map(|i| {
+            let at = if steps == 0 {
+                0.
+            } else {
+                travel * f32::from(i) / f32::from(steps)
+            };
+            div()
+                .absolute()
+                .top(px(9.))
+                .left(px(LEVEL_INSET + at))
+                .w(px(1.))
+                .h(px(6.))
+                .bg(p.edge)
+        });
+        let thumb = div()
+            .absolute()
+            .top(px(4.))
+            .left(px(reach))
+            .size(px(16.))
             .rounded_full()
-            .bg(p.accent),
-    )
-}
-
-// ---- chips --------------------------------------------------------------
-
-/// One segment of a filter row (the log levels). The caller adds the click.
-pub fn chip(
-    id: impl Into<ElementId>,
-    label: impl Into<SharedString>,
-    selected: bool,
-    p: &Palette,
-) -> Stateful<Div> {
-    let p = *p;
-    div()
-        .id(id)
-        .flex()
-        .flex_none()
-        .items_center()
-        .h(px(26.))
-        .px(px(9.))
-        .rounded(px(7.))
-        .ts(12., 16.)
-        .cursor_pointer()
-        .map(|this| {
-            if selected {
-                this.bg(p.wash(0.10)).text_color(p.text).medium()
-            } else {
-                this.text_color(p.muted)
-                    .hover(|s| s.bg(p.wash(0.06)).text_color(p.text))
+            .bg(p.solid)
+            .border_1()
+            .border_color(p.win)
+            .when(focused, |t| {
+                t.child(ring(FOCUS_RING, FOCUS_RING, 8., 1., p.info))
+            });
+        let rail = div()
+            .id(self.id)
+            .relative()
+            .flex_none()
+            .w(px(width))
+            .h(px(24.))
+            .children(ticks)
+            .child(
+                div()
+                    .absolute()
+                    .left(px(LEVEL_INSET))
+                    .right(px(LEVEL_INSET))
+                    .top(px(10.))
+                    .h(px(4.))
+                    .rounded(px(2.))
+                    .bg(p.edge),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .left(px(LEVEL_INSET))
+                    .top(px(10.))
+                    .h(px(4.))
+                    .w(px(reach))
+                    .rounded(px(2.))
+                    .bg(p.text),
+            )
+            .child(thumb)
+            .child({
+                // Where the level is, for the pointer: a press reads its x
+                // against it.
+                let state = state.clone();
+                canvas(
+                    move |bounds, _, cx| state.update(cx, |level, _| level.bounds = bounds),
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .size_full()
+            });
+        let rail = match self.on_change {
+            // Disabled: it keeps the keyboard if it had it, and is passed by.
+            Some(_) if !enabled => keyboard_stop(rail, &focus, false),
+            Some(on_change) => {
+                let drag = LevelDrag(state.entity_id());
+                let press = {
+                    let (state, on_change) = (state.clone(), on_change.clone());
+                    move |event: &MouseDownEvent, window: &mut Window, cx: &mut App| {
+                        let left = state.read(cx).bounds.left();
+                        let x = f32::from(event.position.x - left);
+                        let stop = level_value_at(x, width, min, max);
+                        level_moved(&state, stop, &on_change, window, cx);
+                    }
+                };
+                let dragged = {
+                    let (state, on_change) = (state.clone(), on_change.clone());
+                    move |event: &DragMoveEvent<LevelDrag>, window: &mut Window, cx: &mut App| {
+                        if event.drag(cx).0 != state.entity_id() {
+                            return;
+                        }
+                        let x = f32::from(event.event.position.x - event.bounds.left());
+                        let stop = level_value_at(x, width, min, max);
+                        level_moved(&state, stop, &on_change, window, cx);
+                    }
+                };
+                let keys = {
+                    let state = state.clone();
+                    move |event: &KeyDownEvent, window: &mut Window, cx: &mut App| {
+                        if event.keystroke.modifiers.modified() {
+                            return;
+                        }
+                        let shown = state.read(cx).value;
+                        if let Some(stop) = level_key(&event.keystroke.key, shown, min, max) {
+                            cx.stop_propagation();
+                            level_moved(&state, stop, &on_change, window, cx);
+                        }
+                    }
+                };
+                keyboard_stop(rail, &focus, true)
+                    .cursor_pointer()
+                    .on_mouse_down(MouseButton::Left, press)
+                    .on_drag(drag, |drag, _, _, cx| {
+                        cx.stop_propagation();
+                        cx.new(|_| drag.clone())
+                    })
+                    .on_drag_move(dragged)
+                    .on_key_down(keys)
             }
-        })
-        .child(label.into())
+            None => rail,
+        };
+        h_flex()
+            .flex_none()
+            .gap(px(12.))
+            .when(self.disabled, |el| el.opacity(DISABLED))
+            .child(rail)
+            .child(
+                h_flex()
+                    .flex_none()
+                    .min_w(px(14.))
+                    .justify_end()
+                    .child(
+                        div()
+                            .ts(12., 16.)
+                            .mono()
+                            .text_color(p.text2)
+                            .child(value.to_string()),
+                    ),
+            )
+    }
 }
 
-/// A toggle that can be on alongside others (the token scopes): a check
-/// and the accent when on. The caller adds the click.
-pub fn toggle_chip(
-    id: impl Into<ElementId>,
-    label: impl Into<SharedString>,
+// ---- segmented ----------------------------------------------------------
+
+/// A segment's fill, words and rim: the chosen one is a surface with the
+/// selection's outline, the others are words on the well.
+pub fn segment_colors(chosen: bool, p: &Palette) -> (Hsla, Hsla, Hsla) {
+    let clear = gpui::transparent_black();
+    if chosen {
+        (p.surf, p.text, p.outline)
+    } else {
+        (clear, p.text2, clear)
+    }
+}
+
+/// A short choice of one, side by side on a well (Text size, the case
+/// colour, a provider). Each option is its own Tab stop, chosen by a press
+/// or by Return or Space; the arrow keys do not move between them.
+#[derive(IntoElement)]
+pub struct Segmented {
+    id: ElementId,
+    options: Vec<SharedString>,
+    selected: usize,
+    disabled: bool,
+    shown_focused: Option<usize>,
+    on_select: Option<SelectHandler>,
+}
+
+impl Segmented {
+    pub fn new(id: impl Into<ElementId>, options: Vec<SharedString>, selected: usize) -> Segmented {
+        Segmented {
+            id: id.into(),
+            options,
+            selected,
+            disabled: false,
+            shown_focused: None,
+            on_select: None,
+        }
+    }
+
+    pub fn disabled(mut self, disabled: bool) -> Segmented {
+        self.disabled = disabled;
+        self
+    }
+
+    /// Called with the index of the option chosen, when it is not the one
+    /// already chosen.
+    pub fn on_select(mut self, f: impl Fn(&usize, &mut Window, &mut App) + 'static) -> Segmented {
+        self.on_select = Some(Rc::new(f));
+        self
+    }
+
+    /// See [`Press::shown_focused`]: the option at `index`.
+    pub(crate) fn shown_focused(mut self, index: usize) -> Segmented {
+        self.shown_focused = Some(index);
+        self
+    }
+}
+
+impl RenderOnce for Segmented {
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let p = *palette(cx);
+        let selected = self.selected;
+        let on_select = self.on_select.filter(|_| !self.disabled);
+        let shown_focused = self.shown_focused;
+        h_flex()
+            .id(self.id)
+            .flex_none()
+            .gap(px(2.))
+            .p(px(2.))
+            .rounded(px(8.))
+            .bg(p.well)
+            .when(self.disabled, |el| el.opacity(DISABLED))
+            .children(self.options.into_iter().enumerate().map(|(i, option)| {
+                let chosen = i == selected;
+                let (fill, words, rim) = segment_colors(chosen, &p);
+                let segment = Press::new(i)
+                    .radius(6.)
+                    .own_border(1.)
+                    .flex()
+                    .flex_none()
+                    .items_center()
+                    .h(px(22.))
+                    .px(px(11.))
+                    .rounded(px(6.))
+                    .border_1()
+                    .border_color(rim)
+                    .bg(fill)
+                    .ts(13., 18.)
+                    .medium()
+                    .whitespace_nowrap()
+                    .text_color(words)
+                    .when(!chosen, |s| s.hover(|s| s.text_color(p.text)))
+                    .when(shown_focused == Some(i), Press::shown_focused)
+                    .child(option);
+                match on_select.clone() {
+                    Some(f) => segment.on_click(move |_, window, cx| {
+                        if !chosen {
+                            f(&i, window, cx);
+                        }
+                    }),
+                    None => segment,
+                }
+            }))
+    }
+}
+
+// ---- popup ------------------------------------------------------------------
+
+/// The step a stepped setting shows as: the first of `steps` (ascending)
+/// at or above `value`, the way the deck rounds a value it has no step for
+/// up to its next one, and past the last, the last. With the deck's Idle
+/// home steps `[0, 30, 60, 120]`: 0 is Never, 1 to 30 is 30 s, 31 to 60 is
+/// 1 min and anything above is 2 min. An empty list is 0.
+pub fn step_at(value: u16, steps: &[u16]) -> usize {
+    steps
+        .iter()
+        .position(|&step| step >= value)
+        .unwrap_or(steps.len().saturating_sub(1))
+}
+
+/// What a menu button keeps between frames: its focus, whether its menu is
+/// up, the menu while it is, and whether the keyboard opened it (then the
+/// keyboard comes back to the button when it closes).
+struct PopupState {
+    focus: FocusHandle,
+    open: bool,
+    menu: Option<Entity<PopupMenu>>,
+    keyboard: bool,
+}
+
+/// What the menu's popover holds as its trigger: the button, drawn as it is
+/// whether the menu is up or not.
+#[derive(IntoElement)]
+struct Trigger(Stateful<Div>);
+
+impl Selectable for Trigger {
+    fn selected(self, _: bool) -> Self {
+        self
+    }
+
+    fn is_selected(&self) -> bool {
+        false
+    }
+}
+
+impl RenderOnce for Trigger {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        self.0
+    }
+}
+
+/// A button that opens a menu of choices (Idle home, Language, the deck
+/// button of a macro key): the value chosen and a chevron, on a well, 28
+/// high. A press opens the menu under it, and so do Return and Space while
+/// it has the keyboard; in the menu the arrow keys move, Return chooses and
+/// Escape closes. The menu is gpui-component's, built each time it opens by
+/// [`PopupButton::menu`]:
+///
+/// ```text
+/// PopupButton::new("idle-home", self.tr("2 min")).width(132.).menu(move |menu, _, _| {
+///     menu.item(PopupMenuItem::new(never).checked(at == 0).on_click(..))
+/// })
+/// ```
+///
+/// A menu button without a menu, or a disabled one, is drawn but opens
+/// nothing and is no Tab stop.
+#[derive(IntoElement)]
+pub struct PopupButton {
+    id: ElementId,
+    value: SharedString,
+    width: Option<f32>,
+    disabled: bool,
+    shown_focused: bool,
+    menu: Option<MenuBuilder>,
+}
+
+impl PopupButton {
+    pub fn new(id: impl Into<ElementId>, value: impl Into<SharedString>) -> PopupButton {
+        PopupButton {
+            id: id.into(),
+            value: value.into(),
+            width: None,
+            disabled: false,
+            shown_focused: false,
+            menu: None,
+        }
+    }
+
+    /// A fixed width (132 and 96 on Faces & Keys); a long value is cut at
+    /// its end. Unless said, as wide as its value.
+    pub fn width(mut self, width: f32) -> PopupButton {
+        self.width = Some(width);
+        self
+    }
+
+    pub fn disabled(mut self, disabled: bool) -> PopupButton {
+        self.disabled = disabled;
+        self
+    }
+
+    /// The menu, built afresh each time it opens: add items with
+    /// `PopupMenuItem::new(label).checked(..).on_click(..)`, separators,
+    /// `min_w`. Choosing an item runs its click and closes the menu.
+    pub fn menu(
+        mut self,
+        f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+    ) -> PopupButton {
+        self.menu = Some(Rc::new(f));
+        self
+    }
+
+    /// See [`Press::shown_focused`].
+    pub(crate) fn shown_focused(mut self) -> PopupButton {
+        self.shown_focused = true;
+        self
+    }
+}
+
+impl RenderOnce for PopupButton {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let p = *palette(cx);
+        let state = window.use_keyed_state(self.id.clone(), cx, |_, cx| PopupState {
+            focus: cx.focus_handle(),
+            open: false,
+            menu: None,
+            keyboard: false,
+        });
+        let enabled = !self.disabled && self.menu.is_some();
+        if !enabled {
+            // A menu left up by a button that has since been disabled goes,
+            // and does not come back when it is enabled again.
+            state.update(cx, |popup, _| {
+                popup.open = false;
+                popup.menu = None;
+            });
+        }
+        let (focus, open) = {
+            let popup = state.read(cx);
+            (popup.focus.clone(), popup.open)
+        };
+        let focused = self.shown_focused || (enabled && focus.is_focused(window));
+        let button = div()
+            .id(self.id.clone())
+            .flex()
+            .flex_none()
+            .items_center()
+            .justify_between()
+            .gap(px(8.))
+            .h(px(28.))
+            .pl(px(11.))
+            .pr(px(8.))
+            .rounded(px(8.))
+            .border_1()
+            .border_color(p.edge)
+            .bg(p.well)
+            .ts(13., 18.)
+            .medium()
+            .text_color(p.text)
+            .when_some(self.width, |b, width| b.w(px(width)))
+            .child(
+                div()
+                    .min_w_0()
+                    .whitespace_nowrap()
+                    .when(self.width.is_some(), |v| v.flex_1().truncate())
+                    .child(self.value),
+            )
+            .child(icon(ic::CHEVRON_DOWN, 13., p.text2))
+            .when(focused, |b| {
+                b.child(ring(FOCUS_RING, FOCUS_RING, 8., 1., p.info))
+            });
+        let has_menu = self.menu.is_some();
+        let Some(build) = self.menu.filter(|_| enabled) else {
+            // Disabled: it keeps the keyboard if it had it, and is passed by.
+            let button = if has_menu {
+                keyboard_stop(button, &focus, false)
+            } else {
+                button
+            };
+            return button
+                .when(self.disabled, |b| b.opacity(DISABLED))
+                .into_any_element();
+        };
+        // Return or Space while the button has the keyboard: the menu
+        // opens with the keyboard in it. The pointer opens it through the
+        // popover, on the press itself.
+        let button = keyboard_stop(button, &focus, true)
+            .cursor_pointer()
+            .hover(|b| b.border_color(p.text3))
+            .on_click({
+                let state = state.clone();
+                move |event, _, cx| {
+                    if event.is_keyboard() {
+                        state.update(cx, |popup, cx| {
+                            popup.open = true;
+                            popup.keyboard = true;
+                            cx.notify();
+                        });
+                    }
+                }
+            });
+        Popover::new(SharedString::from(format!("popup:{:?}", self.id)))
+            .appearance(false)
+            .overlay_closable(false)
+            .anchor(Corner::TopLeft)
+            .open(open)
+            .on_open_change({
+                let state = state.clone();
+                move |open, _, cx| {
+                    state.update(cx, |popup, cx| {
+                        popup.open = *open;
+                        if *open {
+                            // The pointer opened it.
+                            popup.keyboard = false;
+                        } else {
+                            popup.menu = None;
+                        }
+                        cx.notify();
+                    });
+                }
+            })
+            .trigger(Trigger(button))
+            .content(move |_, window, cx| {
+                // The menu is built once each time it opens and kept while
+                // it is up: the content is asked for on every frame.
+                if let Some(menu) = state.read(cx).menu.clone() {
+                    return menu;
+                }
+                let (keyboard, back) = {
+                    let popup = state.read(cx);
+                    (popup.keyboard, popup.focus.clone())
+                };
+                let build = build.clone();
+                let menu = PopupMenu::build(window, cx, move |menu, window, cx| {
+                    // Opened from the keyboard, the keyboard comes back to
+                    // the button; opened with the pointer, it goes back to
+                    // the window (the shell keeps it there).
+                    let menu = if keyboard {
+                        menu.action_context(back)
+                    } else {
+                        menu
+                    };
+                    build(menu, window, cx)
+                });
+                state.update(cx, |popup, _| popup.menu = Some(menu.clone()));
+                menu.focus_handle(cx).focus(window);
+                // A choice, Escape or a press outside dismisses the menu:
+                // the popover closes with it.
+                let popover = cx.entity();
+                window
+                    .subscribe(&menu, cx, {
+                        let state = state.clone();
+                        move |_, _: &DismissEvent, window, cx| {
+                            popover.update(cx, |popover, cx| popover.dismiss(window, cx));
+                            state.update(cx, |popup, _| popup.menu = None);
+                        }
+                    })
+                    .detach();
+                menu
+            })
+            .into_any_element()
+    }
+}
+
+// ---- chip ---------------------------------------------------------------
+
+/// A chip's fill, content and rim: the primary's plate while on, a
+/// control's edge around the sub-line colour while off.
+pub fn chip_colors(on: bool, p: &Palette) -> (Hsla, Hsla, Hsla) {
+    if on {
+        (p.solid, p.on_solid, p.solid)
+    } else {
+        (gpui::transparent_black(), p.text2, p.edge)
+    }
+}
+
+/// What a [`Chip`] carries.
+enum ChipContent {
+    Text(SharedString),
+    Icon(&'static str),
+    Word(SharedString),
+}
+
+/// A toggle 28 high in a control's edge, or on the primary's plate while
+/// on: 30 wide with a glyph or a character or two (a modifier of a macro
+/// key's shortcut), or as wide as a word in mono ([`Chip::word`], a token's
+/// scope).
+#[derive(IntoElement)]
+pub struct Chip {
+    id: ElementId,
+    content: ChipContent,
     on: bool,
-    p: &Palette,
-) -> Stateful<Div> {
-    let p = *p;
-    div()
-        .id(id)
-        .flex()
-        .flex_none()
-        .items_center()
-        .gap(px(5.))
-        .h(px(26.))
-        .px(px(9.))
-        .rounded(px(7.))
-        .ts(12., 16.)
-        .mono()
-        .cursor_pointer()
-        .map(|this| {
-            if on {
-                this.bg(p.accent_wash())
-                    .text_color(p.accent)
-                    .child(icon(ic::CHECK, 12., p.accent))
-            } else {
-                this.bg(p.wash(0.05))
-                    .text_color(p.muted)
-                    .hover(|s| s.bg(p.wash(0.09)).text_color(p.text))
-            }
-        })
-        .child(label.into())
+    disabled: bool,
+    tooltip: Option<SharedString>,
+    shown_focused: bool,
+    on_toggle: Option<ToggleHandler>,
 }
 
-// ---- page frame ---------------------------------------------------------
+impl Chip {
+    /// A chip with a character or two on it, in mono.
+    pub fn new(id: impl Into<ElementId>, text: impl Into<SharedString>, on: bool) -> Chip {
+        Chip {
+            id: id.into(),
+            content: ChipContent::Text(text.into()),
+            on,
+            disabled: false,
+            tooltip: None,
+            shown_focused: false,
+            on_toggle: None,
+        }
+    }
 
-/// The measure an admin screen's column is set to.
-pub const PAGE_MAX: f32 = 760.;
+    /// A chip with a 14 px glyph on it.
+    pub fn icon(id: impl Into<ElementId>, path: &'static str, on: bool) -> Chip {
+        Chip {
+            content: ChipContent::Icon(path),
+            ..Chip::new(id, "", on)
+        }
+    }
 
-/// The scrolling column an admin screen sits in: `max` wide at most,
-/// centred in `room` (the width the screen has), with Zeron's 40 px
-/// gutters. `scroll` is the shell's, so a screen opens at its top.
+    /// A modifier's chip: its mark, and its name when the pointer rests on
+    /// it (the name is macOS's own and is not translated).
+    pub fn modifier(id: impl Into<ElementId>, m: Mod, on: bool) -> Chip {
+        Chip::icon(id, m.icon(), on).tooltip(m.name())
+    }
+
+    /// A chip as wide as `word`, in mono 12/16 with 10 px either side.
+    pub fn word(id: impl Into<ElementId>, word: impl Into<SharedString>, on: bool) -> Chip {
+        Chip {
+            content: ChipContent::Word(word.into()),
+            ..Chip::new(id, "", on)
+        }
+    }
+
+    pub fn disabled(mut self, disabled: bool) -> Chip {
+        self.disabled = disabled;
+        self
+    }
+
+    pub fn tooltip(mut self, text: impl Into<SharedString>) -> Chip {
+        self.tooltip = Some(text.into());
+        self
+    }
+
+    /// Called with the value the chip is being moved **to**.
+    pub fn on_toggle(mut self, f: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Chip {
+        self.on_toggle = Some(Rc::new(f));
+        self
+    }
+
+    /// See [`Press::shown_focused`].
+    pub(crate) fn shown_focused(mut self) -> Chip {
+        self.shown_focused = true;
+        self
+    }
+}
+
+impl RenderOnce for Chip {
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let p = *palette(cx);
+        let on = self.on;
+        let (fill, ink, rim) = chip_colors(on, &p);
+        let chip = Press::new(self.id)
+            .own_border(1.)
+            .disabled(self.disabled)
+            .flex()
+            .flex_none()
+            .items_center()
+            .justify_center()
+            .h(px(28.))
+            .rounded(px(8.))
+            .border_1()
+            .border_color(rim)
+            .bg(fill)
+            .mono()
+            .medium()
+            .text_color(ink)
+            .map(|c| match self.content {
+                ChipContent::Text(text) => c.w(px(30.)).ts(13., 18.).child(text),
+                ChipContent::Icon(path) => c.w(px(30.)).ts(13., 18.).child(icon(path, 14., ink)),
+                ChipContent::Word(word) => c.px(px(10.)).ts(12., 16.).child(word),
+            })
+            .when_some(self.tooltip, |c, text| c.tooltip(tip(text)))
+            .when(self.shown_focused, Press::shown_focused);
+        match self.on_toggle {
+            Some(f) => chip.on_click(move |_, window, cx| f(&!on, window, cx)),
+            None => chip,
+        }
+    }
+}
+
+// ---- text field -------------------------------------------------------------
+
+/// A text field, 28 high, on a well. gpui-component's `Input` keeps the
+/// caret, the selection, the input method and undo; its edge is the
+/// control's edge and, while it has the keyboard, the one blue (both from
+/// the theme `style::install` writes). It is a Tab stop of its own. It is
+/// as wide as what holds it.
+pub fn field(state: &Entity<InputState>, p: &Palette) -> Input {
+    // `Input::h` is the height of a multi-line field and hides the style's
+    // own, so the style's is set through the trait.
+    gpui::Styled::h(Input::new(state), px(28.))
+        .py(px(0.))
+        .px(px(10.))
+        .rounded(px(8.))
+        .bg(p.well)
+        .text_size(px(13.))
+}
+
+// ---- containers -------------------------------------------------------
+
+/// A 32 px tile with an 18 px glyph in it, at the head of a row. Always the
+/// sub-line colour: a mark is not a state.
+pub fn tile(path: &'static str, p: &Palette) -> Div {
+    div()
+        .flex_none()
+        .flex()
+        .items_center()
+        .justify_center()
+        .size(px(32.))
+        .rounded(px(8.))
+        .bg(p.well)
+        .child(icon(path, 18., p.text2))
+}
+
+/// A 20 px box that centres what it is given and draws nothing itself: the
+/// lead of a row whose mark is an icon or a radio.
+pub fn bare(el: impl IntoElement) -> Div {
+    div()
+        .flex_none()
+        .flex()
+        .items_center()
+        .justify_center()
+        .size(px(20.))
+        .child(el)
+}
+
+/// A label over its body, 8 px apart. Sections stack 20 px apart in the
+/// page's column, so a section has no margin of its own.
+pub fn section(title: impl Into<SharedString>, body: impl IntoElement, p: &Palette) -> Div {
+    v_flex().gap(px(8.)).child(label(title, p)).child(body)
+}
+
+/// A card: a surface with a rule around it and one between each of
+/// `children`.
+///
+/// The rules are the card's, so a row does not need to know whether it is
+/// the last. Each is drawn over the bottom pixel of the child above it, as
+/// a row's own bottom border would be, so a row stays 44 or 56 high with its
+/// rule and a card of four rows is as tall as the design's. Only the last
+/// child is not wrapped, which is what lets a last row that
+/// [`grow`](Row::grow)s take a stretched card's spare height. A child with
+/// a fill of its own at the card's corner rounds itself: gpui clips to
+/// rectangles, never to a radius.
+pub fn card(children: Vec<AnyElement>, p: &Palette) -> Div {
+    let last = children.len().saturating_sub(1);
+    let mut card = v_flex()
+        .w_full()
+        .rounded(px(12.))
+        .bg(p.surf)
+        .border_1()
+        .border_color(p.line);
+    for (i, child) in children.into_iter().enumerate() {
+        card = if i < last {
+            card.child(
+                v_flex().relative().w_full().child(child).child(
+                    div()
+                        .absolute()
+                        .left_0()
+                        .right_0()
+                        .bottom_0()
+                        .h(px(1.))
+                        .bg(p.line),
+                ),
+            )
+        } else {
+            card.child(child)
+        };
+    }
+    card
+}
+
+/// One row of a [`card`]: an optional lead (a [`tile`], a [`bare`] icon),
+/// a title over an optional sub-line, and what the row offers on the right.
+#[derive(IntoElement)]
+pub struct Row {
+    lead: Option<AnyElement>,
+    title: Option<AnyElement>,
+    sub: Option<AnyElement>,
+    right: Vec<AnyElement>,
+    pad: f32,
+    grow: bool,
+    click: Option<(ElementId, ClickHandler)>,
+}
+
+impl Default for Row {
+    fn default() -> Row {
+        Row {
+            lead: None,
+            title: None,
+            sub: None,
+            right: Vec::new(),
+            pad: 16.,
+            grow: false,
+            click: None,
+        }
+    }
+}
+
+impl Row {
+    pub fn new() -> Row {
+        Row::default()
+    }
+
+    /// What leads the row: a [`tile`], or a [`bare`] icon or radio.
+    pub fn lead(mut self, el: impl IntoElement) -> Row {
+        self.lead = Some(el.into_any_element());
+        self
+    }
+
+    /// A plain title, wrapping when it must.
+    pub fn title(self, text: impl Into<SharedString>) -> Row {
+        self.title_el(para(text))
+    }
+
+    /// A title made of more than words.
+    pub fn title_el(mut self, el: impl IntoElement) -> Row {
+        self.title = Some(el.into_any_element());
+        self
+    }
+
+    /// A plain sub-line, wrapping when it must. A row with one is 56 high.
+    /// (The design's name for it; a row is never subtracted from.)
+    #[allow(clippy::should_implement_trait)]
+    pub fn sub(self, text: impl Into<SharedString>) -> Row {
+        self.sub_el(para(text))
+    }
+
+    pub fn sub_el(mut self, el: impl IntoElement) -> Row {
+        self.sub = Some(el.into_any_element());
+        self
+    }
+
+    /// One more thing on the right, 10 px after the one before.
+    pub fn right(mut self, el: impl IntoElement) -> Row {
+        self.right.push(el.into_any_element());
+        self
+    }
+
+    /// The row's sides, 16 px unless said (14 in the deck's own card).
+    pub fn pad(mut self, pad: f32) -> Row {
+        self.pad = pad;
+        self
+    }
+
+    /// Take the spare height of a stretched card. Only a card's last row
+    /// can (see [`card`]).
+    pub fn grow(mut self) -> Row {
+        self.grow = true;
+        self
+    }
+
+    /// Make the whole row the thing pressed: a radio's choice. It is then a
+    /// Tab stop of its own, pressed by Return and Space, and its keyboard
+    /// ring is drawn just inside it, where a ring outside would cross its
+    /// card's rim. A button on the row keeps its own press.
+    pub fn on_click(
+        mut self,
+        id: impl Into<ElementId>,
+        f: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    ) -> Row {
+        self.click = Some((id.into(), Rc::new(f)));
+        self
+    }
+}
+
+impl RenderOnce for Row {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let p = *palette(cx);
+        let height = if self.sub.is_some() {
+            ROW_TWO_LINES
+        } else {
+            ROW_ONE_LINE
+        };
+        let title = self
+            .title
+            .map(|title| div().ts(13., 18.).medium().text_color(p.text).child(title));
+        let sub = self
+            .sub
+            .map(|sub| div().ts(12., 16.).text_color(p.text2).child(sub));
+        let row = h_flex()
+            .w_full()
+            .gap(px(12.))
+            .min_h(px(height))
+            .py(px(6.))
+            .px(px(self.pad))
+            .when(self.grow, |row| row.flex_1())
+            .children(self.lead)
+            .child(
+                v_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .gap(px(2.))
+                    .children(title)
+                    .children(sub),
+            )
+            .when(!self.right.is_empty(), |row| {
+                row.child(h_flex().flex_none().gap(px(10.)).children(self.right))
+            });
+        match self.click {
+            Some((id, f)) => {
+                let focus = focus_handle(&id, window, cx);
+                let focused = focus.is_focused(window);
+                keyboard_stop(row.id(id), &focus, true)
+                    .cursor_pointer()
+                    .when(focused, |row| {
+                        row.child(inset_ring(ROW_RING_INSET, ROW_RING_RADIUS, p.info))
+                    })
+                    .on_click(move |event, window, cx| f(event, window, cx))
+                    .into_any_element()
+            }
+            None => row.into_any_element(),
+        }
+    }
+}
+
+/// How far inside a clickable [`Row`] its keyboard ring is drawn, and the
+/// ring's radius: inside a card's 12 px corner at either end.
+const ROW_RING_INSET: f32 = 2.;
+const ROW_RING_RADIUS: f32 = 8.;
+
+/// Something that needs the owner, as a card of one row: the amber wash
+/// and rim around it. The row brings its own mark (a [`bare`] warning
+/// triangle in `warn`) and its button.
+pub fn attention(row: Row, p: &Palette) -> Div {
+    v_flex()
+        .w_full()
+        .rounded(px(12.))
+        .bg(p.warn_wash)
+        .border_1()
+        .border_color(p.warn_line)
+        .child(row)
+}
+
+// ---- tables ---------------------------------------------------------------
+
+/// Between the cells of a [`table_row`].
+pub const CELL_GAP: f32 = 12.;
+
+/// A column of a table, `width` px that neither grows nor shrinks, so it
+/// lines up with the same column of every other row and of the head. What
+/// it holds starts at its left edge.
+pub fn cell(width: f32) -> Div {
+    div().flex_none().w(px(width))
+}
+
+/// A column of a table whose content stands at its right edge: a count, a
+/// size, the row's control.
+pub fn cell_end(width: f32) -> Div {
+    h_flex().flex_none().w(px(width)).justify_end()
+}
+
+/// One row of a table on a [`card`] — the Integrations page's sources,
+/// Footprint's items: its cells side by side, [`CELL_GAP`] apart inside the
+/// row's 16 px sides, at least `height` high. Every cell but the one that
+/// takes what is left (`flex_1().min_w_0()`) is a [`cell`] or a
+/// [`cell_end`], so the columns line up row under row.
+///
+/// `ruled` is a row the card draws its rule under, over the row's last
+/// pixel: every row but the card's last. That pixel is the rule's own, as a
+/// bottom border is in the design's `border-box` rows, so a row its content
+/// makes taller than `height` gets it back below the content, and one that
+/// `height` holds keeps `height` with its rule in it.
+pub fn table_row(height: f32, ruled: bool) -> Div {
+    h_flex()
+        .w_full()
+        .gap(px(CELL_GAP))
+        .min_h(px(height))
+        .px(px(16.))
+        .pt(px(6.))
+        .pb(px(if ruled { 7. } else { 6. }))
+}
+
+// ---- the frame ----------------------------------------------------------
+
+/// The width of a page's content: the main column's 828 less its 32 px
+/// sides.
+pub const PAGE_WIDTH: f32 = 764.;
+
+/// The main column's padding: [`PAGE_SIDE`] left and right, [`PAGE_END`]
+/// above and below.
+pub const PAGE_SIDE: f32 = 32.;
+pub const PAGE_END: f32 = 28.;
+
+/// The app's tile and name, as the sidebar and first run's top bar show
+/// them. The name is the product's and is never translated.
+pub fn brand() -> Div {
+    h_flex()
+        .flex_none()
+        .gap(px(9.))
+        .child(
+            gpui::img(BRAND_TILE)
+                .flex_none()
+                .size(px(22.))
+                .rounded(px(6.)),
+        )
+        .child(div().ts(13., 18.).semibold().child("OpenWalkieTalkie"))
+}
+
+/// The width of a sidebar row's edge: the outline of the page that is up.
+const NAV_EDGE: f32 = 1.5;
+
+/// One page in the sidebar: its glyph and name, 32 high. The page that is
+/// up is outlined and semibold; the others are in the sub-line colour. The
+/// caller adds the press ([`Press::on_click`]) and anything after the name;
+/// with a press it is a Tab stop.
+pub fn nav_item(
+    id: impl Into<ElementId>,
+    icon_path: &'static str,
+    label: impl Into<SharedString>,
+    current: bool,
+    p: &Palette,
+) -> Press {
+    let p = *p;
+    let color = if current { p.text } else { p.text2 };
+    Press::new(id)
+        .own_border(NAV_EDGE)
+        .h_flex()
+        .flex_none()
+        .h(px(32.))
+        .px(px(10.))
+        .gap(px(10.))
+        .rounded(px(8.))
+        .border(px(NAV_EDGE))
+        .ts(13., 18.)
+        .text_color(color)
+        .map(|item| {
+            if current {
+                item.semibold().border_color(p.outline)
+            } else {
+                item.medium()
+                    .border_color(gpui::transparent_black())
+                    .hover(|s| s.bg(p.well))
+            }
+        })
+        .child(icon(icon_path, 16., color))
+        .child(div().flex_1().min_w_0().child(label.into()))
+}
+
+/// A link out of the app: the words in the sub-line colour and a small
+/// arrow. The caller adds the press that opens it ([`Press::on_click`]);
+/// with one it is a Tab stop.
+pub fn link_out(id: impl Into<ElementId>, text: impl Into<SharedString>, p: &Palette) -> Press {
+    Press::new(id)
+        .radius(4.)
+        .h_flex()
+        .flex_none()
+        .gap(px(5.))
+        .ts(13., 18.)
+        .text_color(p.text2)
+        .child(text.into())
+        .child(icon(ic::EXTERNAL, 13., p.text3))
+}
+
+/// A page's head: an optional way back, the title (22/28 semibold), the
+/// sentence under it, and the page's own controls on the right in a 28 px
+/// band.
+#[derive(IntoElement)]
+pub struct Header {
+    title: SharedString,
+    sub: SharedString,
+    right: Vec<AnyElement>,
+    back: Option<(ElementId, SharedString, ClickHandler)>,
+}
+
+impl Header {
+    /// A page's title and the sentence under it; an empty `sub` draws no
+    /// sentence.
+    pub fn new(title: impl Into<SharedString>, sub: impl Into<SharedString>) -> Header {
+        Header {
+            title: title.into(),
+            sub: sub.into(),
+            right: Vec::new(),
+            back: None,
+        }
+    }
+
+    /// One more control on the right, 12 px after the one before.
+    pub fn right(mut self, el: impl IntoElement) -> Header {
+        self.right.push(el.into_any_element());
+        self
+    }
+
+    /// A sub-page's way back to its page, over the title: `label` is the
+    /// page's name. It is a Tab stop, pressed by Return and Space too.
+    pub fn back(
+        mut self,
+        id: impl Into<ElementId>,
+        label: impl Into<SharedString>,
+        f: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
+    ) -> Header {
+        self.back = Some((id.into(), label.into(), Rc::new(f)));
+        self
+    }
+}
+
+impl RenderOnce for Header {
+    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let p = *palette(cx);
+        let back = self.back.map(|(id, label, f)| {
+            // In a row of its own, so the press is as wide as the words.
+            h_flex().child(
+                Press::new(id)
+                    .radius(4.)
+                    .h_flex()
+                    .flex_none()
+                    .gap(px(4.))
+                    .ts(12., 16.)
+                    .text_color(p.text2)
+                    .child(icon(ic::CHEVRON_LEFT, 12., p.text2))
+                    .child(label)
+                    .on_click(move |event, window, cx| f(event, window, cx)),
+            )
+        });
+        h_flex()
+            .w_full()
+            .items_start()
+            .gap(px(16.))
+            .child(
+                v_flex()
+                    .flex_1()
+                    .min_w_0()
+                    .gap(px(4.))
+                    .children(back)
+                    .child(
+                        div()
+                            .ts(22., 28.)
+                            .semibold()
+                            .text_color(p.text)
+                            .child(self.title),
+                    )
+                    .when(!self.sub.is_empty(), |column| {
+                        column.child(div().ts(13., 18.).text_color(p.text2).child(para(self.sub)))
+                    }),
+            )
+            .when(!self.right.is_empty(), |header| {
+                header.child(
+                    h_flex()
+                        .flex_none()
+                        .h(px(28.))
+                        .gap(px(12.))
+                        .children(self.right),
+                )
+            })
+    }
+}
+
+/// The scrolling column a page sits in, against the sidebar: its content
+/// [`PAGE_WIDTH`] wide at most, inside the main column's padding, 20 px
+/// between its blocks, and left-aligned, so a wider window leaves the extra
+/// room empty on the right. `room` is the width right of the sidebar;
+/// `scroll` is the shell's, so a page opens at its top.
 ///
 /// The column's width is **a number of pixels** and not `w_full` capped by
 /// `max_w`. With the cap, taffy 0.9 lays some of the column's descendants
@@ -683,10 +2266,9 @@ pub fn page(
     id: impl Into<ElementId>,
     scroll: &gpui::ScrollHandle,
     room: f32,
-    max: f32,
     body: impl IntoElement,
 ) -> Stateful<Div> {
-    let width = room.min(max).max(0.);
+    let width = room.clamp(0., PAGE_WIDTH + 2. * PAGE_SIDE);
     div()
         .id(id)
         .size_full()
@@ -695,386 +2277,11 @@ pub fn page(
         .child(
             v_flex()
                 .w(px(width))
-                .mx_auto()
-                .px(px(40.))
-                .pt(px(10.))
-                .pb(px(56.))
+                .px(px(PAGE_SIDE))
+                .py(px(PAGE_END))
+                .gap(px(20.))
                 .child(body),
         )
-}
-
-/// A page's title (20/26 Medium), its subtitle and the actions to its right.
-pub fn page_header(
-    title: impl Into<SharedString>,
-    subtitle: Option<AnyElement>,
-    actions: Vec<AnyElement>,
-    p: &Palette,
-) -> Div {
-    h_flex()
-        .items_start()
-        .gap(px(16.))
-        .child(
-            v_flex()
-                .flex_1()
-                .min_w_0()
-                .child(
-                    div()
-                        .ts(20., 26.)
-                        .medium()
-                        .text_color(p.text)
-                        .child(title.into()),
-                )
-                .children(
-                    subtitle.map(|s| div().mt(px(4.)).ts(13., 18.).text_color(p.muted).child(s)),
-                ),
-        )
-        .when(!actions.is_empty(), |this| {
-            this.child(
-                h_flex()
-                    .flex_none()
-                    .gap(px(6.))
-                    .items_center()
-                    .children(actions),
-            )
-        })
-}
-
-/// A labelled block: a muted sentence-case label over its card.
-pub fn section(label: impl Into<SharedString>, body: impl IntoElement, p: &Palette) -> Div {
-    section_with(label, Vec::new(), body, p)
-}
-
-/// [`section`] with things to the right of the label.
-pub fn section_with(
-    label: impl Into<SharedString>,
-    trailing: Vec<AnyElement>,
-    body: impl IntoElement,
-    p: &Palette,
-) -> Div {
-    v_flex()
-        .mt(px(28.))
-        .gap(px(8.))
-        .child(
-            h_flex()
-                .min_h(px(26.))
-                .items_center()
-                .gap(px(8.))
-                .px(px(4.))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .ts(13., 17.)
-                        .text_color(p.muted)
-                        .child(label.into()),
-                )
-                .children(trailing),
-        )
-        .child(body)
-}
-
-/// A section card holding `rows`, each inset 16 px with a divider above all
-/// but the first.
-pub fn card(rows: Vec<AnyElement>, p: &Palette) -> Div {
-    let mut card = v_flex().w_full().rounded(px(12.)).bg(p.card());
-    for (i, row) in rows.into_iter().enumerate() {
-        card = card.child(
-            v_flex()
-                .mx(px(16.))
-                .when(i > 0, |this| this.border_t_1().border_color(p.divider()))
-                .child(row),
-        );
-    }
-    card
-}
-
-/// A card with free content and its own padding, for what is not a list.
-pub fn panel(p: &Palette) -> Div {
-    v_flex().w_full().rounded(px(12.)).bg(p.card()).p(px(16.))
-}
-
-/// One row of a [`card`]: an optional tile, a title over a meta line, the
-/// row's controls on the right, and details under the text column.
-#[derive(IntoElement, Default)]
-pub struct Row {
-    tile: Option<AnyElement>,
-    title: Option<AnyElement>,
-    meta: Option<AnyElement>,
-    trailing: Vec<AnyElement>,
-    details: Vec<AnyElement>,
-}
-
-impl Row {
-    pub fn new() -> Row {
-        Row::default()
-    }
-
-    pub fn tile(mut self, tile: impl IntoElement) -> Row {
-        self.tile = Some(tile.into_any_element());
-        self
-    }
-
-    /// A plain title.
-    pub fn title(self, text: impl Into<SharedString>) -> Row {
-        self.title_el(div().child(text.into()))
-    }
-
-    /// A title made of more than words (a name with badges after it).
-    pub fn title_el(mut self, el: impl IntoElement) -> Row {
-        self.title = Some(el.into_any_element());
-        self
-    }
-
-    /// A plain meta line.
-    pub fn meta(self, text: impl Into<SharedString>) -> Row {
-        self.meta_el(div().child(text.into()))
-    }
-
-    pub fn meta_el(mut self, el: impl IntoElement) -> Row {
-        self.meta = Some(el.into_any_element());
-        self
-    }
-
-    pub fn trailing(mut self, el: impl IntoElement) -> Row {
-        self.trailing.push(el.into_any_element());
-        self
-    }
-
-    pub fn detail(mut self, el: impl IntoElement) -> Row {
-        self.details.push(el.into_any_element());
-        self
-    }
-}
-
-impl RenderOnce for Row {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let p = *palette(cx);
-        let indent = if self.tile.is_some() { 48. } else { 0. };
-        v_flex()
-            .w_full()
-            .py(px(12.))
-            .min_h(px(60.))
-            .justify_center()
-            .child(
-                h_flex()
-                    .gap(px(12.))
-                    .items_center()
-                    .children(self.tile)
-                    .child(
-                        v_flex()
-                            .flex_1()
-                            .min_w(px(120.))
-                            .gap(px(2.))
-                            .children(
-                                self.title.map(|t| {
-                                    div().ts(13., 17.).medium().text_color(p.text).child(t)
-                                }),
-                            )
-                            .children(
-                                self.meta
-                                    .map(|m| div().ts(12., 16.).text_color(p.muted).child(m)),
-                            ),
-                    )
-                    .when(!self.trailing.is_empty(), |this| {
-                        this.child(
-                            h_flex()
-                                .flex_none()
-                                .gap(px(6.))
-                                .items_center()
-                                .children(self.trailing),
-                        )
-                    }),
-            )
-            .when(!self.details.is_empty(), |this| {
-                this.child(
-                    v_flex()
-                        .mt(px(10.))
-                        .pl(px(indent))
-                        .gap(px(10.))
-                        .children(self.details),
-                )
-            })
-    }
-}
-
-/// A label and its value on one line, in a details block.
-pub fn kv(label: impl Into<SharedString>, value: impl IntoElement, p: &Palette) -> Div {
-    h_flex()
-        .items_start()
-        .gap(px(12.))
-        .child(
-            div()
-                .w(px(112.))
-                .flex_none()
-                .ts(12., 18.)
-                .text_color(p.faint)
-                .child(label.into()),
-        )
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .ts(12.5, 18.)
-                .text_color(p.text)
-                .child(value),
-        )
-}
-
-// ---- strips, code, empty states ----------------------------------------
-
-/// What a [`strip`] is about.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Severity {
-    Danger,
-    Warning,
-    Note,
-}
-
-/// A tinted strip for something the operator has to know or act on: a 6 %
-/// tint of the status colour, a 20 % rim, and text in its muted shade.
-pub fn strip(
-    severity: Severity,
-    title: Option<SharedString>,
-    body: Option<AnyElement>,
-    actions: Vec<AnyElement>,
-    p: &Palette,
-) -> Div {
-    let (base, text, glyph) = match severity {
-        Severity::Danger => (p.danger, p.danger_muted, ic::DANGER),
-        Severity::Warning => (p.warning, p.warning_muted, ic::DANGER),
-        Severity::Note => (p.accent, p.text, ic::INFO),
-    };
-    h_flex()
-        .w_full()
-        .items_start()
-        .gap(px(10.))
-        .px(px(14.))
-        .py(px(12.))
-        .rounded(px(12.))
-        .bg(base.alpha(0.06))
-        .border_1()
-        .border_color(base.alpha(0.20))
-        .child(div().pt(px(1.)).child(icon(glyph, 16., text.opacity(0.9))))
-        .child(
-            v_flex()
-                .flex_1()
-                .min_w_0()
-                .gap(px(3.))
-                .children(title.map(|t| div().ts(13., 17.).medium().text_color(text).child(t)))
-                .children(body.map(|b| {
-                    div()
-                        .ts(12.5, 18.)
-                        .text_color(text.opacity(if severity == Severity::Note {
-                            0.75
-                        } else {
-                            0.9
-                        }))
-                        .child(b)
-                })),
-        )
-        .when(!actions.is_empty(), |this| {
-            this.child(
-                h_flex()
-                    .flex_none()
-                    .gap(px(6.))
-                    .items_center()
-                    .children(actions),
-            )
-        })
-}
-
-/// A block of monospaced text on the terminal plate, for a command or a
-/// file's worth of lines. `copy` adds an icon button that copies `text`.
-pub fn code_block(
-    id: impl Into<ElementId>,
-    text: impl Into<SharedString>,
-    copy: bool,
-    p: &Palette,
-) -> Stateful<Div> {
-    code_block_localized(id, text, copy, p, deck_gui_core::i18n::Language::English)
-}
-
-pub fn code_block_localized(
-    id: impl Into<ElementId>,
-    text: impl Into<SharedString>,
-    copy: bool,
-    p: &Palette,
-    language: deck_gui_core::i18n::Language,
-) -> Stateful<Div> {
-    let text: SharedString = text.into();
-    let copied = text.clone();
-    div()
-        .id(id)
-        .relative()
-        .w_full()
-        .rounded(px(10.))
-        .bg(p.terminal)
-        .border_1()
-        .border_color(p.hairline(0.06))
-        .px(px(14.))
-        .py(px(11.))
-        .ts(12., 19.)
-        .mono()
-        .text_color(p.text)
-        .child(text)
-        .when(copy, |this| {
-            this.child(
-                div().absolute().top(px(6.)).right(px(6.)).child(
-                    Btn::icon_only("copy", ic::COPY)
-                        .small()
-                        .tooltip(language.text("Copy"))
-                        .on_click(move |_, _, cx| {
-                            cx.write_to_clipboard(gpui::ClipboardItem::new_string(
-                                copied.to_string(),
-                            ));
-                        }),
-                ),
-            )
-        })
-}
-
-/// A centred glyph, a title and a line of help, for a pane with nothing in it.
-pub fn empty_state(
-    path: &'static str,
-    title: impl Into<SharedString>,
-    help: impl Into<SharedString>,
-    p: &Palette,
-) -> Div {
-    v_flex()
-        .w_full()
-        .items_center()
-        .justify_center()
-        .gap(px(4.))
-        .px(px(24.))
-        .py(px(40.))
-        .child(icon(path, 28., p.muted.opacity(0.45)))
-        .child(
-            div()
-                .mt(px(10.))
-                .ts(14., 19.)
-                .medium()
-                .text_color(p.text)
-                .child(title.into()),
-        )
-        .child(
-            div()
-                .max_w(px(320.))
-                .ts(12.5, 18.)
-                .text_center()
-                .text_color(p.muted)
-                .child(help.into()),
-        )
-}
-
-/// A text field in the window's style. Its own `Input` keeps the caret,
-/// the selection and the focus ring (the accent, from the theme).
-pub fn field(state: &gpui::Entity<InputState>, p: &Palette) -> Input {
-    Input::new(state)
-        .bg(p.field())
-        .rounded(px(8.))
-        .h(px(32.))
-        .px(px(10.))
-        .text_size(px(13.))
 }
 
 // ---- paragraphs -----------------------------------------------------------
@@ -1229,5 +2436,260 @@ impl IntoElement for Para {
 
     fn into_element(self) -> Self::Element {
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_shortcut_is_written_in_the_macs_order_whatever_order_it_was_given_in() {
+        assert_eq!(
+            Mod::ALL,
+            [Mod::Control, Mod::Option, Mod::Shift, Mod::Command]
+        );
+        assert_eq!(
+            canonical(&[Mod::Command, Mod::Shift]),
+            [Mod::Shift, Mod::Command]
+        );
+        assert_eq!(
+            canonical(&[Mod::Command, Mod::Option, Mod::Control, Mod::Shift]),
+            Mod::ALL
+        );
+        // Each once, and none is none.
+        assert_eq!(
+            canonical(&[Mod::Option, Mod::Option, Mod::Control]),
+            [Mod::Control, Mod::Option]
+        );
+        assert!(canonical(&[]).is_empty());
+        // The derived order is the Mac's too, so a sorted set agrees.
+        let mut sorted = vec![Mod::Command, Mod::Control, Mod::Shift, Mod::Option];
+        sorted.sort();
+        assert_eq!(sorted, Mod::ALL);
+    }
+
+    #[test]
+    fn every_modifier_has_its_own_mark_and_the_name_macos_prints() {
+        let names: Vec<&str> = Mod::ALL.iter().map(|m| m.name()).collect();
+        assert_eq!(names, ["Control", "Option", "Shift", "Command"]);
+        for (i, a) in Mod::ALL.iter().enumerate() {
+            assert!(a.icon().starts_with("icons/mod-"), "{a:?}");
+            for b in &Mod::ALL[i + 1..] {
+                assert_ne!(a.icon(), b.icon(), "{a:?} and {b:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn tabular_figures_and_the_weights_are_set_on_the_text_style() {
+        let mut figures = div().tnum();
+        let features = figures
+            .style()
+            .text
+            .as_ref()
+            .and_then(|text| text.font_features.clone())
+            .expect("tnum sets the features");
+        assert_eq!(features.tag_value_list(), [("tnum".to_string(), 1)]);
+        // Nothing else of the inherited text style is touched: the family
+        // and the CJK fallbacks come from the window's root.
+        let text = figures.style().text.clone().unwrap_or_default();
+        assert_eq!(text.font_family, None);
+        assert_eq!(text.font_fallbacks, None);
+        for (mut el, weight) in [
+            (div().medium(), FontWeight::MEDIUM),
+            (div().semibold(), FontWeight::SEMIBOLD),
+        ] {
+            let text = el.style().text.clone().unwrap_or_default();
+            assert_eq!(text.font_weight, Some(weight));
+        }
+        let mut code = div().mono().ts(12., 16.);
+        let text = code.style().text.clone().unwrap_or_default();
+        assert_eq!(text.font_family, Some(MONO.into()));
+        assert_eq!(text.font_size, Some(px(12.).into()));
+    }
+
+    #[test]
+    fn the_kits_rows_are_the_designs_two_heights() {
+        assert_eq!((ROW_ONE_LINE, ROW_TWO_LINES), (44., 56.));
+        // The content column is the main column's width less its sides.
+        assert_eq!(PAGE_WIDTH + 2. * PAGE_SIDE, 828.);
+        assert_eq!(PAGE_END, 28.);
+        assert_eq!(Row::new().pad, 16., "a row's sides, unless said");
+    }
+
+    #[test]
+    fn a_table_row_holds_its_height_with_its_rule_and_gives_a_taller_one_the_rule_back() {
+        // The Integrations board's rows: 64 at least, a pixel more for the
+        // rule under every row but the card's last.
+        let mut ruled = table_row(64., true);
+        let style = ruled.style();
+        assert_eq!(style.min_size.height, Some(px(64.).into()));
+        assert_eq!(style.padding.top, Some(px(6.).into()));
+        assert_eq!(style.padding.bottom, Some(px(7.).into()));
+        assert_eq!(style.padding.left, Some(px(16.).into()));
+        assert_eq!(style.gap.width, Some(px(CELL_GAP).into()));
+        let mut last = table_row(64., false);
+        assert_eq!(last.style().padding.bottom, Some(px(6.).into()));
+        // A column is its width, never more or less; one at its end puts
+        // what it holds there.
+        for mut column in [cell(88.), cell_end(104.)] {
+            let style = column.style();
+            assert_eq!((style.flex_grow, style.flex_shrink), (Some(0.), Some(0.)));
+        }
+        assert_eq!(cell(88.).style().size.width, Some(px(88.).into()));
+        assert_eq!(
+            cell_end(104.).style().justify_content,
+            Some(gpui::JustifyContent::End)
+        );
+        // Cards side by side are stretched on purpose.
+        assert_eq!(
+            div().flex().items_stretch().style().align_items,
+            Some(AlignItems::Stretch)
+        );
+    }
+
+    #[test]
+    fn a_copy_button_says_it_copied_for_two_seconds_and_then_its_label_again() {
+        assert_eq!(COPIED_FOR, Duration::from_secs(2));
+        assert!(!says_copied(None), "not pressed yet");
+        assert!(says_copied(Some(Instant::now())));
+        if let Some(earlier) = Instant::now().checked_sub(COPIED_FOR) {
+            assert!(!says_copied(Some(earlier)));
+        }
+    }
+
+    #[test]
+    fn a_level_takes_the_stop_under_the_pointer_and_its_ends_past_either_end() {
+        // The design's speaker level: 168 wide, 0 to 10, the stops' centres
+        // from 8 to 160.
+        let at = |x: f32| level_value_at(x, LEVEL_WIDTH, 0, 10);
+        assert_eq!((at(8.), at(160.)), (0, 10), "the two ends");
+        assert_eq!(at(84.), 5, "the middle");
+        assert_eq!(at(8. + 15.2 * 6.), 6, "a stop's centre");
+        // Half a stop either way rounds to the nearer one.
+        assert_eq!((at(8. + 15.2 * 5.6), at(8. + 15.2 * 6.4)), (6, 6));
+        // Outside the rail, and outside the control: the nearer end.
+        assert_eq!((at(0.), at(-40.)), (0, 0));
+        assert_eq!((at(168.), at(400.)), (10, 10));
+        // Brightness runs from 1 to 5.
+        assert_eq!(level_value_at(8., LEVEL_WIDTH, 1, 5), 1);
+        assert_eq!(level_value_at(84., LEVEL_WIDTH, 1, 5), 3);
+        assert_eq!(level_value_at(160., LEVEL_WIDTH, 1, 5), 5);
+        // A level with one stop, or none, is that stop wherever it is
+        // pressed, and a level too narrow for its thumb does not divide by
+        // nothing.
+        assert_eq!(level_value_at(50., LEVEL_WIDTH, 4, 4), 4);
+        assert_eq!(level_value_at(50., LEVEL_WIDTH, 4, 2), 4);
+        assert_eq!(level_value_at(9., 10., 0, 10), 10);
+        assert_eq!(level_value_at(7., 10., 0, 10), 0);
+    }
+
+    #[test]
+    fn the_arrow_keys_home_and_end_move_a_level_a_stop_at_a_time_and_stop_at_its_ends() {
+        assert_eq!(level_key("left", 6, 0, 10), Some(5));
+        assert_eq!(level_key("down", 6, 0, 10), Some(5));
+        assert_eq!(level_key("right", 6, 0, 10), Some(7));
+        assert_eq!(level_key("up", 6, 0, 10), Some(7));
+        assert_eq!(level_key("home", 6, 0, 10), Some(0));
+        assert_eq!(level_key("end", 6, 0, 10), Some(10));
+        // Never past an end.
+        assert_eq!(level_key("left", 1, 1, 5), Some(1));
+        assert_eq!(level_key("right", 5, 1, 5), Some(5));
+        assert_eq!(level_key("down", 0, 0, 10), Some(0));
+        // A value outside the range moves from the end it is past.
+        assert_eq!(level_key("right", 9, 1, 5), Some(5));
+        assert_eq!(level_key("left", 0, 1, 5), Some(1));
+        // Every other key is left to whatever else wants it.
+        for key in ["enter", "space", "tab", "a", "escape", ""] {
+            assert_eq!(level_key(key, 6, 0, 10), None, "{key:?}");
+        }
+        // The thumb's place follows the same range.
+        assert_eq!(level_fraction(6, 0, 10), 0.6);
+        assert_eq!((level_fraction(1, 1, 5), level_fraction(5, 1, 5)), (0., 1.));
+        assert_eq!(level_fraction(3, 3, 3), 0.);
+    }
+
+    #[test]
+    fn idle_home_shows_the_step_the_deck_rounds_a_value_up_to() {
+        // The deck keeps 0, 30, 60 or 120 seconds and rounds anything else
+        // up to the next (`src/deck/model.rs`): Never, 30 s, 1 min, 2 min.
+        let steps = [0, 30, 60, 120];
+        for (value, step) in [
+            (0, 0),
+            (1, 1),
+            (30, 1),
+            (31, 2),
+            (45, 2),
+            (60, 2),
+            (61, 3),
+            (120, 3),
+            (900, 3),
+            (u16::MAX, 3),
+        ] {
+            assert_eq!(step_at(value, &steps), step, "{value} s");
+        }
+        // Each step shows as itself, so writing a choice and reading it
+        // back agree.
+        for (i, &step) in steps.iter().enumerate() {
+            assert_eq!(step_at(step, &steps), i);
+        }
+        assert_eq!(step_at(5, &[]), 0);
+    }
+
+    #[test]
+    fn the_four_buttons_are_the_designs_fills_words_and_rims() {
+        let clear = gpui::transparent_black();
+        for p in [Palette::dark(), Palette::light()] {
+            assert_eq!(Kind::Primary.colors(&p), (p.solid, p.on_solid, p.solid));
+            assert_eq!(Kind::Secondary.colors(&p), (clear, p.text, p.edge));
+            assert_eq!(Kind::Quiet.colors(&p), (p.well, p.text, clear));
+            assert_eq!(Kind::Danger.colors(&p), (clear, p.bad_text, p.edge));
+            // A new button is the secondary one.
+            assert_eq!(Kind::default(), Kind::Secondary);
+            assert_eq!(Btn::new("b", "Check").kind, Kind::Secondary);
+            assert_eq!(Btn::icon_only("c", ic::COPY).kind, Kind::Quiet);
+            // On and off, the primary's plate or an edge around nothing.
+            assert_eq!(switch_colors(true, &p), (p.solid, p.solid, p.on_solid));
+            assert_eq!(switch_colors(false, &p), (clear, p.edge, p.edge));
+            assert_eq!(chip_colors(true, &p), (p.solid, p.on_solid, p.solid));
+            assert_eq!(chip_colors(false, &p), (clear, p.text2, p.edge));
+            // The chosen segment is a surface with the selection's outline.
+            assert_eq!(segment_colors(true, &p), (p.surf, p.text, p.outline));
+            assert_eq!(segment_colors(false, &p), (clear, p.text2, clear));
+        }
+    }
+
+    #[test]
+    fn a_ring_sits_its_gap_outside_the_element_and_follows_its_corners() {
+        let color = Palette::dark().info;
+        // A button's: 8 px corners, a 1 px border, the ring 2 px wide and
+        // 2 px out, so from 2 to 4 px outside the button.
+        let mut button = ring(2., 2., 8., 1., color);
+        let style = button.style();
+        for inset in [
+            &style.inset.top,
+            &style.inset.right,
+            &style.inset.bottom,
+            &style.inset.left,
+        ] {
+            assert_eq!(*inset, Some(px(-5.).into()));
+        }
+        assert_eq!(style.corner_radii.top_left, Some(px(12.).into()));
+        assert_eq!(style.border_widths.top, Some(px(2.).into()));
+        assert_eq!(style.border_color, Some(color));
+        assert_eq!(style.position, Some(gpui::Position::Absolute));
+        // A tile's resting ring touches it.
+        let mut rest = ring(0., 1., 12., 0., color);
+        assert_eq!(rest.style().inset.left, Some(px(-1.).into()));
+        assert_eq!(rest.style().corner_radii.top_left, Some(px(13.).into()));
+        // Focus on a selected tile sits outside the selection's ring.
+        let mut both = ring(FOCUS_RING_SELECTED, FOCUS_RING, 12., 0., color);
+        assert_eq!(both.style().inset.top, Some(px(-8.).into()));
+        // A row's is inside it, clear of its card's corners.
+        let mut row = inset_ring(ROW_RING_INSET, ROW_RING_RADIUS, color);
+        assert_eq!(row.style().inset.top, Some(px(2.).into()));
+        assert_eq!(row.style().border_widths.left, Some(px(FOCUS_RING).into()));
+        assert_eq!(row.style().corner_radii.top_left, Some(px(8.).into()));
     }
 }

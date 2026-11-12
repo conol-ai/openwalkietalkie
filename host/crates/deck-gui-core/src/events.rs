@@ -54,12 +54,13 @@ impl ApiEvent {
     }
 }
 
-/// Everything that reaches the GUI from outside the UI thread. Two variants:
-/// unlike openmicrokbd this app owns no HID link, no audio and no hotkeys —
-/// `deckd` owns all three and speaks through `ApiEvent` — but it does own the
-/// menu bar, and `muda` calls its handler from the menu's own thread.
+/// Everything that reaches the GUI from outside the UI thread: the service,
+/// and the menu bar. Unlike openmicrokbd this app owns no HID link, no audio
+/// and no hotkeys — `deckd` owns all three and speaks through `ApiEvent` —
+/// but it does own the menu bar, and `muda` calls its handler from the
+/// menu's own thread.
 ///
-/// The tray goes on this bus rather than into a poll for the reason the bus
+/// The menu goes on this bus rather than into a poll for the reason the bus
 /// exists: `try_send` on an unbounded `async_channel::Sender` needs no
 /// executor and blocks nobody, so a click can be delivered from wherever
 /// AppKit runs the handler without the UI thread waiting on it.
@@ -67,8 +68,8 @@ impl ApiEvent {
 #[allow(clippy::large_enum_variant)]
 pub enum AppEvent {
     Api(ApiEvent),
-    /// A menu item on the status item was clicked.
-    Tray(crate::TrayCommand),
+    /// An item of the status item's menu was clicked ([`crate::menu`]).
+    Menu(crate::menu::MenuCommand),
 }
 
 /// The writing half. `Clone` is cheap: every producer holds one.

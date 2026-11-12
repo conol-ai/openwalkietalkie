@@ -85,13 +85,7 @@ impl Wire {
             if line.len() > 4096 {
                 return Err("Oversized device reply.".into());
             }
-            if let Some(end) = line.iter().position(|b| *b == b'\n') {
-                let reply: Value =
-                    serde_json::from_slice(&line[..end]).map_err(|_| "Invalid device reply.")?;
-                if reply.get("id").and_then(Value::as_u64) != Some(47201) {
-                    line.drain(..=end);
-                    continue;
-                }
+            if let Some(reply) = take_reply(&mut line, 47201) {
                 return reply.get("result").cloned().ok_or_else(|| {
                     reply["error"]["message"]
                         .as_str()
@@ -119,6 +113,24 @@ impl Wire {
         }
         Err("Recovery timed out. Keep the deck on USB and retry the update.".into())
     }
+}
+
+/// The reply with `id` among the channel-2 lines gathered in `line`, once
+/// its line feed is in; `None` until then. Every other whole line is
+/// dropped: a reply to someone else's request (the service asks a linked
+/// deck its board and charge on this channel too, `device::status`), or the
+/// tail of one that began before this handle was reading, which is no
+/// reply at all.
+fn take_reply(line: &mut Vec<u8>, id: u64) -> Option<Value> {
+    while let Some(end) = line.iter().position(|byte| *byte == b'\n') {
+        let reply = serde_json::from_slice::<Value>(&line[..end]).ok();
+        line.drain(..=end);
+        let ours = |reply: &Value| reply.get("id").and_then(Value::as_u64) == Some(id);
+        if let Some(reply) = reply.filter(ours) {
+            return Some(reply);
+        }
+    }
+    None
 }
 
 fn candidates(api: &mut HidApi) -> Result<Vec<(String, std::ffi::CString)>, String> {
@@ -433,6 +445,35 @@ pub(super) fn crc32(bytes: &[u8]) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// The updater reads channel 2 from a handle of its own while the
+    /// service may be asking the same deck its status there: its reply is
+    /// found by id among the service's replies, and the tail of one that
+    /// began before the updater was reading is passed over, not taken for
+    /// an unreadable answer.
+    #[test]
+    fn the_updaters_reply_is_found_among_the_services_and_a_cut_one_is_passed_over() {
+        let mut line = Vec::new();
+        let ours = r#"{"id":47201,"result":{"version":"0.13.0-openwalkietalkie","board":"Rev B"}}"#;
+        line.extend_from_slice(b"\"battery\":85,\"is_charging\":false}}\n");
+        line.extend_from_slice(br#"{"id":47302,"result":{"board":"Rev B"}}"#);
+        line.push(b'\n');
+        line.extend_from_slice(&ours.as_bytes()[..40]);
+        assert_eq!(take_reply(&mut line, 47201), None, "not whole yet");
+        assert_eq!(
+            line,
+            &ours.as_bytes()[..40],
+            "only the partial reply is left"
+        );
+        line.extend_from_slice(&ours.as_bytes()[40..]);
+        line.extend_from_slice(b"\n{\"id\":47301,");
+        let reply = take_reply(&mut line, 47201).expect("the updater's own reply");
+        assert_eq!(reply["result"]["board"], "Rev B");
+        assert_eq!(
+            line, b"{\"id\":47301,",
+            "what follows waits for its line feed"
+        );
+    }
+
     #[test]
     fn sparse_hid_sends_erase_requests_only_when_advertised() {
         let image = vec![0xff; 4200];

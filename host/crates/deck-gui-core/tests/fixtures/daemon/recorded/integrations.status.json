@@ -1,0 +1,74 @@
+{
+  "claude_channels": [],
+  "claude_channels_stale": 0,
+  "targets": [
+    {
+      "backups": [],
+      "detail": "no `openwalkietalkie` plugin under d/claude-marketplace",
+      "files": [
+        "d/claude-marketplace/.claude-plugin/marketplace.json",
+        "d/claude-marketplace/plugins/openwalkietalkie/.claude-plugin/plugin.json",
+        "d/claude-marketplace/plugins/openwalkietalkie/hooks/hooks.json",
+        "/tmp/owt/run/l1/home/claude/settings.json"
+      ],
+      "limits": [
+        "a plugin is read at session start: a session that was already open when it was installed or rewritten loads it after `/reload-plugins`, not before",
+        "`installed` means enabled at USER scope; a project's own .claude/settings.json can set `enabledPlugins[\"openwalkietalkie@openwalkietalkie\"]: false` and turn it off for that repository, which this row cannot see",
+        "this row reads Claude Code's own records (installed_plugins.json, known_marketplaces.json, enabledPlugins) and never runs the CLI; `claude plugin list --json` is the authority on what a session actually loads"
+      ],
+      "status": "absent",
+      "target": "claude"
+    },
+    {
+      "backups": [],
+      "detail": "no deckd hooks in /tmp/owt/run/l1/home/codex/hooks.json",
+      "files": [
+        "/tmp/owt/run/l1/home/codex/hooks.json",
+        "/tmp/owt/run/l1/home/codex/config.toml"
+      ],
+      "limits": [
+        "trust and enablement come from codex's own `hooks/list` (trustStatus, enabled, warnings) whenever codex can be run, because deckd cannot compute a hook's hash itself (C14a) and only codex tells `trusted` from `modified` or sees the warnings that mean the whole hooks.json was discarded (C12, C18)",
+        "the absence of a SessionStart is NOT evidence that hooks are dead: SessionStart fires on a session's first turn, not when it opens (C18), so an idle session legitimately produces none",
+        "trust is positional (<event>:<group>:<handler>) and keyed on the REALPATH of hooks.json; any change to deckd's path, timeout, matcher or statusMessage re-breaks it as `modified` and the hooks stop firing with no notice (C14a)"
+      ],
+      "status": "absent",
+      "target": "codex"
+    },
+    {
+      "backups": [],
+      "detail": "Install the desktop launcher to connect Codex Desktop to the shared local app server.",
+      "detected": {
+        "path": "/Applications/ChatGPT.app",
+        "version": ""
+      },
+      "files": [
+        "/tmp/owt/run/l1/home/Applications/Codex with OpenWalkieTalkie.app/Contents/Info.plist",
+        "/tmp/owt/run/l1/home/Applications/Codex with OpenWalkieTalkie.app/Contents/MacOS/launch-codex"
+      ],
+      "limits": [
+        "Installed describes the launcher files, not a live desktop connection. Use the launcher after quitting Codex; local-daemon support is experimental and cloud/SSH sessions are not attached by this integration."
+      ],
+      "status": "absent",
+      "target": "codex-desktop"
+    },
+    {
+      "backups": [],
+      "detail": "designed for v1.1 (design §5.3, §4.16); deckd writes nothing for it today",
+      "files": [],
+      "limits": [],
+      "status": "absent",
+      "target": "gemini"
+    },
+    {
+      "backups": [],
+      "detail": "designed for v1.1 (design §5.3, §4.16); deckd writes nothing for it today",
+      "files": [],
+      "limits": [],
+      "status": "absent",
+      "target": "claude-desktop"
+    }
+  ],
+  "warnings": [
+    "/tmp/owt/bin/deckd-s6 is outside /Applications: the hooks will name this path, and moving the binary later shows up as path_drift (and, for Codex, breaks hook trust)"
+  ]
+}

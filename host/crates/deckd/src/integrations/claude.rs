@@ -175,7 +175,13 @@ pub fn settings_path(env: &Env) -> PathBuf {
 /// The marketplace root: deckd's data directory, so it moves with the
 /// daemon's own state and never sits inside `~/.claude`.
 pub fn marketplace_dir(env: &Env) -> PathBuf {
-    env.data.join("claude-marketplace")
+    marketplace_in(&env.data)
+}
+
+/// [`marketplace_dir`] under a data directory, for a caller with no
+/// installer environment (`care.footprint`).
+pub fn marketplace_in(data: &Path) -> PathBuf {
+    data.join("claude-marketplace")
 }
 
 pub fn marketplace_json_path(env: &Env) -> PathBuf {
@@ -185,7 +191,11 @@ pub fn marketplace_json_path(env: &Env) -> PathBuf {
 }
 
 pub fn plugin_dir(env: &Env) -> PathBuf {
-    marketplace_dir(env).join("plugins").join(PLUGIN)
+    plugin_in(&env.data)
+}
+
+fn plugin_in(data: &Path) -> PathBuf {
+    marketplace_in(data).join("plugins").join(PLUGIN)
 }
 
 pub fn plugin_json_path(env: &Env) -> PathBuf {
@@ -193,11 +203,36 @@ pub fn plugin_json_path(env: &Env) -> PathBuf {
 }
 
 pub fn hooks_json_path(env: &Env) -> PathBuf {
-    plugin_dir(env).join("hooks").join("hooks.json")
+    hooks_json_in(&env.data)
+}
+
+/// [`hooks_json_path`] under a data directory.
+pub fn hooks_json_in(data: &Path) -> PathBuf {
+    plugin_in(data).join("hooks").join("hooks.json")
 }
 
 pub fn mcp_json_path(env: &Env) -> PathBuf {
-    plugin_dir(env).join(".mcp.json")
+    mcp_json_in(&env.data)
+}
+
+/// [`mcp_json_path`] under a data directory: the Claude Channels helper's
+/// declaration, which Claude reads at a session's start.
+pub fn mcp_json_in(data: &Path) -> PathBuf {
+    plugin_in(data).join(".mcp.json")
+}
+
+/// Whether the plugin under `data` should carry the Claude Channels helper,
+/// and the channel door serve it: `switch` (`[sources] claude_channels`)
+/// when the config sets it, else whether the plugin carries the helper now.
+///
+/// The unset case is the migration. Every plugin before the switch carried
+/// the helper, so such an install keeps it, and since what this installer
+/// writes then follows what is on disk, it goes on keeping it; a fresh
+/// install has no `.mcp.json`, so it stays without one. Only the owner's
+/// switch moves either of them.
+#[must_use]
+pub fn channels_on(switch: Option<bool>, data: &Path) -> bool {
+    switch.unwrap_or_else(|| mcp_json_in(data).exists())
 }
 
 /// Where the installed bundle's deckd lives.
@@ -289,15 +324,19 @@ pub fn mcp_json(env: &Env) -> serde_json::Value {
     }}})
 }
 
-/// The files this target owns, plus the settings file it reads.
+/// The files this target owns — the Claude Channels helper only while the
+/// owner's switch has it ([`channels_on`]) — plus the settings file it reads.
 pub fn files(env: &Env) -> Vec<PathBuf> {
-    vec![
+    let mut files = vec![
         marketplace_json_path(env),
         plugin_json_path(env),
         hooks_json_path(env),
-        mcp_json_path(env),
-        settings_path(env),
-    ]
+    ];
+    if channels_on(env.channels, &env.data) {
+        files.push(mcp_json_path(env));
+    }
+    files.push(settings_path(env));
+    files
 }
 
 /// `plugins/installed_plugins.json` and `plugins/known_marketplaces.json`,
@@ -317,6 +356,24 @@ fn known_marketplaces_path(env: &Env) -> PathBuf {
 /// The events the plugin declares for this configuration, in file order.
 fn managed(tool_titles: bool) -> impl Iterator<Item = &'static Managed> {
     MANAGED.iter().filter(move |m| !m.optional || tool_titles)
+}
+
+/// How many hook events the plugin declares for this configuration
+/// (`[hooks.claude] tool_titles`): one entry each in `hooks/hooks.json`, and
+/// the Claude Code row's `hooks` in `sources.list`.
+#[must_use]
+pub fn managed_hooks(tool_titles: bool) -> usize {
+    managed(tool_titles).count()
+}
+
+/// How many hook events the plugin under `data` declares, as it is on disk
+/// now: the Footprint page's count for the plugin (`care.footprint`), which
+/// is what was installed and not what this configuration would install.
+/// `None` when there is no plugin `hooks/hooks.json` to read.
+pub fn installed_hooks(data: &Path) -> Option<usize> {
+    let bytes = std::fs::read(hooks_json_in(data)).ok()?;
+    let root: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    Some(root["hooks"].as_object().map_or(0, serde_json::Map::len))
 }
 
 /// `hooks/hooks.json`: one exec-form command hook per event, every one of
@@ -445,15 +502,16 @@ pub fn plan(env: &Env, verb: Verb, receipt: Option<&serde_json::Value>) -> Resul
         ));
     }
     let mut plan = Plan::default();
-    let ours = [
+    let plugin = [
         (marketplace_json_path(env), marketplace_json()),
         (plugin_json_path(env), plugin_json()),
         (hooks_json_path(env), hooks_json(env)),
-        (mcp_json_path(env), mcp_json(env)),
     ];
+    // The Claude Channels helper, which the owner's switch decides.
+    let helper = mcp_json_path(env);
     if verb.is_uninstall() {
         let mut removed = 0usize;
-        for (path, _) in &ours {
+        for path in plugin.iter().map(|(path, _)| path).chain([&helper]) {
             let snapshot = FileSnapshot::read(path)?;
             if snapshot.exists() {
                 plan.writes.push(backup::Planned::remove(snapshot));
@@ -467,11 +525,32 @@ pub fn plan(env: &Env, verb: Verb, receipt: Option<&serde_json::Value>) -> Resul
             ));
         }
     } else {
-        for (path, value) in &ours {
+        for (path, value) in &plugin {
             let snapshot = FileSnapshot::read(path)?;
             plan.writes
                 .push(backup::Planned::write(snapshot, super::render_json(value)?));
         }
+        let channels = channels_on(env.channels, &env.data);
+        let snapshot = FileSnapshot::read(&helper)?;
+        let helper_note = if channels {
+            plan.writes.push(backup::Planned::write(
+                snapshot,
+                super::render_json(&mcp_json(env))?,
+            ));
+            Some(format!(
+                "carries the Claude Channels helper ({}), which Claude Code starts in each new \
+                 session",
+                helper.display()
+            ))
+        } else if snapshot.exists() {
+            plan.writes.push(backup::Planned::remove(snapshot));
+            Some(format!(
+                "takes the Claude Channels helper ({}) out: `[sources] claude_channels` is off",
+                helper.display()
+            ))
+        } else {
+            None
+        };
         let events: Vec<String> = managed(env.tool_titles).map(entry_name).collect();
         plan.note(format!(
             "writes the `{PLUGIN}` plugin under {}: {} command hooks ({}), every one running \
@@ -481,6 +560,9 @@ pub fn plan(env: &Env, verb: Verb, receipt: Option<&serde_json::Value>) -> Resul
             events.join(", "),
             env.exe.display()
         ));
+        if let Some(note) = helper_note {
+            plan.note(note);
+        }
         plan.note(
             "registers it with Claude Code at user scope (`claude plugin marketplace add`, \
              `claude plugin install`): Claude writes its own `enabledPlugins` entry; deckd puts \
@@ -490,7 +572,13 @@ pub fn plan(env: &Env, verb: Verb, receipt: Option<&serde_json::Value>) -> Resul
             "a session already open loads the plugin after `/reload-plugins`; new sessions load it \
              at start",
         );
-        plan.step("For voice messages through Claude Channels, follow Integrations → Claude voice messages in the app. Channels require per-session opt-in; cross-session inbox delivery remains the fallback.");
+        if channels {
+            plan.step(
+                "For voice orders through Claude Channels, start Claude Code with the command \
+                 under Integrations → Claude Channels → How to Connect… in the app. Channels \
+                 require per-session opt-in; cross-session inbox delivery remains the fallback.",
+            );
+        }
         plan.receipt = Some(serde_json::json!({
             "schema": RECEIPT_SCHEMA,
             "deckd": env.exe.display().to_string(),
@@ -654,12 +742,18 @@ pub fn status(env: &Env) -> Report {
         ));
         return report;
     }
-    let desired = [
+    let mut desired = vec![
         (marketplace_json_path(env), marketplace_json()),
         (plugin_json_path(env), plugin_json()),
         (hooks_path.clone(), hooks_json(env)),
-        (mcp_json_path(env), mcp_json(env)),
     ];
+    // The helper is compared against what the switch says the plugin holds:
+    // the file this build writes, or no file at all.
+    let helper = mcp_json_path(env);
+    let channels = channels_on(env.channels, &env.data);
+    if channels {
+        desired.push((helper.clone(), mcp_json(env)));
+    }
     let stale: Vec<String> = desired
         .iter()
         .filter(|(path, value)| {
@@ -667,12 +761,26 @@ pub fn status(env: &Env) -> Report {
         })
         .map(|(path, _)| path.display().to_string())
         .collect();
-    if !stale.is_empty() {
+    let unwanted = !channels && helper.exists();
+    if !stale.is_empty() || unwanted {
+        let mut why = Vec::new();
+        if !stale.is_empty() {
+            why.push(format!(
+                "{} differ(s) from what this build writes",
+                stale.join(", ")
+            ));
+        }
+        if unwanted {
+            why.push(format!(
+                "{} still declares the Claude Channels helper, which `[sources] claude_channels` \
+                 switches off",
+                helper.display()
+            ));
+        }
         report.status = Status::Outdated;
         report.detail = Some(format!(
-            "{} differ(s) from what this build writes; `deckd integrations repair claude` \
-             rewrites them",
-            stale.join(", ")
+            "{}; `deckd integrations repair claude` puts the plugin right",
+            why.join("; ")
         ));
         return report;
     }
@@ -780,11 +888,42 @@ mod tests {
         assert_eq!(channel_exe(staged, &installed, Some(&installed), false), installed);
     }
 
+    fn repair(env: &Env) -> crate::integrations::Receipt {
+        crate::integrations::run(env, Target::Claude, Verb::Repair { trust: false })
+            .expect("repair")
+    }
+
+    fn uninstall(env: &Env) -> crate::integrations::Receipt {
+        crate::integrations::run(env, Target::Claude, Verb::Uninstall).expect("uninstall")
+    }
+
+    /// Every file under `root`, with its bytes.
+    fn tree(root: &Path) -> std::collections::BTreeMap<PathBuf, Vec<u8>> {
+        let mut files = std::collections::BTreeMap::new();
+        let mut dirs = vec![root.to_path_buf()];
+        while let Some(dir) = dirs.pop() {
+            for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    dirs.push(path);
+                } else if let Ok(bytes) = std::fs::read(&path) {
+                    files.insert(path, bytes);
+                }
+            }
+        }
+        files
+    }
+
+    /// D4: the switch on writes the helper, which runs this binary's
+    /// `claude-channel` for this data directory, and nothing goes into the
+    /// user's settings to turn Channels on for them. A helper that went
+    /// missing is put back by a repair.
     #[test]
-    fn channel_bridge_is_managed_without_enabling_channels_for_the_user() {
+    fn the_switch_on_writes_the_channel_helper_and_nothing_of_the_users() {
         let dir = TestDir::new("plugin-channel");
-        let env = test_env(&dir);
-        install(&env);
+        let mut env = test_env(&dir);
+        env.channels = Some(true);
+        let receipt = install(&env);
         let mcp = json_at(&mcp_json_path(&env));
         assert_eq!(
             mcp["mcpServers"]["openwalkietalkie"]["command"],
@@ -794,13 +933,186 @@ mod tests {
             mcp["mcpServers"]["openwalkietalkie"]["args"],
             serde_json::json!(["--data-dir", env.data.to_string_lossy(), "claude-channel"])
         );
+        assert!(receipt.changed.contains(&mcp_json_path(&env)));
+        assert!(status(&env).files.contains(&mcp_json_path(&env)));
+        assert!(
+            receipt
+                .next_steps
+                .iter()
+                .any(|s| s.contains("How to Connect")),
+            "{:?}",
+            receipt.next_steps
+        );
         assert!(!settings_path(&env).exists());
+        assert_eq!(status(&env).status, Status::Installed);
         std::fs::remove_file(mcp_json_path(&env)).unwrap();
         assert_eq!(status(&env).status, Status::Outdated);
-        crate::integrations::run(&env, Target::Claude, Verb::Repair { trust: false }).unwrap();
+        repair(&env);
         assert_eq!(status(&env).status, Status::Installed);
-        crate::integrations::run(&env, Target::Claude, Verb::Uninstall).unwrap();
+        uninstall(&env);
         assert!(!mcp_json_path(&env).exists());
+    }
+
+    /// D4: a new install, the switch left unset, has no helper, is
+    /// `installed` without one, and says nothing about Channels; a repair
+    /// leaves it that way.
+    #[test]
+    fn a_new_install_with_the_switch_unset_writes_no_channel_helper() {
+        let dir = TestDir::new("plugin-channel-new");
+        let env = test_env(&dir);
+        assert_eq!(env.channels, None);
+        assert!(!channels_on(env.channels, &env.data));
+        let receipt = install(&env);
+        assert!(!mcp_json_path(&env).exists());
+        assert_eq!(
+            receipt.changed,
+            [
+                marketplace_json_path(&env),
+                plugin_json_path(&env),
+                hooks_json_path(&env)
+            ]
+        );
+        assert!(
+            receipt
+                .next_steps
+                .iter()
+                .chain(&receipt.notes)
+                .all(|line| !line.contains("Claude Channels")),
+            "{receipt:?}"
+        );
+        let report = status(&env);
+        assert_eq!(report.status, Status::Installed);
+        assert!(!report.files.contains(&mcp_json_path(&env)), "not its file");
+        assert!(repair(&env).changed.is_empty());
+        assert!(!channels_on(env.channels, &env.data), "still off");
+    }
+
+    /// D4: a plugin installed before the switch existed carries the helper,
+    /// and with the switch unset it keeps it: on, `installed`, a repair that
+    /// rewrites nothing, and an older build's helper brought up to date
+    /// rather than dropped.
+    #[test]
+    fn an_older_install_keeps_its_channel_helper_while_the_switch_is_unset() {
+        let dir = TestDir::new("plugin-channel-older");
+        let mut env = test_env(&dir);
+        // What every install before the switch wrote.
+        env.channels = Some(true);
+        install(&env);
+        env.channels = None;
+        assert!(channels_on(None, &env.data));
+        assert_eq!(status(&env).status, Status::Installed);
+        let again = repair(&env);
+        assert!(again.changed.is_empty(), "{:?}", again.changed);
+        assert!(mcp_json_path(&env).exists());
+        let mut older = json_at(&mcp_json_path(&env));
+        older["mcpServers"]["openwalkietalkie"]["command"] =
+            "/Applications/Older.app/Contents/MacOS/deckd".into();
+        std::fs::write(
+            mcp_json_path(&env),
+            serde_json::to_vec_pretty(&older).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(status(&env).status, Status::Outdated);
+        repair(&env);
+        assert_eq!(json_at(&mcp_json_path(&env)), mcp_json(&env));
+        assert_eq!(status(&env).status, Status::Installed);
+    }
+
+    /// D4: switched off, the plugin that carries the helper is `outdated`
+    /// and says why; a repair takes the helper out — into the backups, like
+    /// every file the installer replaces — and the row is `installed`
+    /// again. Switched back on, the next repair puts it back.
+    #[test]
+    fn switching_the_helper_off_and_repairing_takes_it_out() {
+        let dir = TestDir::new("plugin-channel-off");
+        let mut env = test_env(&dir);
+        env.channels = Some(true);
+        install(&env);
+        let written = std::fs::read(mcp_json_path(&env)).unwrap();
+        env.channels = Some(false);
+        let report = status(&env);
+        assert_eq!(report.status, Status::Outdated);
+        assert!(
+            report
+                .detail
+                .as_deref()
+                .unwrap()
+                .contains("Claude Channels helper"),
+            "{:?}",
+            report.detail
+        );
+        let plan = crate::integrations::plan(&env, Target::Claude, Verb::Repair { trust: false })
+            .unwrap();
+        assert_eq!(
+            plan.changes(),
+            [serde_json::json!({"path": mcp_json_path(&env), "action": "remove"})]
+        );
+        let receipt = repair(&env);
+        assert_eq!(receipt.changed, [mcp_json_path(&env)]);
+        assert!(!mcp_json_path(&env).exists());
+        assert_eq!(
+            std::fs::read(&receipt.backups[0]).unwrap(),
+            written,
+            "kept in the backups"
+        );
+        assert_eq!(status(&env).status, Status::Installed);
+        // Unset now, the plugin decides, and it has no helper: off.
+        env.channels = None;
+        assert!(!channels_on(None, &env.data));
+        assert_eq!(status(&env).status, Status::Installed);
+        env.channels = Some(true);
+        assert_eq!(status(&env).status, Status::Outdated);
+        repair(&env);
+        assert_eq!(std::fs::read(mcp_json_path(&env)).unwrap(), written);
+        assert_eq!(status(&env).status, Status::Installed);
+    }
+
+    /// D4: uninstall gives the user's own directories back byte for byte
+    /// with the helper on, with it off, and after it was switched off and
+    /// repaired away; no file of the plugin is left either way.
+    #[test]
+    fn uninstall_restores_the_users_directories_with_the_helper_on_or_off() {
+        let cases = [
+            ("on", Some(true), Some(true)),
+            ("off", Some(false), Some(false)),
+            ("on then off", Some(true), Some(false)),
+        ];
+        for (case, at_install, before_uninstall) in cases {
+            let dir = TestDir::new("plugin-channel-uninstall");
+            let mut env = test_env(&dir);
+            std::fs::write(
+                settings_path(&env),
+                b"{\n    \"model\": \"claude-haiku-4-5\",\n    \"permissions\": {\n        \"ask\": [\"Bash(date:*)\"]\n    }\n}\n",
+            )
+            .unwrap();
+            let before = (tree(&env.claude_dir()), tree(&env.home));
+            env.channels = at_install;
+            install(&env);
+            assert_eq!(
+                mcp_json_path(&env).exists(),
+                at_install == Some(true),
+                "{case}"
+            );
+            env.channels = before_uninstall;
+            if before_uninstall != at_install {
+                repair(&env);
+            }
+            uninstall(&env);
+            assert_eq!(
+                (tree(&env.claude_dir()), tree(&env.home)),
+                before,
+                "{case}: the user's directories did not come back byte for byte"
+            );
+            for path in [
+                marketplace_json_path(&env),
+                plugin_json_path(&env),
+                hooks_json_path(&env),
+                mcp_json_path(&env),
+            ] {
+                assert!(!path.exists(), "{case}: {} is left", path.display());
+            }
+            assert_eq!(status(&env).status, Status::Absent, "{case}");
+        }
     }
 
     /// Every hook is a command hook running `deckd hook claude` in exec form,
@@ -873,6 +1185,28 @@ mod tests {
                 "tool_titles = {titles}"
             );
         }
+    }
+
+    /// The count `sources.list` reports beside Claude Code is the number of
+    /// events the installed `hooks.json` really declares, either way
+    /// `tool_titles` is set, and so is the one the footprint reads back
+    /// from the data dir alone.
+    #[test]
+    fn the_hook_count_is_what_hooks_json_declares() {
+        let dir = TestDir::new("plugin-hook-count");
+        let mut env = test_env(&dir);
+        assert_eq!(installed_hooks(&env.data), None, "nothing installed yet");
+        for titles in [false, true] {
+            env.tool_titles = titles;
+            install(&env);
+            let declared = json_at(&hooks_json_path(&env))["hooks"]
+                .as_object()
+                .map_or(0, serde_json::Map::len);
+            assert_eq!(managed_hooks(titles), declared, "tool_titles = {titles}");
+            assert_eq!(installed_hooks(&env.data), Some(declared));
+            assert!(hooks_json_path(&env).starts_with(marketplace_dir(&env)));
+        }
+        assert_eq!(managed_hooks(false), 13);
     }
 
     #[test]
@@ -948,6 +1282,41 @@ mod tests {
             ]
         );
         assert!(plan.commands.iter().all(|c| c.before_writes));
+    }
+
+    /// D7: an install that may not run `claude` (none was found, or this is
+    /// a test) leaves the two commands as `run:` next steps, and they paste
+    /// as they are: the marketplace under `Application Support` is quoted,
+    /// and a shell reads each line as the very words `run_cli` would pass.
+    #[test]
+    fn the_commands_left_to_run_paste_into_a_shell_as_they_are() {
+        let dir = TestDir::new("plugin-commands-pasted");
+        let mut env = test_env(&dir);
+        env.data = dir.sub("Library/Application Support/OpenWalkieTalkie");
+        let marketplace = marketplace_dir(&env).display().to_string();
+        let receipt = install(&env);
+        let left: Vec<&str> = receipt
+            .next_steps
+            .iter()
+            .filter_map(|step| step.strip_prefix("run: "))
+            .collect();
+        assert_eq!(
+            left,
+            [
+                format!("claude plugin marketplace add '{marketplace}' --scope user --json"),
+                "claude plugin install openwalkietalkie@openwalkietalkie --scope user --json"
+                    .to_string(),
+            ]
+        );
+        #[cfg(unix)]
+        {
+            let planned = commands(&env, Verb::Install { trust: false });
+            for (line, command) in left.iter().zip(planned) {
+                let mut argv = vec![command.program.to_string()];
+                argv.extend(command.args);
+                assert_eq!(crate::integrations::words_read_by("/bin/sh", line), argv);
+            }
+        }
     }
 
     /// A machine that installed the pre-plugin shape has it taken back out

@@ -1,0 +1,110 @@
+{
+  "agents": {
+    "evict": "lru_idle",
+    "grace_s": 300,
+    "pins": {}
+  },
+  "api": {
+    "allowed_origins": [],
+    "mailbox_ttl_s": 600,
+    "max_held_hooks": 64,
+    "port": 0,
+    "tcp": true,
+    "uds_default_scope": "observe",
+    "uds_max_scope": "admin"
+  },
+  "cards": {
+    "paging": false,
+    "paging_back": true,
+    "ready_ttl_s": 900
+  },
+  "codex": {
+    "daemon": false,
+    "daemon_socket": null
+  },
+  "desktop": {
+    "focus": true,
+    "inject": [
+      "ghostty"
+    ]
+  },
+  "device": {
+    "clock": "local",
+    "hello_s": 5,
+    "pace_ms": 8,
+    "status_poll_s": 30,
+    "usage_period": "5h / 7d"
+  },
+  "hooks": {
+    "claude.desk_presence": false,
+    "claude.hold_s": 120,
+    "claude.report_via": "http",
+    "claude.tool_titles": false,
+    "codex.hold_s": 120,
+    "enabled": true,
+    "gemini.permission": "notify"
+  },
+  "log": {
+    "level": "info"
+  },
+  "macropad": {},
+  "privacy": {
+    "event_ring": 4096,
+    "keep_prompts": false,
+    "keep_replies": "last",
+    "keep_tool_input": "pending",
+    "log_content": false,
+    "transcript_log": false
+  },
+  "sources": {
+    "apps_paused": [],
+    "claude": true,
+    "claude_channels": false,
+    "paused": false
+  },
+  "trust": {
+    "confirm": "sheet",
+    "dev_requirement": null,
+    "gui_requirement": "anchor apple generic and identifier \"ai.cohdl.openwalkietalkie\" and certificate leaf[subject.OU] = \"TEAMID\"",
+    "require_trusted_for_allow": true
+  },
+  "usage": {
+    "providers": []
+  },
+  "voice": {
+    "announce_questions": false,
+    "commands": true,
+    "device_uid": null,
+    "fallback_input": "none",
+    "fallback_output": "none",
+    "mic_warm": "card_pending",
+    "slow_sco_ms": 1500,
+    "speak_over_sco": true,
+    "stt.allow_server": false,
+    "stt.companion": true,
+    "stt.engine": "apple",
+    "stt.language": "auto",
+    "stt.locale": "en-US",
+    "stt.model": "",
+    "stt.prompted": false,
+    "stt.threads": 0,
+    "transport": "ble",
+    "tts.announce_max_chars": 120,
+    "tts.api_key": "",
+    "tts.engine": "cloud",
+    "tts.instruct": null,
+    "tts.interval_s": 0.3199999928474426,
+    "tts.lang": "auto",
+    "tts.model": "",
+    "tts.provider": "openai",
+    "tts.python": null,
+    "tts.threads": 0,
+    "tts.voices": [],
+    "voices.default_pool": [
+      "Samantha",
+      "Daniel",
+      "Karen",
+      "Rishi"
+    ]
+  }
+}

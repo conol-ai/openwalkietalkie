@@ -477,21 +477,55 @@ fn find_ours(array: &[serde_json::Value], env: &Env) -> Result<Vec<usize>, Strin
 /// is exactly `hook codex`. Suffix-exact, never a substring match: an `echo
 /// /path/deckd hook codex` in the user's own hook must survive.
 fn is_ours(handler: &serde_json::Value, env: &Env) -> bool {
+    runs_deckd(handler, &env.exe)
+}
+
+/// [`is_ours`] against the binary deckd runs as, for a caller with no
+/// installer environment (`managed_groups`).
+fn runs_deckd(handler: &serde_json::Value, exe: &Path) -> bool {
     if handler.get("type").and_then(|t| t.as_str()) != Some("command") {
         return false;
     }
     let Some(command) = handler.get("command").and_then(|c| c.as_str()) else {
         return false;
     };
-    is_ours_command(command, env)
+    command_runs_deckd(command, exe)
 }
 
 /// The same ownership test against a bare command string, which is all
 /// `hooks/list` reports back (it has no `type` field of its own).
 fn is_ours_command(command: &str, env: &Env) -> bool {
+    command_runs_deckd(command, &env.exe)
+}
+
+fn command_runs_deckd(command: &str, exe: &Path) -> bool {
     markers::split_command(command).is_some_and(|(binary, rest)| {
-        rest == "hook codex" && markers::is_managed_binary(&binary, &env.exe)
+        rest == "hook codex" && markers::is_managed_binary(&binary, exe)
     })
+}
+
+/// How many of `hooks_file`'s hook groups hold a deckd handler: the entries
+/// of the leftover Codex setup the Footprint page lists (`care.footprint`),
+/// counted the way [`status`] counts them. `None` when the file is absent,
+/// unreadable or not a JSON object.
+pub fn managed_groups(hooks_file: &Path, exe: &Path) -> Option<usize> {
+    let snapshot = FileSnapshot::read(hooks_file).ok()?;
+    if !snapshot.exists() {
+        return None;
+    }
+    let root = super::parse_json_object(&snapshot).ok()?;
+    Some(root["hooks"].as_object().map_or(0, |hooks| {
+        hooks
+            .values()
+            .filter_map(serde_json::Value::as_array)
+            .flatten()
+            .filter(|group| {
+                group["hooks"]
+                    .as_array()
+                    .is_some_and(|handlers| handlers.iter().any(|h| runs_deckd(h, exe)))
+            })
+            .count()
+    }))
 }
 
 /// What deckd wrote into `config.toml`, so uninstall can take back exactly
@@ -776,7 +810,8 @@ pub struct HookMeta {
 /// (C12's whole-file discard).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HooksListError {
-    /// codex is not on `PATH`, did not start, or did not answer in time.
+    /// codex is on neither `PATH` nor [`super::cli_dirs`], did not start,
+    /// or did not answer in time.
     Unavailable(String),
     /// codex answered, and its `warnings` say the hooks config was discarded.
     Discarded(String),
@@ -794,13 +829,15 @@ impl std::fmt::Display for HooksListError {
 /// `hooks/list`. There is no `codex hooks list` subcommand in 0.153.4 and no
 /// RPC that *writes* trust, so this is the only way to read `currentHash`.
 pub fn hooks_list(env: &Env) -> Result<Vec<HookMeta>, HooksListError> {
-    let codex = super::which("codex").ok_or_else(|| {
+    let codex = super::find_cli("codex").ok_or_else(|| {
         HooksListError::Unavailable(
-            "codex is not on PATH, so deckd cannot read the hook hashes it would trust".to_string(),
+            "codex is neither on PATH nor where its installer puts it, so deckd cannot read the \
+             hook hashes it would trust"
+                .to_string(),
         )
     })?;
     let cwd = std::env::temp_dir();
-    let mut child = std::process::Command::new(&codex)
+    let mut child = super::cli_command(&codex)
         .args(["app-server", "--listen", "stdio://"])
         .env("CODEX_HOME", env.codex_dir())
         .current_dir(&cwd)
@@ -1588,6 +1625,34 @@ mod tests {
             REPORT_TIMEOUT_S
         );
         assert_eq!(file["hooks"]["SessionEnd"][0]["hooks"][0]["timeout"], 1);
+    }
+
+    /// The footprint's count of the leftover Codex setup is the groups
+    /// `status` counts: one per event deckd installed, never a user's own
+    /// group beside them, and nothing at all for a file that is not there.
+    #[test]
+    fn the_managed_groups_are_deckds_and_only_deckds() {
+        let dir = TestDir::new("codex-groups");
+        let env = test_env(&dir);
+        let file = hooks_path(&env);
+        assert_eq!(managed_groups(&file, &env.exe), None, "no file, no setup");
+        install(&env);
+        assert_eq!(managed_groups(&file, &env.exe), Some(EVENTS.len()));
+        let mut root = hooks(&env);
+        root["hooks"]["Stop"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({"hooks": [
+                {"type": "command", "command": "echo /opt/deckd hook codex"}
+            ]}));
+        std::fs::write(&file, serde_json::to_vec_pretty(&root).unwrap()).unwrap();
+        assert_eq!(
+            managed_groups(&file, &env.exe),
+            Some(EVENTS.len()),
+            "the user's echo is not ours"
+        );
+        std::fs::write(&file, b"[]").unwrap();
+        assert_eq!(managed_groups(&file, &env.exe), None, "not an object");
     }
 
     /// C14a: appended at the end, never inserted, because the trust key is

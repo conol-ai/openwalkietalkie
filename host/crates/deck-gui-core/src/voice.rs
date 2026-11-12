@@ -139,10 +139,18 @@ pub struct SttConfig {
     pub engine: String,
     /// `""` is the daemon's default model.
     pub model: String,
+    /// `"auto"`, or a language code (`"en"`).
     pub language: String,
+    /// The recogniser's locale (`"en-GB"`), which picks the dialect where
+    /// `language` names only the language.
+    pub locale: String,
     /// Whether the operator has answered the first-start question about a
     /// local model. False on a Mac that has never been asked.
     pub prompted: bool,
+    /// `voice.stt.companion`: a connected app's own recogniser hears the
+    /// presses addressed to its agents, which sends that audio off this
+    /// machine. False when the service does not say.
+    pub companion: bool,
 }
 
 impl SttConfig {
@@ -152,8 +160,13 @@ impl SttConfig {
             engine: text(voice.get("stt.engine")).unwrap_or_default(),
             model: text(voice.get("stt.model")).unwrap_or_default(),
             language: text(voice.get("stt.language")).unwrap_or_default(),
+            locale: text(voice.get("stt.locale")).unwrap_or_default(),
             prompted: voice
                 .get("stt.prompted")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            companion: voice
+                .get("stt.companion")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
         }
@@ -608,6 +621,25 @@ mod tests {
         let cfg = SttConfig::parse(&json!({"voice": {"stt.engine": "whisper", "stt.model": "", "stt.language": "auto", "stt.prompted": false}}));
         assert!(cfg.whisper_selected() && !cfg.prompted);
         assert_eq!(SttStatus::parse(&Value::Null), SttStatus::default());
+    }
+
+    #[test]
+    fn the_stt_half_of_config_get_carries_the_locale_and_the_companion_switch() {
+        let cfg = SttConfig::parse(&json!({"voice": {
+            "stt.engine": "apple", "stt.model": "", "stt.language": "zh",
+            "stt.locale": "zh-HK", "stt.prompted": true, "stt.companion": true
+        }}));
+        assert_eq!(cfg.language, "zh");
+        assert_eq!(cfg.locale, "zh-HK", "the dialect the language alone does not name");
+        assert!(cfg.companion && cfg.prompted);
+        // A service that publishes neither key leaves both unsaid: no
+        // locale, and the switch that sends audio off the Mac is not on.
+        let older = SttConfig::parse(&json!({"voice": {
+            "stt.engine": "whisper", "stt.language": "auto"
+        }}));
+        assert_eq!(older.locale, "");
+        assert!(!older.companion);
+        assert_eq!(SttConfig::parse(&Value::Null), SttConfig::default());
     }
 
     #[test]

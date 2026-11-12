@@ -1,0 +1,81 @@
+{
+  "paused": false,
+  "sources": [
+    {
+      "id": "claude",
+      "kind": "tool",
+      "name": "Claude Code",
+      "enabled": true,
+      "state": null,
+      "on_deck": 3,
+      "sessions": 3,
+      "unit": "sessions",
+      "last_event_at": "2026-11-11T10:01:56.000Z",
+      "handoff": "app",
+      "hooks": 13,
+      "stale": null,
+      "does": null
+    },
+    {
+      "id": "claude_channels",
+      "kind": "channel",
+      "name": "Claude Channels",
+      "enabled": true,
+      "state": "connected",
+      "on_deck": 0,
+      "sessions": 0,
+      "unit": "sessions",
+      "last_event_at": null,
+      "handoff": null,
+      "hooks": null,
+      "stale": 2,
+      "does": null
+    },
+    {
+      "id": "codex",
+      "kind": "tool",
+      "name": "Codex CLI",
+      "enabled": true,
+      "state": "connected",
+      "on_deck": 2,
+      "sessions": 2,
+      "unit": "threads",
+      "last_event_at": "2026-11-11T10:01:00.000Z",
+      "handoff": "none",
+      "hooks": null,
+      "stale": null,
+      "does": null
+    },
+    {
+      "id": "app:Conol",
+      "kind": "app",
+      "name": "Conol",
+      "enabled": true,
+      "state": "connected",
+      "on_deck": 7,
+      "sessions": 7,
+      "unit": "chats",
+      "last_event_at": "2026-11-11T10:01:48.000Z",
+      "handoff": "self",
+      "hooks": null,
+      "stale": null,
+      "does": ["sessions", "voice"]
+    },
+    {
+      "id": "app:Omarchy remote",
+      "kind": "app",
+      "name": "Omarchy remote",
+      "enabled": true,
+      "state": "connected",
+      "on_deck": 2,
+      "sessions": 2,
+      "unit": "sessions",
+      "last_event_at": "2026-11-11T10:01:00.000Z",
+      "handoff": "self",
+      "hooks": null,
+      "stale": null,
+      "does": ["sessions", "face"]
+    }
+  ],
+  "other": 0
+}

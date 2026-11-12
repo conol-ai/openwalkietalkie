@@ -1,1071 +1,1040 @@
-//! The **Deck** screen (§8.2's Deck row): the roster mirror on the left, the
-//! detail pane on the right, and the order composer under it.
+//! The Deck page (boards Main, DeckQuiet, DeckLight, DeckZh, NotLinked): the
+//! device in the owner's hand — its picture with the face it shows, its
+//! link, its battery, its firmware and the colour of its case — then what
+//! needs attention, then the deck's own settings in its panels' names and
+//! order.
 //!
-//! It is the [`Shell`]'s first pane. Local window state holds the selected
-//! row, order box, workflow disclosures, and the last card answer so that
-//! **Retry** can re-send it (§4.8). Agent data comes from the mirror.
-use crate::present;
-use crate::shell::Shell;
+//! **Three layouts, by one rule** ([`layout`]). A deck is linked while the
+//! service answers and the link is up; a degraded link still counts, and the
+//! page says it is not answering. The service answering with no deck linked
+//! is the not-linked page: when the deck was last seen, what to try, and the
+//! one setting that is still the owner's to make. A service that does not
+//! answer is the same page with its section saying why, as the installed app
+//! can tell from macOS: not running, never set up, or held by macOS until
+//! the owner allows it ([`no_service`]). The frame's strip, the Service page
+//! and the status item say it in the same words ([`no_service_title`],
+//! [`Shell::no_service_buttons`]).
+//!
+//! Everything shown is read from the mirror, the app's own case preference
+//! and the two facts other pages read for it (sessions on an old helper, a
+//! firmware update). Every control sends a `DeviceSet` and redraws from the
+//! mirror the service answers with; the one thing the page keeps is the stop
+//! a level was moved to, shown until the deck agrees or two seconds pass
+//! ([`level_shown`]), or the thumb would lag the pointer by a round trip.
+//!
+//! The words are pure functions of those inputs and a language, so a test
+//! reads every row in every state without a window.
+use crate::app;
+use crate::art::{self, Device};
+use crate::prefs::Case;
+use crate::present::{self, LoginItem};
+use crate::shell::{Screen, Shell};
+use crate::shots::Scene;
 use crate::style::{palette, Palette};
-use crate::ui::{self, frag, ic, word, Btn, Row, Tint, Type as _};
-use deck_gui_core::{OrderEntry, UiAction};
-use deck_model::{Agent, AgentId, Card, CardId, CardKind, CardStatus, Ts};
-use gpui::{
-    div, prelude::*, px, AnyElement, App, ClipboardItem, Context, Div, Entity, SharedString,
-    Stateful, Subscription, Window,
+use crate::ui::{self, ic, Btn, Level, PopupButton, Row, Segmented, Switch, Type as _};
+use deck_gui_core::attention::{attention, Attention, Extras};
+use deck_gui_core::i18n::Language;
+use deck_gui_core::UiAction;
+use deck_model::{
+    DeviceState, FaceEntry, Link, LinkDrop, ServiceState, SetKey, Snapshot, Template, Tone,
+    Transport, Ts, LINK_DROP_WINDOW,
 };
-use gpui_component::input::{Input, InputEvent, InputState};
+use gpui::{div, prelude::*, px, AnyElement, App, Context, Div, Subscription, Window};
+use gpui_component::menu::PopupMenuItem;
 use gpui_component::{h_flex, v_flex};
+use std::cmp::Reverse;
 use std::collections::BTreeMap;
+use std::time::Duration;
 
-/// The roster column: a mark, a name and an age on the first line, the
-/// state, slot and source on the second, without truncating the name.
-pub const ROSTER_WIDTH: f32 = 300.;
+/// The deck's column: its label and its card, beside the column of
+/// sections.
+const DECK_COLUMN: f32 = 280.;
+/// How wide the deck is drawn in its card: wide enough for its plate to
+/// carry the face's title.
+const DECK_WIDTH: f32 = 164.;
+/// The deck's card pads its rows a little less than a page's cards do.
+const DECK_ROW_PAD: f32 = 14.;
+/// Under the stage's caption: the design's 13, and one more for the card's
+/// rule, which the card draws over its child's last pixel where the
+/// design's stage has it as a border of its own.
+const STAGE_BOTTOM: f32 = 14.;
+/// Between the two columns, and between the sections of a column.
+const GAP: f32 = 20.;
 
-/// The detail column never grows past a comfortable measure, however wide
-/// the window is.
-const DETAIL_MAX: f32 = 760.;
+/// The deck's own ranges (`SetKey::accepts`): speaker and mic gain run from
+/// 0 to 10, brightness from 1 to 5.
+const SPEAKER: (u16, u16) = (0, 10);
+const MIC: (u16, u16) = (0, 10);
+const BRIGHTNESS: (u16, u16) = (1, 5);
 
-/// The detail column's width under which the agent's actions go under its
-/// name instead of beside it.
-const NARROW_DETAIL: f32 = 520.;
+/// The link's details: the dialog's id, its width, and how tall its list of
+/// drops grows before it scrolls (an hour can hold sixty). gpui draws no
+/// scroll bar, so the height is fifteen and a half of the list's 18 px
+/// lines: a list that scrolls shows half a line at its foot, and that cut
+/// line is what says there are more below.
+const LINK_DETAILS: &str = "link-details";
+const LINK_DETAILS_WIDTH: f32 = 420.;
+const DROPS_HEIGHT: f32 = 279.;
 
-/// What this GUI last answered on a card, which is what **Retry** re-sends.
-///
-/// Keyed on the card's `created` stamp as well as its id, because a `CardId`
-/// is **not** an identity for the life of an agent: the counter lives on the
-/// device slot and `Store::reset_slot` zeroes it whenever the agent leaves
-/// that slot, so the same agent's next card can be `#17` again, with other
-/// choices behind the same indices. Without the stamp, Retry on the second
-/// `#17` would re-send the choice the operator picked on the first one.
-type Answered = BTreeMap<(AgentId, CardId, Ts), (Option<u8>, Option<String>)>;
+/// The harness's scenes that are this page's.
+const DECK_SCENES: [Scene; 8] = [
+    Scene::Main,
+    Scene::DeckQuiet,
+    Scene::DeckZh,
+    Scene::NotLinked,
+    Scene::ServiceDown,
+    Scene::NotInstalled,
+    Scene::LinkDetails,
+    Scene::DeckUnknown,
+];
 
-/// The Deck screen's own view state.
+// ---- what the page says, as pure functions ---------------------------------
+
+/// Which of its three layouts the page is in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Layout {
+    /// A deck is linked: its rows, and its settings.
+    Linked,
+    /// The service answers and no deck is linked.
+    NotLinked,
+    /// The service does not answer.
+    NoService,
+}
+
+/// The page's layout: linked while the service answers and the link is up
+/// (a link that is up and silent is still linked), not linked while the
+/// service answers with the link down, and neither while it does not
+/// answer, whatever its last mirror said.
+pub fn layout(connected: bool, link: Link) -> Layout {
+    match (connected, link) {
+        (false, _) => Layout::NoService,
+        (true, Link::Offline) => Layout::NotLinked,
+        (true, Link::Connected | Link::Degraded) => Layout::Linked,
+    }
+}
+
+/// Why the service is not answering, as far as the window can tell: the
+/// status item's model says it too, so it is `deck_gui_core`'s.
+pub use deck_gui_core::NoService;
+
+/// Why the service does not answer, in the installed app run for real
+/// (`installed`), by its launch agent as macOS reports it: not registered
+/// is never set up (by the rule first run opens by), waiting for approval
+/// is held by macOS until the owner allows it in Login Items, and anything
+/// else is set up and not running. Any other run cannot tell, and says it
+/// is not running: it never offers to set the owner's service up.
+pub fn no_service(installed: bool, agent: LoginItem) -> NoService {
+    if !installed {
+        return NoService::NotRunning;
+    }
+    match agent {
+        LoginItem::NotRegistered | LoginItem::NotFound => NoService::NotInstalled,
+        LoginItem::RequiresApproval => NoService::AwaitingApproval,
+        LoginItem::Enabled | LoginItem::Unknown(_) => NoService::NotRunning,
+    }
+}
+
+/// What a page calls a service that does not answer, `why` it does not:
+/// the Deck page's section, the frame's strip and the Service page's row
+/// all say this.
+pub fn no_service_title(why: NoService, language: Language) -> &'static str {
+    match why {
+        NoService::NotRunning => language.text("The background service is not running"),
+        NoService::NotInstalled => language.text("The background service is not installed"),
+        NoService::AwaitingApproval => {
+            language.text("The background service is waiting for your approval")
+        }
+    }
+}
+
+/// The Link row's word and its tone: how the deck is linked, a link that is
+/// up and silent, a service waiting for a deck, or no service at all.
+pub fn link_word(layout: Layout, device: &DeviceState, language: Language) -> (&'static str, Tone) {
+    match layout {
+        Layout::NoService => (language.text("Not linked"), Tone::Gray),
+        Layout::NotLinked => (language.text("Waiting"), Tone::Gray),
+        Layout::Linked if device.link == Link::Degraded => {
+            (language.text("Not answering"), Tone::Amber)
+        }
+        Layout::Linked => match device.transport {
+            Some(Transport::Bluetooth) => (language.text("Bluetooth"), Tone::Green),
+            Some(Transport::Usb) => (language.text("Cable"), Tone::Green),
+            // A service that predates the transport, or a deck that has
+            // not said yet.
+            None => (language.text("Linked"), Tone::Green),
+        },
+    }
+}
+
+/// The Battery row's figure: `85%`, `85% · charging` while the deck says it
+/// is charging, or a dash while it has not said (it sends an unknown charge
+/// as 0, which the service keeps as none).
+pub fn battery_word(battery: Option<u8>, charging: Option<bool>, language: Language) -> String {
+    let Some(percent) = battery else {
+        return "\u{2014}".to_string();
+    };
+    let figure = language.format("{0}%", &[&percent.to_string()]);
+    if charging == Some(true) {
+        format!("{figure}{}", language.text(" · charging"))
+    } else {
+        figure
+    }
+}
+
+/// The Firmware row: what the linked deck runs, or what the last deck ran
+/// while none is linked, as `0.13.0 · Rev B`. `None` while it is not known,
+/// and the row is left out.
+pub fn firmware_word(layout: Layout, device: &DeviceState) -> Option<String> {
+    let (fw, board) = match layout {
+        Layout::Linked => (device.fw.as_deref(), device.board.as_deref()),
+        Layout::NotLinked | Layout::NoService => {
+            let last = device.last.as_ref()?;
+            (last.fw.as_deref(), last.board.as_deref())
+        }
+    };
+    Some(present::fw_text(fw?, board)).filter(|text| !text.is_empty())
+}
+
+/// The strip the page reads the deck's faces from: the deck's own report
+/// while it has made one, else the strip the service keeps.
+pub fn strip(mirror: &Snapshot) -> &[FaceEntry] {
+    if mirror.device.faces.is_empty() {
+        &mirror.faces
+    } else {
+        &mirror.device.faces
+    }
+}
+
+/// The face the deck has on its screen, when it has said which and the
+/// strip has it.
+pub fn face_shown<'a>(device: &DeviceState, strip: &'a [FaceEntry]) -> Option<&'a FaceEntry> {
+    let face = device.face?;
+    strip.iter().find(|entry| entry.f == face)
+}
+
+/// A face's own name in English, the name the deck gives a face it adds.
+pub const fn face_label(face: Template) -> &'static str {
+    match face {
+        Template::Agents => "Agents",
+        Template::Macropad => "Macropad",
+        Template::Usage => "Usage",
+        Template::System => "System",
+        Template::Timer => "Timer",
+        Template::Arcade => "Arcade",
+        Template::Settings => "Settings",
+        Template::Omarchy => "Omarchy",
+    }
+}
+
+/// What the page calls a face: the name the owner gave it, as it is, or —
+/// for a face still called by its template's own name — that name in the
+/// window's language.
+pub fn face_name(entry: &FaceEntry, language: Language) -> String {
+    let label = face_label(entry.t);
+    if entry.n.is_empty() || entry.n == label {
+        language.text(label).to_string()
+    } else {
+        entry.n.clone()
+    }
+}
+
+/// When the deck was last linked, as the caption under a deck that is away
+/// says it: `Last linked today, 09:41`. `None` when no deck ever was.
+pub fn last_linked(device: &DeviceState, now: Ts, language: Language) -> Option<String> {
+    let last = device.last.as_ref()?;
+    let when = present::day_and_time(last.at, now, language);
+    Some(language.format("Last linked {0}", &[&when]))
+}
+
+/// The caption under the deck: the face it shows, `Linked` while it has not
+/// said which, and while it is away when it was last linked (nothing when
+/// it never was).
+pub fn caption(
+    layout: Layout,
+    device: &DeviceState,
+    strip: &[FaceEntry],
+    now: Ts,
+    language: Language,
+) -> Option<String> {
+    match layout {
+        Layout::Linked => Some(match face_shown(device, strip) {
+            Some(face) => language.format("Showing the {0} face", &[&face_name(face, language)]),
+            None => language.text("Linked").to_string(),
+        }),
+        Layout::NotLinked | Layout::NoService => last_linked(device, now, language),
+    }
+}
+
+/// Idle home's four choices, in seconds, as the deck offers them.
+pub const IDLE_HOME: [u16; 4] = [0, 30, 60, 120];
+
+/// The choice the deck shows for `seconds`: the first step at or above it,
+/// the way it rounds a value it has no step for.
+pub fn idle_home_at(seconds: u16) -> usize {
+    ui::step_at(seconds, &IDLE_HOME)
+}
+
+/// The choice at `at` of [`IDLE_HOME`], in the deck's own words.
+pub fn idle_home_word(at: usize, language: Language) -> &'static str {
+    match at {
+        0 => language.text("Never"),
+        1 => language.text("30 s"),
+        2 => language.text("1 min"),
+        _ => language.text("2 min"),
+    }
+}
+
+/// How long a level shows the stop it sent without the deck agreeing.
+pub const LEVEL_HOLD: Duration = Duration::from_millis(2_000);
+
+/// A stop a level was moved to and sent, and when.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Sent {
+    pub value: u16,
+    pub at: Ts,
+}
+
+impl Sent {
+    /// Whether it is still shown at `now`: until [`LEVEL_HOLD`] has passed.
+    pub fn holds(self, now: Ts) -> bool {
+        u128::from(now.millis().saturating_sub(self.at.millis())) < LEVEL_HOLD.as_millis()
+    }
+}
+
+/// The stop a level shows: the one it sent while that still holds, else the
+/// deck's own setting as the mirror has it.
+pub fn level_shown(mirror: u16, sent: Option<Sent>, now: Ts) -> u16 {
+    sent.filter(|sent| sent.holds(now))
+        .map_or(mirror, |sent| sent.value)
+}
+
+/// The link's drops of the hour up to `now`, newest first, by the window
+/// the attention list counts them in.
+pub fn recent_drops(device: &DeviceState, now: Ts) -> Vec<&LinkDrop> {
+    let window = u64::try_from(LINK_DROP_WINDOW.as_millis()).unwrap_or(u64::MAX);
+    let mut drops: Vec<&LinkDrop> = device
+        .drops
+        .iter()
+        .filter(|drop| now.millis().saturating_sub(drop.at.millis()) <= window)
+        .collect();
+    drops.sort_by_key(|drop| Reverse(drop.at));
+    drops
+}
+
+/// Why the link dropped, in words: the service's reason, or the reason as it
+/// came when this window has no words for it.
+pub fn drop_reason(why: &str, language: Language) -> &str {
+    match why {
+        "read" => language.text("read error"),
+        "write" => language.text("write error"),
+        "write_stall" => language.text("write stalled"),
+        "removed" => language.text("unplugged or out of range"),
+        "misses" => language.text("stopped answering"),
+        other => other,
+    }
+}
+
+/// One drop as the link details list it: `09:58 · stopped answering`, on
+/// this Mac's clock.
+pub fn drop_line(drop: &LinkDrop, language: Language) -> String {
+    let (_, _, _, hour, minute) = present::local_clock(drop.at);
+    let time = format!("{hour:02}:{minute:02}");
+    language.format("{0} · {1}", &[&time, drop_reason(&drop.why, language)])
+}
+
+/// What an attention card offers beside its words.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Remedy {
+    /// **Details**: the link's drops.
+    Details,
+    /// **Open Service**: the page that can do something about it.
+    OpenService,
+}
+
+/// One attention card: what is wrong, what to do, and the button, if any.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Notice {
+    pub title: String,
+    pub sub: String,
+    pub remedy: Option<Remedy>,
+}
+
+/// The card for `item`. `port` is the service's port, which a degraded
+/// service's words name.
+pub fn notice(item: &Attention, port: u16, language: Language) -> Notice {
+    let words = |title: String, sub: &str, remedy| Notice {
+        title,
+        sub: sub.to_string(),
+        remedy,
+    };
+    match item {
+        Attention::LinkDrops { count } => words(
+            language.format(
+                "The link reconnected {0} times in the last hour",
+                &[&count.to_string()],
+            ),
+            language.text("Try the cable. If it goes on, send the support file."),
+            Some(Remedy::Details),
+        ),
+        Attention::NotAnswering => words(
+            language.text("The deck is not answering").to_string(),
+            language.text("It is linked but silent. Move it closer or use the cable."),
+            None,
+        ),
+        // The service's own words for what is wrong with it, as the window
+        // has always said them.
+        Attention::ServiceDegraded { reason } => {
+            let service = ServiceState {
+                degraded: Some(reason.clone()),
+                port,
+                ..ServiceState::default()
+            };
+            let sub = present::degraded_banner_localized(&service, language)
+                .unwrap_or_else(|| language.format("The service is degraded: {0}.", &[reason]));
+            words(
+                language.text("The service needs attention").to_string(),
+                &sub,
+                Some(Remedy::OpenService),
+            )
+        }
+        Attention::StaleHelpers { count: 1 } => words(
+            language
+                .text("1 Claude session uses an old helper")
+                .to_string(),
+            language.text("Restart that session."),
+            None,
+        ),
+        Attention::StaleHelpers { count } => words(
+            language.format(
+                "{0} Claude sessions use an old helper",
+                &[&count.to_string()],
+            ),
+            language.text("Restart those sessions."),
+            None,
+        ),
+        Attention::FirmwareUpdate { version } => words(
+            language.format(
+                "Deck firmware {0} is available",
+                &[&present::fw_text(version, None)],
+            ),
+            language.text("Install it by cable from Service."),
+            Some(Remedy::OpenService),
+        ),
+    }
+}
+
+// ---- the pane ----------------------------------------------------------------
+
+/// The page's own state, which the shell owns: the stops the levels were
+/// moved to, and the answer a harness scene gave for why the service is
+/// not answering.
 pub struct DeckPane {
-    pub(crate) order: Entity<InputState>,
-    pub(crate) selected: Option<AgentId>,
-    answered: Answered,
-    pub(crate) workflow: crate::workflow::ViewState,
-    pub(crate) images: crate::images::View,
+    /// Each level's last stop sent, until the deck agrees or it no longer
+    /// holds.
+    sent: BTreeMap<SetKey, Sent>,
+    /// A harness scene's [`NoService`], in place of this run's own.
+    staged: Option<NoService>,
 }
 
 impl DeckPane {
-    /// The pane and the subscriptions the [`Shell`] has to keep alive: a
-    /// dropped `Subscription` is a cancelled one, and the order box's Return
-    /// key is one.
-    pub fn new(window: &mut Window, cx: &mut Context<Shell>) -> (DeckPane, Vec<Subscription>) {
-        let order = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("Send an order to the selected agent\u{2026}")
-        });
-        // Return in the box sends the order, which is what §8.2's "text box
-        // → `op.order`" means with a keyboard in it.
-        let enter = cx.subscribe_in(&order, window, |this, _, event, window, cx| {
-            if matches!(event, InputEvent::PressEnter { .. }) {
-                this.send_order(window, cx);
-            }
-        });
-        (
-            DeckPane {
-                order,
-                selected: None,
-                answered: Answered::new(),
-                workflow: Default::default(),
-                images: Default::default(),
-            },
-            vec![enter],
-        )
-    }
-
-    /// What this window answered on *this* card, recorded when it answers.
-    pub(crate) fn remember(
-        &mut self,
-        agent: &AgentId,
-        card: &Card,
-        choice: Option<u8>,
-        text: Option<String>,
-    ) {
-        self.answered
-            .insert((agent.clone(), card.id, card.created), (choice, text));
-    }
-
-    /// What **Retry** would re-send for this card, or `None` when this window
-    /// has not answered *it* — a card that merely reuses its id is not it.
-    fn recall(&self, agent: &AgentId, card: &Card) -> Option<(Option<u8>, Option<String>)> {
-        self.answered
-            .get(&(agent.clone(), card.id, card.created))
-            .cloned()
+    /// The pane, and the subscriptions its text fields need kept alive: it
+    /// has no text field.
+    pub(crate) fn new(
+        _window: &mut Window,
+        _cx: &mut Context<Shell>,
+    ) -> (DeckPane, Vec<Subscription>) {
+        let pane = DeckPane {
+            sent: BTreeMap::new(),
+            staged: None,
+        };
+        (pane, Vec::new())
     }
 }
 
 impl Shell {
-    pub(crate) fn localize_order_input(&self, window: &mut Window, cx: &mut Context<Self>) {
-        let placeholder = self.deck.selected.as_ref()
-            .and_then(|id| self.state.mirror().agents.get(id))
-            .map(|agent| self.fmt("Send an order to {0}…", &[&agent.name]))
-            .unwrap_or_else(|| self.tr("Send an order to the selected agent…").to_owned());
-        self.deck.order.update(cx, |input, cx| input.set_placeholder(placeholder, window, cx));
+    /// Nothing to ask: everything the page draws is the mirror's, and the
+    /// two facts it borrows are read by the pages they belong to.
+    pub(crate) fn refresh_deck(
+        &mut self,
+        _force: bool,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
     }
-    /// The whole Deck screen: roster, detail and the composer.
-    pub(crate) fn render_deck(&self, dim: bool, cx: &Context<Self>) -> Div {
+
+    /// The page. It is never dimmed as a whole: a service that is not
+    /// answering is one of its layouts, with its own buttons.
+    pub(crate) fn render_deck(&self, _dim: bool, cx: &Context<Self>) -> AnyElement {
         let p = *palette(cx);
-        h_flex()
-            .size_full()
-            .child(self.render_roster(dim, cx))
-            .child(
-                v_flex()
-                    .flex_1()
-                    .min_w_0()
-                    .h_full()
-                    .border_l_1()
-                    .border_color(p.border)
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_h_0()
-                            .when(dim, |this| this.opacity(0.55))
-                            .child(self.render_detail(dim, cx)),
-                    )
-                    .child(self.render_composer(dim, cx)),
-            )
+        let layout = layout(self.state.connected(), self.state.mirror().device.link);
+        let header = ui::Header::new(
+            self.tr(Screen::Deck.label()),
+            self.tr("The device in your hand: its link, its battery, its settings."),
+        );
+        let sections = match layout {
+            Layout::Linked => self.deck_settings(&p, cx),
+            Layout::NotLinked | Layout::NoService => self.deck_away(layout, &p, cx),
+        };
+        let columns = h_flex()
+            .w_full()
+            .items_start()
+            .gap(px(GAP))
+            .child(self.deck_card(layout, &p, cx))
+            .child(sections);
+        let body = v_flex().gap(px(GAP)).child(header).child(columns);
+        ui::page("deck", &self.page_scroll, self.content_width, body).into_any_element()
     }
 
-    // ---- the roster ----------------------------------------------------
-
-    fn render_roster(&self, dim: bool, cx: &Context<Self>) -> Div {
-        let p = *palette(cx);
-        let groups = present::projects(self.state.mirror());
-        let now = present::now();
-        let focused = self.state.mirror().focus.agent.clone();
-        let home = std::env::var("HOME").ok();
-        let total: usize = groups.iter().map(|group| group.agents.len()).sum();
-        let empty = total == 0;
-        // One header per project, the rows of the project under it — the
-        // same grouping the deck pages through with LEFT/RIGHT. The header
-        // names the directory's last component and holds the whole path.
-        let mut sections: Vec<AnyElement> = Vec::new();
-        for (index, group) in groups.iter().enumerate() {
-            let count = group.agents.len().to_string();
-            let path = group
-                .cwd
-                .as_deref()
-                .map(|cwd| present::project_path(cwd, home.as_deref()));
-            let header = h_flex()
-                .id(SharedString::from(format!("project-{index}")))
-                .h(px(28.))
-                .px(px(10.))
-                .gap(px(8.))
-                .when(index > 0, |this| this.mt(px(6.)))
-                .ts(12., 16.)
-                .medium()
-                .text_color(p.muted.opacity(0.75))
-                .when(group.agents.first().is_some_and(|a| a.kind == deck_model::Kind::Conol), |this| {
-                    let (mark, color) = ui::kind_mark(deck_model::Kind::Conol, &p);
-                    this.child(ui::icon(mark, 18., color))
-                })
-                .child(
-                    div()
-                        .min_w_0()
-                        .truncate()
-                        .child(if group.cwd.is_none() && group.label == present::NO_PROJECT { self.tr(present::NO_PROJECT).to_owned() } else { group.label.clone() }),
-                )
-                .child(div().flex_none().text_color(p.faint).child(count))
-                .when_some(path, |this, path| this.tooltip(ui::tip(path)));
-            sections.push(header.into_any_element());
-            for agent in &group.agents {
-                sections.push(
-                    self.render_row(agent, group, focused.as_ref(), now, dim, cx)
-                        .into_any_element(),
-                );
-            }
-        }
-        v_flex()
-            .w(px(ROSTER_WIDTH))
-            .h_full()
-            .flex_none()
-            .when(dim, |this| this.opacity(0.55))
-            .child(
-                h_flex()
-                    .flex_none()
-                    .h(px(30.))
-                    .px(px(18.))
-                    .gap(px(8.))
-                    .child(div().ts(13., 17.).medium().child(self.tr("Agents")))
-                    .child(
-                        div()
-                            .ts(12., 16.)
-                            .text_color(p.faint)
-                            .child(total.to_string()),
-                    )
-                    .child(div().flex_1())
-                    .child(
-                        div()
-                            .id("roster-rev")
-                            .ts(11., 14.)
-                            .mono()
-                            .text_color(p.faint)
-                            .child(format!("rev {}", self.state.mirror().rev))
-                            .tooltip(ui::tip(
-                                self.tr("The mirror's revision: it moves when anything on the deck does"),
-                            )),
-                    ),
-            )
-            .child(
-                v_flex()
-                    .id("roster")
-                    .flex_1()
-                    .min_h_0()
-                    .overflow_y_scroll()
-                    .px(px(8.))
-                    .pt(px(4.))
-                    .pb(px(12.))
-                    .gap(px(2.))
-                    .when(empty, |this| {
-                        this.child(ui::empty_state(
-                            ic::BOT,
-                            self.tr("No agents yet"),
-                            self.tr("Start a Claude, Codex or Gemini session in a terminal and it appears here."),
-                            &p,
-                        ))
-                    })
-                    // Every agent the slot policy could not fit on the deck
-                    // sits in its project too, its row saying "not on deck";
-                    // the operator can still answer it here.
-                    .children(sections),
-            )
-    }
-
-    fn render_row(
+    /// The page's dialog `id` and its width: the link's details.
+    pub(crate) fn deck_dialog(
         &self,
-        agent: &Agent,
-        project: &present::Project,
-        focused: Option<&AgentId>,
-        now: Ts,
-        dim: bool,
+        id: &'static str,
         cx: &Context<Self>,
-    ) -> Stateful<Div> {
-        let p = *palette(cx);
-        let id = agent.id.clone();
-        let name = agent.name.clone();
-        let shown = present::row_name_localized(agent, project, self.language());
-        let selected = self.deck.selected.as_ref() == Some(&agent.id);
-        // The active-channel bar (§8.2): which agent the deck's channel view
-        // is on right now, which is not the same thing as the row the
-        // operator happens to be reading here.
-        let active = focused == Some(&agent.id);
-        let stale = dim || present::stale(agent);
-        let tone = present::state_tone(agent.state, stale);
-        let (mark, mark_color) = ui::kind_mark(agent.kind, &p);
-        let title = present::row_title_localized(agent, project, self.language());
-        let age = present::state_age_localized(agent, now, self.language());
-        div()
-            .id(SharedString::from(format!("row-{}", agent.id)))
-            .relative()
-            .flex()
-            .flex_col()
-            .gap(px(3.))
-            .px(px(10.))
-            .py(px(8.))
-            .rounded(px(8.))
-            .cursor_pointer()
-            .map(|this| {
-                if selected {
-                    this.bg(p.selected)
-                } else {
-                    this.hover(|s| s.bg(p.hover))
-                }
-            })
-            .on_click(cx.listener(move |this, _, window, cx| {
-                this.deck.selected = Some(id.clone());
-                this.refresh_images(window, cx);
-                let placeholder = this.fmt("Send an order to {0}…", &[&name]);
-                this.deck.order.update(cx, |input, cx| {
-                    input.set_placeholder(placeholder, window, cx);
-                });
-                cx.notify();
-            }))
-            .when(active, |this| {
-                this.child(
-                    div()
-                        .absolute()
-                        .left(px(1.))
-                        .top(px(12.))
-                        .bottom(px(12.))
-                        .w(px(2.))
-                        .rounded_full()
-                        .bg(p.accent),
-                )
-            })
-            .child(
-                h_flex()
-                    .gap(px(8.))
-                    .child(ui::icon(
-                        mark,
-                        14.,
-                        if stale { p.faint } else { mark_color },
-                    ))
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .truncate()
-                            .ts(13., 17.)
-                            .when(selected, |this| this.medium())
-                            .text_color(if stale {
-                                p.muted
-                            } else if selected {
-                                p.text
-                            } else {
-                                p.text.opacity(0.88)
-                            })
-                            .child(shown),
-                    )
-                    .children(age.map(|age| div().ts(11., 14.).text_color(p.faint).child(age))),
-            )
-            .child(
-                h_flex()
-                    .pl(px(22.))
-                    .gap(px(6.))
-                    .ts(11.5, 15.)
-                    .child(ui::dot(p.tone(tone), 6.))
-                    .child(
-                        div()
-                            .text_color(p.tone_text(tone))
-                            .child(self.tr(present::state_word(agent.state))),
-                    )
-                    .child(div().text_color(p.faint).child("\u{b7}"))
-                    .child(
-                        div()
-                            .text_color(p.muted)
-                            .child(present::slot_badge_localized(agent.slot, self.language())),
-                    )
-                    .child(div().text_color(p.faint).child("\u{b7}"))
-                    .child(
-                        div()
-                            .text_color(p.muted)
-                            .child(self.tr(present::owner_source(agent))),
-                    ),
-            )
-            .when(!title.is_empty(), |this| {
-                this.child(
-                    div()
-                        .pl(px(22.))
-                        .truncate()
-                        .ts(11.5, 15.)
-                        .text_color(p.faint)
-                        .child(title),
-                )
-            })
+    ) -> Option<(AnyElement, f32)> {
+        (id == LINK_DETAILS).then(|| (self.render_link_details(cx), LINK_DETAILS_WIDTH))
     }
 
-    // ---- the detail pane -----------------------------------------------
+    /// The link's details keep nothing of their own to let go of.
+    pub(crate) fn deck_dialog_closed(&mut self, _id: &'static str, _cx: &mut Context<Self>) {}
 
-    fn render_detail(&self, dim: bool, cx: &Context<Self>) -> Stateful<Div> {
-        let p = *palette(cx);
-        let pane = div().id("detail").size_full().overflow_y_scroll();
-        if let Some(image) = self.expanded_image(cx) { return pane.child(image); }
-        let Some(agent) = self
-            .deck
-            .selected
-            .as_ref()
-            .and_then(|id| self.state.mirror().agents.get(id))
-        else {
-            return pane.child(div().pt(px(80.)).child(ui::empty_state(
-                ic::DIAL,
-                self.tr("No agent selected"),
-                self.tr("Pick an agent to see its card, where it runs and what it was told."),
-                &p,
-            )));
-        };
+    /// Nothing lives outside the render: the page has no text field.
+    pub(crate) fn localize_deck(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {}
+
+    /// A level the deck now agrees with shows the deck's setting again.
+    pub(crate) fn on_deck_event(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {
+        let settings = self.state.mirror().settings;
+        self.deck
+            .sent
+            .retain(|key, sent| settings.get(*key) != sent.value);
+    }
+
+    /// A stop the deck never agreed with is let go of once it no longer
+    /// holds; the shell redraws after the tick.
+    pub(crate) fn tick_deck(&mut self, _beat: u64, _window: &mut Window, _cx: &mut Context<Self>) {
         let now = present::now();
-        // A definite width, for the reason `ui::page` gives.
-        let width = self.detail_room().min(DETAIL_MAX);
-        pane.child(
-            v_flex()
-                .w(px(width))
-                .mx_auto()
-                .px(px(32.))
-                .pt(px(6.))
-                .pb(px(24.))
-                .child(self.render_agent_head(agent, dim, cx))
-                .children(
-                    agent
-                        .card
-                        .as_ref()
-                        .map(|card| self.render_card(agent, card, now, dim, cx)),
-                )
-                .when(agent.workflow.is_some() || !agent.workflow_runs.is_empty() || agent.messages.iter().any(|m| m.message.role == deck_model::ChatRole::Tool), |this| this.child(self.render_workflow(agent, dim, cx)))
-                .children(agent.reply.as_ref().map(|reply| {
-                    ui::section(
-                        self.tr("Reply"),
-                        ui::panel(&p)
-                            .ts(13.5, 21.)
-                            .child(match (&reply.text, reply.redacted) {
-                                (Some(text), _) => text.clone(),
-                                (None, true) => self.tr(present::REDACTED).to_string(),
-                                (None, false) => String::new(),
-                            }),
-                        &p,
-                    )
-                }))
-                .child(self.render_images(agent, cx))
-                .child(self.render_orders(agent, cx))
-                .child(self.render_about(agent, &p)),
-        )
+        self.deck.sent.retain(|_, sent| sent.holds(now));
     }
 
-    /// The agent's name, what it is and where it sits, and §8.2's actions.
-    /// Everything here is a [`UiAction`]; nothing here touches the mirror.
-    fn render_agent_head(&self, agent: &Agent, dim: bool, cx: &Context<Self>) -> Div {
-        let p = *palette(cx);
-        let (mark, mark_color) = ui::kind_mark(agent.kind, &p);
-        let stale = present::stale(agent);
-        let tone = present::state_tone(agent.state, stale || dim);
-        let age = present::state_age_localized(agent, present::now(), self.language());
-        let title = present::live_title_localized(agent, self.language()).to_string();
-        let id = agent.id.clone();
-        let card = agent.card.as_ref().map(|c| c.id);
-        // `op.ack` is the GUI-only clear of a Ready card (§4.7); a question
-        // card is answered or snoozed, never acknowledged.
-        let ackable = agent
-            .card
-            .as_ref()
-            .is_some_and(|c| matches!(c.kind, CardKind::R));
-        let state = match age {
-            Some(age) => format!("{} {age}", self.tr(present::state_word(agent.state))),
-            None => self.tr(present::state_word(agent.state)).to_string(),
+    /// The page's scenes. The mirror is the scene's fixture; the page adds
+    /// why the service is not answering (a harness run is never the
+    /// installed app, so it could not tell "not installed" by itself) and
+    /// opens the link's details for `link-details`.
+    pub(crate) fn stage_deck(
+        &mut self,
+        scene: Scene,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        self.deck.sent.clear();
+        self.deck.staged = match scene {
+            Scene::ServiceDown => Some(NoService::NotRunning),
+            Scene::NotInstalled => Some(NoService::NotInstalled),
+            _ => None,
         };
-        // Below this the name, the meta line and three buttons do not fit on
-        // one line beside the tile.
-        let narrow = self.detail_room() < NARROW_DETAIL;
-        let mut actions: Vec<AnyElement> = Vec::new();
-        if let Some(card) = card.filter(|_| ackable) {
-            let id = id.clone();
-            actions.push(
-                Btn::new("ack", self.tr("Acknowledge"))
-                    .small()
-                    .icon(ic::CHECK)
-                    .disabled(dim)
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.act(
-                            UiAction::Ack {
-                                agent: id.clone(),
-                                card,
-                            },
-                            window,
-                            cx,
-                        );
-                    }))
+        if !DECK_SCENES.contains(&scene) {
+            return false;
+        }
+        self.go(Screen::Deck, window, cx);
+        if scene == Scene::LinkDetails {
+            self.open_link_details(window, cx);
+        }
+        true
+    }
+
+    /// Open the link's details: the menu's **Show Link Problem…** and the
+    /// link card's **Details**.
+    pub(crate) fn open_link_details(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_dialog(LINK_DETAILS, window);
+        cx.notify();
+    }
+
+    // ---- the deck's card ---------------------------------------------------
+
+    /// The deck's column: the picture on its stage with its caption, then
+    /// Link, Battery (linked only), Firmware (when known) and Case.
+    fn deck_card(&self, layout: Layout, p: &Palette, cx: &Context<Self>) -> Div {
+        let language = self.language();
+        let mirror = self.state.mirror();
+        let device = &mirror.device;
+        let linked = layout == Layout::Linked;
+        let case = self.prefs(cx).case();
+        // A deck that is away shows nothing on its screen, whatever it last
+        // showed.
+        let face = face_shown(device, strip(mirror))
+            .map(|entry| entry.t)
+            .filter(|_| linked);
+        let picture = Device::new(case, face, DECK_WIDTH)
+            .dim(!linked)
+            .when_some(face, |picture, face| {
+                picture.title(self.tr(art::plate_title(face)))
+            });
+        let caption = caption(layout, device, strip(mirror), present::now(), language);
+        // The deck's box as the design lays it out, its height rounded to
+        // the pixel (264 at 164 wide).
+        let deck_box = art::DeviceGeometry::at(DECK_WIDTH).height.round();
+        // The stage's fill reaches the card's top corners, so it rounds them
+        // itself, inside the card's 1 px rim.
+        let stage = v_flex()
+            .w_full()
+            .items_center()
+            .gap(px(12.))
+            .pt(px(18.))
+            .pb(px(STAGE_BOTTOM))
+            .rounded_t(px(11.))
+            .bg(p.stage)
+            .child(div().flex_none().h(px(deck_box)).child(picture))
+            .children(caption.map(|caption| div().ts(12., 16.).text_color(p.text2).child(caption)));
+        let (word, tone) = link_word(layout, device, language);
+        let mut rows = vec![
+            stage.into_any_element(),
+            Row::new()
+                .pad(DECK_ROW_PAD)
+                .title(self.tr("Link"))
+                .right(ui::status(word, tone, p))
+                .into_any_element(),
+        ];
+        if linked {
+            rows.push(self.battery_row(device, p).into_any_element());
+        }
+        if let Some(firmware) = firmware_word(layout, device) {
+            rows.push(
+                Row::new()
+                    .pad(DECK_ROW_PAD)
+                    .title(self.tr("Firmware"))
+                    .right(ui::mono(firmware, p.text2))
                     .into_any_element(),
             );
         }
-        if let Some(card) = card {
-            let id = id.clone();
-            actions.push(
-                Btn::new("snooze", self.tr("Snooze"))
-                    .small()
-                    .icon(ic::CLOCK)
-                    .disabled(dim)
-                    .tooltip(self.tr("Put the card back on the deck later"))
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.act(
-                            UiAction::Snooze {
-                                agent: id.clone(),
-                                card,
-                            },
-                            window,
-                            cx,
-                        );
-                    }))
-                    .into_any_element(),
-            );
-        }
-        actions.push(
-            Btn::new("focus", self.tr("Focus terminal"))
-                .small()
-                .outlined()
-                .icon(ic::TERMINAL)
-                .disabled(dim || !agent.caps.focus)
-                .on_click(cx.listener(move |this, _, window, cx| {
-                    this.act(UiAction::Focus { agent: id.clone() }, window, cx);
-                }))
+        let chosen = Case::ALL
+            .iter()
+            .position(|c| *c == case)
+            .unwrap_or_default();
+        let colours = Segmented::new(
+            "deck-case",
+            vec![self.tr("White").into(), self.tr("Black").into()],
+            chosen,
+        )
+        .on_select(cx.listener(|this, at: &usize, _, cx| {
+            if let Some(case) = Case::ALL.get(*at).copied() {
+                this.update_prefs(cx, |prefs| prefs.set_case(case));
+            }
+        }));
+        rows.push(
+            Row::new()
+                .pad(DECK_ROW_PAD)
+                .title(self.tr("Case"))
+                .right(colours)
                 .into_any_element(),
         );
-        let mut actions = Some(actions);
-        let mut actions_below = None;
-        if narrow {
-            actions_below = actions.take();
-        }
         v_flex()
-            .gap(px(12.))
-            .child(
-                h_flex()
-                    .items_center()
-                    .gap(px(14.))
-                    .child(
-                        div()
-                            .flex_none()
-                            .size(px(44.))
-                            .rounded(px(12.))
-                            .bg(p.wash(0.06))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .child(ui::icon(mark, 22., mark_color)),
-                    )
-                    .child(
-                        v_flex()
-                            .flex_1()
-                            .min_w_0()
-                            .gap(px(3.))
-                            .child(
-                                h_flex()
-                                    .gap(px(8.))
-                                    .child(
-                                        div()
-                                            .ts(20., 26.)
-                                            .medium()
-                                            .truncate()
-                                            .child(agent.name.clone()),
-                                    )
-                                    .when(stale, |this| {
-                                        this.child(ui::badge(self.tr("session gone"), Tint::Neutral, &p))
-                                    }),
-                            )
-                            .child(ui::meta_line(
-                                vec![
-                                    word(state, p.tone_text(tone)),
-                                    frag(self.tr(present::kind_label(agent.kind))),
-                                    frag(present::slot_badge_localized(agent.slot, self.language())),
-                                    frag(self.tr(present::owner_source(agent))),
-                                ],
-                                &p,
-                            )),
-                    )
-                    .children(
-                        actions
-                            .take()
-                            .map(|actions| h_flex().flex_none().gap(px(6.)).children(actions)),
-                    ),
-            )
-            .when(!title.is_empty(), |this| {
-                this.child(div().ts(13., 19.).text_color(p.muted).child(title))
-            })
-            // A narrow detail column puts the actions under the name rather
-            // than squeezing the name down to its first letters.
-            .children(
-                actions_below.map(|actions| h_flex().flex_wrap().gap(px(6.)).children(actions)),
-            )
+            .flex_none()
+            .w(px(DECK_COLUMN))
+            .gap(px(8.))
+            .child(ui::label(self.tr("Your deck"), p))
+            .child(ui::card(rows, p))
     }
 
-    fn render_card(
-        &self,
-        agent: &Agent,
-        card: &Card,
-        now: Ts,
-        dim: bool,
-        cx: &Context<Self>,
-    ) -> Div {
-        let p = *palette(cx);
-        let label = match card.kind {
-            CardKind::Q => "Waiting on you",
-            CardKind::R => "Ready",
+    /// The Battery row: the glyph and the figure, or a dash while the deck
+    /// has not said.
+    fn battery_row(&self, device: &DeviceState, p: &Palette) -> Row {
+        let figure = battery_word(device.battery, device.charging, self.language());
+        let row = Row::new().pad(DECK_ROW_PAD).title(self.tr("Battery"));
+        match device.battery {
+            Some(percent) => row
+                .right(art::battery(percent, p))
+                .right(div().ts(13., 18.).medium().tnum().child(figure)),
+            None => row.right(div().ts(13., 18.).text_color(p.text2).child(figure)),
+        }
+    }
+
+    // ---- the sections --------------------------------------------------------
+
+    /// What needs attention, a card each, in the attention list's order:
+    /// `None` when nothing does.
+    fn deck_attention(&self, p: &Palette, cx: &Context<Self>) -> Option<Div> {
+        let mirror = self.state.mirror();
+        let extras = Extras {
+            stale_helpers: self.integrations.stale_helpers(),
+            firmware: self.service.firmware_available(),
         };
-        let countdown = present::hold_countdown_localized(card, now, self.language()).map(|left| {
-            h_flex()
-                .gap(px(5.))
-                .ts(12., 16.)
-                .text_color(p.muted)
-                .child(ui::icon(ic::CLOCK, 13., p.muted))
-                .child(left)
-                .into_any_element()
+        let items = attention(mirror, self.state.connected(), present::now(), &extras);
+        if items.is_empty() {
+            return None;
+        }
+        let language = self.language();
+        let cards = items.iter().enumerate().map(|(i, item)| {
+            let notice = notice(item, mirror.service.port, language);
+            let row = Row::new()
+                .lead(ui::bare(ui::icon(ic::DANGER, 18., p.warn)))
+                .title(notice.title)
+                .sub(notice.sub);
+            let row = match notice.remedy {
+                Some(Remedy::Details) => row.right(
+                    Btn::new(("deck-attention", i), self.tr("Details")).on_click(
+                        cx.listener(|this, _, window, cx| this.open_link_details(window, cx)),
+                    ),
+                ),
+                Some(Remedy::OpenService) => row.right(
+                    Btn::new(("deck-attention", i), self.tr("Open Service")).on_click(
+                        cx.listener(|this, _, window, cx| this.go(Screen::Service, window, cx)),
+                    ),
+                ),
+                None => row,
+            };
+            ui::attention(row, p)
         });
-        let mut badges: Vec<AnyElement> = vec![
-            div()
-                .mono()
-                .text_color(p.text)
-                .child(present::card_ref(card))
-                .into_any_element(),
-            ui::badge(self.tr(card.status.name()), status_tint(&card.status), &p).into_any_element(),
-            ui::badge(self.tr(present::route(card.deliver)), Tint::Neutral, &p).into_any_element(),
-        ];
-        if let Some(custom) = present::custom_badge(&card.origin) {
-            badges.push(ui::badge(self.tr(custom), Tint::Accent, &p).into_any_element());
-        }
-        badges.push(frag(present::origin_line_localized(&card.origin, self.language())));
-        let body = ui::panel(&p)
-            .gap(px(12.))
-            .child(ui::meta_line(badges, &p))
-            // The full card text, never truncated: this is the thing the
-            // operator is being asked about.
-            .child(
-                div()
-                    .ts(14., 22.)
-                    .text_color(p.text)
-                    .child(present::card_text_localized(card, self.language()).to_string()),
-            )
-            .children(present::answering_localized(card, self.language()).map(|what| {
-                h_flex()
-                    .gap(px(6.))
-                    .ts(12., 16.)
-                    .text_color(p.muted)
-                    .child(ui::spinner(12., p.muted))
-                    .child(self.fmt("Sent: {0}", &[&what]))
-            }))
-            .children(present::degraded_at(card).map(|at| {
-                ui::hint(
-                    match at {
-                        Some(at) => self.fmt("Degraded · focused at {0}", &[&at]),
-                        None => self.tr("Degraded · not focused yet").to_string(),
-                    },
-                    &p,
-                )
-            }))
-            .child(self.render_choices(agent, card, dim, cx))
-            .children(self.render_failed(agent, card, dim, cx));
-        ui::section_with(self.tr(label), countdown.into_iter().collect(), body, &p)
+        let cards = v_flex().gap(px(8.)).children(cards);
+        Some(ui::section(self.tr("Needs attention"), cards, p))
     }
 
-    /// Every choice, flat, however the deck had to page them (§8.2).
-    fn render_choices(&self, agent: &Agent, card: &Card, dim: bool, cx: &Context<Self>) -> Div {
-        let p = *palette(cx);
-        let card_id = card.id;
-        let rows: Vec<Stateful<Div>> = (0..card.choices.len())
-            .map(|n| {
-                let index = u8::try_from(n).unwrap_or(u8::MAX);
-                let id = agent.id.clone();
-                let choice = &card.choices[n];
-                let recommended = card.rec == Some(index);
-                let sent_as = card
-                    .choice_map
-                    .get(n)
-                    .copied()
-                    .filter(|sent| *sent != index);
-                div()
-                    .id(SharedString::from(format!("choice-{n}")))
-                    .flex()
-                    .items_center()
-                    .gap(px(10.))
-                    .w_full()
-                    .min_h(px(40.))
-                    .px(px(10.))
-                    .py(px(8.))
-                    .rounded(px(9.))
-                    .bg(p.wash(0.05))
-                    .border_1()
-                    .border_color(if recommended {
-                        p.accent.alpha(0.45)
-                    } else {
-                        gpui::transparent_black()
-                    })
-                    .map(|this| {
-                        if dim {
-                            this.opacity(0.5)
-                        } else {
-                            this.cursor_pointer()
-                                .hover(|s| s.bg(p.wash(0.09)))
-                                .active(|s| s.bg(p.wash(0.12)))
-                                .on_click(cx.listener(move |this, _, window, cx| {
-                                    this.act(
-                                        UiAction::Answer {
-                                            agent: id.clone(),
-                                            card: card_id,
-                                            choice: Some(index),
-                                            text: None,
-                                        },
-                                        window,
-                                        cx,
-                                    );
-                                }))
-                        }
-                    })
-                    .child(ui::keycap((n + 1).to_string(), &p))
-                    .child(
-                        v_flex()
-                            .flex_1()
-                            .min_w_0()
-                            .child(div().ts(13.5, 19.).child(if choice.label.is_empty() {
-                                self.tr(present::REDACTED).to_string()
-                            } else {
-                                choice.label.clone()
-                            }))
-                            .children(choice.detail.clone().map(|detail| {
-                                div().ts(12., 16.).text_color(p.muted).child(detail)
-                            })),
-                    )
-                    .children(sent_as.map(|sent| {
-                        div()
-                            .ts(11., 14.)
-                            .text_color(p.faint)
-                            .child(self.fmt("sent as {0}", &[&sent.to_string()]))
-                    }))
-                    .when(recommended, |this| {
-                        this.child(ui::badge(self.tr("Recommended"), Tint::Accent, &p))
-                    })
-            })
-            .collect();
+    /// The deck's own settings, in its panels' names and order: Volume and
+    /// speech, Alerts, Display.
+    fn deck_settings(&self, p: &Palette, cx: &Context<Self>) -> Div {
+        let settings = self.state.mirror().settings;
+        let switch = |id: &'static str, key: SetKey| {
+            Switch::new(id, settings.get(key) != 0).on_toggle(cx.listener(
+                move |this, on: &bool, window, cx| {
+                    let value = u16::from(*on);
+                    this.act(UiAction::DeviceSet { key, value }, window, cx);
+                },
+            ))
+        };
+        let volume = ui::card(
+            vec![
+                Row::new()
+                    .title(self.tr("Speaker"))
+                    .right(self.deck_level("deck-speaker", SetKey::Speaker, SPEAKER, cx))
+                    .into_any_element(),
+                Row::new()
+                    .title(self.tr("Mic gain"))
+                    .right(self.deck_level("deck-mic", SetKey::Mic, MIC, cx))
+                    .into_any_element(),
+                Row::new()
+                    .title(self.tr("Auto-announce"))
+                    .right(switch("deck-announce", SetKey::Announce))
+                    .into_any_element(),
+            ],
+            p,
+        );
+        let alerts = ui::card(
+            vec![
+                Row::new()
+                    .title(self.tr("Chime"))
+                    .right(switch("deck-chime", SetKey::Chime))
+                    .into_any_element(),
+                Row::new()
+                    .title(self.tr("Auto-jump"))
+                    .right(switch("deck-autojump", SetKey::Autojump))
+                    .into_any_element(),
+            ],
+            p,
+        );
+        let sizes = Segmented::new(
+            "deck-text-size",
+            vec![
+                self.tr("Small").into(),
+                self.tr("Medium").into(),
+                self.tr("Large").into(),
+            ],
+            usize::from(settings.textsize.min(2)),
+        )
+        .on_select(cx.listener(|this, at: &usize, window, cx| {
+            let value = u16::try_from(*at).unwrap_or_default();
+            this.act(
+                UiAction::DeviceSet {
+                    key: SetKey::Textsize,
+                    value,
+                },
+                window,
+                cx,
+            );
+        }));
+        let display = ui::card(
+            vec![
+                Row::new()
+                    .title(self.tr("Brightness"))
+                    .right(self.deck_level("deck-brightness", SetKey::Brightness, BRIGHTNESS, cx))
+                    .into_any_element(),
+                Row::new()
+                    .title(self.tr("Idle home"))
+                    .right(self.idle_home_popup(settings.idlehome, cx))
+                    .into_any_element(),
+                Row::new()
+                    .title(self.tr("Text size"))
+                    .right(sizes)
+                    .into_any_element(),
+                Row::new()
+                    .title(self.tr("Language"))
+                    .sub(self.tr("The app and the deck change together."))
+                    .right(self.language_popup(true, cx))
+                    .into_any_element(),
+            ],
+            p,
+        );
         v_flex()
-            .gap(px(6.))
-            .children(rows)
-            // Redaction keeps the count and drops the labels (§4.3); an
-            // empty choice list under a non-zero count is not "no choices".
-            .when(card.choices.is_empty() && card.choices_n > 0, |this| {
-                this.child(ui::hint(
-                    self.fmt("{0} choices, hidden by this reader's scope", &[&card.choices_n.to_string()]),
-                    &p,
-                ))
-            })
+            .flex_1()
+            .min_w_0()
+            .gap(px(GAP))
+            .children(self.deck_attention(p, cx))
+            .child(ui::section(self.tr("Volume and speech"), volume, p))
+            .child(ui::section(self.tr("Alerts"), alerts, p))
+            .child(ui::section(self.tr("Display"), display, p))
     }
 
-    /// §4.8's two ways out of `failed`: **Retry** (`push`/`poll` only, and
-    /// only when this GUI knows what it answered) and **Release to
-    /// terminal**.
-    fn render_failed(
+    /// The deck away, or the service: what is going on, the two things to
+    /// try, the language (the one setting the owner can still make, and
+    /// only through the service), and the note that the rest comes back.
+    fn deck_away(&self, layout: Layout, p: &Palette, cx: &Context<Self>) -> Div {
+        let absent = (layout == Layout::NoService).then(|| self.service_absence());
+        let first = match absent {
+            None => Row::new()
+                .lead(ui::bare(ui::icon(ic::INFO, 18., p.text2)))
+                .title(self.tr("The background service is waiting for your deck")),
+            Some(why) => {
+                // Not running is something wrong; never set up, or waiting
+                // for the owner's approval, is the owner's turn.
+                let mark = match why {
+                    NoService::NotRunning => ui::icon(ic::DANGER, 18., p.warn),
+                    NoService::NotInstalled | NoService::AwaitingApproval => {
+                        ui::icon(ic::INFO, 18., p.text2)
+                    }
+                };
+                let row = Row::new()
+                    .lead(ui::bare(mark))
+                    .title(no_service_title(why, self.language()))
+                    .when(why == NoService::NotRunning, |row| {
+                        row.sub(self.tr("The deck works only while it runs."))
+                    });
+                self.no_service_buttons(why, "deck-absent", true, cx)
+                    .into_iter()
+                    .fold(row, Row::right)
+            }
+        };
+        let dark = Row::new()
+            .lead(ui::bare(div()))
+            .title(self.tr("If the screen is dark"))
+            .sub(self.tr("Hold PTT, the long key on the left edge, for 2 seconds."));
+        let pair = Row::new()
+            .lead(ui::bare(div()))
+            .title(self.tr("Cable or Bluetooth"))
+            .sub(self.tr("Use the cable, or pair it again."))
+            .right(
+                Btn::new("deck-bluetooth", self.tr("Open Bluetooth Settings"))
+                    .on_click(|_, _, cx: &mut App| cx.open_url(present::BLUETOOTH_SETTINGS)),
+            );
+        let (title, language_sub) = match absent {
+            None => (
+                self.tr("Not linked"),
+                self.tr("The deck follows when it links."),
+            ),
+            Some(_) => (
+                self.tr("Not running"),
+                self.tr("Needs the background service."),
+            ),
+        };
+        let what = ui::card(
+            vec![
+                first.into_any_element(),
+                dark.into_any_element(),
+                pair.into_any_element(),
+            ],
+            p,
+        );
+        let language = Row::new()
+            .title(self.tr("Language"))
+            .sub(language_sub)
+            .right(self.language_popup(absent.is_none(), cx));
+        v_flex()
+            .flex_1()
+            .min_w_0()
+            .gap(px(GAP))
+            .children(self.deck_attention(p, cx))
+            .child(ui::section(title, what, p))
+            .child(ui::section(
+                self.tr("Still yours to set"),
+                ui::card(vec![language.into_any_element()], p),
+                p,
+            ))
+            .child(ui::hint(
+                self.tr("Volume, alerts and display settings come back when the deck links."),
+                p,
+            ))
+    }
+
+    /// Why no service answers, as this run can tell: a harness scene's
+    /// answer, or the service's launch agent as macOS last reported it
+    /// ([`no_service`]). The Deck page, the frame's strip, the Service page
+    /// and the status item all read it here, so they say the same.
+    pub(crate) fn service_absence(&self) -> NoService {
+        self.deck
+            .staged
+            .unwrap_or_else(|| no_service(app::launch().installed(), self.service.agent()))
+    }
+
+    /// What a page offers for a service that does not answer, `why` it does
+    /// not: **Start** and **Open Log** for one that is set up and not
+    /// running; **Set Up…** (first run, [`Shell::set_up_service`]) for one
+    /// never set up; **Open Settings** at Login Items for one macOS holds
+    /// for the owner's approval. `id` keeps one page's buttons apart from
+    /// another's; `primary` draws the first as the primary.
+    pub(crate) fn no_service_buttons(
         &self,
-        agent: &Agent,
-        card: &Card,
-        dim: bool,
+        why: NoService,
+        id: &'static str,
+        primary: bool,
         cx: &Context<Self>,
-    ) -> Option<Div> {
-        let p = *palette(cx);
-        let why = present::failed_reason(card)?;
-        let card_id = card.id;
-        let id = agent.id.clone();
-        let retry = present::retry_offered(card)
-            .then(|| self.deck.recall(&id, card))
-            .flatten();
-        let mut actions: Vec<AnyElement> = Vec::new();
-        if let Some((choice, text)) = retry {
-            let id = id.clone();
-            actions.push(
-                Btn::new("retry", self.tr("Retry"))
-                    .small()
-                    .solid()
-                    .disabled(dim)
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.act(
-                            UiAction::Answer {
-                                agent: id.clone(),
-                                card: card_id,
-                                choice,
-                                text: text.clone(),
-                            },
-                            window,
-                            cx,
-                        );
-                    }))
-                    .into_any_element(),
-            );
+    ) -> Vec<Btn> {
+        let first = |button: Btn| if primary { button.primary() } else { button };
+        match why {
+            NoService::NotRunning => vec![
+                first(Btn::new((id, 0_usize), self.tr("Start")).on_click(
+                    cx.listener(|this, _, window, cx| this.start_service(window, cx)),
+                )),
+                Btn::new((id, 1_usize), self.tr("Open Log"))
+                    .on_click(|_, _, cx: &mut App| cx.open_with_system(&app::launchd_log())),
+            ],
+            NoService::NotInstalled => vec![first(
+                Btn::new((id, 0_usize), self.tr("Set Up\u{2026}")).on_click(cx.listener(
+                    |this, _, window, cx| this.set_up_service(window, cx),
+                )),
+            )],
+            NoService::AwaitingApproval => vec![first(
+                Btn::new((id, 0_usize), self.tr("Open Settings"))
+                    .on_click(|_, _, cx: &mut App| cx.open_url(present::LOGIN_ITEMS_SETTINGS)),
+            )],
         }
-        if present::release_offered(card) {
-            // §4.8: `failed → degraded`. `op.snooze` *is* the release — it
-            // drops the held hook and re-pushes the same id as a `⌨` focus
-            // card, which is exactly what "release to terminal" means on the
-            // device.
-            actions.push(
-                Btn::new("release", self.tr("Release to terminal"))
-                    .small()
-                    .disabled(dim)
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        this.act(
-                            UiAction::Snooze {
-                                agent: id.clone(),
-                                card: card_id,
-                            },
-                            window,
-                            cx,
-                        );
-                    }))
-                    .into_any_element(),
-            );
-        }
-        Some(ui::strip(
-            ui::Severity::Danger,
-            Some(self.tr("The answer did not get through").into()),
-            Some(div().child(why.to_string()).into_any_element()),
-            actions,
-            &p,
+    }
+
+    // ---- the controls --------------------------------------------------------
+
+    /// One of the deck's levels, showing the stop it sent while that holds.
+    fn deck_level(
+        &self,
+        id: &'static str,
+        key: SetKey,
+        (min, max): (u16, u16),
+        cx: &Context<Self>,
+    ) -> Level {
+        let setting = self.state.mirror().settings.get(key);
+        let shown = level_shown(setting, self.deck.sent.get(&key).copied(), present::now());
+        Level::new(id, shown, min, max).on_change(cx.listener(
+            move |this, value: &u16, window, cx| {
+                this.set_deck_level(key, *value, window, cx);
+            },
         ))
     }
 
-    /// The order history (§8.2): "the exact string typed or pushed, shown
-    /// before an `inject` executes". Newest first.
-    fn render_orders(&self, agent: &Agent, cx: &Context<Self>) -> Div {
-        let p = *palette(cx);
-        let orders = self.state.orders(&agent.id);
-        if orders.is_empty() {
-            return ui::section(
-                self.tr("Orders"),
-                ui::panel(&p).child(ui::hint(
-                    self.tr("Nothing typed or pushed yet. What you send below shows here before it is typed."),
-                    &p,
-                )),
-                &p,
-            );
-        }
-        let rows: Vec<AnyElement> = orders
-            .iter()
-            .enumerate()
-            .rev()
-            .map(|(n, entry)| render_order(n, entry, &p, self.language()).into_any_element())
-            .collect();
-        ui::section(self.tr("Orders"), ui::card(rows, &p), &p)
+    /// Send a level's new stop, and show it until the deck agrees.
+    fn set_deck_level(
+        &mut self,
+        key: SetKey,
+        value: u16,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let at = present::now();
+        self.deck.sent.insert(key, Sent { value, at });
+        self.act(UiAction::DeviceSet { key, value }, window, cx);
+        cx.notify();
     }
 
-    /// Where the agent runs and what it can be asked to do.
-    fn render_about(&self, agent: &Agent, p: &Palette) -> Div {
-        ui::section(
-            self.tr("Session"),
-            ui::panel(p)
-                .gap(px(8.))
-                .child(ui::kv(self.tr("Source"), present::source_line_localized(&agent.session, self.language()), p))
-                .child(ui::kv(self.tr("Can"), present::caps_line_localized(&agent.caps, self.language()), p))
-                .child(ui::kv(
-                    self.tr("Agent"),
-                    div().mono().ts(12., 18.).child(agent.id.to_string()),
-                    p,
-                )),
-            p,
+    /// Idle home: the deck's four choices, showing the one it rounds its
+    /// setting to.
+    fn idle_home_popup(&self, seconds: u16, cx: &Context<Self>) -> PopupButton {
+        let language = self.language();
+        let at = idle_home_at(seconds);
+        let shell = cx.entity();
+        PopupButton::new("deck-idle-home", idle_home_word(at, language)).menu(
+            move |mut menu, _, _| {
+                for (i, value) in IDLE_HOME.into_iter().enumerate() {
+                    let shell = shell.clone();
+                    let item = PopupMenuItem::new(idle_home_word(i, language))
+                        .checked(i == at)
+                        .on_click(move |_, window, cx| {
+                            shell.update(cx, |this, cx| {
+                                let key = SetKey::Idlehome;
+                                this.act(UiAction::DeviceSet { key, value }, window, cx);
+                            });
+                        });
+                    menu = menu.item(item);
+                }
+                menu
+            },
         )
     }
 
-    // ---- the composer --------------------------------------------------
+    /// The language, by each one's own name. The app and the deck change
+    /// together; with no deck linked the service keeps it for the deck, and
+    /// with no service it cannot be set here (`enabled`).
+    fn language_popup(&self, enabled: bool, cx: &Context<Self>) -> PopupButton {
+        let current = self.language();
+        let shell = cx.entity();
+        PopupButton::new("deck-language", current.name())
+            .disabled(!enabled)
+            .menu(move |mut menu, _, _| {
+                for language in Language::ALL {
+                    let shell = shell.clone();
+                    let item = PopupMenuItem::new(language.name())
+                        .checked(language == current)
+                        .on_click(move |_, window, cx| {
+                            shell.update(cx, |this, cx| this.choose_language(language, window, cx));
+                        });
+                    menu = menu.item(item);
+                }
+                menu
+            })
+    }
 
-    /// The text box → `op.order` (§8.2).
-    fn render_composer(&self, dim: bool, cx: &Context<Self>) -> Div {
+    // ---- the link's details --------------------------------------------------
+
+    /// The drops of the last hour, newest first, each with its local time
+    /// and its reason; **Open Service** and **Close**.
+    fn render_link_details(&self, cx: &Context<Self>) -> AnyElement {
         let p = *palette(cx);
-        let target = self
-            .deck
-            .selected
-            .as_ref()
-            .and_then(|id| self.state.mirror().agents.get(id));
-        let can_send = !dim && target.is_some();
-        let note = match target {
-            Some(agent) => self.fmt("Typed into {0}'s terminal · Return sends", &[&agent.name]),
-            None => self.tr("Select an agent first").to_string(),
+        let language = self.language();
+        let lines: Vec<String> = recent_drops(&self.state.mirror().device, present::now())
+            .into_iter()
+            .map(|drop| drop_line(drop, language))
+            .collect();
+        let list = if lines.is_empty() {
+            div()
+                .text_color(p.text2)
+                .child(ui::para(self.tr("No drops in the last hour.")))
+                .into_any_element()
+        } else {
+            v_flex()
+                .id("link-drops")
+                .max_h(px(DROPS_HEIGHT))
+                .overflow_y_scroll()
+                .tnum()
+                .text_color(p.text2)
+                .children(lines.into_iter().map(|line| div().child(line)))
+                .into_any_element()
         };
-        let width = (self.detail_room() - 48.).min(DETAIL_MAX - 16.);
-        div()
-            .flex_none()
-            .w_full()
-            .px(px(24.))
-            .pb(px(16.))
-            .pt(px(4.))
+        let buttons = h_flex()
+            .mt(px(16.))
+            .gap(px(8.))
+            .justify_end()
             .child(
-                v_flex()
-                    .w(px(width))
-                    .mx_auto()
-                    .gap(px(6.))
-                    .child(
-                        h_flex()
-                            .h(px(48.))
-                            .pl(px(16.))
-                            .pr(px(8.))
-                            .gap(px(8.))
-                            .rounded(px(16.))
-                            .bg(p.plate)
-                            .border_1()
-                            .border_color(p.hairline(0.09))
-                            .when(!can_send, |this| this.opacity(0.6))
-                            .child(
-                                div().flex_1().min_w_0().child(
-                                    Input::new(&self.deck.order)
-                                        .appearance(false)
-                                        .disabled(!can_send)
-                                        .px(px(0.))
-                                        .text_size(px(14.)),
-                                ),
-                            )
-                            .child(
-                                div()
-                                    .id("order")
-                                    .flex_none()
-                                    .size(px(32.))
-                                    .rounded_full()
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .bg(p.solid)
-                                    .map(|this| {
-                                        if can_send {
-                                            this.cursor_pointer()
-                                                .hover(|s| s.opacity(0.88))
-                                                .on_click(cx.listener(|this, _, window, cx| {
-                                                    this.send_order(window, cx);
-                                                }))
-                                        } else {
-                                            this.opacity(0.35)
-                                        }
-                                    })
-                                    .tooltip(ui::tip(self.tr("Send the order")))
-                                    .child(ui::icon(ic::ARROW_UP, 16., p.on_solid)),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .pl(px(16.))
-                            .ts(11.5, 15.)
-                            .text_color(p.faint)
-                            .child(note),
-                    ),
+                Btn::new("link-open-service", self.tr("Open Service")).on_click(cx.listener(
+                    |this, _, window, cx| {
+                        this.close_dialog(window, cx);
+                        this.go(Screen::Service, window, cx);
+                    },
+                )),
             )
-    }
-
-    /// The detail column's width this frame: what is left of the content
-    /// area once the roster and its rule are off it.
-    pub(crate) fn detail_room(&self) -> f32 {
-        (self.content_width - ROSTER_WIDTH - 1.).max(0.)
-    }
-
-    pub(crate) fn send_order(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(agent) = self.deck.selected.clone() else {
-            return;
-        };
-        let text = self.deck.order.read(cx).value().trim().to_string();
-        if text.is_empty() {
-            return;
-        }
-        self.deck.order.update(cx, |input, cx| {
-            input.set_value("", window, cx);
-        });
-        self.act(UiAction::Order { agent, text }, window, cx);
-    }
-}
-
-/// How a card's status is tinted: a failure is red, a delivery green, the
-/// rest neutral.
-fn status_tint(status: &CardStatus) -> Tint {
-    match status {
-        CardStatus::Failed { .. } => Tint::Danger,
-        CardStatus::Delivered => Tint::Success,
-        CardStatus::Answering { .. } => Tint::Blue,
-        _ => Tint::Neutral,
-    }
-}
-
-/// One line of the order history, with §8.2's Copy on a failure.
-fn render_order(n: usize, entry: &OrderEntry, p: &Palette, language: deck_gui_core::i18n::Language) -> Row {
-    let failed = entry.reason.is_some();
-    let text = match &entry.text {
-        Some(text) => div().mono().ts(12.5, 18.).child(text.clone()),
-        // `order.failed` carries no text (§4.12): an order refused before it
-        // was ever dispatched never had one to keep.
-        None => div().text_color(p.faint).child(language.text("(no text)")),
-    };
-    let mut meta: Vec<AnyElement> = Vec::new();
-    if let Some(via) = &entry.via {
-        meta.push(frag(via.clone()));
-    }
-    if let Some(reason) = &entry.reason {
-        meta.push(word(language.format("failed: {0}", &[reason]), p.danger_muted));
-    }
-    if meta.is_empty() {
-        meta.push(frag(language.text("sent")));
-    }
-    let row = Row::new()
-        .title_el(text.when(failed, |this| this.text_color(p.danger_muted)))
-        .meta_el(ui::meta_line(meta, p));
-    // The text was in the `order.dispatched` before the failure and nowhere
-    // else (`order.failed` carries none), so this button is the operator's
-    // only way to get the string back.
-    match present::copyable(entry).map(str::to_string) {
-        Some(text) => row.trailing(
-            Btn::icon_only(SharedString::from(format!("copy-{n}")), ic::COPY)
-                .small()
-                .tooltip(language.text("Copy the order"))
-                .on_click(move |_, _, cx: &mut App| {
-                    cx.write_to_clipboard(ClipboardItem::new_string(text.clone()));
-                }),
-        ),
-        None => row,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::app;
-    use crate::shell::SIDEBAR_WIDTH;
-
-    /// §4.8's Retry re-sends "what this window answered", which means *this
-    /// card* and not merely its id. A `CardId` is not an identity for the
-    /// life of an agent: the counter lives on the device slot and
-    /// `Store::reset_slot` zeroes it whenever the agent leaves that slot, so
-    /// the same agent's next card can be `#17` again with other choices
-    /// behind the same indices — and nothing ever prunes this map.
-    #[test]
-    fn retry_only_re_sends_what_this_window_answered_on_this_very_card() {
-        use deck_model::{Choice, Deliver, Origin, OriginKind, Page};
-        let agent = AgentId("ag_1".into());
-        let card = |labels: &[&str], created: u64| Card {
-            id: CardId(17),
-            kind: CardKind::Q,
-            status: CardStatus::Failed {
-                reason: "timeout".into(),
-            },
-            deliver: Deliver::Poll,
-            origin: Origin {
-                kind: OriginKind::Permission,
-                tool: Some("Bash".into()),
-                request_id: None,
-                group: None,
-            },
-            text: Some("...".into()),
-            choices: labels
-                .iter()
-                .map(|l| Choice {
-                    label: (*l).into(),
-                    detail: None,
-                })
-                .collect(),
-            choices_n: u8::try_from(labels.len()).unwrap_or(u8::MAX),
-            choice_map: Vec::new(),
-            rec: Some(0),
-            free_text: true,
-            page: Page { index: 0, count: 1 },
-            created: Ts::from_millis(created),
-            expires: None,
-            redacted: false,
-        };
-        let first = card(&["Allow", "Deny"], 1_000);
-        // The map is the pane's, but `remember`/`recall` are pure over it,
-        // so they are exercised here without a window.
-        let mut answered = Answered::new();
-        answered.insert(
-            (agent.clone(), first.id, first.created),
-            (Some(0), None::<String>),
-        );
-        assert_eq!(
-            answered.get(&(agent.clone(), first.id, first.created)),
-            Some(&(Some(0), None)),
-            "the card this window really answered"
-        );
-        // A different card, under the recycled id, that this window never
-        // answered — and whose choice 0 is not what was answered before.
-        let second = card(&["Deploy to production", "Cancel"], 9_000);
-        assert_eq!(
-            answered.get(&(agent, second.id, second.created)),
-            None,
-            "Retry offered choice 0 of a card the operator never answered"
-        );
-    }
-
-    #[test]
-    fn the_roster_and_the_detail_pane_still_split_the_smallest_window_evenly() {
-        // The sidebar takes its width off the top (§8.2), so the roster is
-        // measured against what is left and not against the whole window.
-        const { assert!(SIDEBAR_WIDTH + ROSTER_WIDTH < app::MIN_WIDTH) };
-        const { assert!(ROSTER_WIDTH < (app::MIN_WIDTH - SIDEBAR_WIDTH) / 2.) };
-    }
-
-    #[test]
-    fn a_failed_card_reads_red_and_a_delivered_one_green() {
-        assert_eq!(
-            status_tint(&CardStatus::Failed {
-                reason: "timeout".into()
-            }),
-            Tint::Danger
-        );
-        assert_eq!(status_tint(&CardStatus::Delivered), Tint::Success);
-        assert_eq!(status_tint(&CardStatus::Pending), Tint::Neutral);
+            .child(
+                Btn::new("link-close", self.tr("Close"))
+                    .primary()
+                    .on_click(cx.listener(|this, _, window, cx| this.close_dialog(window, cx))),
+            );
+        v_flex()
+            .p(px(20.))
+            .gap(px(4.))
+            .ts(13., 18.)
+            .child(div().semibold().child(self.tr("Link problem")))
+            .child(div().mt(px(8.)).child(list))
+            .child(buttons)
+            .into_any_element()
     }
 }

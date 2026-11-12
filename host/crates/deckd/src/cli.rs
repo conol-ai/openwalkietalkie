@@ -1,5 +1,6 @@
 //! The `deckd` command line (design §3, contract §3.8): `run`, `status`,
-//! `ctl`, `events`, `token`, `device`, `doctor`, `ble` (the voice link's
+//! `ctl`, `events`, `token`, `device`, `doctor`, `probe` (is a deck there,
+//! for the first run, which has no daemon yet), `ble` (the voice link's
 //! bench tools, which talk to the deck directly and need no daemon). Every
 //! command that talks to the running daemon (`ctl`, `events`, `status --live`, `device
 //! flood|sync|metrics`, the `doctor` socket probe) goes through
@@ -82,6 +83,7 @@ fn ctl_config(socket: &Path, client: &str, scopes: Vec<Scope>) -> ClientConfig {
         subscribe: Vec::new(),
         snapshot: false,
         reconnect: false,
+        content: None,
     }
 }
 
@@ -334,6 +336,16 @@ pub enum Cmd {
     },
     /// Check the installation.
     Doctor {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Whether a deck is plugged in or paired, and on which bus: the first
+    /// run looks with it before any service runs. It enumerates HID and
+    /// opens nothing. Exit 0 when a deck is there and 1 when none is; the
+    /// JSON says the same either way.
+    Probe {
+        /// Print `{"present": bool, "instances": [{"bus": "usb" |
+        /// "bluetooth" | "unknown"}]}`.
         #[arg(long)]
         json: bool,
     },
@@ -594,6 +606,52 @@ fn ble_cmd(cmd: BleCmd) -> i32 {
     }
 }
 
+/// `deckd probe`: what HID lists of the deck, printed, and the exit code
+/// that says the same: 0 when it lists one, 1 when it does not (O19; 2 is
+/// clap's own usage error, which is what a `deckd` older than this verb
+/// answers). A HID that cannot start lists nothing, with the reason on
+/// stderr.
+pub fn probe_cmd(
+    found: Result<Vec<hidapi::BusType>, crate::hid::HidError>,
+    json: bool,
+    out: &mut impl std::io::Write,
+) -> Result<i32, String> {
+    let buses = found.unwrap_or_else(|e| {
+        eprintln!("deckd: {e}");
+        Vec::new()
+    });
+    let written = if json {
+        writeln!(out, "{}", probe_json(&buses))
+    } else if buses.is_empty() {
+        writeln!(out, "no OpenWalkieTalkie found")
+    } else {
+        let names: Vec<&str> = buses.iter().map(|bus| bus_name(*bus)).collect();
+        writeln!(out, "OpenWalkieTalkie present: {}", names.join(", "))
+    };
+    written.map_err(|e| e.to_string())?;
+    Ok(i32::from(buses.is_empty()))
+}
+
+/// `deckd probe --json`: `{"present": bool, "instances": [{"bus": …}]}`,
+/// one instance per entry HID lists of the deck's vendor collection.
+pub fn probe_json(buses: &[hidapi::BusType]) -> serde_json::Value {
+    let instances: Vec<serde_json::Value> = buses
+        .iter()
+        .map(|bus| serde_json::json!({"bus": bus_name(*bus)}))
+        .collect();
+    serde_json::json!({"present": !buses.is_empty(), "instances": instances})
+}
+
+/// A bus as `deckd probe` names it: `usb`, `bluetooth`, or `unknown` for
+/// anything else hidapi may report.
+pub fn bus_name(bus: hidapi::BusType) -> &'static str {
+    match bus {
+        hidapi::BusType::Usb => "usb",
+        hidapi::BusType::Bluetooth => "bluetooth",
+        _ => "unknown",
+    }
+}
+
 #[derive(Subcommand, Debug)]
 pub enum DeviceCmd {
     /// Queue N spinner title updates in the running service (one per pace tick).
@@ -655,8 +713,12 @@ fn run(cli: Cli) -> Result<i32, String> {
             let socket = paths(data_dir).ok().map(|p| p.socket);
             return Ok(crate::hook::main(&cli, &rest, socket));
         }
-        // The bench tools talk to the deck, not to the data directory.
+        // The bench tools talk to the deck, not to the data directory, and
+        // the probe only looks for it.
         Cmd::Ble { cmd } => return Ok(ble_cmd(cmd)),
+        Cmd::Probe { json } => {
+            return probe_cmd(crate::hid::instance_buses(), json, &mut std::io::stdout().lock())
+        }
         other => other,
     };
     let paths = paths(data_dir)?;
@@ -666,6 +728,7 @@ fn run(cli: Cli) -> Result<i32, String> {
         // socket rather than an error exit; kept so the match is total.
         Cmd::Hook { cli, rest } => Ok(crate::hook::main(&cli, &rest, Some(paths.socket))),
         Cmd::Ble { cmd } => Ok(ble_cmd(cmd)),
+        Cmd::Probe { json } => probe_cmd(crate::hid::instance_buses(), json, &mut std::io::stdout().lock()),
         Cmd::Run {
             foreground,
             demo,
@@ -1105,6 +1168,7 @@ pub fn events_cmd(
         },
         snapshot,
         reconnect: true,
+        content: None,
     };
     let rt = match runtime() {
         Ok(rt) => rt,
@@ -1964,7 +2028,7 @@ fn status_text(s: &Status) -> String {
         Some(l) => {
             let m = &l.metric;
             out.push_str(&format!(
-                "\nstatus.json: {} s ago{}\nlink: {:?}, session {:?}, sid {}, fw {}, boot {}, face {}, {} faces, {} agents\npace {} ms{}, outbox depth {}, reports tx {} rx {}, hello tx {} rx {} misses {}\nlink drops {}, barriers {}, device err {} (size {} parse {} range {} unknown {}), decode err {}, encode err {}\nflood {}/{}, ch2 reports {}",
+                "\nstatus.json: {} s ago{}\nlink: {:?}, session {:?}, sid {}, fw {}, boot {}, face {}, {} faces, {} agents\n{}\npace {} ms{}, outbox depth {}, reports tx {} rx {}, hello tx {} rx {} misses {}\nlink drops {}, barriers {}, device err {} (size {} parse {} range {} unknown {}), decode err {}, encode err {}\nflood {}/{}, ch2 reports {}, status polls {} replies {} timeouts {} errors {}",
                 s.live_age_s.unwrap_or(0),
                 if s.running { "" } else { " (daemon not running: last known)" },
                 l.link,
@@ -1975,6 +2039,7 @@ fn status_text(s: &Status) -> String {
                 l.face.map_or("-".to_string(), |f| f.to_string()),
                 l.faces,
                 l.agents,
+                deck_text(l),
                 m.pace_ms,
                 if m.backoff { " (backoff)" } else { "" },
                 m.outbox_depth,
@@ -1995,11 +2060,36 @@ fn status_text(s: &Status) -> String {
                 m.flood_sent,
                 m.flood_sent + m.flood_remaining,
                 m.ch2_reports,
+                m.status_polls,
+                m.status_replies,
+                m.status_timeouts,
+                m.status_errors,
             ));
         }
         None => out.push_str("\nstatus.json: absent (the daemon has not run here)"),
     }
     out
+}
+
+/// The `deck:` line of `deckd status`: what the linked deck says about
+/// itself on channel 2 and the bus it is on, `-` for what is not known.
+fn deck_text(l: &LiveStatus) -> String {
+    let transport = match l.transport {
+        Some(deck_model::Transport::Usb) => "usb",
+        Some(deck_model::Transport::Bluetooth) => "bluetooth",
+        None => "-",
+    };
+    let charging = match l.charging {
+        Some(true) => "yes",
+        Some(false) => "no",
+        None => "-",
+    };
+    format!(
+        "deck: transport {transport}, battery {}, charging {charging}, board {}",
+        l.battery
+            .map_or("-".to_string(), |percent| format!("{percent}%")),
+        l.board.as_deref().unwrap_or("-"),
+    )
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -2050,12 +2140,16 @@ pub fn launchd_checks() -> Vec<(String, bool, String)> {
                             "launchd deckd".into(),
                             true,
                             format!(
-                                "not loaded, but {} is on disk and names {} — `launchctl \
-                                 bootstrap gui/{} {}` would start it",
+                                "not loaded, but {} is on disk and names {} — `{}` would \
+                                 start it",
                                 plist.display(),
                                 program.display(),
-                                crate::launchd::uid(),
-                                plist.display()
+                                crate::integrations::command_line([
+                                    "launchctl",
+                                    "bootstrap",
+                                    &format!("gui/{}", crate::launchd::uid()),
+                                    &plist.display().to_string(),
+                                ])
                             ),
                         )),
                         Some(why) => checks.push((
@@ -2150,7 +2244,48 @@ pub fn launchd_checks() -> Vec<(String, bool, String)> {
     checks
 }
 
+/// The doctor's `tcp` row: the port file, and whether what answers on that
+/// port is this daemon. An empty port file while the service runs is a
+/// degraded door, unless `[api] tcp = false` switched the door off, when it
+/// is the point.
+fn tcp_check(paths: &Paths, running: bool) -> Result<String, String> {
+    let port = std::fs::read_to_string(&paths.port)
+        .ok()
+        .and_then(|s| s.trim().parse::<u16>().ok());
+    let off = Config::load(&paths.config).is_ok_and(|config| !config.api.tcp);
+    match port {
+        None if off => Ok("off ([api] tcp = false): the socket is the only door".into()),
+        None if !running => Ok("no port file (the daemon is not running)".into()),
+        None => Err(
+            "port file empty while the service runs: the tcp door is degraded (port in use?)"
+                .into(),
+        ),
+        Some(port) => match info_probe(port) {
+            Ok(info) if info_is_ours(&info, &paths.socket) => {
+                Ok(format!("127.0.0.1:{port}/v1/info answers and is ours"))
+            }
+            Ok(_) => Err(format!(
+                "127.0.0.1:{port}/v1/info answers but is not this daemon's (hooks_hijack_risk)"
+            )),
+            Err(why) if !running => Ok(format!("stale port {port} ({why})")),
+            Err(why) => Err(format!("127.0.0.1:{port}: {why}")),
+        },
+    }
+}
+
 fn doctor(paths: &Paths) -> Doctor {
+    let mut checks = setup_checks(paths);
+    checks.push(device_check());
+    checks.extend(launchd_checks());
+    Doctor { checks }
+}
+
+/// The doctor's rows about the data directory and the two doors: `data
+/// dir`, `config.toml`, `state.json`, `service`, `status.json`, `socket`,
+/// `tcp` and `tokens.toml`. Nothing here looks for the deck or asks
+/// launchd; `care.checks` answers with these, then the deck's row by its
+/// own rule, then [`launchd_checks`].
+pub fn setup_checks(paths: &Paths) -> Vec<(String, bool, String)> {
     let mut checks = Vec::new();
     let mut check = |name: &str, result: Result<String, String>| match result {
         Ok(detail) => checks.push((name.to_string(), true, detail)),
@@ -2242,29 +2377,7 @@ fn doctor(paths: &Paths) -> Doctor {
             }
         },
     );
-    check(
-        "tcp",
-        match std::fs::read_to_string(&paths.port)
-            .ok()
-            .and_then(|s| s.trim().parse::<u16>().ok())
-        {
-            None if !running => Ok("no port file (the daemon is not running)".into()),
-            None => Err(
-                "port file empty while the service runs: the tcp door is degraded (port in use?)"
-                    .into(),
-            ),
-            Some(port) => match info_probe(port) {
-                Ok(info) if info_is_ours(&info, &paths.socket) => {
-                    Ok(format!("127.0.0.1:{port}/v1/info answers and is ours"))
-                }
-                Ok(_) => Err(format!(
-                    "127.0.0.1:{port}/v1/info answers but is not this daemon's (hooks_hijack_risk)"
-                )),
-                Err(why) if !running => Ok(format!("stale port {port} ({why})")),
-                Err(why) => Err(format!("127.0.0.1:{port}: {why}")),
-            },
-        },
-    );
+    check("tcp", tcp_check(paths, running));
     check(
         "tokens.toml",
         match std::fs::metadata(&paths.tokens) {
@@ -2287,36 +2400,47 @@ fn doctor(paths: &Paths) -> Doctor {
                     (0o600, Ok(n)) => Ok(format!("mode 0600, {n} token(s)")),
                     (0o600, Err(e)) => Err(e),
                     (mode, _) => Err(format!(
-                        "mode {mode:04o}, expected 0600 (chmod 600 {})",
-                        paths.tokens.display()
+                        "mode {mode:04o}, expected 0600 ({})",
+                        crate::integrations::command_line([
+                            "chmod",
+                            "600",
+                            &paths.tokens.display().to_string(),
+                        ])
                     )),
                 }
             }
         },
     );
-    check(
-        "device",
-        crate::hid::probe(|api| {
-            api.device_list()
-                .filter(|d| d.vendor_id() == crate::hid::VID && d.product_id() == crate::hid::PID)
-                .map(|d| format!("{:?}", d.bus_type()).to_lowercase())
-                .collect::<Vec<_>>()
-        })
-        .map_err(|_| "cannot initialize HID".to_string())
-        .and_then(|found| {
-            if found.is_empty() {
-                Err("OpenWalkieTalkie not connected".into())
-            } else {
-                Ok(format!(
-                    "OpenWalkieTalkie present ({} interfaces: {})",
-                    found.len(),
-                    found.join(", ")
-                ))
-            }
-        }),
-    );
-    checks.extend(launchd_checks());
-    Doctor { checks }
+    checks
+}
+
+/// The doctor's `device` row: whether HID lists the deck, and on which
+/// buses. It enumerates and opens nothing, but a service started with
+/// `--no-device` may not enumerate either, so `care.checks` asks for this
+/// row only of a service that may (O16).
+pub fn device_check() -> (String, bool, String) {
+    let found = crate::hid::probe(|api| {
+        api.device_list()
+            .filter(|d| d.vendor_id() == crate::hid::VID && d.product_id() == crate::hid::PID)
+            .map(|d| format!("{:?}", d.bus_type()).to_lowercase())
+            .collect::<Vec<_>>()
+    })
+    .map_err(|_| "cannot initialize HID".to_string())
+    .and_then(|found| {
+        if found.is_empty() {
+            Err("OpenWalkieTalkie not connected".into())
+        } else {
+            Ok(format!(
+                "OpenWalkieTalkie present ({} interfaces: {})",
+                found.len(),
+                found.join(", ")
+            ))
+        }
+    });
+    match found {
+        Ok(detail) => ("device".into(), true, detail),
+        Err(detail) => ("device".into(), false, detail),
+    }
 }
 
 /// Python's `repr(bytes)`, for the `  > ` lines of the dry run.
@@ -2917,6 +3041,56 @@ mod tests {
         assert!(Cli::try_parse_from(["deckd", "ble"]).is_err());
     }
 
+    /// `deckd probe` (O19): the JSON names one bus per instance HID lists —
+    /// none, one or two — and the exit code says the same as `present`: 0
+    /// when a deck is there, 1 when not, never clap's own 2. A HID that
+    /// cannot start is nothing found. Nothing here enumerates: the lists
+    /// are the probe's input.
+    #[test]
+    fn the_probe_prints_each_instance_and_exits_by_whether_there_is_one() {
+        use hidapi::BusType;
+        use serde_json::{json, Value};
+        assert_eq!(probe_json(&[]), json!({"present": false, "instances": []}));
+        assert_eq!(
+            probe_json(&[BusType::Usb]),
+            json!({"present": true, "instances": [{"bus": "usb"}]})
+        );
+        assert_eq!(
+            probe_json(&[BusType::Bluetooth, BusType::Usb]),
+            json!({"present": true, "instances": [{"bus": "bluetooth"}, {"bus": "usb"}]})
+        );
+        assert_eq!(probe_json(&[BusType::Spi])["instances"][0]["bus"], "unknown");
+        let run = |found, json| {
+            let mut out = Vec::new();
+            let code = probe_cmd(found, json, &mut out).unwrap();
+            (code, String::from_utf8(out).unwrap())
+        };
+        let read = |out: &str| serde_json::from_str::<Value>(out).unwrap();
+        let (code, out) = run(Ok(vec![BusType::Usb, BusType::Bluetooth]), true);
+        assert_eq!(code, 0);
+        assert_eq!(read(&out), probe_json(&[BusType::Usb, BusType::Bluetooth]));
+        let (code, out) = run(Ok(Vec::new()), true);
+        assert_eq!((code, read(&out)), (1, probe_json(&[])));
+        let (code, out) = run(Err(crate::hid::HidError::Init), true);
+        assert_eq!((code, read(&out)), (1, probe_json(&[])));
+        assert_eq!(
+            run(Ok(vec![BusType::Bluetooth]), false),
+            (0, "OpenWalkieTalkie present: bluetooth\n".to_string())
+        );
+        assert_eq!(
+            run(Ok(Vec::new()), false),
+            (1, "no OpenWalkieTalkie found\n".to_string())
+        );
+        assert!(matches!(
+            Cli::try_parse_from(["deckd", "probe", "--json"]).unwrap().cmd,
+            Cmd::Probe { json: true }
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["deckd", "probe"]).unwrap().cmd,
+            Cmd::Probe { json: false }
+        ));
+    }
+
     #[test]
     fn status_and_doctor_work_on_an_empty_data_dir() {
         let dir = std::env::temp_dir().join(format!("deckd-cli-{}", std::process::id()));
@@ -3012,6 +3186,68 @@ mod tests {
         .unwrap_err()
         .contains("params are not JSON"));
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// D3: with `[api] tcp = false` an empty port file is the door switched
+    /// off, not a degraded one, so the doctor (and every check built on its
+    /// rows) raises nothing; with the door on it is still the degrade it
+    /// always was.
+    #[test]
+    fn the_doctor_reads_no_port_as_the_door_switched_off_when_it_is() {
+        let dir = std::env::temp_dir().join(format!("deckd-cli-tcp-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = Paths::from_data_dir(dir.clone(), dir.join("logs"), dir.join("caches"));
+        std::fs::write(&p.port, "").unwrap();
+        let degraded = tcp_check(&p, true).unwrap_err();
+        assert!(degraded.contains("degraded"), "{degraded}");
+        assert!(tcp_check(&p, false).unwrap().contains("not running"));
+        std::fs::write(&p.config, "[api]\ntcp = false\n").unwrap();
+        for running in [true, false] {
+            let off = tcp_check(&p, running).unwrap();
+            assert!(off.starts_with("off ([api] tcp = false)"), "{off}");
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// `deckd status` gives the linked deck's own status a line of its own
+    /// (its bus, charge and board, a dash for what is not known), and says
+    /// how the channel-2 requests behind it fare.
+    #[test]
+    fn the_status_text_names_the_decks_transport_charge_and_board() {
+        let status = |live: LiveStatus| Status {
+            running: true,
+            data_dir: PathBuf::from("/nonexistent/deckd"),
+            state_present: false,
+            faces: 0,
+            card_ids: 0,
+            port: None,
+            live: Some(live),
+            live_age_s: Some(0),
+        };
+        let linked = LiveStatus {
+            transport: Some(deck_model::Transport::Bluetooth),
+            battery: Some(85),
+            charging: Some(false),
+            board: Some("Rev B".into()),
+            metric: crate::metrics::Metric {
+                status_polls: 4,
+                status_replies: 3,
+                status_timeouts: 1,
+                ..Default::default()
+            },
+            ..LiveStatus::default()
+        };
+        let text = status_text(&status(linked));
+        let deck = "\ndeck: transport bluetooth, battery 85%, charging no, board Rev B\n";
+        assert!(text.contains(deck), "{text}");
+        assert!(
+            text.contains("status polls 4 replies 3 timeouts 1 errors 0"),
+            "{text}"
+        );
+        let text = status_text(&status(LiveStatus::default()));
+        let deck = "\ndeck: transport -, battery -, charging -, board -\n";
+        assert!(text.contains(deck), "{text}");
     }
 
     #[test]
@@ -3304,5 +3540,32 @@ mod tests {
         for (name, _, detail) in &checks {
             assert!(!detail.is_empty(), "{name} has no detail");
         }
+    }
+
+    /// D7: the fix a doctor row names is pasted into a terminal as it is
+    /// printed, so the `chmod` for a `tokens.toml` under `Application
+    /// Support`, where the data directory lives, quotes the path.
+    #[cfg(unix)]
+    #[test]
+    fn the_tokens_row_names_a_chmod_that_pastes_as_it_is() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = crate::integrations::testdir::TestDir::new("doctor-chmod");
+        let data = dir.sub("Library/Application Support/OpenWalkieTalkie");
+        let paths = Paths::from_data_dir(data.clone(), data.join("logs"), data.join("caches"));
+        std::fs::write(&paths.tokens, "").unwrap();
+        std::fs::set_permissions(&paths.tokens, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let checks = setup_checks(&paths);
+        let (_, ok, detail) = checks
+            .iter()
+            .find(|(name, _, _)| name == "tokens.toml")
+            .expect("a tokens.toml row");
+        assert!(!ok, "{detail}");
+        assert_eq!(
+            *detail,
+            format!(
+                "mode 0644, expected 0600 (chmod 600 '{}')",
+                paths.tokens.display()
+            )
+        );
     }
 }

@@ -1,0 +1,10 @@
+{
+  "error": {
+    "code": -32013,
+    "message": "degraded",
+    "data": {
+      "reason": "voice_unavailable",
+      "why": "this daemon has no audio engine: `--no-device`, a build without one, or the moment before the engines' first report reaches the core. `voice.engines` answers from that report and never asks the run loop, so there is nothing to wait for here"
+    }
+  }
+}

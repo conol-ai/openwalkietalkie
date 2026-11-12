@@ -1,0 +1,31 @@
+{
+  "active": false,
+  "download": null,
+  "engine": "cloud",
+  "load_error": null,
+  "loaded": false,
+  "loading": false,
+  "model": "kokoro-multi-lang-v1_1",
+  "models": [
+    {
+      "about": "Chinese and English, 103 voices, full precision",
+      "bytes": 364816464,
+      "name": "kokoro-multi-lang-v1_1"
+    },
+    {
+      "about": "the same in 8-bit: less than half the download",
+      "bytes": 147031220,
+      "name": "kokoro-int8-multi-lang-v1_1"
+    }
+  ],
+  "path": "d/caches/tts/kokoro/kokoro-multi-lang-v1_1",
+  "present": false,
+  "speakers": 103,
+  "total": 364816464,
+  "voices": [
+    "af_maple",
+    "zm_010",
+    "bf_vale",
+    "zf_001"
+  ]
+}

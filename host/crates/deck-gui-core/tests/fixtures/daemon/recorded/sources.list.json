@@ -1,0 +1,51 @@
+{
+  "other": 0,
+  "paused": false,
+  "sources": [
+    {
+      "does": null,
+      "enabled": true,
+      "handoff": "terminal",
+      "hooks": 13,
+      "id": "claude",
+      "kind": "tool",
+      "last_event_at": null,
+      "name": "Claude Code",
+      "on_deck": 0,
+      "sessions": 0,
+      "stale": null,
+      "state": null,
+      "unit": "sessions"
+    },
+    {
+      "does": null,
+      "enabled": false,
+      "handoff": null,
+      "hooks": null,
+      "id": "claude_channels",
+      "kind": "channel",
+      "last_event_at": null,
+      "name": "Claude Channels",
+      "on_deck": 0,
+      "sessions": 0,
+      "stale": 0,
+      "state": "off",
+      "unit": "sessions"
+    },
+    {
+      "does": null,
+      "enabled": false,
+      "handoff": "none",
+      "hooks": null,
+      "id": "codex",
+      "kind": "tool",
+      "last_event_at": null,
+      "name": "Codex CLI",
+      "on_deck": 0,
+      "sessions": 0,
+      "stale": null,
+      "state": "off",
+      "unit": "threads"
+    }
+  ]
+}

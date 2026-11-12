@@ -468,6 +468,10 @@ impl Sessions {
         self.entries.contains_key(&id)
     }
 
+    pub fn iter(&self) -> impl Iterator<Item = (&SessionId, &SessionEntry)> {
+        self.entries.iter()
+    }
+
     pub fn iter_mut(&mut self) -> impl Iterator<Item = (&SessionId, &mut SessionEntry)> {
         self.entries.iter_mut()
     }

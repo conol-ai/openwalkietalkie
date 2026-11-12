@@ -1,8 +1,9 @@
 //! The API doors (design §4, contract §3.3): the UDS newline-delimited
 //! JSON-RPC socket and axum on `127.0.0.1:<port>`, one `dispatch`, one
 //! session model. `serve` binds both (each may fail on its own: the UDS
-//! path too long, the port in use) and returns what it bound; `Served::
-//! shutdown` stops the accept loops and every connection.
+//! path too long, the port in use; the TCP one is skipped altogether with
+//! `[api] tcp = false`) and returns what it bound; `Served::shutdown`
+//! stops the accept loops and every connection.
 pub mod conn;
 pub mod dispatch;
 pub mod hooks;
@@ -52,7 +53,8 @@ impl Api {
 
 /// What `serve` bound.
 pub struct Served {
-    /// The TCP port, `None` while degraded (`port_in_use`).
+    /// The TCP port, `None` while degraded (`port_in_use`) and with no TCP
+    /// door at all (`[api] tcp = false`).
     pub port: Option<u16>,
     /// The UDS door is up.
     pub uds: bool,
@@ -121,9 +123,16 @@ pub async fn serve(api: Arc<Api>) -> Served {
     };
     // The TCP door binds, or degrades and keeps retrying on its own task
     // (§3.3 D8): either way `service.bound` reaches the core and the port
-    // file tells the truth.
-    let (port, tcp) = http::tcp_door(api.clone(), stop_rx.clone()).await;
-    tasks.push(tcp);
+    // file tells the truth. Switched off, there is no door to bind, and
+    // `service.bound` says that too.
+    let port = if api.config.load().api.tcp {
+        let (port, tcp) = http::tcp_door(api.clone(), stop_rx.clone()).await;
+        tasks.push(tcp);
+        port
+    } else {
+        http::tcp_off(&api).await;
+        None
+    };
     Served {
         port,
         uds,

@@ -1,723 +1,1575 @@
-//! The **Service** screen (§8.2's Service row): whether the daemon is up and
-//! the three buttons that change that, the port with its degraded strip and
-//! "change port + re-install hooks", the allowed origins, a `curl` example,
-//! and the live log tail with a level filter and a content-redaction switch.
+//! The Service page (board Service): the background service — whether it
+//! runs, its restart and its stop, and whether it starts at login — the two
+//! updates, the local API's switch, a check of the whole setup with the
+//! support file beside it, and the line that leads to everything the app
+//! has put on this Mac. Its sub-pages are their own files:
+//! [`crate::footprint`] and [`crate::local_api`]; the update flows are
+//! [`crate::updates`].
 //!
-//! Three of its buttons call methods **this daemon may not have**.
-//! `config.set`, `service.restart` and `service.stop` are being added in
-//! parallel (contract §3), so every one of them is written against the name
-//! the contract gives it and every one of them checks for `-32601` on the
-//! way back: a screen that reported "stopped" on a call the daemon never
-//! answered would be claiming something that did not happen. What a missing
-//! method gets instead is [`present::missing_method_line`] — which method,
-//! and that nothing was done.
+//! **Every fact on it is read, and from where it lives.** The service's
+//! answers (`service.info`, `config.get`, `care.checks`, `care.footprint`,
+//! `sources.list`, `integrations.status`) are kept in this page's pane,
+//! because nothing folds a call's reply into the mirror; whether the deck is
+//! linked and whether Bluetooth is allowed are the mirror's; the launch
+//! agent is `SMAppService`'s, read when the window is made and again
+//! whenever the page asks, a connection comes or goes, and every few
+//! seconds, and never guessed: what the Deck page reads to call a service
+//! "not installed" is always what macOS said.
 //!
-//! **Start** is the odd one out and is not a daemon method at all: a service
-//! that is not running cannot be asked to start itself, so it is
-//! `launchctl kickstart -k`, the same call the strip over every screen
-//! makes, run off the UI thread on the bridge.
+//! A service older than this app answers `-32601` for the care methods; the
+//! sections that need them say "This needs a newer background service."
+//! instead of drawing anything they could not read.
+//!
+//! The words are pure functions of those facts ([`check_rows`],
+//! [`login_row`], [`api_line`], …), so a test reads every row in every state
+//! without a window.
 use crate::app;
-use crate::present::{self, Launchd};
-use crate::shell::Shell;
+use crate::deck::no_service_title;
+use crate::footprint::{self, UNINSTALL_DIALOG};
+use crate::local_api::{close, Shown, TOKEN_DIALOG};
+use crate::login_item;
+use crate::present::{self, LoginItem};
+use crate::shell::{Screen, Sheet, Shell};
+use crate::shots::Scene;
 use crate::style::{palette, Palette};
-use crate::ui::{self, ic, Btn, Row, Severity, Switch, Type as _};
-use deck_gui_core::admin::{method_missing, ApiConfig, Info, Tail};
+use crate::ui::{self, ic, Btn, Row, Switch, Type as _};
+use crate::updater::MacOsUpdater;
+use crate::updates::{self, FirmwarePane, FirmwareStep, FIRMWARE_DIALOG};
+use deck_client::ClientError;
+use deck_gui_core::admin::{method_missing, port_clash, ApiConfig, Info, Report, Status, TokenRow};
+use deck_gui_core::care::{Check, Checks, Footprint, Source, SourceState, Sources};
+use deck_gui_core::i18n::Language;
 use deck_gui_core::{ConfigValue, UiAction};
-use gpui::{
-    div, prelude::*, px, AnyElement, Context, Div, Entity, Hsla, ScrollHandle, SharedString,
-    Stateful, Subscription, Window,
-};
+use deck_model::{DeviceState, Permission, ServiceState, Tone};
+use gpui::{div, prelude::*, px, AnyElement, App, Context, Div, Entity, Subscription, Window};
 use gpui_component::input::{InputEvent, InputState};
 use gpui_component::{h_flex, v_flex};
+use serde_json::Value;
+use std::path::{Path, PathBuf};
 
-/// How many lines of log the screen asks for. `log.tail` clamps its own
-/// maximum; this is what fits in a pane without making the window a log
-/// viewer, which is what Reveal in Finder is for.
-pub const TAIL_LINES: u32 = 200;
+/// Between the page's blocks, and between its two columns.
+const GAP: f32 = 20.;
+/// Between the sections of the left column.
+const COLUMN_GAP: f32 = 16.;
 
-/// The Service screen's own view state.
-pub struct ServicePane {
-    info: Option<Info>,
-    config: ApiConfig,
-    tail: Tail,
-    /// The level filter, `None` for everything.
-    level: Option<String>,
-    /// §8.2's content-redaction switch. On by default: a window that is
-    /// about to be screen-shared is exactly the one nobody thought to turn
-    /// it on in.
-    redact: bool,
-    launchd: Option<Launchd>,
-    /// This window's own login item (§10.2). Read, never written, from
-    /// here: changing it is the Welcome screen's explicit click.
-    login: Option<crate::present::LoginItem>,
-    /// The methods this daemon answered `-32601` for. Kept so the buttons
-    /// can say so *before* they are pressed a second time.
-    missing: Vec<String>,
-    port: Entity<InputState>,
-    /// The log viewer's scroll, pinned to the newest line when a tail lands.
-    log_scroll: ScrollHandle,
-    asked: bool,
-    busy: bool,
+/// How often, in seconds, the launch agent is read again: the owner can
+/// change it in System Settings while the window is open.
+const AGENT_EVERY: u64 = 5;
+/// How often the footprint is weighed again while its page is open.
+const FOOTPRINT_EVERY: u64 = 5;
+
+/// The id of the Integrations page's plan dialog, after which a removal may
+/// have changed what Footprint lists.
+const PLAN_DIALOG: &str = "plan";
+
+/// The harness's scenes that are this page's.
+const SERVICE_SCENES: [Scene; 6] = [
+    Scene::Service,
+    Scene::Footprint,
+    Scene::ServiceStop,
+    Scene::ServiceFirmware,
+    Scene::LocalApi,
+    Scene::FootprintUninstall,
+];
+
+// ---- the replies the page keeps ----------------------------------------------
+
+/// What a read of one of the care methods has come back with.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum Answer<T> {
+    /// Nothing yet: not asked, or asked and not answered.
+    #[default]
+    Unread,
+    /// The service has no such method (`-32601`): it is older than this app.
+    Missing,
+    /// What it said.
+    Got(T),
 }
 
-impl ServicePane {
-    pub fn new(window: &mut Window, cx: &mut Context<Shell>) -> (ServicePane, Vec<Subscription>) {
-        let port = cx.new(|cx| InputState::new(window, cx).placeholder("47201"));
-        let enter = cx.subscribe_in(&port, window, |this, _, event, window, cx| {
-            if matches!(event, InputEvent::PressEnter { .. }) {
-                this.change_port(window, cx);
-            }
-        });
-        (
-            ServicePane {
-                info: None,
-                config: ApiConfig::default(),
-                tail: Tail::default(),
-                level: None,
-                redact: true,
-                launchd: None,
-                login: None,
-                missing: Vec::new(),
-                port,
-                log_scroll: ScrollHandle::new(),
-                asked: false,
-                busy: false,
-            },
-            vec![enter],
-        )
+impl<T> Answer<T> {
+    pub fn got(&self) -> Option<&T> {
+        match self {
+            Answer::Got(answer) => Some(answer),
+            Answer::Unread | Answer::Missing => None,
+        }
     }
 
-    /// What `service.info` last answered, for the Welcome screen's step 1
-    /// and its doctor summary. One call, read in two places, so the two
-    /// cannot disagree about whether the daemon is up.
-    pub(crate) fn info(&self) -> Option<&Info> {
-        self.info.as_ref()
+    pub fn missing(&self) -> bool {
+        matches!(self, Answer::Missing)
     }
 
-    /// …and what `launchctl print` last said about the agent.
-    pub(crate) fn launchd(&self) -> Option<&Launchd> {
-        self.launchd.as_ref()
-    }
-
-    /// `[hooks] enabled` from the one `config.get` this screen already
-    /// makes, for the tray's **Pause hooks** tick. `None` until it has
-    /// answered: a tick that guessed would re-enable hooks the operator had
-    /// paused by hand.
-    pub(crate) fn hooks_enabled(&self) -> Option<bool> {
-        self.config.hooks_enabled
-    }
-
-    /// Install a `config.get` answered for somebody else — the tray reads
-    /// `[hooks] enabled` on every connection, whether or not this screen has
-    /// ever been opened. One answer, one place it lands.
-    pub(crate) fn set_config(&mut self, config: ApiConfig) {
-        self.config = config;
-    }
-
-    fn is_missing(&self, method: &str) -> bool {
-        self.missing.iter().any(|m| m == method)
-    }
-
-    fn note_missing(&mut self, method: &str) {
-        if !self.is_missing(method) {
-            self.missing.push(method.to_string());
+    /// Take a reply: the answer, parsed; a service without the method, as
+    /// such; and from a call that failed or got no answer, nothing, so the
+    /// last answer stands.
+    pub fn take(&mut self, result: Result<Value, ClientError>, parse: impl FnOnce(&Value) -> T) {
+        match result {
+            Ok(value) => *self = Answer::Got(parse(&value)),
+            Err(error) if method_missing(&error) => *self = Answer::Missing,
+            Err(_) => {}
         }
     }
 }
 
+/// What the page reads of `config.get`: the local API's `[api]` table and
+/// the switch of its TCP door, and whether the service logs what is said
+/// in sessions.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Api {
+    pub config: ApiConfig,
+    /// `api.tcp`. `None` from a service that has no such switch, whose door
+    /// is always open: the page then offers none.
+    pub tcp: Option<bool>,
+    /// `privacy.log_content`: the service keeps the text of prompts,
+    /// replies and transcripts in its logs, and so in the support file
+    /// ([`support_note`]). Off unless the owner turned it on; `None` from a
+    /// reply that does not say.
+    pub log_content: Option<bool>,
+}
+
+impl Api {
+    pub fn parse(result: &Value) -> Api {
+        Api {
+            config: ApiConfig::parse(result),
+            tcp: result
+                .get("api")
+                .and_then(|api| api.get("tcp"))
+                .and_then(Value::as_bool),
+            log_content: result
+                .get("privacy")
+                .and_then(|privacy| privacy.get("log_content"))
+                .and_then(Value::as_bool),
+        }
+    }
+}
+
+// ---- what the page says, as pure functions ------------------------------------
+
+/// How one setup check came out.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Verdict {
+    /// Fine: a check mark.
+    Ok,
+    /// Something to do: the warning mark, and the remedy under it when there
+    /// is one to name.
+    Problem,
+    /// Neither: the page could not tell (an older service, a read that has
+    /// not come back, a copy of the app with nothing to compare).
+    NotChecked,
+}
+
+/// One row of "Check my setup".
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CheckRow {
+    pub verdict: Verdict,
+    pub title: String,
+    pub sub: Option<String>,
+}
+
+/// The Codex client, as far as the page can tell.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CodexCheck {
+    /// The owner switched it off: the row is not drawn.
+    Off,
+    Reachable,
+    NotRunning,
+    NotChecked,
+}
+
+/// What "Check my setup" is drawn from.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Setup {
+    /// A deck is linked.
+    pub linked: bool,
+    /// The service runs from this copy of the app; `None` when it cannot be
+    /// told.
+    pub this_copy: Option<bool>,
+    /// The Claude Code plugin's installer status, once read.
+    pub claude: Option<Status>,
+    /// Claude sessions still on a helper from before the last update.
+    pub stale_helpers: u32,
+    pub codex: CodexCheck,
+    /// No launch agent is left from before the rename; `None` when not
+    /// checked.
+    pub legacy_agent: Option<bool>,
+    /// Bluetooth, as macOS has it for the service.
+    pub bluetooth: Permission,
+}
+
+/// The rows of "Check my setup", in the board's order: the deck, the copy
+/// of the app the service runs from, the Claude Code plugin, the old helper
+/// (only while a session uses one), Codex (only while its switch is on), a
+/// leftover launch agent, Bluetooth.
+pub fn check_rows(setup: &Setup, language: Language) -> Vec<CheckRow> {
+    let row = |verdict, title: &str, sub: Option<&str>| CheckRow {
+        verdict,
+        title: title.to_string(),
+        sub: sub.map(str::to_string),
+    };
+    let mut rows = vec![if setup.linked {
+        row(Verdict::Ok, language.text("The deck is linked"), None)
+    } else {
+        row(
+            Verdict::Problem,
+            language.text("The deck is not linked"),
+            None,
+        )
+    }];
+    rows.push(match setup.this_copy {
+        Some(true) => row(
+            Verdict::Ok,
+            language.text("The service runs from this copy of the app"),
+            None,
+        ),
+        Some(false) => row(
+            Verdict::Problem,
+            language.text("The service runs from another copy of the app"),
+            Some(language.text("Quit the other copy, then restart the service.")),
+        ),
+        None => row(
+            Verdict::NotChecked,
+            language.text("The service runs from this copy of the app"),
+            None,
+        ),
+    });
+    rows.push(match &setup.claude {
+        Some(Status::Installed) => row(
+            Verdict::Ok,
+            language.text("Claude Code plugin is current"),
+            None,
+        ),
+        Some(Status::Absent) => row(
+            Verdict::Problem,
+            language.text("Claude Code plugin is not set up"),
+            None,
+        ),
+        Some(_) => row(
+            Verdict::Problem,
+            language.text("Claude Code plugin needs repair"),
+            None,
+        ),
+        None => row(
+            Verdict::NotChecked,
+            language.text("Claude Code plugin is current"),
+            None,
+        ),
+    });
+    match setup.stale_helpers {
+        0 => {}
+        1 => rows.push(row(
+            Verdict::Problem,
+            language.text("1 Claude session uses an old helper"),
+            Some(language.text("Restart that session.")),
+        )),
+        n => rows.push(CheckRow {
+            verdict: Verdict::Problem,
+            title: language.format("{0} Claude sessions use an old helper", &[&n.to_string()]),
+            sub: Some(language.text("Restart those sessions.").to_string()),
+        }),
+    }
+    match setup.codex {
+        CodexCheck::Off => {}
+        CodexCheck::Reachable => {
+            rows.push(row(Verdict::Ok, language.text("Codex is reachable"), None))
+        }
+        CodexCheck::NotRunning => {
+            rows.push(row(
+                Verdict::Problem,
+                language.text("Codex is not running"),
+                None,
+            ));
+        }
+        CodexCheck::NotChecked => {
+            rows.push(row(
+                Verdict::NotChecked,
+                language.text("Codex is reachable"),
+                None,
+            ));
+        }
+    }
+    rows.push(match setup.legacy_agent {
+        Some(true) => row(Verdict::Ok, language.text("No leftover launch agent"), None),
+        Some(false) => row(
+            Verdict::Problem,
+            language.text("An old launch agent is still installed"),
+            Some(language.text("Remove it with Uninstall, or by hand in ~/Library/LaunchAgents.")),
+        ),
+        None => row(
+            Verdict::NotChecked,
+            language.text("No leftover launch agent"),
+            None,
+        ),
+    });
+    rows.push(match setup.bluetooth {
+        Permission::Granted => row(Verdict::Ok, language.text("Bluetooth is allowed"), None),
+        Permission::Denied => row(
+            Verdict::Problem,
+            language.text("Bluetooth is not allowed"),
+            None,
+        ),
+        // Not asked yet, or not known: no verdict either way.
+        Permission::NotDetermined | Permission::Unknown => row(
+            Verdict::NotChecked,
+            language.text("Bluetooth is allowed"),
+            None,
+        ),
+    });
+    rows
+}
+
+/// Whether the service runs from this copy of the app: its executable is
+/// the `deckd` beside this app's own. `None` when either is not known.
+pub fn this_copy(executable: Option<&Path>, own: Option<&Path>) -> Option<bool> {
+    Some(executable? == own?)
+}
+
+/// Codex, from the service's own check of its client, else from the Codex
+/// source's state; the row is left out while the client is switched off.
+pub fn codex_check(checks: Option<&Checks>, sources: Option<&Sources>) -> CodexCheck {
+    if let Some(check) = checks.and_then(|checks| checks.get(Check::CODEX_DAEMON)) {
+        return match check.ok {
+            Some(true) => CodexCheck::Reachable,
+            Some(false) => CodexCheck::NotRunning,
+            // Not checked: the client is switched off.
+            None => CodexCheck::Off,
+        };
+    }
+    match sources.and_then(|sources| sources.get(Source::CODEX)) {
+        Some(codex) if !codex.enabled => CodexCheck::Off,
+        Some(codex) => match codex.state {
+            Some(SourceState::Connected) => CodexCheck::Reachable,
+            Some(SourceState::Waiting | SourceState::Off) => CodexCheck::NotRunning,
+            _ => CodexCheck::NotChecked,
+        },
+        None => CodexCheck::NotChecked,
+    }
+}
+
+/// Whether no launch agent is left from before the rename, by the service's
+/// check; `None` when it has not said.
+pub fn legacy_agent(checks: Option<&Checks>) -> Option<bool> {
+    checks?.get(Check::LEGACY_LAUNCH_AGENT)?.ok
+}
+
+/// Claude sessions on an old helper: the Claude Channels source's count,
+/// else what the Integrations page has read (`known`).
+pub fn stale_helpers(sources: Option<&Sources>, known: u32) -> u32 {
+    sources
+        .and_then(|sources| sources.get(Source::CLAUDE_CHANNELS))
+        .and_then(|channels| channels.stale)
+        .unwrap_or(known)
+}
+
+/// The Start at login row.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LoginRow {
+    /// The switch is on: macOS has the service's launch agent registered,
+    /// or waiting for the owner's approval.
+    pub on: bool,
+    /// The switch can be moved: only in the installed app, and turned on
+    /// only once a deck has been seen on this Mac.
+    pub enabled: bool,
+    /// The line under it.
+    pub sub: Option<&'static str>,
+    /// Offer **Open Settings** (Login Items): macOS waits for the owner.
+    pub settings: bool,
+}
+
+/// The Start at login row for the launch agent's status, in the installed
+/// app or not, with a deck seen on this Mac or not (`deck_seen`).
+///
+/// Turning it on registers the background service, which owner decision 7
+/// keeps until a deck has been seen: until then a switch that is off cannot
+/// be moved, and says to link the deck. One that is on can always be turned
+/// off: that adds nothing.
+pub fn login_row(
+    agent: LoginItem,
+    installed: bool,
+    deck_seen: bool,
+    language: Language,
+) -> LoginRow {
+    let on = agent.registered();
+    let waiting = installed && agent == LoginItem::RequiresApproval;
+    let unseen = installed && !on && !deck_seen;
+    let sub = if !installed {
+        Some(language.text("Only in the installed app."))
+    } else if waiting {
+        Some(language.text("Waiting for your approval in System Settings > General > Login Items."))
+    } else if unseen {
+        Some(language.text("Link the deck first."))
+    } else {
+        None
+    };
+    LoginRow {
+        on,
+        enabled: installed && !unseen,
+        sub,
+        settings: waiting,
+    }
+}
+
+/// What the Local API row says while another program holds its port
+/// (`service.degraded`, one of the two port words
+/// [`deck_gui_core::admin::port_clash`] names): what that means, in place
+/// of the line that would call the door open. `None` while nothing clashes,
+/// and while the door is switched off (`api.tcp` false): nothing is bound,
+/// so nothing can clash.
+pub fn api_clash(api: Option<&Api>, service: &ServiceState, language: Language) -> Option<String> {
+    if api.is_some_and(|api| api.tcp == Some(false)) {
+        return None;
+    }
+    service
+        .degraded
+        .as_deref()
+        .filter(|reason| port_clash(reason))?;
+    present::degraded_banner_localized(service, language)
+}
+
+/// The Local API row's line: off, or on and on which port (the one the
+/// service holds, else the one configured).
+pub fn api_line(api: &Api, held: Option<u16>, language: Language) -> String {
+    if api.tcp == Some(false) {
+        return language
+            .text("Off. Nothing shipped with the deck uses them.")
+            .to_string();
+    }
+    let port = held
+        .or(api.config.port)
+        .map_or_else(|| "\u{2014}".to_string(), |port| port.to_string());
+    language.format(
+        "On. Port {0}. Local tools can use it with a token.",
+        &[&port],
+    )
+}
+
+/// The line under **Export Support File**: where the file goes, and whether
+/// the text said in sessions is in it. The service's redaction (`deckd`
+/// diagnostics) drops the text of prompts, replies and transcripts while
+/// content logging is off, its default, and keeps it while it is on
+/// (`privacy.log_content`, [`Api::log_content`]); the line says which, and
+/// the default until `config.get` has said. Agent names and working
+/// directories are the service's state, not session text, and stay.
+pub fn support_note(api: Option<&Api>, language: Language) -> &'static str {
+    if api.and_then(|api| api.log_content) == Some(true) {
+        language.text("The file is saved to the Desktop. Session text is kept in it.")
+    } else {
+        language.text("The file is saved to the Desktop. Session text is left out.")
+    }
+}
+
+/// The firmware the deck runs, or ran when it was last linked, as the
+/// version alone (`0.13.0`).
+pub fn deck_version(device: &DeviceState) -> Option<String> {
+    let fw = device
+        .fw
+        .as_deref()
+        .or_else(|| device.last.as_ref()?.fw.as_deref())?;
+    Some(present::fw_text(fw, None)).filter(|version| !version.is_empty())
+}
+
+/// The Updates rows' titles: this app's version, and the deck's firmware
+/// (a dash while no deck has said which it runs).
+pub fn update_titles(deck: Option<&str>, language: Language) -> (String, String) {
+    (
+        language.format("OpenWalkieTalkie {0}", &[env!("CARGO_PKG_VERSION")]),
+        language.format("Deck firmware {0}", &[deck.unwrap_or("\u{2014}")]),
+    )
+}
+
+// ---- the pane ------------------------------------------------------------------
+
+/// The page's own state, which the shell owns: the service's answers, the
+/// launch agent's status, the firmware, the token fields, and the two flows
+/// that outlive a frame (an export, an uninstall).
+pub struct ServicePane {
+    /// The service's launch agent, as `SMAppService` last answered.
+    agent: LoginItem,
+    /// The `deckd` beside this app's own executable, as the file system
+    /// resolves it: the service this copy would run.
+    own_deckd: Option<PathBuf>,
+    /// The app's own updates (Sparkle, in a signed release).
+    pub(crate) updater: MacOsUpdater,
+    pub(crate) firmware: FirmwarePane,
+    /// `service.info`, and the executable it names (resolved).
+    pub(crate) info: Option<Info>,
+    executable: Option<PathBuf>,
+    /// `config.get`'s local API.
+    pub(crate) api: Option<Api>,
+    checks: Answer<Checks>,
+    pub(crate) footprint: Answer<Footprint>,
+    pub(crate) footprint_pending: bool,
+    /// Footprint is to be weighed again (a removal may have happened).
+    footprint_stale: bool,
+    sources: Option<Sources>,
+    /// The Claude Code plugin's installer status, once read.
+    claude: Option<Status>,
+    pub(crate) tokens: Vec<TokenRow>,
+    pub(crate) tokens_read: bool,
+    /// The one-time plaintext of a token just made (see `local_api`).
+    pub(crate) shown: Option<Shown>,
+    /// The Local API page's port field, and the new token's name.
+    pub(crate) port: Entity<InputState>,
+    pub(crate) token_name: Entity<InputState>,
+    /// The scopes the new token gets.
+    pub(crate) scopes: Vec<String>,
+    /// The page asked the service for what it shows.
+    asked: bool,
+    exporting: bool,
+    pub(crate) uninstalling: bool,
+    /// How the last Uninstall went, for its dialog.
+    pub(crate) uninstalled: Option<Result<(), String>>,
+    /// The connection as the last event left it.
+    was_connected: bool,
+    /// A harness scene drew this pane: everything in it is the scene's, the
+    /// page reads nothing, and it is drawn as the installed, signed app
+    /// shows it.
+    staged: bool,
+}
+
+impl ServicePane {
+    /// The pane, and the subscriptions its two text fields need kept alive:
+    /// Return in either is its button.
+    pub(crate) fn new(
+        window: &mut Window,
+        cx: &mut Context<Shell>,
+    ) -> (ServicePane, Vec<Subscription>) {
+        let port = cx.new(|cx| InputState::new(window, cx).placeholder("47201"));
+        let token_name = cx.new(|cx| InputState::new(window, cx));
+        let change = cx.subscribe_in(&port, window, |this, _, event, window, cx| {
+            if matches!(event, InputEvent::PressEnter { .. }) {
+                this.change_api_port(window, cx);
+            }
+        });
+        let create = cx.subscribe_in(&token_name, window, |this, _, event, window, cx| {
+            if matches!(event, InputEvent::PressEnter { .. }) {
+                this.create_api_token(window, cx);
+            }
+        });
+        let pane = ServicePane {
+            agent: login_item::agent_status(),
+            own_deckd: app::deckd_path().map(resolved),
+            // Sparkle only in the installed app run for real: it reaches the
+            // network and writes the app's defaults as it starts.
+            updater: MacOsUpdater::for_run(app::launch().installed()),
+            firmware: FirmwarePane::default(),
+            info: None,
+            executable: None,
+            api: None,
+            checks: Answer::Unread,
+            footprint: Answer::Unread,
+            footprint_pending: false,
+            footprint_stale: false,
+            sources: None,
+            claude: None,
+            tokens: Vec::new(),
+            tokens_read: false,
+            shown: None,
+            port,
+            token_name,
+            // `observe` is the least a token can usefully have, and the one
+            // scope that gives a script nothing it could break.
+            scopes: vec!["observe".to_string()],
+            asked: false,
+            exporting: false,
+            uninstalling: false,
+            uninstalled: None,
+            was_connected: false,
+            staged: false,
+        };
+        (pane, vec![change, create])
+    }
+
+    /// A deck firmware newer than the deck's, by its version, once the
+    /// service has found one.
+    pub(crate) fn firmware_available(&self) -> Option<String> {
+        updates::available(&self.firmware.status)
+    }
+
+    /// The background service's launch agent, as `SMAppService` last
+    /// reported it: read when the pane was made and again whenever the page
+    /// asks, never assumed.
+    pub(crate) fn agent(&self) -> LoginItem {
+        self.agent
+    }
+
+    /// A harness scene drew the pane.
+    pub(crate) fn staged(&self) -> bool {
+        self.staged
+    }
+
+    /// Put away what a scene staged: every answer goes, the agent and this
+    /// copy's own service are read again, and the page reads for itself.
+    fn unstage(&mut self) {
+        if !self.staged {
+            return;
+        }
+        self.staged = false;
+        self.agent = login_item::agent_status();
+        self.own_deckd = app::deckd_path().map(resolved);
+        self.firmware = FirmwarePane::default();
+        self.info = None;
+        self.executable = None;
+        self.api = None;
+        self.checks = Answer::Unread;
+        self.footprint = Answer::Unread;
+        self.sources = None;
+        self.claude = None;
+        self.tokens.clear();
+        self.tokens_read = false;
+        close(&mut self.shown);
+        self.uninstalled = None;
+        self.asked = false;
+    }
+}
+
+/// `path` as the file system resolves it, or as it is when it cannot.
+fn resolved(path: PathBuf) -> PathBuf {
+    std::fs::canonicalize(&path).unwrap_or(path)
+}
+
+/// The executable `service.info` names, as the file system resolves it.
+pub fn executable(info: &Value) -> Option<PathBuf> {
+    info.get("executable")
+        .and_then(Value::as_str)
+        .filter(|path| !path.is_empty())
+        .map(|path| resolved(PathBuf::from(path)))
+}
+
+// ---- the scenes' fixtures -------------------------------------------------------
+
+/// The replies the scenes are drawn from: `deck-gui-core`'s fixtures, read by
+/// the parsers the page reads the service with.
+const CARE_CHECKS: &str =
+    include_str!("../../deck-gui-core/tests/fixtures/daemon/care_checks.json");
+const CARE_FOOTPRINT: &str =
+    include_str!("../../deck-gui-core/tests/fixtures/daemon/care_footprint.json");
+const SOURCES_LIST: &str =
+    include_str!("../../deck-gui-core/tests/fixtures/daemon/sources_list.json");
+const CONFIG_GET: &str =
+    include_str!("../../deck-gui-core/tests/fixtures/daemon/config_get_sources.json");
+
+/// The home the footprint fixture's paths are under.
+const FIXTURE_HOME: &str = "/Users/you";
+
+/// The installed app's own service, as the scenes' `service.info` names it.
+const BOARD_DECKD: &str = "/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd";
+
+/// A fixture, parsed; nothing when it is not JSON.
+fn fixture(text: &str) -> Value {
+    serde_json::from_str(text).unwrap_or_default()
+}
+
+/// The footprint the boards draw: the fixture's, under this Mac's home so
+/// its paths read as the page prints a real one, with the settings and the
+/// logs at the board's sizes (the fixture weighs them in binary units).
+pub(crate) fn board_footprint() -> Footprint {
+    let mut footprint = Footprint::parse(&fixture(CARE_FOOTPRINT));
+    let home = std::env::var("HOME").unwrap_or_default();
+    for item in &mut footprint.items {
+        if let Some(rest) = item
+            .path
+            .as_deref()
+            .and_then(|path| path.strip_prefix(FIXTURE_HOME))
+        {
+            item.path = Some(format!("{home}{rest}"));
+        }
+        match item.id.as_str() {
+            "data" => item.bytes = Some(180_000),
+            "logs" => item.bytes = Some(77_000_000),
+            _ => {}
+        }
+    }
+    footprint
+}
+
+/// A release the service found newer than the deck's, with the deck on the
+/// cable: the firmware dialog's scene.
+fn board_firmware() -> Value {
+    serde_json::json!({
+        "phase": "ready",
+        "progress": 0,
+        "message": "Firmware release checked. Installation requires your confirmation.",
+        "device": {
+            "serial": "5E2A91C04B7D",
+            "board": "hw-b",
+            "version": "0.13.0",
+            "recovery": false,
+            "recovery_protocol": 2,
+            "maintenance": false
+        },
+        "release": {
+            "firmware": {
+                "version": "0.14.0",
+                "protocol": 2,
+                "variants": {
+                    "hw-a": {"name": "OpenWalkieTalkie-0.14.0-hw-a.bin"},
+                    "hw-b": {"name": "OpenWalkieTalkie-0.14.0-hw-b.bin"}
+                }
+            }
+        },
+        "error": null,
+        "available": true,
+        "bootloader_warning": false
+    })
+}
+
+/// A minute on this Mac's clock, written as the service writes a moment
+/// (RFC 3339, UTC), so the token lines of the scene, which the page prints
+/// on this Mac's clock, read the same in every time zone.
+fn board_stamp(year: i32, month: u32, day: u32, hour: u32, minute: u32) -> String {
+    present::local_ts(year, month, day, hour, minute)
+        .unwrap_or_default()
+        .to_string()
+}
+
+/// Two tokens, as `token.list` answers: a connected app's and a script's.
+fn board_tokens() -> Vec<TokenRow> {
+    TokenRow::list(&serde_json::json!([
+        {
+            "name": "conol",
+            "scopes": ["observe", "agent", "voice"],
+            "created": board_stamp(2026, 11, 2, 9, 12),
+            "expires": null,
+            "embedded_in": [],
+            "client": "Conol"
+        },
+        {
+            "name": "backup-script",
+            "scopes": ["observe"],
+            "created": board_stamp(2026, 11, 10, 16, 40),
+            "expires": board_stamp(2027, 2, 10, 16, 40),
+            "embedded_in": []
+        }
+    ]))
+}
+
+impl ServicePane {
+    /// The boards' service: running from the installed app, at login,
+    /// 0.13.0, the local API off (on for the Local API scene), every check
+    /// passed but the old helper, and the footprint of nine items.
+    fn stage_board(&mut self, api_on: bool) {
+        self.staged = true;
+        self.asked = true;
+        self.agent = LoginItem::Enabled;
+        self.own_deckd = Some(PathBuf::from(BOARD_DECKD));
+        self.info = Some(Info::parse(
+            &serde_json::json!({"daemon": "0.13.0", "port": 47201}),
+        ));
+        self.executable = Some(PathBuf::from(BOARD_DECKD));
+        let mut config = fixture(CONFIG_GET);
+        config["api"]["tcp"] = api_on.into();
+        self.api = Some(Api::parse(&config));
+        self.checks = Answer::Got(Checks::parse(&fixture(CARE_CHECKS)));
+        self.footprint = Answer::Got(board_footprint());
+        self.sources = Some(Sources::parse(&fixture(SOURCES_LIST)));
+        let (reports, _) = Report::list(&serde_json::json!({
+            "targets": [{"target": "claude", "status": "installed"}]
+        }));
+        self.claude = reports.into_iter().next().map(|report| report.status);
+        self.tokens = board_tokens();
+        self.tokens_read = true;
+    }
+}
+
+// ---- the page ------------------------------------------------------------------
+
 impl Shell {
-    /// Ask for everything this screen draws: the service, the config, the
-    /// log and launchd's view of the agent.
+    /// Ask the service for what the page draws, unless the page has it
+    /// already; `force` asks anyway (a reconnect, **Run Again**). The launch
+    /// agent is read every time: it is this Mac's, and it costs nothing.
     pub(crate) fn refresh_service(
         &mut self,
         force: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.service.busy || (self.service.asked && !force) {
+        if self.service.staged {
             return;
         }
-        self.service.busy = true;
+        self.service.agent = login_item::agent_status();
+        if !self.state.connected() {
+            return;
+        }
+        if force || !self.service.asked {
+            self.service.asked = true;
+            self.read_service_setup(window, cx);
+            self.read_service_config(window, cx);
+            self.read_footprint(window, cx);
+        }
+        if self.screen == Screen::LocalApi && (force || !self.service.tokens_read) {
+            self.read_api_tokens(window, cx);
+        }
+    }
+
+    /// What "Check my setup" is read from: the service, its checks, the
+    /// sources and the installer.
+    fn read_service_setup(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.ask(
             UiAction::ServiceInfo,
             window,
             cx,
             |this, result, window, cx| {
-                this.service.busy = false;
                 if let Ok(value) = result {
-                    let info = Info::parse(&value);
-                    // The field's hint is the port the daemon holds now.
-                    if let Some(port) = info.port {
-                        this.service.port.update(cx, |input, cx| {
-                            input.set_placeholder(port.to_string(), window, cx);
-                        });
-                    }
-                    this.service.info = Some(info);
-                    // Only an answer counts as having asked, so opening the
-                    // screen again after a failed read asks again.
-                    this.service.asked = true;
+                    this.service.info = Some(Info::parse(&value));
+                    this.service.executable = executable(&value);
+                    // The port field's hint is the port the service holds.
+                    this.localize_service(window, cx);
                 }
             },
         );
-        self.ask(UiAction::ConfigGet, window, cx, |this, result, _w, _cx| {
+        self.ask(UiAction::CareChecks, window, cx, |this, result, _, _| {
+            this.service.checks.take(result, Checks::parse);
+        });
+        self.ask(UiAction::SourcesList, window, cx, |this, result, _, _| {
             if let Ok(value) = result {
-                this.service.config = ApiConfig::parse(&value);
+                this.service.sources = Some(Sources::parse(&value));
             }
         });
-        self.tail_log(window, cx);
-        self.read_launchd(window, cx);
-        // A status query, not a registration: reading `SMAppService` changes
-        // nothing (contract §1 M2's own measurement starts from that read).
-        self.service.login = Some(crate::login_item::status());
-    }
-
-    /// `log.tail{lines, level}`. The level goes to the daemon as well as to
-    /// the local filter: asking for 200 `ERROR` lines and getting 200 is
-    /// worth more than filtering 200 mixed ones down to three.
-    fn tail_log(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let level = self.service.level.clone();
+        // `detect: false`: the installer reads its files and runs no CLI.
         self.ask(
-            UiAction::LogTail {
-                lines: TAIL_LINES,
-                level,
-            },
+            UiAction::IntegrationsStatus { detect: false },
             window,
             cx,
-            |this, result, _window, _cx| {
+            |this, result, _, _| {
                 if let Ok(value) = result {
-                    this.service.tail = Tail::parse(&value);
-                    this.service.log_scroll.scroll_to_bottom();
+                    let (reports, _) = Report::list(&value);
+                    this.service.claude = reports
+                        .into_iter()
+                        .find(|report| report.target == "claude")
+                        .map(|report| report.status);
                 }
             },
         );
     }
 
-    /// What launchd says about the daemon's agent. It is a subprocess, so it
-    /// goes where all I/O goes: the bridge's runtime, never the UI thread.
-    fn read_launchd(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let done = app::launchd_print(&cx.global::<app::Tokio>().0);
-        cx.spawn_in(window, async move |this, cx| {
-            let Ok(output) = done.recv().await else {
-                return;
-            };
-            this.update_in(cx, |this, _window, cx| {
-                this.service.launchd = Some(present::launchd_state(&output));
-                cx.notify();
-            })
-            .ok();
-        })
-        .detach();
-    }
-
-    // ---- the screen ----------------------------------------------------
-
-    pub(crate) fn render_service(&self, dim: bool, cx: &Context<Self>) -> Stateful<Div> {
-        let p = *palette(cx);
-        let connected = self.state.connected();
-        let info = self.service.info.clone().unwrap_or_default();
-        let mut actions: Vec<AnyElement> = Vec::new();
-        if !connected {
-            actions.push(
-                Btn::new("service-start", self.tr("Start"))
-                    .solid()
-                    .icon(ic::PLAY)
-                    .on_click(cx.listener(|this, _, window, cx| this.start_service(window, cx)))
-                    .into_any_element(),
-            );
-        }
-        actions.push(
-            Btn::new("service-restart", self.tr("Restart"))
-                .icon(ic::REFRESH)
-                .disabled(dim)
-                .on_click(cx.listener(|this, _, window, cx| {
-                    this.lifecycle(UiAction::ServiceRestart, window, cx);
-                }))
-                .into_any_element(),
-        );
-        actions.push(
-            Btn::new("service-stop", self.tr("Stop"))
-                .danger_quiet()
-                .icon(ic::STOP)
-                .disabled(dim)
-                .on_click(cx.listener(|this, _, window, cx| {
-                    this.lifecycle(UiAction::ServiceStop, window, cx);
-                }))
-                .into_any_element(),
-        );
-        let subtitle = v_flex()
-            .gap(px(2.))
-            .child(present::service_headline_localized(connected, &info, self.language()))
-            .children(info.uds.as_ref().map(|uds| {
-                div()
-                    .mono()
-                    .ts(11.5, 16.)
-                    .text_color(p.faint)
-                    .child(uds.clone())
-            }));
-        ui::page(
-            "service",
-            &self.page_scroll,
-            self.content_width,
-            ui::PAGE_MAX,
-            v_flex()
-                .child(ui::page_header(
-                    self.tr("Service"),
-                    Some(subtitle.into_any_element()),
-                    actions,
-                    &p,
-                ))
-                .child(self.render_language(cx))
-                .children(
-                    present::degraded_banner_localized(&self.state.mirror().service, self.language())
-                        .map(|line| self.render_degraded(line, dim, cx)),
-                )
-                .children(self.service.missing.iter().map(|method| {
-                    // The methods behind Restart, Stop and the port may not
-                    // be in this daemon's table yet, and a button that has
-                    // already been refused once should say so before it is
-                    // pressed again.
-                    div().mt(px(12.)).child(ui::strip(
-                        Severity::Warning,
-                        None,
-                        Some(
-                            div()
-                                .child(present::missing_method_line_localized(method, self.language()))
-                                .into_any_element(),
-                        ),
-                        Vec::new(),
-                        &p,
-                    ))
-                }))
-                .child(self.render_updates(dim, cx))
-                .child(ui::section(self.tr("About"), v_flex().gap(px(12.))
-                    .child(ui::brand_lockup_localized(&p, self.language()))
-                    .child(div().text_color(p.muted).child(self.fmt("Version {0}", &[env!("CARGO_PKG_VERSION")])))
-                    .child(Btn::new("about-website", "openwalkietalkie.org")
-                        .icon(ic::EXTERNAL)
-                        .on_click(|_, _, cx| cx.open_url("https://openwalkietalkie.org/"))), &p))
-                .child(self.render_lifecycle(&p))
-                .child(self.render_door(dim, cx))
-                .child(self.render_log(dim, cx)),
-        )
-    }
-
-    fn render_language(&self, cx: &Context<Self>) -> Div {
-        let p = *palette(cx);
-        let selected = self.language();
-        let choices = deck_gui_core::i18n::Language::ALL.into_iter().map(|language| {
-            ui::chip(
-                SharedString::from(format!("language-{}", language.code())),
-                language.name(),
-                language == selected,
-                &p,
-            )
-            .when(!self.state.connected(), |chip| chip.opacity(0.45))
-            .on_click(cx.listener(move |this, _, window, cx| {
-                if this.state.connected() {
-                    this.act(UiAction::DeviceSet {
-                        key: deck_model::SetKey::Language,
-                        value: language as u16,
-                    }, window, cx);
+    /// `config.get`, for the local API's switch and port.
+    fn read_service_config(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.ask(
+            UiAction::ConfigGet,
+            window,
+            cx,
+            |this, result, window, cx| {
+                if let Ok(value) = result {
+                    this.service.api = Some(Api::parse(&value));
+                    this.localize_service(window, cx);
                 }
-            }))
-            .into_any_element()
-        }).collect::<Vec<_>>();
-        ui::section(self.tr("Language"), v_flex().gap(px(10.))
-            .child(h_flex().gap(px(8.)).flex_wrap().children(choices))
-            .child(ui::hint(self.tr("The app and your deck use the same language. This setting is remembered when the deck is disconnected."), &p)), &p)
+            },
+        );
     }
 
-    /// §8.2's degraded strip. Its repair is the port field below, so the
-    /// button puts the caret there rather than changing anything itself.
-    fn render_degraded(&self, line: String, dim: bool, cx: &Context<Self>) -> Div {
-        let p = *palette(cx);
-        div().mt(px(20.)).child(ui::strip(
-            Severity::Warning,
-            Some(self.tr("The service is degraded").into()),
-            Some(div().child(line).into_any_element()),
-            vec![Btn::new("degraded-pick-port", self.tr("Pick a new port"))
-                .small()
-                .disabled(dim)
-                .on_click(cx.listener(|this, _, window, cx| {
-                    this.service
-                        .port
-                        .update(cx, |input, cx| input.focus(window, cx));
-                }))
-                .into_any_element()],
-            &p,
-        ))
+    /// Service, Footprint or Local API, whichever is open. `dim` is set
+    /// while the service is not there: what needs it cannot be pressed.
+    pub(crate) fn render_service(&self, dim: bool, cx: &Context<Self>) -> AnyElement {
+        match self.screen {
+            Screen::Footprint => self.render_footprint(dim, cx),
+            Screen::LocalApi => self.render_local_api(dim, cx),
+            _ => self.render_service_page(dim, cx),
+        }
     }
 
-    /// What launchd thinks of the daemon, and the window's own login item
-    /// beside it — two different objects, said as two rows.
-    fn render_lifecycle(&self, p: &Palette) -> Div {
-        let launchd = self.service.launchd.clone().unwrap_or(Launchd::Unknown);
-        let running = matches!(launchd, Launchd::Running(_));
-        let login = self
+    /// The page's dialog `id` and its width: the firmware's review, the
+    /// token shown once, how Uninstall went.
+    pub(crate) fn service_dialog(
+        &self,
+        id: &'static str,
+        cx: &Context<Self>,
+    ) -> Option<(AnyElement, f32)> {
+        match id {
+            FIRMWARE_DIALOG => Some(self.render_firmware_dialog(cx)),
+            TOKEN_DIALOG => self.render_shown_token(cx),
+            UNINSTALL_DIALOG => self.render_uninstalled(cx),
+            _ => None,
+        }
+    }
+
+    /// A dialog went. The token's takes its plaintext with it; the
+    /// installer's plan dialog (the Integrations page's) may have removed
+    /// something Footprint lists, so it is weighed again.
+    pub(crate) fn service_dialog_closed(&mut self, id: &'static str, _cx: &mut Context<Self>) {
+        match id {
+            TOKEN_DIALOG => {
+                close(&mut self.service.shown);
+            }
+            UNINSTALL_DIALOG => self.service.uninstalled = None,
+            PLAN_DIALOG => self.service.footprint_stale = true,
+            _ => {}
+        }
+    }
+
+    /// The text fields' hints: the port the service holds, and the token's.
+    pub(crate) fn localize_service(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let port = self
             .service
-            .login
-            .unwrap_or(present::LoginItem::Unknown(-1));
-        ui::section(
-            self.tr("Lifecycle"),
-            ui::card(
-                vec![
-                    Row::new()
-                        .tile(ui::tile(
-                            ic::SERVER,
-                            if running { p.success_muted } else { p.muted },
-                            p,
-                        ))
-                        .title(self.tr("launchd agent"))
-                        .meta_el(
-                            v_flex()
-                                .gap(px(2.))
-                                .child(present::launchd_line_localized(&launchd, self.language()))
-                                .child(div().text_color(p.faint).child(self.tr(present::LOGIN_ITEM_NOTE))),
-                        )
-                        .into_any_element(),
-                    Row::new()
-                        .tile(ui::tile(ic::MONITOR, p.muted, p))
-                        .title(self.tr("This window at login"))
-                        .meta(present::login_item_line_localized(login, self.language()))
-                        .into_any_element(),
-                ],
-                p,
-            ),
+            .info
+            .as_ref()
+            .and_then(|info| info.port)
+            .or_else(|| self.service.api.as_ref().and_then(|api| api.config.port))
+            .map_or_else(|| "47201".to_string(), |port| port.to_string());
+        self.service
+            .port
+            .update(cx, |input, cx| input.set_placeholder(port, window, cx));
+        let name = self.tr("A name for the new token…");
+        self.service
+            .token_name
+            .update(cx, |input, cx| input.set_placeholder(name, window, cx));
+    }
+
+    /// A connection that came or went: what was read stays until the page
+    /// asks again, and the launch agent is read again (the Deck page says
+    /// "not installed" by it).
+    pub(crate) fn on_service_event(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {
+        let connected = self.state.connected();
+        if connected == self.service.was_connected {
+            return;
+        }
+        self.service.was_connected = connected;
+        if !connected {
+            self.service.asked = false;
+            self.service.tokens_read = false;
+        }
+        if !self.service.staged {
+            self.service.agent = login_item::agent_status();
+        }
+    }
+
+    /// Once a second: the launch agent every few seconds, and the footprint
+    /// while its page is open or after a removal.
+    pub(crate) fn tick_service(&mut self, beat: u64, window: &mut Window, cx: &mut Context<Self>) {
+        if self.service.staged {
+            return;
+        }
+        if beat.is_multiple_of(AGENT_EVERY) {
+            self.service.agent = login_item::agent_status();
+        }
+        let weigh = self.screen == Screen::Footprint && beat.is_multiple_of(FOOTPRINT_EVERY);
+        if self.service.footprint_stale || weigh {
+            self.service.footprint_stale = false;
+            self.read_footprint(window, cx);
+        }
+    }
+
+    /// The page's scenes, drawn from fixtures as the installed app would
+    /// show them, with the question or the dialog each state scene is about
+    /// up. Any other scene finds the pane as this run would have it.
+    pub(crate) fn stage_service(
+        &mut self,
+        scene: Scene,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        self.service.unstage();
+        if !SERVICE_SCENES.contains(&scene) {
+            return false;
+        }
+        self.service.stage_board(scene == Scene::LocalApi);
+        if scene == Scene::ServiceFirmware {
+            self.service.firmware.status = board_firmware();
+        }
+        self.go(scene.screen(), window, cx);
+        match scene {
+            Scene::ServiceStop => self.ask_stop_service(window, cx),
+            Scene::ServiceFirmware => self.review_firmware(window, cx),
+            Scene::FootprintUninstall => self.ask_uninstall_app(window, cx),
+            _ => {}
+        }
+        true
+    }
+
+    /// Whether this run is the installed app, as the page draws it: a
+    /// harness scene draws the installed app.
+    pub(crate) fn service_installed(&self) -> bool {
+        self.service.staged || app::launch().installed()
+    }
+
+    // ---- the Service page ----------------------------------------------------
+
+    /// Two columns — the service, its updates and the local API; the check
+    /// of the setup — then the footprint's line.
+    fn render_service_page(&self, dim: bool, cx: &Context<Self>) -> AnyElement {
+        let p = *palette(cx);
+        let header = ui::Header::new(
+            self.tr(Screen::Service.label()),
+            self.tr("The background service, updates, and what this app has added to your Mac."),
+        );
+        let left = v_flex()
+            .flex_1()
+            .min_w_0()
+            .gap(px(COLUMN_GAP))
+            .child(ui::section(
+                self.tr("Background service"),
+                self.service_background_card(&p, cx),
+                &p,
+            ))
+            .child(ui::section(
+                self.tr("Updates"),
+                self.service_updates_card(dim, &p, cx),
+                &p,
+            ))
+            .child(ui::section(
+                self.tr("Local API"),
+                self.service_api_card(dim, &p, cx),
+                &p,
+            ));
+        // The check's card takes the column's height when the left one is
+        // the taller.
+        let right = v_flex()
+            .flex_1()
+            .min_w_0()
+            .gap(px(8.))
+            .child(ui::label(self.tr("Check my setup"), &p))
+            .child(self.service_setup_card(dim, &p, cx).flex_1());
+        let columns = div()
+            .flex()
+            .items_stretch()
+            .w_full()
+            .gap(px(GAP))
+            .child(left)
+            .child(right);
+        let body = v_flex()
+            .gap(px(GAP))
+            .child(header)
+            .child(columns)
+            .child(ui::section(
+                self.tr("Footprint"),
+                self.service_footprint_card(&p, cx),
+                &p,
+            ));
+        ui::page("service", &self.page_scroll, self.content_width, body).into_any_element()
+    }
+
+    /// Whether the service runs, with **Restart** and **Stop…**; or why it
+    /// does not, in the Deck page's words and with its buttons (not
+    /// running: **Start**, **Open Log**; never set up: **Set Up…**; held by
+    /// macOS: **Open Settings**); and Start at login.
+    fn service_background_card(&self, p: &Palette, cx: &Context<Self>) -> Div {
+        let state = if self.state.connected() {
+            Row::new()
+                .title(self.tr("The service is running"))
+                .sub(self.tr("It keeps the deck linked."))
+                .right(
+                    Btn::new("service-restart", self.tr("Restart")).on_click(cx.listener(
+                        |this, _, window, cx| {
+                            this.service_lifecycle(UiAction::ServiceRestart, window, cx)
+                        },
+                    )),
+                )
+                .right(Btn::new("service-stop", self.tr("Stop…")).quiet().on_click(
+                    cx.listener(|this, _, window, cx| this.ask_stop_service(window, cx)),
+                ))
+        } else {
+            let why = self.service_absence();
+            self.no_service_buttons(why, "service-absent", true, cx)
+                .into_iter()
+                .fold(
+                    Row::new().title(no_service_title(why, self.language())),
+                    Row::right,
+                )
+        };
+        let login = login_row(
+            self.service.agent,
+            self.service_installed(),
+            self.prefs(cx).deck_seen(),
+            self.language(),
+        );
+        let switch = Switch::new("service-login", login.on)
+            .disabled(!login.enabled)
+            .on_toggle(cx.listener(|this, on: &bool, window, cx| {
+                this.set_start_at_login(*on, window, cx);
+            }));
+        let login = Row::new()
+            .title(self.tr("Start at login"))
+            .when_some(login.sub, |row, sub| row.sub(sub))
+            .when(login.settings, |row| {
+                row.right(
+                    Btn::new("service-login-settings", self.tr("Open Settings"))
+                        .on_click(|_, _, cx: &mut App| cx.open_url(present::LOGIN_ITEMS_SETTINGS)),
+                )
+            })
+            .right(switch);
+        ui::card(vec![state.into_any_element(), login.into_any_element()], p)
+    }
+
+    /// This app's version with **Check**, and the deck's firmware with
+    /// **Check**, or **Review…** once there is something to review.
+    fn service_updates_card(&self, dim: bool, p: &Palette, cx: &Context<Self>) -> Div {
+        let (app, deck) = update_titles(
+            deck_version(&self.state.mirror().device).as_deref(),
+            self.language(),
+        );
+        // Sparkle updates a signed release; any other build says why not.
+        let signed = self.service.staged || self.service.updater.uses_signed_updates();
+        let check_app = Btn::new("service-app-check", self.tr("Check"))
+            .disabled(!signed)
+            .when(!signed, |button| {
+                button.tooltip(self.tr("automatic updates are unavailable in this build"))
+            })
+            .on_click(cx.listener(|this, _, window, cx| this.check_app_update(window, cx)));
+        let firmware = &self.service.firmware;
+        let review = match updates::firmware_step(&firmware.status) {
+            FirmwareStep::Check => Btn::new("service-firmware", self.tr("Check"))
+                .disabled(dim || updates::busy(&firmware.status))
+                .on_click(
+                    cx.listener(|this, _, window, cx| this.refresh_firmware(true, window, cx)),
+                ),
+            FirmwareStep::Review => Btn::new("service-firmware", self.tr("Review…"))
+                .on_click(cx.listener(|this, _, window, cx| this.review_firmware(window, cx))),
+        };
+        ui::card(
+            vec![
+                Row::new()
+                    .title(app)
+                    .sub(self.tr("The app and the service update together."))
+                    .right(check_app)
+                    .into_any_element(),
+                Row::new()
+                    .title(deck)
+                    .sub(self.tr("By cable."))
+                    .right(review)
+                    .into_any_element(),
+            ],
             p,
         )
     }
 
-    /// `service.stop` / `service.restart`, honestly.
-    fn lifecycle(&mut self, action: UiAction, window: &mut Window, cx: &mut Context<Self>) {
-        let (method, what) = match action {
-            UiAction::ServiceStop => ("service.stop", self.tr("Stop")),
-            _ => ("service.restart", self.tr("Restart")),
+    /// The local API: on or off, and its switch where the service has one;
+    /// **Details** while it is on. While another program holds its port, a
+    /// second row says so in place of the line that would call it open: the
+    /// local API is the one thing that clash closes ([`api_clash`]).
+    fn service_api_card(&self, dim: bool, p: &Palette, cx: &Context<Self>) -> Div {
+        let clash = api_clash(
+            self.service.api.as_ref(),
+            &self.state.mirror().service,
+            self.language(),
+        );
+        let mut row = Row::new().title(self.tr("HTTP port and tokens"));
+        if let Some(api) = &self.service.api {
+            let held = self.service.info.as_ref().and_then(|info| info.port);
+            if clash.is_none() {
+                row = row.sub(api_line(api, held, self.language()));
+            }
+            if api.tcp != Some(false) {
+                row = row.right(
+                    Btn::new("service-api-details", self.tr("Details")).on_click(cx.listener(
+                        |this, _, window, cx| {
+                            this.go(Screen::LocalApi, window, cx);
+                        },
+                    )),
+                );
+            }
+            if let Some(on) = api.tcp {
+                row = row.right(Switch::new("service-api", on).disabled(dim).on_toggle(
+                    cx.listener(|this, on: &bool, window, cx| this.set_local_api(*on, window, cx)),
+                ));
+            }
+        }
+        let mut rows = vec![row.into_any_element()];
+        if let Some(clash) = clash {
+            rows.push(
+                Row::new()
+                    .lead(ui::bare(ui::icon(ic::DANGER, 17., p.warn)))
+                    .title(clash)
+                    .into_any_element(),
+            );
+        }
+        ui::card(rows, p)
+    }
+
+    /// What "Check my setup" is drawn from, as the page has it now.
+    fn service_setup(&self) -> Setup {
+        let checks = self.service.checks.got();
+        let sources = self.service.sources.as_ref();
+        Setup {
+            linked: self.linked(),
+            this_copy: this_copy(
+                self.service.executable.as_deref(),
+                self.service.own_deckd.as_deref(),
+            ),
+            claude: self
+                .service
+                .claude
+                .clone()
+                .or_else(|| self.integrations.claude_status()),
+            stale_helpers: stale_helpers(sources, self.integrations.stale_helpers()),
+            codex: codex_check(checks, sources),
+            legacy_agent: legacy_agent(checks),
+            bluetooth: self.state.mirror().voice.permissions.bluetooth,
+        }
+    }
+
+    /// The checks, **Run Again** and **Export Support File**, and where the
+    /// file goes. A service without `care.checks` gets the one line instead.
+    fn service_setup_card(&self, dim: bool, p: &Palette, cx: &Context<Self>) -> Div {
+        if self.service.checks.missing() {
+            return ui::card(
+                vec![newer_service(self.language(), p).into_any_element()],
+                p,
+            );
+        }
+        let mut rows: Vec<AnyElement> = check_rows(&self.service_setup(), self.language())
+            .into_iter()
+            .map(|row| self.service_check_row(row, p).into_any_element())
+            .collect();
+        let buttons = h_flex()
+            .gap(px(8.))
+            .px(px(16.))
+            .py(px(8.))
+            .child(
+                Btn::new("service-run-again", self.tr("Run Again"))
+                    .icon(ic::REFRESH)
+                    .disabled(dim)
+                    .on_click(
+                        cx.listener(|this, _, window, cx| this.run_service_checks(window, cx)),
+                    ),
+            )
+            .child(
+                Btn::new("service-export", self.tr("Export Support File"))
+                    .quiet()
+                    .disabled(dim || self.service.exporting)
+                    .on_click(
+                        cx.listener(|this, _, window, cx| this.export_support_file(window, cx)),
+                    ),
+            );
+        // Whether the service's own redaction leaves the text said in
+        // sessions out of the file, as `config.get` says it is set.
+        let note = div().px(px(16.)).pb(px(12.)).child(ui::hint(
+            support_note(self.service.api.as_ref(), self.language()),
+            p,
+        ));
+        rows.push(v_flex().child(buttons).child(note).into_any_element());
+        ui::card(rows, p)
+    }
+
+    /// One check: its mark and its words, the remedy under a problem, and
+    /// "Not checked" beside what could not be told.
+    fn service_check_row(&self, row: CheckRow, p: &Palette) -> Row {
+        let mark = |path: &'static str, color| ui::bare(ui::icon(path, 17., color));
+        match row.verdict {
+            Verdict::Ok => Row::new()
+                .lead(mark(ic::CHECK_CIRCLE, p.good))
+                .title(row.title),
+            Verdict::Problem => Row::new()
+                .lead(mark(ic::DANGER, p.warn))
+                .title(row.title)
+                .when_some(row.sub, |row, sub| row.sub(sub)),
+            Verdict::NotChecked => Row::new()
+                .lead(ui::bare(div()))
+                .title(row.title)
+                .right(ui::status(self.tr("Not checked"), Tone::Gray, p)),
+        }
+    }
+
+    /// What the app has added: how many things and what they weigh, and
+    /// **Show All**.
+    fn service_footprint_card(&self, p: &Palette, cx: &Context<Self>) -> Div {
+        let sub = match &self.service.footprint {
+            Answer::Got(footprint) => Some(footprint::summary(footprint, self.language())),
+            Answer::Missing => Some(
+                self.tr("This needs a newer background service.")
+                    .to_string(),
+            ),
+            Answer::Unread => None,
         };
+        let row = Row::new()
+            .title(self.tr("What this app has added to your Mac"))
+            .when_some(sub, |row, sub| row.sub(sub))
+            .right(
+                Btn::new("service-footprint", self.tr("Show All"))
+                    .on_click(cx.listener(|this, _, window, cx| this.show_footprint(window, cx))),
+            );
+        ui::card(vec![row.into_any_element()], p)
+    }
+
+    // ---- what the controls do --------------------------------------------------
+
+    /// **Stop…**: the question first, then `service.stop`.
+    pub(crate) fn ask_stop_service(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let sheet = Sheet {
+            title: self.tr("Stop the background service?").into(),
+            body: self
+                .tr("The deck stops working until you start it again.")
+                .into(),
+            confirm: self.tr("Stop").into(),
+            danger: true,
+        };
+        self.ask_first(sheet, window, cx, |this, window, cx| {
+            this.service_lifecycle(UiAction::ServiceStop, window, cx);
+        });
+    }
+
+    /// `service.restart` or `service.stop`, honestly: the service answers
+    /// first and goes afterwards, so a reply is the request taken, and the
+    /// socket closing is what says it went (the frame shows it).
+    pub(crate) fn service_lifecycle(
+        &mut self,
+        action: UiAction,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let stop = matches!(action, UiAction::ServiceStop);
         self.ask(action, window, cx, move |this, result, window, cx| {
+            let what = if stop {
+                this.tr("Stop")
+            } else {
+                this.tr("Restart")
+            };
             match result {
-                // §3: the daemon answers *first* and exits afterwards, so a
-                // reply here means the request was accepted, not that the
-                // process has gone. The socket dropping is what says that,
-                // and the mirror already reports it.
-                Ok(_) => this.toast(this.fmt("{0} accepted.", &[(what)]), window, cx),
+                Ok(_) => this.toast(this.fmt("{0} accepted.", &[what]), window, cx),
                 Err(e) if method_missing(&e) => {
-                    this.service.note_missing(method);
-                    this.toast(present::missing_method_line_localized(method, this.language()), window, cx);
+                    this.toast(
+                        this.tr("This needs a newer background service."),
+                        window,
+                        cx,
+                    );
                 }
-                Err(e) => this.toast(this.fmt("{0} failed: {1}", &[(what), &(e).to_string()]), window, cx),
+                Err(e) => this.toast(
+                    this.fmt("{0} failed: {1}", &[what, &e.to_string()]),
+                    window,
+                    cx,
+                ),
             }
         });
     }
 
-    /// The port, the origins and the `curl` example (§4.1, §8.2).
-    fn render_door(&self, dim: bool, cx: &Context<Self>) -> Div {
-        let p = *palette(cx);
-        let info = self.service.info.clone().unwrap_or_default();
-        let curl = present::curl_example(info.port.or(self.service.config.port));
-        ui::section(
-            self.tr("The HTTP door"),
-            ui::card(
-                vec![
-                    Row::new()
-                        .tile(ui::tile(ic::GLOBAL, p.muted, &p))
-                        .title(self.tr("Port"))
-                        .meta(present::port_line_localized(&info, &self.service.config, self.language()))
-                        .trailing(
-                            div()
-                                .w(px(96.))
-                                .child(ui::field(&self.service.port, &p).disabled(dim).mono()),
-                        )
-                        .trailing(
-                            Btn::new("port-change", self.tr("Change port"))
-                                .outlined()
-                                .disabled(dim)
-                                .tooltip(self.tr("Sets the port and re-installs Claude's hooks to match"))
-                                .on_click(cx.listener(|this, _, window, cx| {
-                                    this.change_port(window, cx);
-                                })),
-                        )
-                        .detail(ui::hint(
-                            self.tr("Changing the port rewrites the URL Claude's http hooks POST to, so \
-                             the hooks are re-installed in the same breath \u{2014} a port change \
-                             without it leaves every hook pointed at the old one."),
-                            &p,
-                        ))
-                        .into_any_element(),
-                    Row::new()
-                        .tile(ui::tile(ic::CHECK_CIRCLE, p.muted, &p))
-                        .title(self.tr("Allowed origins"))
-                        .meta(present::origins_line_localized(&self.service.config.allowed_origins, self.language()))
-                        .into_any_element(),
-                    Row::new()
-                        .tile(ui::tile(ic::TERMINAL, p.muted, &p))
-                        .title(self.tr("Try it"))
-                        .meta(
-                            "The socket is not HTTP, so curl --unix-socket cannot speak to it \
-                             \u{2014} that door is deckd ctl.",
-                        )
-                        .detail(ui::code_block_localized("curl", curl, true, &p, self.language()))
-                        .into_any_element(),
-                ],
-                &p,
-            ),
-            &p,
-        )
-    }
-
-    /// §8.2's "change port + re-install hooks": one without the other leaves
-    /// every installed Claude hook POSTing to a port the daemon no longer
-    /// holds, so the repair follows the write and is not a second button.
-    fn change_port(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let typed = self.service.port.read(cx).value().trim().to_string();
-        if typed.is_empty() {
-            self.service
-                .port
-                .update(cx, |input, cx| input.focus(window, cx));
-            self.toast(self.tr("Type the new port first."), window, cx);
+    /// Start at login: on registers the launch agent; off asks first, then
+    /// unregisters it (the service stops with it). Either way the switch
+    /// shows the status macOS reports afterwards, never the call's return.
+    fn set_start_at_login(&mut self, on: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if on {
+            let answer = login_item::register_agent();
+            self.service_agent_changed(answer, window, cx);
             return;
         }
-        let Ok(port) = typed.parse::<u16>() else {
-            self.toast(self.tr("A port is a number from 1 to 65535."), window, cx);
-            return;
+        let sheet = Sheet {
+            title: self.tr("Turn off Start at login?").into(),
+            body: self
+                .tr("The service stops now and does not start when you log in.")
+                .into(),
+            confirm: self.tr("Turn Off").into(),
+            danger: true,
         };
-        if port < 1024 {
-            self.toast(
-                self.tr("Ports below 1024 need root, and this daemon is a per-user agent."),
+        self.ask_first(sheet, window, cx, |this, window, cx| {
+            let answer = login_item::unregister_agent();
+            this.service_agent_changed(answer, window, cx);
+        });
+    }
+
+    /// The launch agent's status after a change, or the reason it did not
+    /// change and the status it kept.
+    fn service_agent_changed(
+        &mut self,
+        answer: Result<LoginItem, String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match answer {
+            Ok(status) => self.service.agent = status,
+            Err(why) => {
+                self.service.agent = login_item::agent_status();
+                self.toast(why, window, cx);
+            }
+        }
+        cx.notify();
+    }
+
+    /// The local API's switch: the question (the service restarts to open or
+    /// close its door), then `api.tcp` and the restart.
+    fn set_local_api(&mut self, on: bool, window: &mut Window, cx: &mut Context<Self>) {
+        let (title, confirm) = if on {
+            (self.tr("Turn the local API on?"), self.tr("Turn On"))
+        } else {
+            (self.tr("Turn the local API off?"), self.tr("Turn Off"))
+        };
+        let sheet = Sheet {
+            title: title.into(),
+            body: self.tr("The service restarts.").into(),
+            confirm: confirm.into(),
+            danger: !on,
+        };
+        self.ask_first(sheet, window, cx, move |this, window, cx| {
+            this.ask(
+                UiAction::ConfigSet {
+                    key: "api.tcp".into(),
+                    value: ConfigValue::Bool(on),
+                },
                 window,
                 cx,
+                |this, result, window, cx| match result {
+                    Ok(_) => this.service_lifecycle(UiAction::ServiceRestart, window, cx),
+                    Err(e) if method_missing(&e) => {
+                        this.toast(
+                            this.tr("This needs a newer background service."),
+                            window,
+                            cx,
+                        );
+                    }
+                    Err(e) => this.toast(
+                        this.fmt("{0} failed: {1}", &[this.tr("Local API"), &e.to_string()]),
+                        window,
+                        cx,
+                    ),
+                },
             );
+        });
+    }
+
+    /// **Run Again**: every check read afresh.
+    fn run_service_checks(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.service.staged {
             return;
         }
-        self.ask(
-            UiAction::ConfigSet {
-                key: "api.port".into(),
-                value: ConfigValue::Int(i64::from(port)),
-            },
-            window,
-            cx,
-            move |this, result, window, cx| match result {
-                Ok(_) => {
-                    this.toast(
-                        this.fmt("Port set to {0}. Re-installing the Claude hooks…", &[&(port).to_string()]),
-                        window,
-                        cx,
+        self.service.agent = login_item::agent_status();
+        self.read_service_setup(window, cx);
+    }
+
+    /// **Export Support File**: the service writes it to the Desktop,
+    /// redacted as its diagnostics redact (the page's note says whether the
+    /// text said in sessions is in it, [`support_note`]), and says where.
+    fn export_support_file(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.service.exporting {
+            return;
+        }
+        self.service.exporting = true;
+        let action = UiAction::CareSupportFile {
+            to: "desktop".into(),
+        };
+        self.ask(action, window, cx, |this, result, window, cx| {
+            this.service.exporting = false;
+            match result {
+                Ok(reply) => {
+                    let path = reply
+                        .get("path")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default();
+                    let name = Path::new(path).file_name().map_or_else(
+                        || path.to_string(),
+                        |name| name.to_string_lossy().into_owned(),
                     );
-                    // §4.1: `config.set{api.port}` → `integrations.repair
-                    // claude`. The repair is not a dry run: the operator
-                    // asked for the port change, and a hook left on the old
-                    // port is the failure this pair exists to avoid.
-                    this.ask(
-                        UiAction::Integrations {
-                            verb: deck_gui_core::Verb::Repair,
-                            target: "claude".into(),
-                            trust: false,
-                            dry_run: false,
-                        },
-                        window,
-                        cx,
-                        |this, result, window, cx| match result {
-                            Ok(_) => {
-                                this.toast(this.tr("Claude's hooks now point at the new port."), window, cx);
-                                this.refresh_service(true, window, cx);
-                            }
-                            Err(e) => this.toast(
-                                this.fmt("The port changed but the hooks did not: {0}. Repair Claude on the Integrations screen before the next session.", &[&(e).to_string()]),
-                                window,
-                                cx,
-                            ),
-                        },
-                    );
+                    this.toast(this.fmt("Saved to the Desktop: {0}", &[&name]), window, cx);
                 }
                 Err(e) if method_missing(&e) => {
-                    this.service.note_missing("config.set");
-                    this.toast(present::missing_method_line_localized("config.set", this.language()), window, cx);
+                    this.toast(
+                        this.tr("This needs a newer background service."),
+                        window,
+                        cx,
+                    );
                 }
-                Err(e) => this.toast(this.fmt("Could not set the port: {0}", &[&(e).to_string()]), window, cx),
-            },
-        );
-    }
-
-    // ---- the log tail --------------------------------------------------
-
-    fn render_log(&self, dim: bool, cx: &Context<Self>) -> Div {
-        let p = *palette(cx);
-        let redact = self.service.redact;
-        let home = std::env::var("HOME").ok();
-        let lines: Vec<Div> = self
-            .service
-            .tail
-            .lines
-            .iter()
-            .filter(|line| present::log_level_matches(line, self.service.level.as_deref()))
-            .map(|line| {
-                let text = if redact {
-                    present::redact_line(line, home.as_deref())
-                } else {
-                    line.clone()
-                };
-                div().text_color(level_color(line, &p)).child(text)
-            })
-            .collect();
-        let empty = lines.is_empty();
-        let mut chips: Vec<Stateful<Div>> =
-            vec![self.level_chip("log-level-all", self.tr("All"), None, dim, cx)];
-        chips.extend(present::LOG_LEVELS.iter().map(|level| {
-            self.level_chip(
-                SharedString::from(format!("log-level-{level}")),
-                level,
-                Some((*level).to_string()),
-                dim,
-                cx,
-            )
-        }));
-        ui::section_with(
-            self.tr("Log"),
-            vec![
-                h_flex()
-                    .gap(px(8.))
-                    .ts(12., 16.)
-                    .text_color(p.muted)
-                    .child(self.tr("Hide content"))
-                    .child(Switch::new("log-redact", redact).on_toggle(cx.listener(
-                        |this, on: &bool, _, cx| {
-                            this.service.redact = *on;
-                            cx.notify();
-                        },
-                    )))
-                    .into_any_element(),
-                Btn::icon_only("log-refresh", ic::REFRESH)
-                    .small()
-                    .disabled(dim)
-                    .tooltip(self.tr("Read the log again"))
-                    .on_click(cx.listener(|this, _, window, cx| this.tail_log(window, cx)))
-                    .into_any_element(),
-            ],
-            v_flex()
-                .gap(px(8.))
-                .child(
-                    h_flex()
-                        .gap(px(2.))
-                        .children(chips)
-                        .child(div().flex_1())
-                        .children(self.service.tail.file.as_ref().map(|file| {
-                            div()
-                                .min_w_0()
-                                .truncate()
-                                .mono()
-                                .ts(11., 14.)
-                                .text_color(p.faint)
-                                .child(file.clone())
-                        })),
-                )
-                .child(
-                    div()
-                        .id("log")
-                        .h(px(340.))
-                        .overflow_y_scroll()
-                        .track_scroll(&self.service.log_scroll)
-                        .rounded(px(12.))
-                        .bg(p.terminal)
-                        .border_1()
-                        .border_color(p.hairline(0.06))
-                        .px(px(14.))
-                        .py(px(12.))
-                        .mono()
-                        .ts(11.5, 18.)
-                        .children(lines)
-                        .when(empty, |this| {
-                            this.child(div().text_color(p.faint).child(self.tr("Nothing at this level.")))
-                        }),
+                Err(e) => this.toast(
+                    this.fmt(
+                        "{0} failed: {1}",
+                        &[this.tr("Export Support File"), &e.to_string()],
+                    ),
+                    window,
+                    cx,
                 ),
-            &p,
-        )
-    }
-
-    fn level_chip(
-        &self,
-        id: impl Into<gpui::ElementId>,
-        label: &'static str,
-        level: Option<String>,
-        dim: bool,
-        cx: &Context<Self>,
-    ) -> Stateful<Div> {
-        let p = *palette(cx);
-        let here = self.service.level == level;
-        ui::chip(id, label, here, &p).when(!dim, |this| {
-            this.on_click(cx.listener(move |this, _, window, cx| {
-                this.service.level = level.clone();
-                this.tail_log(window, cx);
-            }))
-        })
+            }
+        });
     }
 }
 
-/// A log line's colour, from the level word in it: errors and warnings in
-/// their status shade, the chatty levels faint, the rest plain.
-fn level_color(line: &str, p: &Palette) -> Hsla {
-    if line.contains("ERROR") {
-        p.danger_muted
-    } else if line.contains("WARN") {
-        p.warning_muted
-    } else if line.contains("DEBUG") || line.contains("TRACE") {
-        p.faint
-    } else {
-        p.text.opacity(0.86)
-    }
+/// The line a section shows in place of what an older service cannot
+/// answer.
+fn newer_service(language: Language, p: &Palette) -> Row {
+    Row::new()
+        .lead(ui::bare(ui::icon(ic::INFO, 17., p.text2)))
+        .title(language.text("This needs a newer background service."))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /// The scenes' footprint is the fixture's, re-homed: every path the page
+    /// prints starts at `~`, and the board's sizes come out as the board
+    /// writes them.
     #[test]
-    fn the_log_tail_asks_for_a_pane_full_and_not_for_the_whole_file() {
-        // `log.tail` clamps its own ceiling; this is what a pane can show
-        // without the window becoming a log viewer.
-        const { assert!(TAIL_LINES >= 50 && TAIL_LINES <= 1000) };
-    }
-
-    #[test]
-    fn a_method_this_daemon_lacks_is_remembered_so_the_button_says_so_next_time() {
-        // The pane's own bookkeeping, which is what puts the sentence under
-        // the buttons rather than only in a toast that has scrolled away.
-        struct Missing(Vec<String>);
-        impl Missing {
-            fn note(&mut self, m: &str) {
-                if !self.0.iter().any(|x| x == m) {
-                    self.0.push(m.to_string());
-                }
+    fn the_boards_footprint_is_the_fixtures_under_this_macs_home() {
+        let footprint = board_footprint();
+        let rows = footprint::items(&footprint, Language::English);
+        assert_eq!(rows.len(), 9);
+        for row in &rows {
+            if let footprint::Place::Path(path) = &row.place {
+                assert!(path.starts_with('~'), "{path}");
             }
         }
-        let mut missing = Missing(Vec::new());
-        missing.note("service.stop");
-        missing.note("service.stop");
-        missing.note("config.set");
-        assert_eq!(missing.0, vec!["service.stop", "config.set"]);
-        for method in &missing.0 {
-            let line = present::missing_method_line(method);
-            assert!(line.contains(method));
-            assert!(
-                line.contains("nothing happened"),
-                "a missing method must never read as a success"
-            );
-        }
+        let sizes: Vec<Option<&str>> = rows.iter().map(|row| row.size.as_deref()).collect();
+        assert_eq!(
+            sizes,
+            [
+                None,
+                Some("13 hooks"),
+                Some("7 entries"),
+                Some("1.6 GB"),
+                Some("428 MB"),
+                Some("9 MB"),
+                Some("180 KB"),
+                Some("4 KB"),
+                Some("77 MB"),
+            ]
+        );
+        assert_eq!(
+            footprint::summary(&footprint, Language::English),
+            "9 items, 2.1 GB. Most can be removed one at a time."
+        );
     }
 
+    /// Every fixture a scene is drawn from parses into what the scene shows.
     #[test]
-    fn a_log_line_is_coloured_by_the_level_word_in_it() {
-        let p = crate::style::Palette::dark(true);
+    fn the_scenes_fixtures_read_as_the_board() {
+        let checks = Checks::parse(&fixture(CARE_CHECKS));
+        let sources = Sources::parse(&fixture(SOURCES_LIST));
         assert_eq!(
-            level_color("2026-10-04 ERROR deckd: boom", &p),
-            p.danger_muted
+            codex_check(Some(&checks), Some(&sources)),
+            CodexCheck::Reachable
+        );
+        assert_eq!(legacy_agent(Some(&checks)), Some(true));
+        assert_eq!(stale_helpers(Some(&sources), 0), 2);
+        let mut config = fixture(CONFIG_GET);
+        assert_eq!(Api::parse(&config).tcp, Some(true));
+        config["api"]["tcp"] = false.into();
+        assert_eq!(Api::parse(&config).tcp, Some(false));
+        assert!(updates::available(&board_firmware()).is_some());
+        let tokens = board_tokens();
+        let lines: Vec<String> = tokens
+            .iter()
+            .map(|token| {
+                crate::local_api::token_life_line(
+                    token,
+                    crate::shots::board_now(),
+                    Language::English,
+                )
+            })
+            .collect();
+        assert_eq!(
+            lines,
+            [
+                "created 2026-11-02, 09:12 · no expiry",
+                "created yesterday, 16:40 · expires 2027-02-10, 16:40",
+            ]
+        );
+    }
+
+    /// The note under the support file says what the service's redaction
+    /// does as it is set: the text said in sessions is left out unless
+    /// content logging is on, and the default while `config.get` has not
+    /// said.
+    #[test]
+    fn the_support_file_note_follows_content_logging() {
+        crate::i18n::install();
+        let left_out = "The file is saved to the Desktop. Session text is left out.";
+        let mut config = fixture(CONFIG_GET);
+        assert_eq!(Api::parse(&config).log_content, None);
+        assert_eq!(support_note(Some(&Api::parse(&config)), Language::English), left_out);
+        assert_eq!(support_note(None, Language::English), left_out);
+        config["privacy"] = serde_json::json!({"log_content": false});
+        assert_eq!(support_note(Some(&Api::parse(&config)), Language::English), left_out);
+        config["privacy"]["log_content"] = true.into();
+        assert_eq!(Api::parse(&config).log_content, Some(true));
+        assert_eq!(
+            support_note(Some(&Api::parse(&config)), Language::English),
+            "The file is saved to the Desktop. Session text is kept in it."
         );
         assert_eq!(
-            level_color("2026-10-04 WARN deckd: hmm", &p),
-            p.warning_muted
-        );
-        assert_eq!(level_color("2026-10-04 DEBUG deckd: x", &p), p.faint);
-        assert_eq!(
-            level_color("2026-10-04 INFO deckd: ok", &p),
-            p.text.opacity(0.86)
+            support_note(Some(&Api::parse(&config)), Language::Japanese),
+            "デスクトップに保存され、セッションの文章も含まれます。"
         );
     }
 }
