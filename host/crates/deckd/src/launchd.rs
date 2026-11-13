@@ -545,6 +545,9 @@ mod tests {
         assert_eq!(agent.dangling(), None);
     }
 
+    // `program_of_plist` reads the plist with macOS's `plutil`, as launchd
+    // itself exists only there.
+    #[cfg(target_os = "macos")]
     #[test]
     fn a_bundle_program_resolves_against_the_app_the_plist_sits_in() {
         let dir = crate::integrations::testdir::TestDir::new("launchd-bundleprogram");
@@ -574,6 +577,7 @@ mod tests {
         assert!(err.contains("nothing to resolve it against"), "{err}");
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn an_absolute_program_argument_is_taken_as_written() {
         let dir = crate::integrations::testdir::TestDir::new("launchd-programargs");

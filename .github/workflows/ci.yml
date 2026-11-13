@@ -138,9 +138,11 @@ jobs:
           sudo apt-get install -y --no-install-recommends pkg-config libudev-dev libasound2-dev libdbus-1-dev cmake libclang-dev lsof
       # The window is macOS only, so the app is left out. The repository's
       # .cargo/config.toml builds for the firmware, hence the explicit target.
+      # --no-fail-fast: a platform difference usually breaks several suites
+      # at once, and one run should name them all.
       - name: Test the Linux host
         run: |
-          cargo test --manifest-path host/Cargo.toml --workspace --exclude openwalkietalkie-app --lib --tests --locked --target x86_64-unknown-linux-gnu --target-dir target/host
+          cargo test --manifest-path host/Cargo.toml --workspace --exclude openwalkietalkie-app --lib --tests --locked --no-fail-fast --target x86_64-unknown-linux-gnu --target-dir target/host
       - name: Test the Omarchy bridge
         run: |
           python3 -m unittest discover -s host/omarchy -p 'test_*.py'
