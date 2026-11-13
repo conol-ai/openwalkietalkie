@@ -6,7 +6,8 @@
     "uds_max_scope": "admin",
     "mailbox_ttl_s": 600,
     "max_held_hooks": 64,
-    "tcp": true
+    "tcp": true,
+    "tcp_rule": "explicit"
   },
   "codex": {
     "daemon": true,

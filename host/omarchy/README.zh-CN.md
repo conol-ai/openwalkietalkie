@@ -1,6 +1,10 @@
 # Omarchy 适配器
 
-让对讲机遥控 Omarchy（Hyprland）笔记本：窗口和工作区、scratchpad、Claude Code / Codex / Kimi Code 会话、语音指令。
+让对讲机遥控 Omarchy（Hyprland）笔记本：窗口和工作区、scratchpad、Claude Code / Codex / Kimi Code 会话、语音指令。[English](README.md)
+
+**Linux 加上本适配器是正式支持的平台。** 每个 pull request 和每次推送到 `main`，CI 的 “Linux host” 任务都会在 Ubuntu 24.04 上为 Linux 构建 host 工作区并运行它的测试（除 Mac 应用以外的所有 crate：`deckd`、`deck-proto`、`deck-model`、`deck-client`、`deck-gui-core` 和 `deck-wrap`），再运行本目录的 Python 测试（见[测试](#测试)）。窗口应用只有 macOS 版，Linux 上暂时没有窗口。适配器通过页面数据接口（`device.ws.set`，以及 `device.ws`、`device.key`、`device.link` 事件）和 `deckd` 通信，这是公开接口，写在 [native companion API 文档](https://openwalkietalkie.org/docs/native-companions/#feed-the-omarchy-face)里。
+
+**在 Linux 上，`deckd` 分不清你的各个进程。** macOS 版服务的两项检查在 Linux 上没有实现：祖先进程上限（让由 agent CLI 启动的进程最多只能申请 `observe,agent,voice,hooks:ingest`），以及受信任的主体（签名的应用）。所以你这个用户的任何进程，包括由 Claude Code、Codex 或 Kimi Code 启动的进程，都可以向 `deckd` 的 socket 申请 `admin`（它的设置、集成、自检和令牌）；也没有任何客户端会被视为受信任，所以客户端为权限卡片发来的允许会被拒绝。固件安装仍然需要在对讲机上按一下，除非对讲机已经处于恢复模式。
 
 **推荐方案：Linux 版 `deckd` 直接装在 Omarchy 上。** 对讲机用蓝牙直连 Omarchy：BlueZ 把它的 HID 服务暴露成 `/dev/hidraw*`，由 `hid.rs` 驱动；语音走对讲机的音频 GATT 服务（BlueZ），用本机 Whisper 识别。Omarchy 上跑两个 systemd 用户服务：`deckd.service`（Linux 版 `deckd`）和 `omarchy-deck.service`（本目录的 Python 适配器）。
 
@@ -19,7 +23,9 @@ sh omarchy/install.sh target/x86_64-unknown-linux-gnu/release/deckd
 python3 omarchy/omarchy_hook.py install kimi     # Kimi Code；claude / codex 同理
 ```
 
-`install.sh` 会把适配器复制到 `~/.local/share/openwalkietalkie/omarchy/`，`install` 写进各 CLI 设置的 hook 命令指向这份副本，并且脚本不存在时放行（不会因为挪了仓库而拦住你的会话）。适配器自动找到正在运行的 Hyprland 实例和 Wayland 显示，不用写环境变量。
+构建需要 `pkg-config`、libudev（hidapi）、ALSA（cpal）和 D-Bus（bluer）的开发文件，以及 whisper.cpp 要用的 CMake 和 libclang。CI 在 Ubuntu 上装的是 `pkg-config libudev-dev libasound2-dev libdbus-1-dev cmake libclang-dev`（`.github/workflows/ci.yml`）。
+
+`install.sh` 会把适配器复制到 `~/.local/share/openwalkietalkie/omarchy/`；给了二进制文件时，把 `deckd` 装到 `~/.local/bin/deckd`；再启用并启动 `systemd/` 里的两个单元（可以重复执行；`systemctl --user disable --now deckd omarchy-deck` 撤销）。`deckd.service` 以 `DECKD_DATA_DIR=~/.local/share/openwalkietalkie` 运行 `deckd run`，所以它的配置、socket 和缓存都在这个目录下；`omarchy-deck.service` 在这个 socket 上启动适配器。（不设 `DECKD_DATA_DIR` 启动的 `deckd` 改用 XDG 目录，socket 在 `$XDG_RUNTIME_DIR/openwalkietalkie/deckd.sock`，没有 `XDG_RUNTIME_DIR` 时在 `${XDG_CACHE_HOME:-~/.cache}/openwalkietalkie/deckd.sock`；不带 `--socket` 启动的适配器也去这里找。）`omarchy_hook.py install` 写进各 CLI 设置的 hook 命令指向这份副本，并且脚本不存在时放行（不会因为挪了仓库而拦住你的会话）。适配器自动找到正在运行的 Hyprland 实例和 Wayland 显示，不用写环境变量。
 
 ### 语音（PTT）
 
@@ -40,7 +46,7 @@ DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd stt install --model small
 
 ### Kimi Code
 
-Kimi Code 有 hook（`config.toml` 里的 `[[hooks]]`），`omarchy_hook.py install kimi` 会写入一个带标记的块，先备份，卸载时原样还原。没装 hook 时，适配器退回去读 `~/.kimi-code/sessions/*/agents/main/wire.jsonl` 判断状态（尊重 `KIMI_CODE_HOME`）。每次回复结束，回复摘要会推到对讲机上。
+Kimi Code 有 hook（`config.toml` 里的 `[[hooks]]`），`omarchy_hook.py install kimi` 会写入一个带标记的块，先备份，卸载时原样还原；它用 `tomllib` 检查写入结果，所以需要 Python 3.11 或更新版本。没装 hook 时，适配器退回去读 `~/.kimi-code/sessions/*/agents/main/wire.jsonl` 判断状态（尊重 `KIMI_CODE_HOME`）。每次回复结束，回复摘要会推到对讲机上。
 
 ## 能做什么
 
@@ -115,7 +121,7 @@ WantedBy=default.target
 o.launch_on_start("python3 /path/to/host/omarchy/omarchy_deck.py")
 ```
 
-也可以在终端手动跑 `python3 omarchy_deck.py` 先看日志。它会自动重连，Mac 重启、`deckd` 重启、隧道断开都不用管。
+也可以在终端手动跑 `python3 omarchy_deck.py` 先看日志。不带 `--socket` 时，它连 `$DECKD_SOCKET`，其次是 `$DECKD_DATA_DIR/deckd.sock`，再次是不设 `DECKD_DATA_DIR` 启动的 Linux `deckd` 监听的位置（见上面 `install.sh` 那段）；那里没有 socket 时，连隧道的这一端 `$XDG_RUNTIME_DIR/deckd.sock`（没有 `XDG_RUNTIME_DIR` 时是 `~/.local/state/deckd.sock`）。每次连接前它都会重新查找，并自动重连：Mac 重启、`deckd` 重启、隧道断开都不用管。
 
 ### 4. 安装 hook（让会话出现在名册里）
 
@@ -130,12 +136,13 @@ python3 omarchy_hook.py uninstall all     # 随时撤销，只删我们加的，
 
 ## 测试
 
+CI 在仓库根目录、Ubuntu 24.04 的 Python 3.12 上运行它们，排在 Linux host 的 Rust 测试之后：
+
 ```sh
-cd host/omarchy
-for t in test_omarchy_deck test_omarchy_sessions test_omarchy_hook test_omarchy_kimi test_omarchy_integration; do python3 -B $t.py; done
+python3 -m unittest discover -s host/omarchy -p 'test_*.py'
 ```
 
-覆盖：Hyprland 数据到 `ws` 行的转换、按键映射、进程树和窗口匹配、会话注册和释放、守护进程离线重连、语音指令的各种拒绝条件、hook 放行、安装和卸载，以及对假 `deckd` 的端到端流程。**这些都是在 macOS 上用伪造的 `/proc` 和 Hyprland 跑的，没有在真实 Omarchy 上跑过。**
+覆盖：Hyprland 数据到 `ws` 行的转换、按键映射、进程树和窗口匹配、会话注册和释放、守护进程离线重连、语音指令的各种拒绝条件、hook 放行、安装和卸载，以及对假 `deckd` 的端到端流程。其中三个（Kimi Code 的安装）需要 `tomllib`，在 3.11 以前的 Python 上会报 `ModuleNotFoundError: No module named 'tomllib'`。**这些都是在伪造的 `/proc` 和 Hyprland 上跑的，没有在真实 Omarchy 上跑过。**
 
 ---
 

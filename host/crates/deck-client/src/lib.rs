@@ -625,24 +625,33 @@ impl Drop for Client {
     }
 }
 
-/// `~/Library/Application Support/OpenWalkieTalkie/deckd.sock` (Linux:
-/// `$XDG_RUNTIME_DIR/openwalkietalkie/deckd.sock`); `DECKD_DATA_DIR` honoured,
-/// the same rule as `deckd`.
+/// The socket `deckd` listens on, by the daemon's own rule
+/// (`config::Paths::detect`): `$DECKD_DATA_DIR/deckd.sock` when that is
+/// set; else on macOS `~/Library/Application Support/OpenWalkieTalkie/
+/// deckd.sock`, and elsewhere `$XDG_RUNTIME_DIR/openwalkietalkie/deckd.sock`,
+/// or, with no runtime dir, `$XDG_CACHE_HOME/openwalkietalkie/deckd.sock`,
+/// else `~/.cache/openwalkietalkie/deckd.sock`.
 pub fn default_socket() -> PathBuf {
-    if let Some(dir) = std::env::var_os("DECKD_DATA_DIR") {
+    socket_for(cfg!(target_os = "macos"), |name| std::env::var_os(name))
+}
+
+/// [`default_socket`]'s rule over an environment lookup `var`, for the
+/// platform `macos` says. An XDG variable counts only when it is an
+/// absolute path, as the `directories` crate the daemon resolves its paths
+/// with reads it; a relative or empty one is passed over.
+fn socket_for(macos: bool, var: impl Fn(&str) -> Option<std::ffi::OsString>) -> PathBuf {
+    if let Some(dir) = var("DECKD_DATA_DIR") {
         return PathBuf::from(dir).join("deckd.sock");
     }
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_default();
-    if cfg!(target_os = "macos") {
-        home.join("Library/Application Support/OpenWalkieTalkie/deckd.sock")
-    } else {
-        std::env::var_os("XDG_RUNTIME_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| home.join(".local/state"))
-            .join("openwalkietalkie/deckd.sock")
+    let home = var("HOME").map(PathBuf::from).unwrap_or_default();
+    if macos {
+        return home.join("Library/Application Support/OpenWalkieTalkie/deckd.sock");
     }
+    let absolute = |name: &str| var(name).map(PathBuf::from).filter(|dir| dir.is_absolute());
+    absolute("XDG_RUNTIME_DIR")
+        .or_else(|| absolute("XDG_CACHE_HOME"))
+        .unwrap_or_else(|| home.join(".cache"))
+        .join("openwalkietalkie/deckd.sock")
 }
 
 #[cfg(test)]
@@ -679,6 +688,55 @@ mod tests {
             assert!(path
                 .to_string_lossy()
                 .contains("Library/Application Support/OpenWalkieTalkie"));
+        }
+    }
+
+    /// The daemon's rule (`config::Paths::detect`) on both platforms,
+    /// against a made-up environment: the data dir first; the Library
+    /// folder on macOS; elsewhere the runtime dir, else the cache dir, else
+    /// `~/.cache`, each XDG variable only when it is an absolute path.
+    #[test]
+    fn the_socket_rule_is_the_daemons_on_either_platform() {
+        let rule = |macos: bool, env: &[(&str, &str)]| {
+            let env: HashMap<String, std::ffi::OsString> = env
+                .iter()
+                .map(|(name, value)| (name.to_string(), (*value).into()))
+                .collect();
+            socket_for(macos, |name| env.get(name).cloned())
+        };
+        let home = ("HOME", "/home/u");
+        for macos in [true, false] {
+            assert_eq!(
+                rule(macos, &[home, ("DECKD_DATA_DIR", "/data"), ("XDG_RUNTIME_DIR", "/run/user/1")]),
+                PathBuf::from("/data/deckd.sock"),
+                "macos {macos}: the data dir wins"
+            );
+        }
+        assert_eq!(
+            rule(true, &[home, ("XDG_RUNTIME_DIR", "/run/user/1")]),
+            PathBuf::from("/home/u/Library/Application Support/OpenWalkieTalkie/deckd.sock")
+        );
+        let linux = [
+            (
+                vec![home, ("XDG_RUNTIME_DIR", "/run/user/1"), ("XDG_CACHE_HOME", "/c")],
+                "/run/user/1/openwalkietalkie/deckd.sock",
+            ),
+            (
+                vec![home, ("XDG_CACHE_HOME", "/c")],
+                "/c/openwalkietalkie/deckd.sock",
+            ),
+            (
+                vec![home, ("XDG_RUNTIME_DIR", "run/user/1"), ("XDG_CACHE_HOME", "c")],
+                "/home/u/.cache/openwalkietalkie/deckd.sock",
+            ),
+            (
+                vec![home, ("XDG_RUNTIME_DIR", "")],
+                "/home/u/.cache/openwalkietalkie/deckd.sock",
+            ),
+            (vec![home], "/home/u/.cache/openwalkietalkie/deckd.sock"),
+        ];
+        for (env, want) in linux {
+            assert_eq!(rule(false, &env), PathBuf::from(want), "{env:?}");
         }
     }
 

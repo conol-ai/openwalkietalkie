@@ -490,10 +490,13 @@ impl Env {
             channel_exe,
             data: paths.data.clone(),
             tokens: paths.tokens.clone(),
-            // With the TCP door off (`[api] tcp = false`) there is no bound
-            // port to wait for, and none to name: every hook installed
-            // reaches the daemon over its socket.
-            port: if config.api.tcp {
+            // Unless the file switches the TCP door on (`[api] tcp =
+            // true`) there is no bound port to wait for, and none to name:
+            // every hook this installer writes reaches the daemon over its
+            // socket. A door the key left out keeps open is the pre-plugin
+            // hooks' (`config::Api::tcp_door`), and those this installer
+            // only takes out, whatever port they name.
+            port: if config.api.tcp == Some(true) {
                 bound_port(&paths.port, config.api.port)?
             } else {
                 config.api.port
@@ -517,7 +520,7 @@ impl Env {
     }
 
     pub fn receipts_path(&self) -> PathBuf {
-        self.data.join("integrations.json")
+        receipts_in(&self.data)
     }
 
     /// `$CLAUDE_CONFIG_DIR`, else `~/.claude`.
@@ -543,6 +546,59 @@ impl Env {
     pub fn hook_url_pattern(&self) -> String {
         format!("http://127.0.0.1:{}/v1/hooks/*", self.port)
     }
+}
+
+/// `integrations.json` in deckd's data directory `data`: its own record of
+/// what it installed, per target ([`Receipts`]).
+pub fn receipts_in(data: &Path) -> PathBuf {
+    data.join("integrations.json")
+}
+
+/// Do the hooks deckd gave Claude Code before its integration became a
+/// plugin still post to the TCP door? `deckd run` asks this when `[api]
+/// tcp` is left out and keeps the door open while they may (`config::Api::
+/// tcp_door`). Two things say so, and either is enough:
+///
+/// - deckd's own record of the Claude target is still a pre-plugin one
+///   ([`pre_plugin_claude_receipt`]): the old installer wrote its HTTP hooks
+///   into a settings file, perhaps under a `CLAUDE_CONFIG_DIR` this process
+///   does not see, and nothing has installed, repaired or removed the
+///   integration since;
+/// - Claude's settings file — the one the installer reads, under this
+///   process's `CLAUDE_CONFIG_DIR` or `HOME` — still carries one of those
+///   HTTP hooks ([`claude_legacy::http_hooks_on_disk`]). Only the HTTP hooks
+///   count: every other leftover makes the Claude row `outdated` too, but
+///   none reaches the door.
+///
+/// When the hooks are in the settings file this process reads, the Claude
+/// row asks for Repair meanwhile, and `install` (the app's Repair) migrates
+/// them and replaces the record. When only the record says so, the row
+/// cannot show them (`claude::status` reads the settings file alone): the
+/// exception lasts until `[api] tcp` is set or the Claude integration is
+/// installed, repaired or removed, each of which replaces the record, and
+/// `deckd integrations install claude` run under the `CLAUDE_CONFIG_DIR`
+/// that holds them is what migrates them. An installer that cannot run here
+/// finds no settings file: it could not migrate one either.
+pub fn legacy_claude_hooks(paths: &Paths, config: &Config) -> bool {
+    if pre_plugin_claude_receipt(&paths.data) {
+        return true;
+    }
+    match Env::detect(paths, config) {
+        Ok(env) => claude_legacy::http_hooks_on_disk(&env),
+        Err(why) => {
+            tracing::warn!(%why, "cannot look for the pre-plugin Claude hooks");
+            false
+        }
+    }
+}
+
+/// Is deckd's own record of the Claude target, in `integrations.json` under
+/// the data directory `data`, the inventory of a pre-plugin install
+/// (`claude::legacy_receipt`)? A plugin-era record is not, and neither is a
+/// missing or unreadable file.
+pub fn pre_plugin_claude_receipt(data: &Path) -> bool {
+    let receipts = Receipts::load(&receipts_in(data));
+    claude::legacy_receipt(receipts.get(Target::Claude)).is_some()
 }
 
 /// `$NAME` as an absolute path; an empty value is "unset" and a relative one
@@ -1416,9 +1472,10 @@ mod tests {
         assert_eq!(bound_port(&port_file, 47201).unwrap(), 47201);
     }
 
-    /// D3: with the TCP door switched off no port is ever bound, so a
-    /// daemon on `[api] port = 0` installs as readily as one on 47201:
-    /// every hook it writes reaches it over the socket.
+    /// D3: unless the file switches the TCP door on, no port is waited for,
+    /// so a daemon on `[api] port = 0` installs as readily as one on 47201:
+    /// every hook it writes reaches it over the socket. The door is off by
+    /// default now, and so the installer of a default config waits for none.
     #[test]
     fn an_installer_without_a_tcp_door_waits_for_no_port() {
         let dir = TestDir::new("env-tcp-off");
@@ -1429,11 +1486,94 @@ mod tests {
         );
         let mut config = Config::default();
         config.api.port = 0;
+        for switch in [None, Some(false)] {
+            config.api.tcp = switch;
+            let env = Env::with_exe(fake_exe(&dir), &paths, &config).unwrap();
+            assert_eq!(env.port, 0, "{switch:?}");
+        }
+        config.api.tcp = Some(true);
         let error = Env::with_exe(fake_exe(&dir), &paths, &config).unwrap_err();
         assert!(error.contains("has not bound a port"), "{error}");
-        config.api.tcp = false;
-        let env = Env::with_exe(fake_exe(&dir), &paths, &config).unwrap();
-        assert_eq!(env.port, 0);
+    }
+
+    /// What `deckd run` asks of Claude's settings when `[api] tcp` is left
+    /// out reads the file the Claude row reads and `install` migrates, and
+    /// asks less of it: the old HTTP hooks, which post to the door, make the
+    /// row `outdated` (the Integrations page offers Repair) and keep the
+    /// door open; a leftover that posts nothing — here the chained
+    /// `statusLine` alone — still asks for Repair but keeps nothing open.
+    /// (Under the process's own environment, `legacy_claude_hooks` would
+    /// read the operator's settings, so `tests/tcp_door.rs` holds the whole
+    /// rule against a real daemon on a throwaway `CLAUDE_CONFIG_DIR` and
+    /// `HOME`.)
+    #[test]
+    fn the_door_keeps_open_only_for_the_old_hooks_that_post_to_it() {
+        let dir = TestDir::new("env-legacy");
+        let env = test_env(&dir);
+        assert_eq!(
+            claude_legacy::settings_path(&env),
+            claude::settings_path(&env)
+        );
+        assert!(!claude_legacy::http_hooks_on_disk(&env));
+        assert_ne!(claude::status(&env).status, Status::Outdated);
+        let legacy = claude_legacy::tests::legacy_settings(&env);
+        let write = |value: &serde_json::Value| {
+            std::fs::write(
+                claude_legacy::settings_path(&env),
+                serde_json::to_vec(value).unwrap(),
+            )
+            .unwrap();
+        };
+        write(&legacy);
+        assert!(claude_legacy::http_hooks_on_disk(&env));
+        let report = claude::status(&env);
+        assert_eq!(report.status, Status::Outdated, "{:?}", report.detail);
+        write(&serde_json::json!({"statusLine": legacy["statusLine"].clone()}));
+        assert!(
+            !claude_legacy::http_hooks_on_disk(&env),
+            "nothing left posts to the door"
+        );
+        let report = claude::status(&env);
+        assert_eq!(
+            report.status,
+            Status::Outdated,
+            "the row still asks for Repair: {:?}",
+            report.detail
+        );
+    }
+
+    /// The other half of what `deckd run` asks: deckd's own record. A
+    /// pre-plugin receipt — the old installer's inventory, with its
+    /// `entries` and `allowlist` — says the old HTTP hooks went into a
+    /// settings file, perhaps one under a `CLAUDE_CONFIG_DIR` this process
+    /// does not see. A plugin-era receipt, another target's, no file and an
+    /// unreadable one say nothing.
+    #[test]
+    fn a_pre_plugin_receipt_is_deckds_own_word_for_the_old_hooks() {
+        let dir = TestDir::new("env-receipt");
+        let env = test_env(&dir);
+        let path = env.receipts_path();
+        assert_eq!(path, receipts_in(&env.data));
+        assert!(!pre_plugin_claude_receipt(&env.data), "no file");
+        let inventory = claude_legacy::tests::legacy_settings(&env)["_openwalkietalkie"].clone();
+        let save = |target: Target, receipt: Option<serde_json::Value>| {
+            let mut receipts = Receipts::default();
+            receipts.set(target, receipt);
+            receipts.save(&path).unwrap();
+        };
+        save(Target::Claude, Some(inventory.clone()));
+        assert!(pre_plugin_claude_receipt(&env.data));
+        save(
+            Target::Claude,
+            Some(serde_json::json!({
+                "schema": 2, "plugin": "openwalkietalkie@openwalkietalkie", "events": ["Stop"],
+            })),
+        );
+        assert!(!pre_plugin_claude_receipt(&env.data), "a plugin-era record");
+        save(Target::Codex, Some(inventory));
+        assert!(!pre_plugin_claude_receipt(&env.data), "another target's");
+        std::fs::write(&path, "{ not json").unwrap();
+        assert!(!pre_plugin_claude_receipt(&env.data), "an unreadable file");
     }
 
     /// D4: `integrations install|repair` over the CLI or the API take the
@@ -1545,14 +1685,22 @@ mod tests {
         let translocated = dir.sub("AppTranslocation/X/d/OpenWalkieTalkie.app/Contents/MacOS");
         let exe = translocated.join("deckd");
         write_exe(&exe);
-        let error = Env::with_exe(exe, &paths, &Config::default()).unwrap_err();
+        let env = Env::with_exe(exe, &paths, &Config::default());
+        // App Translocation and `/Applications` are macOS's: elsewhere such
+        // a path is only a path, refused for nothing and warned of nothing.
         if cfg!(target_os = "macos") {
+            let error = env.expect_err("a translocated binary is refused");
             assert!(error.contains("App Translocation"), "{error}");
+        } else {
+            let env = env.unwrap_or_else(|e| panic!("only a path off macOS: {e}"));
+            assert!(env.warnings.is_empty(), "{:?}", env.warnings);
         }
         let env = Env::with_exe(fake_exe(&dir), &paths, &Config::default()).unwrap();
         if cfg!(target_os = "macos") {
             assert_eq!(env.warnings.len(), 1, "{:?}", env.warnings);
             assert!(env.warnings[0].contains("outside /Applications"));
+        } else {
+            assert!(env.warnings.is_empty(), "{:?}", env.warnings);
         }
         assert!(
             !env.exe.as_os_str().is_empty(),

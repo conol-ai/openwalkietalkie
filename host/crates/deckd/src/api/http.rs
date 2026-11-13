@@ -1023,12 +1023,13 @@ pub async fn tcp_door(
     }
 }
 
-/// No TCP door (`[api] tcp = false`, D3): nothing is bound, so nothing can
-/// collide and no degrade is raised. The core records port 0, which
-/// [`held_port`] reads as none, and the port file is emptied, so a port an
-/// earlier run left in it never sends a client to whatever holds it now.
+/// No TCP door (off: the default, or `[api] tcp = false`; D3 and the
+/// owner's decision 12): nothing is bound, so nothing can collide and no
+/// degrade is raised. The core records port 0, which [`held_port`] reads as
+/// none, and the port file is emptied, so a port an earlier run left in it
+/// never sends a client to whatever holds it now.
 pub async fn tcp_off(api: &Api) {
-    tracing::info!("no tcp door: [api] tcp = false, the socket is the only door");
+    tracing::info!("no tcp door: the socket is the only door");
     report_bind(api, Some(0), None, None).await;
 }
 
@@ -2297,11 +2298,11 @@ pub(crate) mod tests {
         answering.abort();
     }
 
-    /// D3: with `[api] tcp = false` the daemon serves its socket and binds
-    /// no TCP port. The configured port is this test's the whole time, so a
-    /// door that so much as tried it would have degraded `port_in_use`; this
-    /// one records no port and no degrade, empties the port file an earlier
-    /// run left behind, and answers on the socket with `port: null`.
+    /// D3: with the door off the daemon serves its socket and binds no TCP
+    /// port. The configured port is this test's the whole time, so a door
+    /// that so much as tried it would have degraded `port_in_use`; this one
+    /// records no port and no degrade, empties the port file an earlier run
+    /// left behind, and answers on the socket with `port: null`.
     #[tokio::test]
     async fn with_the_tcp_door_off_only_the_socket_is_served() {
         let held = tokio::net::TcpListener::bind(("127.0.0.1", 0))
@@ -2311,7 +2312,7 @@ pub(crate) mod tests {
         let daemon =
             crate::api::testkit::test_api_on("http-tcp-off", FakeVerifier::default(), port);
         let mut config = (**daemon.api.config.load()).clone();
-        config.api.tcp = false;
+        config.api.tcp = Some(false);
         daemon.api.config.store(Arc::new(config));
         std::fs::write(&daemon.api.paths.port, "47201").unwrap();
         let served = crate::api::serve(daemon.api.clone()).await;
@@ -2360,33 +2361,49 @@ pub(crate) mod tests {
         drop(held);
     }
 
-    /// D3: the door is on unless a file turns it off. The default daemon
-    /// binds as it always did, and so does the gate's own API daemon
-    /// (`tools/host-test.sh`: `[api] port = 0` and no switch).
+    /// The door is off unless the file switches it on (the owner's decision
+    /// 12, which ended D3's "on by default"), or `deckd run` found the
+    /// pre-plugin Claude hooks that post to it while the file leaves the key
+    /// out; an explicit value is honoured either way. A default daemon binds
+    /// nothing; the gate's own API daemon (`tools/host-test.sh`, which names
+    /// `tcp = true`) and one kept open for the old hooks bind their door.
     #[tokio::test]
-    async fn the_default_daemon_and_the_gates_own_still_bind_their_door() {
-        let gate = crate::config::Config::parse(
-            "[api]\nport = 0\nallowed_origins = [\"http://localhost:5173\"]\n\n[liveness]\nseed = false\n\n[codex]\ndaemon = false\n",
+    async fn the_door_is_bound_only_when_the_file_or_the_old_claude_hooks_ask() {
+        use crate::config::Config;
+        let gate = Config::parse(
+            "[api]\nport = 0\ntcp = true\nallowed_origins = [\"http://localhost:5173\"]\n\n[liveness]\nseed = false\n\n[codex]\ndaemon = false\n",
         )
         .unwrap();
-        for (name, config) in [("http-tcp-default", None), ("http-tcp-gate", Some(gate))] {
-            let daemon = test_api(name, FakeVerifier::default());
-            if let Some(config) = config {
-                daemon.api.config.store(Arc::new(config));
-            }
-            assert!(daemon.api.config.load().api.tcp, "{name}");
+        let mut left_out = Config::default();
+        left_out.api.port = 0;
+        let mut off = left_out.clone();
+        off.api.tcp = Some(false);
+        for (name, config, legacy_hooks, bound) in [
+            ("http-tcp-default", left_out.clone(), false, false),
+            ("http-tcp-gate", gate, false, true),
+            ("http-tcp-legacy", left_out, true, true),
+            ("http-tcp-off-legacy", off, true, false),
+        ] {
+            let mut daemon = test_api(name, FakeVerifier::default());
+            Arc::get_mut(&mut daemon.api)
+                .expect("the testkit's Api is not shared yet")
+                .legacy_hooks = legacy_hooks;
+            daemon.api.config.store(Arc::new(config));
             let served = crate::api::serve(daemon.api.clone()).await;
-            let port = served.port.expect("the door is bound");
-            assert_eq!(
-                std::fs::read_to_string(&daemon.api.paths.port)
-                    .unwrap()
-                    .trim(),
-                port.to_string(),
-                "{name}"
-            );
-            let (status, body) = http(port, "GET", "/v1/info", &[], "").await;
-            assert_eq!(status, 200, "{name}: {body}");
-            assert_eq!(body["port"], port, "{name}");
+            let file = std::fs::read_to_string(&daemon.api.paths.port).unwrap();
+            if bound {
+                let port = served.port.expect("the door is bound");
+                assert_eq!(file.trim(), port.to_string(), "{name}");
+                let (status, body) = http(port, "GET", "/v1/info", &[], "").await;
+                assert_eq!(status, 200, "{name}: {body}");
+                assert_eq!(body["port"], port, "{name}");
+            } else {
+                assert_eq!(served.port, None, "{name}");
+                assert_eq!(file, "", "{name}: no port named");
+                assert_eq!(info(&daemon.api)["port"], serde_json::Value::Null, "{name}");
+                let service = daemon.api.bus.snapshot().service.clone();
+                assert_eq!((service.port, service.degraded), (0, None), "{name}");
+            }
             served.shutdown().await;
         }
     }

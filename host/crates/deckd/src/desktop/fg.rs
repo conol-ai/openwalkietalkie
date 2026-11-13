@@ -227,6 +227,7 @@ mod tests {
     /// is worth a line: `proc_pidinfo` answers 0 bytes for `launchd`
     /// because it belongs to root, so this check reports `Dead` for it.
     /// That is safe (it refuses) and it is not the case we want to prove.
+    #[cfg(target_os = "macos")]
     fn ttyless_child() -> std::process::Child {
         use std::os::unix::process::CommandExt;
         let mut cmd = std::process::Command::new("/bin/sleep");
@@ -248,6 +249,7 @@ mod tests {
 
     /// This process's own controlling tty, or `None` under a test runner
     /// that has none (CI, launchd).
+    #[cfg(target_os = "macos")]
     fn own_tty() -> Option<String> {
         // `ttyname` on stdin: the one call that answers "what is my
         // terminal called" without a fork.
@@ -273,7 +275,9 @@ mod tests {
     /// The refusals are the rows that matter, and they need no tty of their
     /// own: a dead pid, a pid with no controlling terminal at all, and a
     /// tty that does not exist are each a refusal on this machine, in CI,
-    /// and under launchd.
+    /// and under launchd. These rows read the macOS check; elsewhere it
+    /// cannot tell (`off_macos_guard_three_cannot_tell_and_refuses`).
+    #[cfg(target_os = "macos")]
     #[test]
     fn guard_three_refuses_a_dead_pid_a_ttyless_pid_and_a_vanished_tty() {
         // A pid that cannot be alive: `pid_max` is 99999 on macOS, so
@@ -374,6 +378,7 @@ mod tests {
     /// `/dev/console` is the other terminal: a real character device with
     /// its own `st_rdev` that this process is certainly not the foreground
     /// of, present on every macOS install.
+    #[cfg(target_os = "macos")]
     #[test]
     fn guard_three_refuses_the_right_pid_aimed_at_the_wrong_tty() {
         let me = std::process::id();
@@ -392,7 +397,9 @@ mod tests {
     ///
     /// Its value is that it is the *only* assertion in this file that
     /// `Foreground` is reachable at all — a check that could only ever
-    /// refuse would pass every other test here.
+    /// refuse would pass every other test here. On macOS, where the check
+    /// can allow at all.
+    #[cfg(target_os = "macos")]
     #[test]
     fn guard_three_allows_this_process_on_its_own_tty_when_it_has_one() {
         let Some(tty) = own_tty() else {
@@ -418,6 +425,25 @@ mod tests {
         // And the same pid on a *different* device is refused, which is the
         // pair that makes the tty clause load-bearing rather than decorative.
         assert!(!check(me, "/dev/null").allows());
+    }
+
+    /// Off macOS this build cannot tell whose foreground a pid is (§13's
+    /// Linux port needs `/proc/<pid>/stat`), and a guard that cannot tell
+    /// refuses: every pid on every tty is `Unknown`, which allows nothing,
+    /// so no dictation is ever typed there on a guess.
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn off_macos_guard_three_cannot_tell_and_refuses() {
+        for (pid, tty) in [
+            (std::process::id(), "/dev/null"),
+            (std::process::id(), "/dev/tty"),
+            (999_999, "/dev/null"),
+            (1, "/dev/console"),
+        ] {
+            let verdict = check(pid, tty);
+            assert_eq!(verdict, Verdict::Unknown, "{pid} on {tty}");
+            assert!(!verdict.allows(), "{pid} on {tty}");
+        }
     }
 
     /// The trait and the free function are one check, so a test that fakes

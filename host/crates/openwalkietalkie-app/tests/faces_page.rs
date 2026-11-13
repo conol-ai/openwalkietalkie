@@ -418,6 +418,12 @@ fn the_usage_sources_are_read_from_config_get_and_written_whole() {
     assert!(config.on(CODEX) && !config.on(CLAUDE));
     assert_eq!(config.switched(CLAUDE, true), ["codex", "claude"]);
     assert!(config.switched(CODEX, false).is_empty());
+    // A service whose TCP door is off — every one of this release, unless
+    // its owner switched the door on — still publishes the switch, as
+    // `false`, so the list stays writable.
+    let mut door_off = fixture.clone();
+    door_off["api"]["tcp"] = false.into();
+    assert!(UsageConfig::parse(&door_off).writable);
     // An older service: the list is published, `api.tcp` is not, and the
     // write would be refused. The service matches names loosely, and so
     // does the page: a variant goes with its provider.

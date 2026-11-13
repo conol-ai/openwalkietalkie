@@ -461,19 +461,37 @@ impl Core {
                 let result = if method == "firmware.check" {
                     self.firmware.check(cache, params.get("force").and_then(serde_json::Value::as_bool).unwrap_or(false))
                 } else {
-                    let voice = &self.store.snapshot().voice;
-                    if voice.ptt.is_some() || voice.speaking.is_some() || self.store.is_finalizing() {
-                        return Reply::err(ApiError::invalid("firmware", "Finish talking and wait for transcription before updating."));
+                    if !self.quiet() {
+                        return Reply::err(ApiError::invalid("firmware", crate::firmware::VOICE_BUSY));
                     }
-                    let text = |key| params.get(key).and_then(serde_json::Value::as_str).unwrap_or("");
-                    self.firmware.install(
-                        text("board"),
-                        text("serial"),
-                        text("version"),
-                        params
+                    let text = |key| params.get(key).and_then(serde_json::Value::as_str).unwrap_or("").to_string();
+                    let install = crate::firmware::Install {
+                        board: text("board"),
+                        serial: text("serial"),
+                        version: text("version"),
+                        allow_bootloader_update: params
                             .get("allow_bootloader_update")
                             .and_then(serde_json::Value::as_bool)
                             .unwrap_or(false),
+                    };
+                    // A deck that can show a card is asked first, and the
+                    // install waits for ENTER on it (`care::test`); a deck
+                    // in recovery cannot, and installs as it always has;
+                    // any other deck is refused until it links.
+                    match self.install_gate() {
+                        super::test_agent::InstallGate::AskTheDeck => {
+                            return self.install_after_press(install, now);
+                        }
+                        super::test_agent::InstallGate::NotLinked => {
+                            return self.install_refused_until_linked(&install);
+                        }
+                        super::test_agent::InstallGate::Recovery => {}
+                    }
+                    self.firmware.install(
+                        &install.board,
+                        &install.serial,
+                        &install.version,
+                        install.allow_bootloader_update,
                         cache,
                         self.hid.maintenance.clone(),
                     )
@@ -529,14 +547,26 @@ impl Core {
         Reply::ok(serde_json::json!({"events": events, "gap": gap}))
     }
 
-    /// `config.get`: [`config_json`] of the config in force, with the one key
-    /// whose value is not the file's alone resolved. `sources.claude_channels`
+    /// `config.get`: [`config_json`] of the config in force, with the two
+    /// keys whose value is not the file's alone resolved, and a client is
+    /// told what they resolve to, never `null`. `sources.claude_channels`
     /// left out of the file is whatever this daemon's Claude plugin carries
-    /// now ([`Core::channels_on`]), and a client is told that, never `null`:
-    /// it is what the Integrations page's switch shows.
+    /// now ([`Core::channels_on`]): it is what the Integrations page's switch
+    /// shows. `api.tcp` left out is off, unless the pre-plugin Claude hooks
+    /// kept the door open at start ([`Core::tcp_door`]): it is what the
+    /// Service page's Local API switch shows, and the app reads a boolean
+    /// there as the mark of a service that writes `usage.providers`. Beside
+    /// it, and only in this reply, `api.tcp_rule` says which rule decided
+    /// it ([`crate::config::TcpRule::word`]: `explicit`, `default` or
+    /// `legacy_hooks`), so the app can say why the door is open; it is no
+    /// key of the file, and `config.set` refuses it as it refuses any
+    /// unmanaged key.
     fn config_get(&self) -> serde_json::Value {
         let mut published = config_json(self.config());
         published["sources"]["claude_channels"] = self.channels_on().into();
+        let door = self.tcp_door();
+        published["api"]["tcp"] = door.on.into();
+        published["api"]["tcp_rule"] = door.rule.word().into();
         published
     }
 
@@ -1394,8 +1424,8 @@ impl Core {
         // failed (`port_in_use`) or because a stranger answers on it
         // (`hooks_hijack_risk`) — the daemon does not hold it, and saying
         // it does would send a client (and Claude's hooks) to the squatter.
-        // Nor does it hold one with no door bound at all (`[api] tcp =
-        // false`).
+        // Nor does it hold one with no door bound at all (the door off,
+        // `config::Api::tcp_door`).
         let port = crate::api::http::held_port(&snap.service);
         let mut info = serde_json::json!({
             "api": "1",
@@ -1572,10 +1602,11 @@ fn published_key_hint(key: &str) -> String {
 /// written out here; every §9 key the daemon reads is present.
 ///
 /// It is a function of the file alone, which is what `config.set` and
-/// `config.reload` compare: `sources.claude_channels` is the file's own
-/// value here, `null` when the file leaves it out. `config.get` publishes
-/// that key resolved (`Core::config_get`), because an unset switch follows
-/// the plugin on this machine.
+/// `config.reload` compare: `sources.claude_channels` and `api.tcp` are the
+/// file's own values here, `null` when the file leaves them out.
+/// `config.get` publishes those keys resolved (`Core::config_get`), because
+/// an unset Channels switch follows the plugin on this machine and an unset
+/// TCP door follows what `deckd run` found in Claude's settings.
 pub fn config_json(c: &Config) -> serde_json::Value {
     let macropad: serde_json::Map<String, serde_json::Value> = c
         .macropad
@@ -2782,12 +2813,47 @@ mod tests {
     /// D3: the Local API switch is managed and, like the port, read at
     /// start: the reply names it under `restart_needed` instead of claiming
     /// it was applied, and so does a reload that finds it moved by hand.
+    /// `config.get` always publishes a bool: the file's value once it sets
+    /// one, and while it leaves the key out, off — unless `run` kept the
+    /// door open for the pre-plugin Claude hooks it found at start. `null`
+    /// takes the key out of the file again.
     #[test]
     fn config_set_writes_the_tcp_switch_for_the_next_start() {
         let (mut c, _ops, _lines, _debug, dir) = detached_core("dispatch-config-tcp");
         let t0 = Instant::now();
         let path = c.paths.config.clone();
         let admin = || ctx(2, &[Scope::Admin]);
+        // The switch, and the rule that decided it (`api.tcp_rule`).
+        let get = |c: &mut Core| {
+            let published = c
+                .call(admin(), "config.get", serde_json::json!({}), t0)
+                .result
+                .unwrap();
+            serde_json::json!([published["api"]["tcp"], published["api"]["tcp_rule"]])
+        };
+        assert_eq!(
+            get(&mut c),
+            serde_json::json!([false, "default"]),
+            "left out: off by default"
+        );
+        c.legacy_hooks = true;
+        assert_eq!(
+            get(&mut c),
+            serde_json::json!([true, "legacy_hooks"]),
+            "left out, and the old hooks were found"
+        );
+        // The rule is published, never written: no key of the file.
+        let refused = c
+            .call(
+                admin(),
+                "config.set",
+                serde_json::json!({"patch": {"api.tcp_rule": "explicit"}}),
+                t0,
+            )
+            .result
+            .unwrap_err();
+        assert_eq!(refused.code, ApiError::INVALID_PARAMS, "{refused:?}");
+        assert!(!path.exists() || !std::fs::read_to_string(&path).unwrap().contains("tcp"));
         let ok = c
             .call(
                 admin(),
@@ -2801,8 +2867,13 @@ mod tests {
         assert_eq!(ok["applied"], serde_json::json!([]));
         assert_eq!(ok["restart_needed"], serde_json::json!(["api.tcp"]));
         let written = Config::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
-        assert!(!written.api.tcp);
+        assert_eq!(written.api.tcp, Some(false));
         assert_eq!(config_json(&written)["api"]["tcp"], false);
+        assert_eq!(
+            get(&mut c),
+            serde_json::json!([false, "explicit"]),
+            "an explicit value is always honoured"
+        );
         // The operator switches it back by hand; the reload says the same.
         std::fs::write(&path, "[api]\ntcp = true\n").unwrap();
         let reloaded = c
@@ -2810,6 +2881,26 @@ mod tests {
             .result
             .unwrap();
         assert_eq!(reloaded["restart_needed"], serde_json::json!(["api.tcp"]));
+        assert_eq!(get(&mut c), serde_json::json!([true, "explicit"]));
+        // Taken out again: the file says nothing, and nothing kept it open.
+        c.legacy_hooks = false;
+        let ok = c
+            .call(
+                admin(),
+                "config.set",
+                serde_json::json!({"patch": {"api.tcp": null}}),
+                t0,
+            )
+            .result
+            .unwrap();
+        assert_eq!(ok["changed"], serde_json::json!(["api.tcp"]));
+        assert_eq!(ok["restart_needed"], serde_json::json!(["api.tcp"]));
+        assert!(!std::fs::read_to_string(&path).unwrap().contains("tcp"));
+        assert_eq!(
+            config_json(c.config())["api"]["tcp"],
+            serde_json::Value::Null
+        );
+        assert_eq!(get(&mut c), serde_json::json!([false, "default"]));
         let before = std::fs::read_to_string(&path).unwrap();
         let err = c
             .call(
@@ -2839,16 +2930,19 @@ mod tests {
 
     /// B3.3 for D3's switches: `config.get`'s `api` table has every key of
     /// the app's fixture (`GC/tests/fixtures/daemon/config_get_sources.json`)
-    /// with the same JSON type, `tcp` among them, and no key the fixture
-    /// lacks; the usage providers and the Mac microphone fallback have the
-    /// fixture's types; and all three are keys `config.set` writes.
+    /// with the same JSON type, `tcp` among them — a bool, which the app also
+    /// reads as the mark of a service that writes `usage.providers` — and no
+    /// key the fixture lacks; the usage providers and the Mac microphone
+    /// fallback have the fixture's types; and all three are keys `config.set`
+    /// writes. A default daemon's door is off (the owner's decision 12).
     #[test]
     fn config_get_has_the_keys_of_the_apps_fixture_for_the_d3_switches() {
         let fixture: serde_json::Value = serde_json::from_str(include_str!(
             "../../../deck-gui-core/tests/fixtures/daemon/config_get_sources.json"
         ))
         .unwrap();
-        let published = config_json(&Config::default());
+        let (c, _ops, _lines, _debug, dir) = detached_core("dispatch-config-fixture");
+        let published = c.config_get();
         let want = fixture["api"].as_object().unwrap();
         let got = published["api"].as_object().unwrap();
         for (key, value) in want {
@@ -2870,16 +2964,22 @@ mod tests {
                 "{key} is a switch config.set writes"
             );
         }
-        assert_eq!(published["api"]["tcp"], true);
+        assert_eq!(published["api"]["tcp"], false);
+        assert_eq!(published["api"]["tcp_rule"], "default", "why it is off");
+        assert!(
+            !MANAGED.contains(&"api.tcp_rule"),
+            "the rule is published, never written"
+        );
         assert_eq!(
             published["usage"]["providers"],
             serde_json::json!(["codex"])
         );
         assert_eq!(published["voice"]["fallback_input"], "none");
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     /// D3: with no TCP door there is no port to name. `api::serve` records
-    /// port 0 for `[api] tcp = false`, and `service.info` then says `null` —
+    /// port 0 for a door that is off, and `service.info` then says `null` —
     /// not the configured 47201 and not 0 — while nothing is degraded, so no
     /// `service.degraded` event is raised either.
     #[test]

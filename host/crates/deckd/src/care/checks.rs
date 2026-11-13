@@ -62,7 +62,9 @@ impl From<(String, bool, String)> for Check {
 /// `{"checks": [{name, ok, detail}]}`, in the doctor's order with the two
 /// new rows last.
 pub fn run(context: &Context, homes: &Homes) -> serde_json::Value {
-    let mut checks: Vec<Check> = crate::cli::setup_checks(&context.paths)
+    // The `tcp` row asks how the door was decided only when the port file
+    // names none, and this service already knows.
+    let mut checks: Vec<Check> = crate::cli::setup_checks(&context.paths, || Some(context.tcp))
         .into_iter()
         .map(Check::from)
         .collect();

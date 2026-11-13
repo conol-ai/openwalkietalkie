@@ -377,6 +377,7 @@ pub fn ancestry_chain(_pid: u32) -> Vec<(u32, String, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "macos")]
     use std::time::Duration;
 
     /// The default `[trust] gui_requirement` of `config.rs`.
@@ -456,7 +457,10 @@ mod tests {
     /// bundle path, so it is untrusted — and asking about it must not
     /// panic or block. Its ancestry is whatever ran `cargo test`, so the
     /// cap is not asserted here (`launchd_is_never_agent_descended` is the
-    /// deterministic negative).
+    /// deterministic negative). `proc_pidpath` is macOS's: elsewhere the
+    /// verdict names no executable
+    /// (`off_macos_no_executable_is_read_and_nothing_is_capped`).
+    #[cfg(target_os = "macos")]
     #[test]
     fn the_test_process_itself_is_untrusted_with_a_clean_verdict() {
         use std::os::unix::fs::MetadataExt;
@@ -508,16 +512,37 @@ mod tests {
         assert_eq!(ANCESTRY_MAX_HOPS, 64);
     }
 
+    /// Off macOS nothing reads a peer's process: there is no `proc_pidpath`,
+    /// so the verdict names no executable, and no ppid walk, so nothing is
+    /// ever capped — whoever the peer is, this test binary included, under
+    /// whatever ran it. The §4.2 cap is the macOS one and nothing more
+    /// (the owner's decision 3 keeps it as it is), and `docs/host-service.md`
+    /// §13 says so for Linux.
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn off_macos_no_executable_is_read_and_nothing_is_capped() {
+        let me = std::process::id();
+        assert_eq!(exe_path(me), None);
+        assert!(!ancestry_capped(me));
+        assert!(!ancestry_capped_within(me, ANCESTRY_MAX_HOPS));
+        assert!(ancestry_chain(me).is_empty());
+        let verdict = verifier().verify(me);
+        assert_eq!(verdict, PeerVerdict::default(), "untrusted, uncapped, no exe");
+    }
+
     /// Set on the fixture half of `a_grandchild_of_a_process_named_node_is_
     /// ancestry_capped` to the file the fixture reports its child's pid in:
     /// the same binary, re-run under the name `node`. A file, not stdout —
     /// libtest owns the child's stdout and does not hand it over mid-run.
+    #[cfg(target_os = "macos")]
     const FIXTURE_ENV: &str = "DECKD_TRUST_FIXTURE_PID_FILE";
     /// How long the fixture lives if nobody kills it, and how long the test
     /// waits for its pid file.
+    #[cfg(target_os = "macos")]
     const FIXTURE_LIFE: Duration = Duration::from_secs(20);
 
     /// The fixture: spawn a child, report its pid, then wait to be killed.
+    #[cfg(target_os = "macos")]
     fn node_fixture(pid_file: std::path::PathBuf) -> ! {
         let child = std::process::Command::new("/bin/sleep")
             .arg("30")
@@ -543,7 +568,9 @@ mod tests {
     /// same test function plays the fixture half (spawn `/bin/sleep`, print
     /// its pid, wait). The tree is therefore test → `node` → `sleep`, and
     /// `ancestry_capped_within(sleep, 2)` pins the cap on the `node` hop —
-    /// never on whatever ran `cargo test`.
+    /// never on whatever ran `cargo test`. The walk is macOS's
+    /// (`proc_pidinfo`), and so is this test.
+    #[cfg(target_os = "macos")]
     #[test]
     fn a_grandchild_of_a_process_named_node_is_ancestry_capped() {
         use std::process::{Command, Stdio};

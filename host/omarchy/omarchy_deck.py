@@ -2,9 +2,10 @@
 """Omarchy (Hyprland) remote for the OpenWalkieTalkie deck (Python 3.10+, stdlib only).
 
 Run on the Omarchy machine while a `deckd` is reachable through its Unix socket
-(README.zh-CN.md has the whole setup):
+(README.md has the whole setup): a `deckd` on this machine is found where it
+listens, and a Mac's through the SSH tunnel the README sets up, for example
 
-    ssh -N -L "$XDG_RUNTIME_DIR/deckd.sock:/Users/you/Library/Application Support/OpenWalkieTalkie/deckd.sock" mac
+    ssh -N -L "$XDG_RUNTIME_DIR/deckd.sock:/Users/you/.deckd.sock" mac
     python3 omarchy_deck.py
 
 It keeps the deck's Omarchy face current (`device.ws.set`: the focused monitor's
@@ -82,12 +83,35 @@ KEYMAP = {
 WORKSPACE_STEP = {'left': -1, 'right': 1}
 
 
+def _absolute_env(name: str) -> Path | None:
+    """`$name` as a path when it is an absolute one, as deckd reads its XDG variables."""
+    value = os.environ.get(name, '')
+    return Path(value) if value and os.path.isabs(value) else None
+
+
+def daemon_socket_path() -> Path:
+    """Where a Linux `deckd` started without `DECKD_DATA_DIR` listens (its
+    `config::Paths::detect`): `$XDG_RUNTIME_DIR/openwalkietalkie/deckd.sock`,
+    else under `$XDG_CACHE_HOME`, else under `~/.cache`."""
+    base = _absolute_env('XDG_RUNTIME_DIR') or _absolute_env('XDG_CACHE_HOME') or Path.home() / '.cache'
+    return base / 'openwalkietalkie' / 'deckd.sock'
+
+
 def socket_path() -> Path:
+    """`$DECKD_SOCKET`, else `$DECKD_DATA_DIR/deckd.sock`, else where deckd
+    listens by default (`daemon_socket_path`). An SSH tunnel to a Mac set up
+    by an earlier README ends at `$XDG_RUNTIME_DIR/deckd.sock`, which is where
+    this bridge used to look: while that socket is there and deckd's own is
+    not, it is the one."""
     if os.environ.get('DECKD_SOCKET'):
         return Path(os.environ['DECKD_SOCKET'])
     if os.environ.get('DECKD_DATA_DIR'):
         return Path(os.environ['DECKD_DATA_DIR']) / 'deckd.sock'
-    return Path(os.environ.get('XDG_RUNTIME_DIR', Path.home() / '.local/state')) / 'deckd.sock'
+    own = daemon_socket_path()
+    tunnel = Path(os.environ.get('XDG_RUNTIME_DIR') or Path.home() / '.local/state') / 'deckd.sock'
+    if not own.exists() and tunnel.exists():
+        return tunnel
+    return own
 
 
 # --- Hyprland ---------------------------------------------------------------
@@ -386,7 +410,12 @@ def watch_hyprland(remote: Remote) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
-    parser.add_argument('--socket', type=Path, default=socket_path(), help='deckd Unix socket')
+    # No default here: without --socket the path is looked up again before
+    # every connection (`socket_path`), so a tunnel or a deckd that comes up
+    # after the bridge is still found.
+    parser.add_argument('--socket', type=Path, default=None,
+                        help='deckd Unix socket (default: $DECKD_SOCKET, $DECKD_DATA_DIR/deckd.sock, '
+                             "else deckd's own: $XDG_RUNTIME_DIR/openwalkietalkie/deckd.sock)")
     parser.add_argument('--control-socket', type=Path, default=control_socket_path(),
                         help='where omarchy_hook.py reports Claude Code / Codex events')
     args = parser.parse_args()
@@ -402,7 +431,7 @@ def main() -> int:
     delay = 1.0
     while True:
         try:
-            remote.serve(args.socket)
+            remote.serve(args.socket or socket_path())
         except KeyboardInterrupt:
             return 0
         except Exception as error:  # the bridge outlives anything one connection throws

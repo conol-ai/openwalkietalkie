@@ -2246,20 +2246,30 @@ pub fn launchd_checks() -> Vec<(String, bool, String)> {
 
 /// The doctor's `tcp` row: the port file, and whether what answers on that
 /// port is this daemon. An empty port file while the service runs is a
-/// degraded door, unless `[api] tcp = false` switched the door off, when it
-/// is the point.
-fn tcp_check(paths: &Paths, running: bool) -> Result<String, String> {
+/// degraded door, unless the door is off — by default, or because `[api]
+/// tcp = false` says so — when it is the point. `door` says how the door is
+/// decided (`config::Api::tcp_door`; `None` for a `config.toml` that does
+/// not load), and is asked only when the port file names no port.
+fn tcp_check(
+    paths: &Paths,
+    running: bool,
+    door: impl FnOnce() -> Option<crate::config::TcpDoor>,
+) -> Result<String, String> {
     let port = std::fs::read_to_string(&paths.port)
         .ok()
         .and_then(|s| s.trim().parse::<u16>().ok());
-    let off = Config::load(&paths.config).is_ok_and(|config| !config.api.tcp);
     match port {
-        None if off => Ok("off ([api] tcp = false): the socket is the only door".into()),
-        None if !running => Ok("no port file (the daemon is not running)".into()),
-        None => Err(
-            "port file empty while the service runs: the tcp door is degraded (port in use?)"
-                .into(),
-        ),
+        None => match door().filter(|door| !door.on) {
+            Some(off) => Ok(format!(
+                "off ({}): the socket is the only door",
+                off.reason()
+            )),
+            None if !running => Ok("no port file (the daemon is not running)".into()),
+            None => Err(
+                "port file empty while the service runs: the tcp door is degraded (port in use?)"
+                    .into(),
+            ),
+        },
         Some(port) => match info_probe(port) {
             Ok(info) if info_is_ours(&info, &paths.socket) => {
                 Ok(format!("127.0.0.1:{port}/v1/info answers and is ours"))
@@ -2274,18 +2284,36 @@ fn tcp_check(paths: &Paths, running: bool) -> Result<String, String> {
 }
 
 fn doctor(paths: &Paths) -> Doctor {
-    let mut checks = setup_checks(paths);
+    let mut checks = setup_checks(paths, || file_door(paths));
     checks.push(device_check());
     checks.extend(launchd_checks());
     Doctor { checks }
+}
+
+/// The TCP door as `deckd run` would decide it from this data dir's
+/// `config.toml` and this process's environment (`config::Api::tcp_door`):
+/// what the doctor, a process of its own, has to go on. `None` for a file
+/// that does not load.
+fn file_door(paths: &Paths) -> Option<crate::config::TcpDoor> {
+    let config = Config::load(&paths.config).ok()?;
+    Some(
+        config
+            .api
+            .tcp_door(|| crate::integrations::legacy_claude_hooks(paths, &config)),
+    )
 }
 
 /// The doctor's rows about the data directory and the two doors: `data
 /// dir`, `config.toml`, `state.json`, `service`, `status.json`, `socket`,
 /// `tcp` and `tokens.toml`. Nothing here looks for the deck or asks
 /// launchd; `care.checks` answers with these, then the deck's row by its
-/// own rule, then [`launchd_checks`].
-pub fn setup_checks(paths: &Paths) -> Vec<(String, bool, String)> {
+/// own rule, then [`launchd_checks`]. `door` is how the TCP door is decided
+/// (the doctor works it out, the service knows it), asked only by the `tcp`
+/// row and only when the port file names no port.
+pub fn setup_checks(
+    paths: &Paths,
+    door: impl FnOnce() -> Option<crate::config::TcpDoor>,
+) -> Vec<(String, bool, String)> {
     let mut checks = Vec::new();
     let mut check = |name: &str, result: Result<String, String>| match result {
         Ok(detail) => checks.push((name.to_string(), true, detail)),
@@ -2377,7 +2405,7 @@ pub fn setup_checks(paths: &Paths) -> Vec<(String, bool, String)> {
             }
         },
     );
-    check("tcp", tcp_check(paths, running));
+    check("tcp", tcp_check(paths, running, door));
     check(
         "tokens.toml",
         match std::fs::metadata(&paths.tokens) {
@@ -3188,25 +3216,55 @@ mod tests {
         std::fs::remove_dir_all(dir).unwrap();
     }
 
-    /// D3: with `[api] tcp = false` an empty port file is the door switched
-    /// off, not a degraded one, so the doctor (and every check built on its
-    /// rows) raises nothing; with the door on it is still the degrade it
-    /// always was.
+    /// D3, and the owner's decision 12 that made off the default: an empty
+    /// port file is the door off — by default, or by `[api] tcp = false`,
+    /// even with the old Claude hooks about — not a degraded one, so the
+    /// doctor (and every check built on its rows) raises nothing and says
+    /// which; with the door on, the file's or the old hooks', it is still
+    /// the degrade it always was. How the door is decided is asked only
+    /// when the port file names no port: the doctor's own answer reads
+    /// Claude's settings.
     #[test]
     fn the_doctor_reads_no_port_as_the_door_switched_off_when_it_is() {
+        use crate::config::TcpDoor;
         let dir = std::env::temp_dir().join(format!("deckd-cli-tcp-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let p = Paths::from_data_dir(dir.clone(), dir.join("logs"), dir.join("caches"));
         std::fs::write(&p.port, "").unwrap();
-        let degraded = tcp_check(&p, true).unwrap_err();
-        assert!(degraded.contains("degraded"), "{degraded}");
-        assert!(tcp_check(&p, false).unwrap().contains("not running"));
-        std::fs::write(&p.config, "[api]\ntcp = false\n").unwrap();
+        let decided = |file: &str, legacy_hooks: bool| -> Option<TcpDoor> {
+            Some(Config::parse(file).unwrap().api.tcp_door(|| legacy_hooks))
+        };
         for running in [true, false] {
-            let off = tcp_check(&p, running).unwrap();
+            let off = tcp_check(&p, running, || decided("", false)).unwrap();
+            assert!(off.starts_with("off ([api] tcp is left out"), "{off}");
+            assert!(off.ends_with("the socket is the only door"), "{off}");
+            let off = tcp_check(&p, running, || decided("[api]\ntcp = false\n", true)).unwrap();
             assert!(off.starts_with("off ([api] tcp = false)"), "{off}");
         }
+        for (file, legacy_hooks) in [("[api]\ntcp = true\n", false), ("", true)] {
+            let on = || decided(file, legacy_hooks);
+            let degraded = tcp_check(&p, true, on).unwrap_err();
+            assert!(degraded.contains("degraded"), "{degraded}");
+            assert!(tcp_check(&p, false, on).unwrap().contains("not running"));
+        }
+        // A config.toml that does not load is no reason to call it off.
+        let degraded = tcp_check(&p, true, || None).unwrap_err();
+        assert!(degraded.contains("degraded"), "{degraded}");
+        // A port named: probed, and the door's decision is never asked. A
+        // port just given back answers nothing, which a stopped daemon
+        // leaves behind.
+        let closed = std::net::TcpListener::bind(("127.0.0.1", 0))
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        std::fs::write(&p.port, closed.to_string()).unwrap();
+        let stale = tcp_check(&p, false, || panic!("not asked with a port named")).unwrap();
+        assert!(
+            stale.starts_with(&format!("stale port {closed}")),
+            "{stale}"
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -3554,7 +3612,7 @@ mod tests {
         let paths = Paths::from_data_dir(data.clone(), data.join("logs"), data.join("caches"));
         std::fs::write(&paths.tokens, "").unwrap();
         std::fs::set_permissions(&paths.tokens, std::fs::Permissions::from_mode(0o644)).unwrap();
-        let checks = setup_checks(&paths);
+        let checks = setup_checks(&paths, || None);
         let (_, ok, detail) = checks
             .iter()
             .find(|(name, _, _)| name == "tokens.toml")

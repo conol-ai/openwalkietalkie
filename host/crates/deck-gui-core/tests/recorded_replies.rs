@@ -180,6 +180,9 @@ fn one_config_get_reads_every_switch_and_a_port_of_zero_as_no_port() {
         (api.max_held_hooks, api.hooks_enabled),
         (Some(64), Some(true))
     );
+    // The stage-6 service bound its TCP door unless its file said not to.
+    // The door has been off by default since (the owner's decision 12), so
+    // a service of this release answers `false` here for the same config.
     assert_eq!(reply["api"]["tcp"], true);
     let stt = SttConfig::parse(&reply);
     assert_eq!(

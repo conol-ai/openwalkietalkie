@@ -481,14 +481,19 @@ pub struct Api {
     /// already has more than anyone can work through.
     pub max_held_hooks: u32,
     /// Whether the TCP door (`127.0.0.1:<port>`: `/v1/rpc`, `/v1/ws`,
-    /// `/v1/events`, the REST mirror, the HTTP hook door) is bound at all.
-    /// On by default. Off, the daemon serves its Unix sockets alone, which
-    /// is where everything shipped with the deck already talks — the app,
-    /// `deckd ctl`, the hook helpers, the channel helper — and only a
-    /// bearer-token client is left out. Nothing is bound, so nothing can
-    /// collide: no `port_in_use` degrade, an empty port file and
-    /// `service.info.port: null`. Read at start, like `port`.
-    pub tcp: bool,
+    /// `/v1/events`, the REST mirror, the HTTP hook door) is bound at all,
+    /// as the file says it: `None` when the file leaves the key out, which
+    /// [`Api::tcp_door`] resolves (off, unless the pre-plugin Claude hooks
+    /// still post to it). Off, the daemon serves its Unix sockets alone,
+    /// which is where everything shipped with the deck already talks — the
+    /// app, `deckd ctl`, the hook helpers, the channel helper, the connected
+    /// apps, the Omarchy bridge — and only a bearer-token client is left
+    /// out. Nothing is bound, so nothing can collide: no `port_in_use`
+    /// degrade, an empty port file and `service.info.port: null`. Read at
+    /// start, like `port`. The door and its tokens go in the next release,
+    /// with `op.*`, the public `voice.*` methods, `focus.report` and the
+    /// socket's `agent.wait`.
+    pub tcp: Option<bool>,
 }
 
 impl Default for Api {
@@ -500,7 +505,88 @@ impl Default for Api {
             uds_max_scope: "admin".into(),
             mailbox_ttl_s: 600,
             max_held_hooks: 64,
-            tcp: true,
+            tcp: None,
+        }
+    }
+}
+
+impl Api {
+    /// The TCP door as `deckd run` binds it, and the rule that said so.
+    ///
+    /// `[api] tcp` when the file names it: an explicit `true` or `false` is
+    /// always honoured. Left out, the door is off — unless the HTTP hooks
+    /// deckd gave Claude Code before its integration became a plugin
+    /// (`integrations::claude_legacy`) still post to it: Claude's settings
+    /// carry one, or deckd's own record of the Claude target is still the
+    /// pre-plugin one (`integrations::legacy_claude_hooks`). Closing it
+    /// under them would leave every Claude permission ask to the terminal,
+    /// so the door stays open while they may be there, and the Integrations
+    /// page's Claude row asks for Repair, which migrates them; the next
+    /// start finds them gone. That is `legacy_hooks`, which reads those
+    /// files and is asked only when the key is left out.
+    pub fn tcp_door(&self, legacy_hooks: impl FnOnce() -> bool) -> TcpDoor {
+        match self.tcp {
+            Some(on) => TcpDoor {
+                on,
+                rule: TcpRule::Explicit,
+            },
+            None if legacy_hooks() => TcpDoor {
+                on: true,
+                rule: TcpRule::LegacyHooks,
+            },
+            None => TcpDoor {
+                on: false,
+                rule: TcpRule::Default,
+            },
+        }
+    }
+}
+
+/// Whether the TCP door is bound ([`Api::tcp_door`]), and why.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TcpDoor {
+    pub on: bool,
+    pub rule: TcpRule,
+}
+
+/// The rules of [`Api::tcp_door`], in the order they are asked.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TcpRule {
+    /// `[api] tcp` names it.
+    Explicit,
+    /// The key is left out: off.
+    Default,
+    /// The key is left out, and the pre-plugin Claude hooks that post to
+    /// the door may still be installed: on until they are migrated.
+    LegacyHooks,
+}
+
+impl TcpRule {
+    /// The rule as `config.get` publishes it, `api.tcp_rule`: `explicit`,
+    /// `default` or `legacy_hooks`. What the Service page's Local API row
+    /// reads to say why the door is open.
+    pub const fn word(self) -> &'static str {
+        match self {
+            TcpRule::Explicit => "explicit",
+            TcpRule::Default => "default",
+            TcpRule::LegacyHooks => "legacy_hooks",
+        }
+    }
+}
+
+impl TcpDoor {
+    /// Which rule applied, in the words of the start-up log line and of the
+    /// doctor's `tcp` row.
+    pub fn reason(self) -> &'static str {
+        match self.rule {
+            TcpRule::Explicit if self.on => "[api] tcp = true",
+            TcpRule::Explicit => "[api] tcp = false",
+            TcpRule::Default => "[api] tcp is left out, and the door is off by default",
+            TcpRule::LegacyHooks => {
+                "[api] tcp is left out, but the pre-plugin deckd hooks of Claude Code, which post \
+                 to this door, may still be installed; repairing the Claude integration migrates \
+                 them"
+            }
         }
     }
 }
@@ -1773,7 +1859,7 @@ hold_s = 30
         assert_eq!(c.api.port, 47201);
         assert_eq!(c.api.uds_default_scope, "observe");
         assert_eq!(c.api.mailbox_ttl_s, 600);
-        assert!(c.api.tcp);
+        assert_eq!(c.api.tcp, None, "left out: `Api::tcp_door` decides");
         assert!(c.trust.require_trusted_for_allow);
         assert_eq!(c.privacy.keep_tool_input, "pending");
         assert_eq!(c.privacy.event_ring, 4096);
@@ -1868,28 +1954,83 @@ hold_s = 30
         assert!(is_hot("voice.fallback_input"));
     }
 
-    /// D3: `[api] tcp`, the Service page's Local API switch. On by default
-    /// (nothing that works today stops working), off parses, and it is read
-    /// at start like the port, so a change is "restart needed" and never
-    /// "applied". The gate's own API daemon, whose file names a port and
-    /// no switch, keeps its door.
+    /// `[api] tcp`, the Service page's Local API switch (D3), off by default
+    /// since the owner's answer to decision 12: nobody outside this repo and
+    /// Conol uses the door. Left out it is off, unless the pre-plugin Claude
+    /// hooks still post to it; an explicit value is always honoured, and
+    /// Claude's settings are not even read for one. It is read at start like
+    /// the port, so a change is "restart needed" and never "applied".
     #[test]
-    fn the_tcp_door_is_on_by_default_and_switching_it_needs_a_restart() {
+    fn the_tcp_door_is_off_unless_the_file_or_the_old_claude_hooks_open_it() {
         let c = Config::default();
-        assert!(c.api.tcp);
+        assert_eq!(c.api.tcp, None);
+        let door = |config: &Config, legacy: Option<bool>| {
+            config
+                .api
+                .tcp_door(|| legacy.expect("Claude's settings are read only for a key left out"))
+        };
+        assert_eq!(
+            door(&c, Some(false)),
+            TcpDoor {
+                on: false,
+                rule: TcpRule::Default
+            }
+        );
+        assert_eq!(
+            door(&c, Some(true)),
+            TcpDoor {
+                on: true,
+                rule: TcpRule::LegacyHooks
+            }
+        );
         let off = Config::parse("[api]\ntcp = false\n").unwrap();
-        assert!(!off.api.tcp);
+        let on = Config::parse("[api]\ntcp = true\n").unwrap();
+        assert_eq!((off.api.tcp, on.api.tcp), (Some(false), Some(true)));
+        for (config, want) in [(&off, false), (&on, true)] {
+            assert_eq!(
+                door(config, None),
+                TcpDoor {
+                    on: want,
+                    rule: TcpRule::Explicit
+                }
+            );
+        }
         assert_eq!(off.api.port, 47201, "the rest of [api] keeps its defaults");
-        assert_eq!(changed_keys(&c, &off), ["api.tcp"]);
+        assert_eq!(changed_keys(&c, &off), ["api.tcp"], "off is not left out");
+        assert_eq!(changed_keys(&off, &on), ["api.tcp"]);
         assert!(!is_hot("api.tcp"), "read at start, like the port");
         assert!(Config::parse("[api]\ntcp = \"no\"\n").is_err());
-        // `tools/host-test.sh`'s API daemon, byte for byte.
-        let gate = Config::parse(
-            "[api]\nport = 0\nallowed_origins = [\"http://localhost:5173\"]\n\n[liveness]\nseed = false\n\n[codex]\ndaemon = false\n",
+        // What the start-up line and the doctor say for each rule.
+        assert_eq!(door(&off, None).reason(), "[api] tcp = false");
+        assert_eq!(door(&on, None).reason(), "[api] tcp = true");
+        assert!(door(&c, Some(false)).reason().contains("off by default"));
+        assert!(door(&c, Some(true)).reason().contains("pre-plugin"));
+        // And the word `config.get` publishes for each (`api.tcp_rule`).
+        assert_eq!(
+            [TcpRule::Explicit, TcpRule::Default, TcpRule::LegacyHooks].map(TcpRule::word),
+            ["explicit", "default", "legacy_hooks"]
+        );
+    }
+
+    /// The gate keeps exercising the door until it is deleted: its `api`
+    /// and hardware `w2` daemons name the switch, byte for byte as
+    /// `tools/host-test.sh` writes them, and parse with the door on.
+    #[test]
+    fn the_gates_own_daemons_switch_the_tcp_door_on() {
+        let script = std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../tools/host-test.sh"),
         )
-        .unwrap();
-        assert!(gate.api.tcp);
-        assert_eq!(gate.api.port, 0);
+        .expect("tools/host-test.sh");
+        for text in [
+            "[api]\nport = 0\ntcp = true\nallowed_origins = [\"http://localhost:5173\"]\n\n[liveness]\nseed = false\n\n[codex]\ndaemon = false\n",
+            "[api]\nport = 0\ntcp = true\n\n[liveness]\nseed = false\n\n[codex]\ndaemon = false\n",
+        ] {
+            let printf = format!("printf '{}'", text.replace('\n', "\\n"));
+            assert!(script.contains(&printf), "the gate no longer writes {printf}");
+            let gate = Config::parse(text).unwrap();
+            assert!(gate.api.tcp_door(|| false).on, "{text:?}");
+            assert_eq!(gate.api.port, 0);
+        }
     }
 
     /// `[device] status_poll_s`, the kill switch of the deck's channel-2

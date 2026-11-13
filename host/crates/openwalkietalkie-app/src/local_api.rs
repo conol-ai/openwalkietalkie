@@ -4,7 +4,10 @@
 //!
 //! Nothing shipped with the deck uses the door: the deck's own link, the
 //! Claude Code plugin's hooks and the connected apps all reach the service
-//! over its socket. So a new port is only a `config.set` and a restart (the
+//! over its socket. So the door is off unless the owner switches it on (the
+//! Service page's switch, `[api] tcp`), the page is reached from its
+//! **Details** only while it is on, and the door and its tokens go in the
+//! next release. A new port is only a `config.set` and a restart (the
 //! service binds its door when it starts), and nothing has to be re-pointed
 //! at it.
 //!

@@ -1,6 +1,13 @@
 //! Release discovery and verified, board-specific USB application updates.
 //! All network/USB work runs off the core. Only an explicit install call
 //! acquires HID maintenance and writes flash; polling never installs anything.
+//!
+//! On a deck that can show a card, the install call itself does not start
+//! one: the core asks the deck first, and the install waits in the phase
+//! `confirming` ([`Updater::await_confirmation`]) for the press that starts
+//! it ([`Updater::confirmed`]) or for the card to go unanswered
+//! ([`Updater::not_confirmed`]). A deck in recovery cannot show a card and
+//! installs as it always has (`Core::install_after_press`).
 mod bulk;
 mod migration;
 mod transport;
@@ -11,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::{atomic::Ordering, Arc, Mutex};
+use std::sync::{atomic::Ordering, Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 pub const REPOSITORY: &str = "conol-ai/openwalkietalkie";
@@ -194,25 +201,63 @@ impl Default for Status {
 }
 
 impl Status {
+    /// An update operation is under way: a check, an install waiting for
+    /// the deck's press, or one writing to it. No other starts meanwhile.
     pub fn busy(&self) -> bool {
         matches!(
             self.phase.as_str(),
-            "checking" | "downloading" | "installing" | "reconnecting" | "bootloader"
+            "checking"
+                | "confirming"
+                | "downloading"
+                | "installing"
+                | "reconnecting"
+                | "bootloader"
         )
     }
+}
+
+/// An install, as `firmware.install` names it: the board, and the deck and
+/// release the last check found.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Install {
+    pub board: String,
+    pub serial: String,
+    pub version: String,
+    pub allow_bootloader_update: bool,
 }
 
 #[derive(Clone, Default)]
 pub struct Updater {
     state: Arc<Mutex<Status>>,
     checked: Arc<Mutex<Option<Instant>>>,
+    /// The install that waits for the deck's press while the phase is
+    /// `confirming` ([`Updater::await_confirmation`]).
+    awaiting: Arc<Mutex<Option<Install>>>,
     /// Never probe USB or fetch: see [`Updater::offline`].
     offline: bool,
+    /// A test's updater ([`testkit::checked`]): an install that passed
+    /// every check is kept here instead of started, so no thread, USB or
+    /// download is ever reached (a started install that fails probes USB).
+    #[cfg(test)]
+    started: Option<Arc<Mutex<Vec<Install>>>>,
 }
 
 /// Why an offline updater refuses to install (see [`Updater::offline`]).
 pub const NO_DEVICE: &str =
     "This service runs with --no-device: it never opens the deck, so it cannot install firmware.";
+
+/// Why an install does not start while someone talks: it pauses the deck's
+/// link under the press, the transcription and the speech.
+pub const VOICE_BUSY: &str = "Finish talking and wait for transcription before updating.";
+
+/// Why an install is refused for a deck that runs its firmware (the last
+/// check did not find it in recovery) but has no session with the service:
+/// it cannot be asked for the press yet, and nothing installs without one.
+/// Once it links, the same install asks it.
+pub const WAIT_FOR_LINK: &str = "Wait for the deck to link, then install again.";
+
+/// Why an install does not start while another update operation runs.
+const ALREADY_RUNNING: &str = "An update operation is already running.";
 
 impl Updater {
     /// The updater of a daemon that may not open the deck: `deckd run
@@ -339,60 +384,139 @@ impl Updater {
         if self.offline {
             return Err(NO_DEVICE.into());
         }
-        let mut state = self.state.lock().unwrap();
+        let state = self.state.lock().unwrap();
         if state.busy() {
-            return Err("An update operation is already running.".into());
+            return Err(ALREADY_RUNNING.into());
         }
-        let device = state
-            .device
-            .clone()
-            .ok_or("Check for updates with your deck connected by USB first.")?;
-        let release = state
-            .release
-            .clone()
-            .ok_or("Check for a firmware release first.")?;
-        release.validate()?;
-        if device.serial != serial || serial.is_empty() || release.firmware.version != version {
-            return Err("The device or release changed. Check for updates again.".into());
+        let install = Install {
+            board: board.into(),
+            serial: serial.into(),
+            version: version.into(),
+            allow_bootloader_update,
+        };
+        self.start(state, &install, cache, maintenance)
+    }
+
+    /// Every refusal [`Updater::install`] would answer `install` with, and
+    /// nothing else: no phase changes, nothing starts. What the core asks
+    /// before it puts the install's card on the deck, so a card only ever
+    /// asks for an install that would start.
+    pub fn vet(&self, install: &Install) -> Result<(), String> {
+        if self.offline {
+            return Err(NO_DEVICE.into());
         }
-        if let Some(actual) = &device.board {
-            if actual != board {
-                return Err("This firmware is for a different board.".into());
-            }
+        let state = self.state.lock().unwrap();
+        if state.busy() {
+            return Err(ALREADY_RUNNING.into());
         }
-        if !device.recovery && !device.maintenance {
-            if let Some(current) = device.version.as_deref().and_then(firmware_version) {
-                let new = Version::parse(version).map_err(|_| "Invalid version.")?;
-                if new <= current {
-                    return Err("The deck already has this version or a newer one.".into());
-                }
-            }
-        }
-        let asset = release
-            .firmware
-            .variants
-            .get(board)
-            .cloned()
-            .ok_or("No firmware for the selected board.")?;
-        if release.firmware.protocol == 2
-            && (device.recovery_protocol != Some(2) || device.maintenance)
-            && !allow_bootloader_update
+        plan(&state, install).map(drop)
+    }
+
+    /// Hold `install`, which [`Updater::vet`] passed, for a press on the
+    /// deck. The phase is `confirming`, as busy as an install: no check
+    /// starts and no other install is taken until the deck confirms it
+    /// ([`Updater::confirmed`]) or does not ([`Updater::not_confirmed`]).
+    pub fn await_confirmation(&self, install: Install) -> Status {
+        *self.awaiting.lock().unwrap() = Some(install);
         {
-            return Err(
-                "Read and accept the bootloader power-loss warning before updating this device."
-                    .into(),
-            );
+            let mut state = self.state.lock().unwrap();
+            state.phase = "confirming".into();
+            state.progress = 0;
+            state.error = None;
+            state.message = "Press ENTER on the deck to start the install.".into();
         }
-        let migration = release.firmware.migrations.get(board).cloned();
+        self.status()
+    }
+
+    /// The deck confirmed the install that waits: it starts now, checked
+    /// again as [`Updater::install`] checks it. Nobody is waiting for this
+    /// answer, so a refusal stays in the status, as a failed install's
+    /// reason does.
+    pub fn confirmed(&self, cache: PathBuf, maintenance: Maintenance) -> Result<Status, String> {
+        let Some(install) = self.awaiting.lock().unwrap().take() else {
+            return Err("No install is waiting for the deck.".into());
+        };
+        let state = self.state.lock().unwrap();
+        let started = self.start(state, &install, cache, maintenance);
+        if let Err(why) = &started {
+            self.fail(why.clone());
+        }
+        started
+    }
+
+    /// The deck confirmed the install that waits, and it starts once the
+    /// voice is quiet ([`Updater::confirmed`]): the phase stays
+    /// `confirming`, as busy as before and with nothing downloaded yet, and
+    /// the message says the press was taken and what the install waits for.
+    /// Nothing changes when no install waits.
+    pub fn waits_for_quiet(&self) {
+        if self.awaiting.lock().unwrap().is_none() {
+            return;
+        }
+        let mut state = self.state.lock().unwrap();
+        if state.phase == "confirming" {
+            state.message = "Starting the install when the deck stops talking…".into();
+        }
+    }
+
+    /// The deck did not confirm the install that waits: its card was
+    /// dismissed, answered some other way, or its minute ran out. Nothing
+    /// was installed; the status is idle again and says so.
+    pub fn not_confirmed(&self) {
+        if self.awaiting.lock().unwrap().take().is_none() {
+            return;
+        }
+        let mut state = self.state.lock().unwrap();
+        state.phase = "idle".into();
+        state.progress = 0;
+        state.error = None;
+        state.message = "Not confirmed on the deck. Nothing was installed.".into();
+    }
+
+    /// The install the deck confirmed cannot start, for `why`: it stays in
+    /// the status, as a failed install's reason does.
+    pub fn abandon(&self, why: &str) {
+        if self.awaiting.lock().unwrap().take().is_some() {
+            self.fail(why.into());
+        }
+    }
+
+    /// Start `install` from `state`: every check of [`plan`], then the
+    /// download and the flash on a thread of their own. The caller made
+    /// sure nothing else is under way.
+    fn start(
+        &self,
+        mut state: MutexGuard<'_, Status>,
+        install: &Install,
+        cache: PathBuf,
+        maintenance: Maintenance,
+    ) -> Result<Status, String> {
+        // Whoever asks: an offline updater never pauses the link or opens
+        // the deck.
+        if self.offline {
+            return Err(NO_DEVICE.into());
+        }
+        let Plan {
+            device,
+            release,
+            asset,
+            migration,
+        } = plan(&state, install)?;
         state.phase = "downloading".into();
         state.progress = 0;
         state.error = None;
         state.message = "Downloading and verifying firmware…".into();
         let initial = state.clone();
         drop(state);
+        #[cfg(test)]
+        if let Some(started) = &self.started {
+            started.lock().unwrap().push(install.clone());
+            return Ok(initial);
+        }
         let this = self.clone();
-        let board = board.to_string();
-        let version = version.to_string();
+        let board = install.board.clone();
+        let version = install.version.clone();
+        let allow_bootloader_update = install.allow_bootloader_update;
         std::thread::Builder::new()
             .name("firmware-install".into())
             .spawn(move || {
@@ -482,6 +606,73 @@ impl Updater {
         state.error = Some(error);
         state.message = "Update did not complete. You can check again and retry.".into();
     }
+}
+
+/// What an install writes, once [`plan`] found it sound.
+struct Plan {
+    device: Device,
+    release: Manifest,
+    asset: Asset,
+    migration: Option<Migration>,
+}
+
+/// Every check an install makes before it starts, against the deck and the
+/// release in `state`: the same deck and release the last check found, the
+/// board, no downgrade, and the bootloader's consent where it may be
+/// replaced.
+fn plan(state: &Status, install: &Install) -> Result<Plan, String> {
+    let Install {
+        board,
+        serial,
+        version,
+        allow_bootloader_update,
+    } = install;
+    let device = state
+        .device
+        .clone()
+        .ok_or("Check for updates with your deck connected by USB first.")?;
+    let release = state
+        .release
+        .clone()
+        .ok_or("Check for a firmware release first.")?;
+    release.validate()?;
+    if device.serial != *serial || serial.is_empty() || release.firmware.version != *version {
+        return Err("The device or release changed. Check for updates again.".into());
+    }
+    if let Some(actual) = &device.board {
+        if actual != board {
+            return Err("This firmware is for a different board.".into());
+        }
+    }
+    if !device.recovery && !device.maintenance {
+        if let Some(current) = device.version.as_deref().and_then(firmware_version) {
+            let new = Version::parse(version).map_err(|_| "Invalid version.")?;
+            if new <= current {
+                return Err("The deck already has this version or a newer one.".into());
+            }
+        }
+    }
+    let asset = release
+        .firmware
+        .variants
+        .get(board)
+        .cloned()
+        .ok_or("No firmware for the selected board.")?;
+    if release.firmware.protocol == 2
+        && (device.recovery_protocol != Some(2) || device.maintenance)
+        && !allow_bootloader_update
+    {
+        return Err(
+            "Read and accept the bootloader power-loss warning before updating this device.".into(),
+        );
+    }
+    let migration = release.firmware.migrations.get(board).cloned();
+    Ok(Plan {
+        device,
+        release,
+        asset,
+        migration,
+    })
 }
 
 /// Versions reported by the running firmware append the product name.
@@ -743,6 +934,66 @@ impl Drop for Pause {
     }
 }
 
+/// An updater that has checked, for the tests of what starts an install
+/// (`Core::install_after_press`): no deck, no network.
+#[cfg(test)]
+pub(crate) mod testkit {
+    use super::*;
+
+    /// The deck on the cable: Rev A, firmware 0.1.0, its recovery already
+    /// the second protocol, so the test release needs no bootloader
+    /// consent.
+    pub fn deck() -> Device {
+        Device {
+            serial: "USB-A".into(),
+            board: Some("hw-a".into()),
+            version: Some("0.1.0-openwalkietalkie".into()),
+            recovery_protocol: Some(2),
+            ..Device::default()
+        }
+    }
+
+    /// The same deck in recovery, which names neither its board nor its
+    /// firmware.
+    pub fn deck_in_recovery() -> Device {
+        Device {
+            serial: "USB-A".into(),
+            recovery: true,
+            recovery_protocol: Some(2),
+            ..Device::default()
+        }
+    }
+
+    /// The install of the test release (0.2.0) on [`deck`], as the app
+    /// sends it.
+    pub fn install() -> Install {
+        Install {
+            board: "hw-a".into(),
+            serial: "USB-A".into(),
+            version: "0.2.0".into(),
+            allow_bootloader_update: false,
+        }
+    }
+
+    /// An updater whose last check found `device` on the cable and the test
+    /// release, and the list every install it starts goes to instead of a
+    /// thread of its own.
+    pub fn checked(device: Device) -> (Updater, Arc<Mutex<Vec<Install>>>) {
+        let started = Arc::default();
+        let updater = Updater {
+            started: Some(Arc::clone(&started)),
+            ..Updater::default()
+        };
+        {
+            let mut state = updater.state.lock().unwrap();
+            state.phase = "ready".into();
+            state.device = Some(device);
+            state.release = Some(super::tests::fixture().0);
+        }
+        (updater, started)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -769,7 +1020,7 @@ mod tests {
         }
     }
 
-    fn fixture() -> (Manifest, Vec<u8>) {
+    pub(super) fn fixture() -> (Manifest, Vec<u8>) {
         let mut image = vec![0; 128];
         image[..4].copy_from_slice(&0x20040000u32.to_le_bytes());
         image[4..8].copy_from_slice(&(APP_BASE + 9).to_le_bytes());
@@ -1110,6 +1361,205 @@ mod tests {
             "the link was never asked to pause"
         );
         assert!(!cache.exists());
+    }
+
+    /// `vet` answers exactly the refusals `install` answers — the board,
+    /// the deck and release the check found, a downgrade, the bootloader's
+    /// consent, an offline service — and starts nothing, whatever it says.
+    #[test]
+    fn vet_refuses_what_install_refuses_and_starts_nothing() {
+        let (updater, started) = testkit::checked(testkit::deck());
+        let good = testkit::install();
+        let same_refusal = |install: &Install| {
+            let vetted = updater.vet(install).unwrap_err();
+            let installed = updater
+                .install(
+                    &install.board,
+                    &install.serial,
+                    &install.version,
+                    install.allow_bootloader_update,
+                    PathBuf::from("/unused"),
+                    Maintenance::default(),
+                )
+                .unwrap_err();
+            assert_eq!(vetted, installed, "{install:?}");
+            vetted
+        };
+        let refused = [
+            Install {
+                board: "hw-b".into(),
+                ..good.clone()
+            },
+            Install {
+                serial: "USB-B".into(),
+                ..good.clone()
+            },
+            Install {
+                version: "0.1.0".into(),
+                ..good.clone()
+            },
+        ];
+        for install in &refused {
+            same_refusal(install);
+        }
+        let set_device = |edit: &dyn Fn(&mut Device)| {
+            edit(updater.state.lock().unwrap().device.as_mut().unwrap());
+        };
+        set_device(&|deck| deck.version = Some("0.3.0-openwalkietalkie".into()));
+        assert!(same_refusal(&good).contains("newer one"));
+        set_device(&|deck| {
+            deck.version = Some("0.1.0-openwalkietalkie".into());
+            deck.recovery_protocol = Some(1);
+        });
+        let consent = same_refusal(&good);
+        assert!(consent.contains("power-loss warning"), "{consent}");
+        let given = Install {
+            allow_bootloader_update: true,
+            ..good.clone()
+        };
+        updater.vet(&given).unwrap();
+        assert_eq!(updater.status().phase, "ready");
+        assert!(started.lock().unwrap().is_empty(), "vet starts nothing");
+        assert_eq!(Updater::offline().vet(&good).unwrap_err(), NO_DEVICE);
+    }
+
+    /// An install that waits for the deck is `confirming`: busy, so no
+    /// other install or check starts; the press starts the one it waited
+    /// for, once, and only then.
+    #[test]
+    fn an_install_waiting_for_the_deck_starts_when_it_is_confirmed() {
+        let (updater, started) = testkit::checked(testkit::deck());
+        let cache = PathBuf::from("/unused");
+        updater.vet(&testkit::install()).unwrap();
+        let status = updater.await_confirmation(testkit::install());
+        assert_eq!(status.phase, "confirming");
+        assert_eq!(
+            status.message,
+            "Press ENTER on the deck to start the install."
+        );
+        assert!(status.busy() && status.available && status.error.is_none());
+        assert!(
+            started.lock().unwrap().is_empty(),
+            "nothing before the press"
+        );
+        assert_eq!(
+            updater.vet(&testkit::install()).unwrap_err(),
+            ALREADY_RUNNING
+        );
+        let again = updater.install(
+            "hw-a",
+            "USB-A",
+            "0.2.0",
+            false,
+            cache.clone(),
+            Maintenance::default(),
+        );
+        assert_eq!(again.unwrap_err(), ALREADY_RUNNING);
+        let check = updater.check(cache.clone(), true).unwrap();
+        assert_eq!(check.phase, "confirming", "a check waits too");
+        assert!(updater.checked.lock().unwrap().is_none());
+
+        let maintenance = Maintenance::default();
+        let status = updater
+            .confirmed(cache.clone(), maintenance.clone())
+            .unwrap();
+        assert_eq!(status.phase, "downloading");
+        assert_eq!(*started.lock().unwrap(), [testkit::install()]);
+        assert!(
+            !maintenance.requested.load(Ordering::Acquire),
+            "a test's install never reaches the link"
+        );
+        let twice = updater
+            .confirmed(cache, Maintenance::default())
+            .unwrap_err();
+        assert_eq!(twice, "No install is waiting for the deck.");
+        assert_eq!(started.lock().unwrap().len(), 1, "one press, one install");
+        assert_eq!(updater.status().phase, "downloading");
+    }
+
+    /// After the press, while the voice holds the install back, the status
+    /// says what it waits for and stays `confirming`: busy, nothing
+    /// downloaded. With no install waiting it changes nothing — the press
+    /// that started one, a refusal, an idle updater.
+    #[test]
+    fn a_confirmed_install_held_back_by_the_voice_says_what_it_waits_for() {
+        const WAITS: &str = "Starting the install when the deck stops talking…";
+        let (updater, started) = testkit::checked(testkit::deck());
+        updater.waits_for_quiet();
+        assert_eq!(updater.status().phase, "ready", "nothing waits yet");
+        assert_ne!(updater.status().message, WAITS);
+        updater.await_confirmation(testkit::install());
+        updater.waits_for_quiet();
+        let status = updater.status();
+        assert_eq!((status.phase.as_str(), status.message.as_str()), ("confirming", WAITS));
+        assert!(status.busy() && status.error.is_none());
+        assert!(started.lock().unwrap().is_empty(), "nothing before quiet");
+        let status = updater
+            .confirmed(PathBuf::from("/unused"), Maintenance::default())
+            .unwrap();
+        assert_eq!(status.phase, "downloading");
+        updater.waits_for_quiet();
+        let status = updater.status();
+        assert_eq!(status.phase, "downloading");
+        assert_ne!(status.message, WAITS, "a started install is not waiting");
+    }
+
+    /// An install the deck did not confirm is idle again with the reason,
+    /// nothing started; the release is still there to install.
+    #[test]
+    fn an_install_the_deck_did_not_confirm_is_idle_with_the_reason() {
+        let (updater, started) = testkit::checked(testkit::deck());
+        updater.await_confirmation(testkit::install());
+        updater.not_confirmed();
+        let status = updater.status();
+        assert_eq!(status.phase, "idle");
+        assert_eq!(
+            status.message,
+            "Not confirmed on the deck. Nothing was installed."
+        );
+        assert!(status.error.is_none() && status.available && !status.busy());
+        assert!(updater
+            .confirmed(PathBuf::from("/unused"), Maintenance::default())
+            .is_err());
+        assert!(started.lock().unwrap().is_empty());
+        assert_eq!(updater.status().phase, "idle", "no late press starts it");
+        // Nothing waits any more: a second call changes nothing.
+        updater.not_confirmed();
+        updater.abandon(VOICE_BUSY);
+        assert_eq!(updater.status().phase, "idle");
+        updater.vet(&testkit::install()).unwrap();
+    }
+
+    /// The press checks the install again, and one that can no longer
+    /// start, or that the voice held back for good, ends in `error` with
+    /// its reason, nothing started.
+    #[test]
+    fn a_confirmed_install_that_cannot_start_keeps_its_reason() {
+        let (updater, started) = testkit::checked(testkit::deck());
+        updater.await_confirmation(testkit::install());
+        let mut state = updater.state.lock().unwrap();
+        state.device.as_mut().unwrap().serial = "USB-B".into();
+        drop(state);
+        let why = updater
+            .confirmed(PathBuf::from("/unused"), Maintenance::default())
+            .unwrap_err();
+        let status = updater.status();
+        assert_eq!(status.phase, "error");
+        assert_eq!(status.error.as_deref(), Some(why.as_str()));
+        assert!(why.contains("changed"), "{why}");
+
+        let (updater, _) = testkit::checked(testkit::deck());
+        updater.await_confirmation(testkit::install());
+        updater.abandon(VOICE_BUSY);
+        let status = updater.status();
+        assert_eq!(
+            (status.phase.as_str(), status.error.as_deref()),
+            ("error", Some(VOICE_BUSY))
+        );
+        assert!(updater
+            .confirmed(PathBuf::from("/unused"), Maintenance::default())
+            .is_err());
+        assert!(started.lock().unwrap().is_empty());
     }
 
     #[test]

@@ -173,5 +173,47 @@ class Instance(unittest.TestCase):
                 hy.ensure_instance()
                 self.assertEqual(_os.environ['HYPRLAND_INSTANCE_SIGNATURE'], 'live_2')
 
+class SocketPath(unittest.TestCase):
+    """Without --socket the bridge looks where deckd listens (config.rs `Paths::detect`)."""
+
+    def path(self, env):
+        import os as _os
+        with mock.patch.dict(_os.environ, env, clear=True):
+            return o.socket_path()
+
+    # Paths that exist on no machine, so a real tunnel or deckd changes nothing.
+    HOME = '/nonexistent/home'
+    RUN = '/nonexistent/run'
+
+    def test_the_named_socket_and_the_data_dir_come_first(self):
+        env = {'HOME': self.HOME, 'XDG_RUNTIME_DIR': self.RUN, 'DECKD_DATA_DIR': '/data'}
+        self.assertEqual(self.path(env), Path('/data/deckd.sock'))
+        self.assertEqual(self.path({**env, 'DECKD_SOCKET': '/tmp/s.sock'}), Path('/tmp/s.sock'))
+
+    def test_deckds_own_socket_is_under_the_runtime_dir_else_the_cache_dir(self):
+        cases = [
+            ({'XDG_RUNTIME_DIR': self.RUN, 'XDG_CACHE_HOME': '/c'}, f'{self.RUN}/openwalkietalkie/deckd.sock'),
+            ({'XDG_CACHE_HOME': '/c'}, '/c/openwalkietalkie/deckd.sock'),
+            # A relative XDG variable does not count, as in deckd.
+            ({'XDG_RUNTIME_DIR': 'run', 'XDG_CACHE_HOME': 'c'}, f'{self.HOME}/.cache/openwalkietalkie/deckd.sock'),
+            ({}, f'{self.HOME}/.cache/openwalkietalkie/deckd.sock'),
+        ]
+        for env, want in cases:
+            self.assertEqual(self.path({'HOME': self.HOME, **env}), Path(want), env)
+
+    def test_an_old_tunnels_end_is_used_only_while_deckds_own_socket_is_absent(self):
+        import tempfile as _t
+        with _t.TemporaryDirectory(dir='/tmp') as runtime:
+            env = {'HOME': self.HOME, 'XDG_RUNTIME_DIR': runtime}
+            own = Path(runtime) / 'openwalkietalkie' / 'deckd.sock'
+            self.assertEqual(self.path(env), own, 'neither is there: deckd\'s own')
+            tunnel = Path(runtime) / 'deckd.sock'
+            tunnel.touch()
+            self.assertEqual(self.path(env), tunnel, 'only the old tunnel end is there')
+            own.parent.mkdir()
+            own.touch()
+            self.assertEqual(self.path(env), own, 'deckd\'s own wins once it is there')
+
+
 if __name__ == '__main__':
     unittest.main()

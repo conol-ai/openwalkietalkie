@@ -16,9 +16,10 @@
 //! back for `Exit::GRACE`; here that is observed from the outside, as the
 //! reply arriving before the exit rather than as a cell's value.
 //!
-//! Nothing here touches the real data dir, port 47201 or the user's
-//! LaunchAgent: `--data-dir` is a fresh `$TMPDIR` directory with
-//! `[api] port = 0`, and the daemon runs `--no-device`.
+//! Nothing here touches the real data dir, port 47201, the user's
+//! LaunchAgent or their `~/.claude`: `--data-dir` is a fresh `$TMPDIR`
+//! directory with `[api] port = 0` and `HOME` and the CLI homes inside it,
+//! and the daemon runs `--no-device`.
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
@@ -49,7 +50,12 @@ impl Daemon {
         let n = NEXT.fetch_add(1, Ordering::Relaxed);
         let dir = std::env::temp_dir().join(format!("dkx{}-{n}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).expect("a temp data dir");
+        // The CLI homes inside it: a daemon whose file leaves `[api] tcp`
+        // out reads Claude's settings at start (the pre-plugin hooks keep
+        // the TCP door open), and the operator's are not this test's.
+        for home in ["home/claude", "home/codex"] {
+            std::fs::create_dir_all(dir.join(home)).expect("a temp data dir and its homes");
+        }
         // Port 0: an ephemeral port, so a gate run never collides with the
         // operator's own daemon on 47201. No roster seeding and no Codex
         // daemon client: this daemon must not reach the operator's own live
@@ -64,6 +70,9 @@ impl Daemon {
             .arg("--data-dir")
             .arg(&dir)
             .args(["run", "--foreground", "--no-device"])
+            .env("HOME", dir.join("home"))
+            .env("CLAUDE_CONFIG_DIR", dir.join("home/claude"))
+            .env("CODEX_HOME", dir.join("home/codex"))
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())

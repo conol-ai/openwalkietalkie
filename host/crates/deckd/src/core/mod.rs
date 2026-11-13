@@ -279,11 +279,21 @@ pub struct Core {
     sources: crate::care::sources::Ledger,
     /// The test agent (`care::test`): the daemon's own care session, the
     /// agent "Test" while a test is on the deck, and how the last test of
-    /// each kind went.
+    /// each kind went; and the agent that asks before a firmware install,
+    /// while its card waits.
     test_agent: crate::care::test::TestAgent,
+    /// When the deck confirmed the install that waits for the voice to go
+    /// quiet before it starts (`Core::start_confirmed_install`).
+    install_pressed: Option<Instant>,
     /// `--no-device`: the deck is never opened here, nor looked for —
     /// `care.checks` leaves the doctor's HID enumeration out (O16).
     pub no_device: bool,
+    /// `[api] tcp` was left out of the file when `run` started and Claude's
+    /// settings still carried the pre-plugin hooks, so the TCP door was
+    /// opened for them (`config::Api::tcp_door`). What the key left out
+    /// resolves to here ([`Core::tcp_door`]); `false` in a core `run` did
+    /// not start, and in one whose file named the key, where nothing looked.
+    pub legacy_hooks: bool,
 }
 
 /// A parked `op.answer` reply. `deck-model` answers the method before the
@@ -384,7 +394,9 @@ impl Core {
             usage: crate::usage::Feeder::default(),
             sources: crate::care::sources::Ledger::default(),
             test_agent: crate::care::test::TestAgent::default(),
+            install_pressed: None,
             no_device: false,
+            legacy_hooks: false,
         }
     }
 
@@ -709,6 +721,14 @@ impl Core {
         )
     }
 
+    /// The TCP door as this daemon resolves `[api] tcp`: the file's value,
+    /// or — left out — open only for the pre-plugin Claude hooks `run`
+    /// found at start ([`Core::legacy_hooks`]). Its `on` is what `config.get`
+    /// publishes, the Local API row's switch; `care.checks` reads its rule.
+    pub(crate) fn tcp_door(&self) -> crate::config::TcpDoor {
+        self.config.api.tcp_door(|| self.legacy_hooks)
+    }
+
     /// What a care method needs from here (`crate::care`): copies, so the
     /// door can walk the disk on the blocking pool while this thread goes
     /// on.
@@ -718,6 +738,7 @@ impl Core {
             executable: self.executable.clone(),
             config: self.config.clone(),
             no_device: self.no_device,
+            tcp: self.tcp_door(),
             codex_connected: self.adapters.codex_connected(),
             firmware_busy: self.firmware.status().busy(),
         }
@@ -2543,6 +2564,8 @@ impl Core {
         self.expire_logical(now);
         self.beat(now);
         self.demo_tick(now);
+        // An install the deck confirmed while someone was talking.
+        self.start_confirmed_install(now);
         // The countdowns under the usage bars are written to the minute.
         if self.usage.due(now) {
             self.push_usage(now);
@@ -2686,16 +2709,21 @@ pub fn run(opts: RunOptions) -> Result<i32, CoreError> {
     if loaded == crate::state::Loaded::Corrupt {
         tracing::warn!("state.json was corrupt; moved aside and started empty");
     }
+    // The TCP door, decided once: `[api] tcp` when the file names it, else
+    // off — unless Claude's settings still carry the pre-plugin hooks that
+    // post to it, which are looked for only then (`config::Api::tcp_door`).
+    let door = opts
+        .config
+        .api
+        .tcp_door(|| crate::integrations::legacy_claude_hooks(&opts.paths, &opts.config));
+    let legacy_hooks = door.rule == crate::config::TcpRule::LegacyHooks;
+    tracing::info!(on = door.on, "tcp door: {}", door.reason());
     let sid = new_sid();
     let started = Instant::now();
     let mut cfg = StoreConfig::new(started, wall_now(), sid);
-    // With `[api] tcp = false` no door will hold a port, so the snapshot
-    // names none from the start (`api::serve` records the same).
-    cfg.port = if opts.config.api.tcp {
-        opts.config.api.port
-    } else {
-        0
-    };
+    // With the door off no port will be held, so the snapshot names none
+    // from the start (`api::serve` records the same).
+    cfg.port = if door.on { opts.config.api.port } else { 0 };
     cfg.grace_s = opts.config.agents.grace_s;
     cfg.ready_ttl_s = opts.config.cards.ready_ttl_s;
     cfg.hold_s = opts.config.hooks.claude.hold_s;
@@ -2739,6 +2767,7 @@ pub fn run(opts: RunOptions) -> Result<i32, CoreError> {
     }
     // …and `care.checks` does not even enumerate HID for its `device` row.
     core.no_device = opts.no_device;
+    core.legacy_hooks = legacy_hooks;
     // The voice engine (§7). `--no-device` leaves `AudioHandle::none()` in
     // place, which is exactly the daemon the seam pass shipped: every
     // `Effect::Audio` is logged and forgotten and the §7.4 machine still
@@ -2869,6 +2898,7 @@ pub fn run(opts: RunOptions) -> Result<i32, CoreError> {
         // hot-reloaded config as everything else.
         adapters: Arc::new(crate::adapters::Adapters::new(watch.config())),
         paths: opts.paths.clone(),
+        legacy_hooks,
     });
     tracing::info!(
         sid,

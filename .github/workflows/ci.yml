@@ -117,3 +117,32 @@ jobs:
         run: |
           tools/fetch-sparkle.sh target/sparkle/2.9.6
           OWT_SPARKLE_FRAMEWORK_DIR="$PWD/target/sparkle/2.9.6" cargo check --manifest-path host/Cargo.toml -p openwalkietalkie-app --locked --target aarch64-apple-darwin --target-dir target/host
+  linux-host:
+    name: Linux host
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: 1.98.1
+      # hidapi's hidraw backend links libudev; cpal's ALSA backend and bluer's
+      # D-Bus client find their libraries through pkg-config; whisper-rs builds
+      # whisper.cpp with CMake and generates its bindings with libclang. The
+      # service's tests name a port's squatter with lsof.
+      - name: Install the Linux host's system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libudev-dev libasound2-dev libdbus-1-dev cmake libclang-dev lsof
+      # The window is macOS only, so the app is left out. The repository's
+      # .cargo/config.toml builds for the firmware, hence the explicit target.
+      # --no-fail-fast: a platform difference usually breaks several suites
+      # at once, and one run should name them all.
+      - name: Test the Linux host
+        run: |
+          cargo test --manifest-path host/Cargo.toml --workspace --exclude openwalkietalkie-app --lib --tests --locked --no-fail-fast --target x86_64-unknown-linux-gnu --target-dir target/host
+      - name: Test the Omarchy bridge
+        run: |
+          python3 -m unittest discover -s host/omarchy -p 'test_*.py'

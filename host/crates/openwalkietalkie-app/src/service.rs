@@ -36,7 +36,9 @@ use crate::ui::{self, ic, Btn, Row, Switch, Type as _};
 use crate::updater::MacOsUpdater;
 use crate::updates::{self, FirmwarePane, FirmwareStep, FIRMWARE_DIALOG};
 use deck_client::ClientError;
-use deck_gui_core::admin::{method_missing, port_clash, ApiConfig, Info, Report, Status, TokenRow};
+use deck_gui_core::admin::{
+    method_missing, port_clash, ApiConfig, Info, Report, Status, TokenRow, Verb,
+};
 use deck_gui_core::care::{Check, Checks, Footprint, Source, SourceState, Sources};
 use deck_gui_core::i18n::Language;
 use deck_gui_core::{ConfigValue, UiAction};
@@ -116,9 +118,14 @@ impl<T> Answer<T> {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Api {
     pub config: ApiConfig,
-    /// `api.tcp`. `None` from a service that has no such switch, whose door
-    /// is always open: the page then offers none.
+    /// `api.tcp`, the door as the service resolved it: off unless its owner
+    /// switched it on, or the pre-plugin Claude hooks still post to it.
+    /// `None` from a service that has no such switch, whose door is always
+    /// open: the page then offers none.
     pub tcp: Option<bool>,
+    /// `api.tcp_rule`: which rule decided [`Api::tcp`]. `None` from a
+    /// service that does not say, and for a word this build does not know.
+    pub tcp_rule: Option<TcpRule>,
     /// `privacy.log_content`: the service keeps the text of prompts,
     /// replies and transcripts in its logs, and so in the support file
     /// ([`support_note`]). Off unless the owner turned it on; `None` from a
@@ -128,16 +135,44 @@ pub struct Api {
 
 impl Api {
     pub fn parse(result: &Value) -> Api {
+        let api = result.get("api");
         Api {
             config: ApiConfig::parse(result),
-            tcp: result
-                .get("api")
-                .and_then(|api| api.get("tcp"))
-                .and_then(Value::as_bool),
+            tcp: api.and_then(|api| api.get("tcp")).and_then(Value::as_bool),
+            tcp_rule: api
+                .and_then(|api| api.get("tcp_rule"))
+                .and_then(Value::as_str)
+                .and_then(TcpRule::parse),
             log_content: result
                 .get("privacy")
                 .and_then(|privacy| privacy.get("log_content"))
                 .and_then(Value::as_bool),
+        }
+    }
+}
+
+/// Why the local API's door is as it is, as the service says it
+/// (`config.get`'s `api.tcp_rule`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TcpRule {
+    /// The owner's own switch (`[api] tcp` in the service's file).
+    Explicit,
+    /// Nothing switched it: off.
+    Default,
+    /// Nothing switched it, and the service found Claude Code's hooks from
+    /// before the plugin, which post to the door, at its start: open for
+    /// them until Repair migrates them.
+    LegacyHooks,
+}
+
+impl TcpRule {
+    /// The service's word, or `None` for one this build does not know.
+    pub fn parse(word: &str) -> Option<TcpRule> {
+        match word {
+            "explicit" => Some(TcpRule::Explicit),
+            "default" => Some(TcpRule::Default),
+            "legacy_hooks" => Some(TcpRule::LegacyHooks),
+            _ => None,
         }
     }
 }
@@ -411,8 +446,9 @@ pub fn login_row(
 /// (`service.degraded`, one of the two port words
 /// [`deck_gui_core::admin::port_clash`] names): what that means, in place
 /// of the line that would call the door open. `None` while nothing clashes,
-/// and while the door is switched off (`api.tcp` false): nothing is bound,
-/// so nothing can clash.
+/// and while the door is off (`api.tcp` false, which is what a service of
+/// this release says unless its owner switched the door on): nothing is
+/// bound, so nothing can clash.
 pub fn api_clash(api: Option<&Api>, service: &ServiceState, language: Language) -> Option<String> {
     if api.is_some_and(|api| api.tcp == Some(false)) {
         return None;
@@ -439,6 +475,61 @@ pub fn api_line(api: &Api, held: Option<u16>, language: Language) -> String {
         "On. Port {0}. Local tools can use it with a token.",
         &[&port],
     )
+}
+
+/// What the local API's switch asks before it acts: the sheet's title, its
+/// sentence and the word on its going-ahead button, whether that button is
+/// a destructive one, and whether going ahead repairs Claude Code's
+/// integration instead of switching the door.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ApiQuestion {
+    pub title: String,
+    pub body: String,
+    pub confirm: String,
+    pub danger: bool,
+    pub repair_first: bool,
+}
+
+/// [`ApiQuestion`] for switching the door `on` or off. Off, while the
+/// service says the door is open for Claude Code's hooks from before the
+/// plugin ([`TcpRule::LegacyHooks`]), the sheet says they still use it and
+/// offers Repair first: closing the door under them would leave Claude's
+/// permission questions in the terminal. Repair migrates them, and the
+/// service closes the door at its next start; the rule it published stays
+/// until then, so once the Claude row (`claude`, the installer's latest
+/// read) is no longer `outdated` the sheet is the plain one again. A row
+/// not read yet takes the service at its word.
+pub fn api_question(
+    on: bool,
+    api: Option<&Api>,
+    claude: Option<&Status>,
+    language: Language,
+) -> ApiQuestion {
+    let (title, confirm) = if on {
+        (language.text("Turn the local API on?"), language.text("Turn On"))
+    } else {
+        (language.text("Turn the local API off?"), language.text("Turn Off"))
+    };
+    let mut question = ApiQuestion {
+        title: title.to_string(),
+        body: language.text("The service restarts.").to_string(),
+        confirm: confirm.to_string(),
+        danger: !on,
+        repair_first: false,
+    };
+    let legacy = api.is_some_and(|api| api.tcp_rule == Some(TcpRule::LegacyHooks));
+    if !on && legacy && claude.is_none_or(|status| *status == Status::Outdated) {
+        question.body = language
+            .text(
+                "Claude Code's older hooks still use the local API. Repair them first, or \
+                 Claude Code's questions stay in the terminal.",
+            )
+            .to_string();
+        question.confirm = language.text("Repair").to_string();
+        question.danger = false;
+        question.repair_first = true;
+    }
+    question
 }
 
 /// The line under **Export Support File**: where the file goes, and whether
@@ -473,6 +564,12 @@ pub fn update_titles(deck: Option<&str>, language: Language) -> (String, String)
         language.format("OpenWalkieTalkie {0}", &[env!("CARGO_PKG_VERSION")]),
         language.format("Deck firmware {0}", &[deck.unwrap_or("\u{2014}")]),
     )
+}
+
+/// The deck firmware row's line: how an install reaches the deck. The
+/// service asks for ENTER on a linked deck before it installs anything.
+pub fn firmware_sub(language: Language) -> &'static str {
+    language.text("By cable, after a press on the deck.")
 }
 
 // ---- the pane ------------------------------------------------------------------
@@ -1122,7 +1219,7 @@ impl Shell {
                     .into_any_element(),
                 Row::new()
                     .title(deck)
-                    .sub(self.tr("By cable."))
+                    .sub(firmware_sub(self.language()))
                     .right(review)
                     .into_any_element(),
             ],
@@ -1371,19 +1468,36 @@ impl Shell {
     }
 
     /// The local API's switch: the question (the service restarts to open or
-    /// close its door), then `api.tcp` and the restart.
+    /// close its door), then `api.tcp` and the restart. While Claude Code's
+    /// hooks from before the plugin still use the door, the question to
+    /// turn it off offers Repair first ([`api_question`]), which is the
+    /// Integrations page's own Repair of Claude Code, its plan reviewed
+    /// before anything is written; the door is left as it is.
     fn set_local_api(&mut self, on: bool, window: &mut Window, cx: &mut Context<Self>) {
-        let (title, confirm) = if on {
-            (self.tr("Turn the local API on?"), self.tr("Turn On"))
-        } else {
-            (self.tr("Turn the local API off?"), self.tr("Turn Off"))
-        };
+        // The installer's latest read of the Claude row: the Integrations
+        // page's, which a Repair reads again, else this page's own.
+        let claude = self
+            .integrations
+            .claude_status()
+            .or_else(|| self.service.claude.clone());
+        let question = api_question(
+            on,
+            self.service.api.as_ref(),
+            claude.as_ref(),
+            self.language(),
+        );
         let sheet = Sheet {
-            title: title.into(),
-            body: self.tr("The service restarts.").into(),
-            confirm: confirm.into(),
-            danger: !on,
+            title: question.title,
+            body: question.body,
+            confirm: question.confirm,
+            danger: question.danger,
         };
+        if question.repair_first {
+            self.ask_first(sheet, window, cx, |this, window, cx| {
+                this.plan_integration(Verb::Repair, "claude", window, cx);
+            });
+            return;
+        }
         self.ask_first(sheet, window, cx, move |this, window, cx| {
             this.ask(
                 UiAction::ConfigSet {

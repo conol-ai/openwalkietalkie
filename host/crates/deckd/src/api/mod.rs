@@ -36,6 +36,11 @@ pub struct Api {
     /// across requests and doors.
     pub adapters: Arc<crate::adapters::Adapters>,
     pub paths: Paths,
+    /// What `[api] tcp` left out of the file resolves to when [`serve`]
+    /// decides the TCP door: `true` when `deckd run` found the pre-plugin
+    /// Claude hooks, which post to it, in Claude's settings at start
+    /// (`config::Api::tcp_door`, the same finding as `Core::legacy_hooks`).
+    pub legacy_hooks: bool,
 }
 
 impl Api {
@@ -54,7 +59,7 @@ impl Api {
 /// What `serve` bound.
 pub struct Served {
     /// The TCP port, `None` while degraded (`port_in_use`) and with no TCP
-    /// door at all (`[api] tcp = false`).
+    /// door at all (off, `config::Api::tcp_door`).
     pub port: Option<u16>,
     /// The UDS door is up.
     pub uds: bool,
@@ -81,9 +86,14 @@ impl Served {
     }
 }
 
-/// Write the bound port (`0600`), empty while degraded.
+/// Write the bound port (`0600`), empty while degraded and with no door.
+/// The file appears whole: it is written beside itself and renamed into
+/// place, because readers (`deckd status`, the installer, the tests) take
+/// "it exists" for "the door is decided" and must never read it between
+/// its creation and its first byte.
 pub(crate) fn write_port_file(path: &std::path::Path, port: Option<u16>) {
     let text = port.map(|p| p.to_string()).unwrap_or_default();
+    let partial = path.with_extension("partial");
     let mut opts = std::fs::OpenOptions::new();
     opts.write(true).create(true).truncate(true);
     #[cfg(unix)]
@@ -91,11 +101,15 @@ pub(crate) fn write_port_file(path: &std::path::Path, port: Option<u16>) {
         use std::os::unix::fs::OpenOptionsExt;
         opts.mode(0o600);
     }
-    let written = opts.open(path).and_then(|mut f| {
-        use std::io::Write;
-        f.write_all(text.as_bytes())
-    });
+    let written = opts
+        .open(&partial)
+        .and_then(|mut f| {
+            use std::io::Write;
+            f.write_all(text.as_bytes())
+        })
+        .and_then(|()| std::fs::rename(&partial, path));
     if let Err(e) = written {
+        let _ = std::fs::remove_file(&partial);
         tracing::warn!(error = %e, path = %path.display(), "cannot write the port file");
     }
 }
@@ -123,9 +137,11 @@ pub async fn serve(api: Arc<Api>) -> Served {
     };
     // The TCP door binds, or degrades and keeps retrying on its own task
     // (§3.3 D8): either way `service.bound` reaches the core and the port
-    // file tells the truth. Switched off, there is no door to bind, and
-    // `service.bound` says that too.
-    let port = if api.config.load().api.tcp {
+    // file tells the truth. Off — the default, unless the file switches it
+    // on or the pre-plugin Claude hooks still post to it — there is no
+    // door to bind, and `service.bound` says that too.
+    let door = api.config.load().api.tcp_door(|| api.legacy_hooks);
+    let port = if door.on {
         let (port, tcp) = http::tcp_door(api.clone(), stop_rx.clone()).await;
         tasks.push(tcp);
         port
@@ -194,6 +210,9 @@ pub(crate) mod testkit {
         let paths = core.paths();
         let mut config = Config::default();
         config.api.port = port;
+        // Both doors: these are the doors' own tests, and the TCP door is
+        // off unless the file switches it on.
+        config.api.tcp = Some(true);
         let config = Arc::new(ArcSwap::from_pointee(config));
         let api = Arc::new(Api {
             core: core.handle.clone(),
@@ -203,8 +222,41 @@ pub(crate) mod testkit {
             verifier,
             adapters: Arc::new(crate::adapters::Adapters::new(config)),
             paths,
+            legacy_hooks: false,
         });
         let (stop, _) = watch::channel(false);
         TestDaemon { api, stop, core }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::write_port_file;
+
+    /// The port file is written whole and renamed into place: it holds the
+    /// port at `0600`, is emptied the same way when there is no door, and
+    /// leaves nothing beside it.
+    #[test]
+    fn the_port_file_appears_whole_at_0600_and_leaves_nothing_beside_it() {
+        let dir = std::env::temp_dir().join(format!("deckd-port-file-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a temp dir");
+        let path = dir.join("port");
+        write_port_file(&path, Some(50031));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "50031");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
+        write_port_file(&path, None);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "");
+        let left: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(left, [std::ffi::OsString::from("port")]);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

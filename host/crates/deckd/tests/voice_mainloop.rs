@@ -13,18 +13,31 @@
 //!
 //! It prints its own results: a `harness = false` target has no libtest
 //! summary, and forging one would inflate the gate's count.
-#![cfg(target_os = "macos")]
+//!
+//! Every item is macOS's alone, one by one, and not the whole file: a
+//! `harness = false` target is a binary, and a file-wide `#![cfg]` leaves
+//! one with no `fn main` on any other platform, which does not build (the
+//! Linux CI job builds every test target). Off macOS the target has only
+//! the `main` at the end, which says it skipped.
 
+#[cfg(target_os = "macos")]
 use deckd::audio::apple::{AppleStt, AppleTts};
+#[cfg(target_os = "macos")]
 use deckd::audio::mainloop::{call, is_main_thread, post, turn};
+#[cfg(target_os = "macos")]
 use deckd::audio::traits::{
     OnDevice, SttEngine, SttEvent, SttStart, TtsChunk, TtsEngine, TtsRequest,
 };
+#[cfg(target_os = "macos")]
 use deckd::audio::FromAudio;
+#[cfg(target_os = "macos")]
 use std::sync::atomic::{AtomicUsize, Ordering};
+#[cfg(target_os = "macos")]
 use std::sync::{Arc, Mutex};
+#[cfg(target_os = "macos")]
 use std::time::{Duration, Instant};
 
+#[cfg(target_os = "macos")]
 fn pump_until(done: impl Fn() -> bool) -> bool {
     let deadline = Instant::now() + Duration::from_secs(5);
     while !done() && Instant::now() < deadline {
@@ -33,6 +46,7 @@ fn pump_until(done: impl Fn() -> bool) -> bool {
     done()
 }
 
+#[cfg(target_os = "macos")]
 fn row(name: &str, ok: bool, failures: &mut usize) {
     if ok {
         println!("ok    mainloop {name}");
@@ -45,6 +59,7 @@ fn row(name: &str, ok: bool, failures: &mut usize) {
 /// Opt-in real-framework regression: no microphone, playback, or messages
 /// sent to an agent. Generate three sentences, feed them in real time with
 /// three-second pauses, then release PTT while the last phrase is pending.
+#[cfg(target_os = "macos")]
 fn speech_with_pauses() -> String {
     let tts = AppleTts::new();
     let voice = tts
@@ -131,6 +146,7 @@ fn speech_with_pauses() -> String {
     final_text
 }
 
+#[cfg(target_os = "macos")]
 fn contains_all_phrases(text: &str) -> bool {
     let text = text.to_lowercase();
     matches!(
@@ -139,6 +155,7 @@ fn contains_all_phrases(text: &str) -> bool {
     )
 }
 
+#[cfg(target_os = "macos")]
 fn main() {
     let mut failures = 0usize;
 
@@ -414,4 +431,12 @@ fn main() {
     if failures > 0 {
         std::process::exit(1);
     }
+}
+
+/// Off macOS there is no main dispatch queue and no Apple engine, so there
+/// is nothing here to run: the target builds and says it skipped, and no
+/// row is printed as passed.
+#[cfg(not(target_os = "macos"))]
+fn main() {
+    println!("skip  mainloop: the main queue and the Apple engines are macOS's alone");
 }
