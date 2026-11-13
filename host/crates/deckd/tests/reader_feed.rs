@@ -128,6 +128,15 @@ async fn agent_of(daemon: &Daemon, session: &Session) -> AgentId {
     agent.unwrap().id.clone()
 }
 
+/// Every hook plan the door has deferred has run to its end, the reader
+/// check of `crate::chat::observe` included. The door answers a hook before
+/// it runs the hook's plan, and each plan holds the adapters' order lock
+/// from its first request to that check, so a session that is on the
+/// roster has a plan that either holds the lock or has finished.
+async fn settled(daemon: &Daemon) {
+    drop(daemon.api.adapters.order().await);
+}
+
 fn ids(snapshot: &Snapshot, agent: &AgentId) -> Vec<String> {
     snapshot.agents[agent]
         .messages
@@ -200,6 +209,7 @@ async fn only_the_sessions_the_deck_reads_are_fed_and_each_is_filled_whole_when_
         "tool_response": "a\nb"});
     hook(&daemon, &auth, &a.hook("PostToolUse", tool)).await;
     tokio::time::sleep(Duration::from_millis(1_500)).await;
+    settled(&daemon).await;
     let snapshot = daemon.api.bus.snapshot();
     assert_eq!(snapshot.agents[&agent_a].state, AgentState::Working);
     assert!(ids(&snapshot, &agent_a).is_empty(), "A is not read");
@@ -286,6 +296,10 @@ async fn a_follower_that_starts_late_fills_the_session_already_open() {
     )
     .await;
     let agent_c = agent_of(&daemon, &c).await;
+    // The hook's plan ends before the deck reads C: had its reader check
+    // come after, a watcher of the hook's own would fill C and stand in for
+    // the follower this test is about (seen on a loaded CI runner).
+    settled(&daemon).await;
     let slot = daemon.api.bus.snapshot().agents[&agent_c]
         .slot
         .expect("C is on the deck");
