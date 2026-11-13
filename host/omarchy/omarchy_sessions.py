@@ -192,6 +192,8 @@ class Session:
     synced: dict = field(default_factory=dict)
     reply: str = ''
     replied: str = ''
+    # A Kimi turn ended while the bridge was quiet: its reply is read at the wake (`reregister`).
+    reply_due: bool = False
 
 
 def clip(text: str, limit: int) -> str:
@@ -241,9 +243,15 @@ class Bridge:
         self.dirty: set[str] = set()
         self.last_gc = 0.0
         self.last_beat = 0.0
+        # Whether the daemon takes `agent.order.result`; an older one answers
+        # -32601 once and is not asked again.
+        self.order_results = True
 
     # hooks -------------------------------------------------------------------
-    def on_hook(self, msg: dict) -> None:
+    def on_hook(self, msg: dict, quiet: bool = False) -> None:
+        """One hook report. While the bridge is quiet (no deck for ten minutes) it still moves the
+        session's entry here, so the wake shows every session as it is now, but nothing is read
+        from the session's files and nothing goes to deckd until then (`reregister`)."""
         if not valid_hook(msg):
             return
         cli, sid = msg['cli'], msg['session_id']
@@ -262,14 +270,22 @@ class Bridge:
             session.gone = True
         else:
             if msg['event'] == 'Stop' and cli == 'kimi':
-                from omarchy_kimi import find_wire, last_reply  # omarchy_kimi imports this module
-                session.reply = clip(last_reply(find_wire(sid)), REPLY_MAX)
+                if quiet:
+                    session.reply_due = True
+                else:
+                    self.read_reply(session)
             state = state_for(msg['event'], msg.get('ntype'))
             if state:
                 session.state = state
                 session.title = clip(msg.get('message') or '', TITLE_MAX) if state == 'question' else ''
         self.dirty.add(key)
-        self.flush()
+        if not quiet:
+            self.flush()
+
+    def read_reply(self, s: Session) -> None:
+        """A Kimi turn's closing reply, from its log."""
+        from omarchy_kimi import find_wire, last_reply  # omarchy_kimi imports this module
+        s.reply, s.reply_due = clip(last_reply(find_wire(s.session_id)), REPLY_MAX), False
 
     def flush(self) -> None:
         for key in list(self.dirty):
@@ -301,14 +317,24 @@ class Bridge:
             return
         if s.agent is None:
             self.register(s)
+        # deckd speaks the stored reply the moment the state turns ready, so a turn's end sends the
+        # reply first. A session registered just now (first seen, a reconnect, a refusal) is restored
+        # state first instead: its reply is one it already had, and is not announced again.
+        reply_first = bool(s.synced)
+        if reply_first:
+            self.push_reply(s)
         want = {'state': s.state, 'title': s.title}
         if s.synced != want:
             self.call('agent.update', {'agent': s.agent, **want})
             s.synced = want
+        if not reply_first:
+            self.push_reply(s)
+        self.dirty.discard(s.key)
+
+    def push_reply(self, s: Session) -> None:
         if s.reply and s.reply != s.replied:
             self.call('agent.reply', {'agent': s.agent, 'text': s.reply, 'speak': False})
             s.replied = s.reply
-        self.dirty.discard(s.key)
 
     def register(self, s: Session) -> None:
         params = {'kind': s.cli if s.cli in DECK_KINDS else 'other', 'name': s.name, 'key': s.key, 'cwd': s.cwd,
@@ -324,9 +350,18 @@ class Bridge:
         s.synced, s.replied = {}, ''
 
     def reregister(self) -> None:
-        """After a reconnect the daemon has forgotten this connection's agents."""
+        """Register every session afresh, as it is now: after a reconnect the daemon has forgotten
+        this connection's agents, and at the wake from quiet it still shows them as they were when
+        the bridge went quiet. A session that ended meanwhile keeps its agent, so it is released (a
+        daemon that no longer knows it refuses, and the session is dropped all the same), and a
+        Kimi turn that ended meanwhile has its reply read now."""
         for key, s in self.sessions.items():
-            s.agent, s.synced, s.replied = None, {}, ''
+            if s.reply_due:
+                if s.state == 'ready' and not s.gone:
+                    self.read_reply(s)
+                s.reply_due = False
+            if not s.gone:
+                s.agent, s.synced, s.replied = None, {}, ''
             self.dirty.add(key)
         self.flush()
 
@@ -370,10 +405,27 @@ class Bridge:
             why = self.deliver_order(session, data['text'])
             if why:
                 log(f'{session.name}: order not delivered ({why})')
+                self.report_failed_order(session, data.get('order'), why)
         elif kind == 'focus.changed' and data.get('source') == 'device':
             window = window_for(session.pid, self.hypr.clients(), session.cwd, self.proc)
             if window:
                 self.hypr.focus(window['address'])
+
+    def report_failed_order(self, s: Session, order, why: str) -> None:
+        """Tell deckd an order it handed us was not delivered, so the deck shows it.
+
+        Only an order that came with an id can be reported (older daemons send
+        none), and only to a daemon that has the method.
+        """
+        if not isinstance(order, str) or not self.order_results:
+            return
+        try:
+            self.call('agent.order.result', {'agent': s.agent, 'order': order, 'ok': False, 'reason': why})
+        except Exception as error:  # the daemon away, or a refusal: the log has it
+            if getattr(error, 'code', None) == -32601:
+                self.order_results = False
+            else:
+                log(f'{s.name}: order result: {error}')
 
     def herdr_pane_of(self, binary: str, env: dict, pid: int):
         """The herdr pane whose processes include `pid` now, else None."""

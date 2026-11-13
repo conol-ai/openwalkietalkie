@@ -19,6 +19,7 @@
 //! parallel, so a `Read` finishing beside a `Bash` must not settle the
 //! `Bash`.
 use super::HookPayload;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use tokio::sync::oneshot;
 
@@ -149,6 +150,46 @@ fn digest(input: &serde_json::Value) -> String {
     blake3::hash(input.to_string().as_bytes()).to_hex().to_string()
 }
 
+/// What the window did with the asks it held, for the delivery record
+/// (`crate::deliveries::Asks`): counted here, on the hook door's side, and
+/// taken by the core, which adds them to the record. It hangs off
+/// `rt::Adapters`, the one object the door and the core share.
+#[derive(Debug, Default)]
+pub struct Tally {
+    waited: AtomicU64,
+    settled: AtomicU64,
+    prompted: AtomicU64,
+    passed: AtomicU64,
+}
+
+impl Tally {
+    /// An ask began to wait out its window.
+    pub fn waited(&self) {
+        self.waited.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Its window ended: decided elsewhere, a person being asked, or (no
+    /// outcome) the window passed and the deck shows it.
+    pub fn ended(&self, outcome: Option<Outcome>) {
+        let counter = match outcome {
+            Some(Outcome::Settled) => &self.settled,
+            Some(Outcome::Ask) => &self.prompted,
+            None => &self.passed,
+        };
+        counter.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// The counts since the last take; the next take starts from zero.
+    pub fn take(&self) -> crate::deliveries::Asks {
+        crate::deliveries::Asks {
+            waited: self.waited.swap(0, Ordering::Relaxed),
+            settled: self.settled.swap(0, Ordering::Relaxed),
+            prompted: self.prompted.swap(0, Ordering::Relaxed),
+            passed: self.passed.swap(0, Ordering::Relaxed),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -200,5 +241,29 @@ mod tests {
             "notification_type": "idle_prompt"}));
         assert_eq!(settle.observe(&idle), 1);
         assert_eq!(elsewhere.try_recv(), Ok(Outcome::Settled));
+    }
+
+    /// The tally counts each ending under its own name, and a take hands
+    /// the counts over once.
+    #[test]
+    fn the_tally_counts_each_window_once_and_a_take_starts_again() {
+        let tally = Tally::default();
+        for outcome in [
+            Some(Outcome::Settled),
+            Some(Outcome::Settled),
+            Some(Outcome::Ask),
+            None,
+        ] {
+            tally.waited();
+            tally.ended(outcome);
+        }
+        tally.waited();
+        let asks = tally.take();
+        assert_eq!(
+            (asks.waited, asks.settled, asks.prompted, asks.passed),
+            (5, 2, 1, 1),
+            "one still waiting"
+        );
+        assert_eq!(tally.take(), crate::deliveries::Asks::default());
     }
 }

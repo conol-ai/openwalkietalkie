@@ -97,7 +97,11 @@ impl Codex {
         true
     }
 
-    /// `state: ready` plus the assistant's last message, once per turn.
+    /// The assistant's last message, then `state: ready`, once per turn.
+    ///
+    /// In that order because the store speaks the ready line from the
+    /// reply on file the moment the state changes: the other way round,
+    /// the deck read out the previous turn's answer.
     fn turn_complete(&self, p: &serde_json::Value, ctx: &HookCtx) -> Ingest {
         let (Some(agent), Some(session), Some(turn)) =
             (ctx.agent.clone(), session_id(p), turn_id(p))
@@ -107,25 +111,18 @@ impl Codex {
         if !self.claim_turn(&format!("{session}/{turn}"), Instant::now()) {
             return Ingest::Nothing;
         }
-        let mut reqs = vec![Request::AgentUpdate(AgentUpdate {
-            agent: agent.clone(),
-            state: Some(AgentState::Ready),
-            title: None,
-            title_source: None,
-            since: None,
-            name: None,
-            meta: None, task: None, subagents: None,
-        })];
+        let mut reqs = Vec::with_capacity(2);
         if let Some(text) = last_message(p) {
             reqs.push(Request::Reply(ReplySet {
                 message: None,
-                agent,
+                agent: agent.clone(),
                 text,
                 speak: false,
                 announce: None,
                 lane: None,
             }));
         }
+        reqs.push(state(agent, AgentState::Ready));
         Ingest::Report(reqs)
     }
 }
@@ -166,10 +163,10 @@ impl Adapter for Codex {
             caps: Caps {
                 answer: AnswerCap::None,
                 order: OrderCap::Inject,
-                // Nothing to focus without a terminal (a Desktop-hosted
-                // thread), and §4.15 says an agent that does not claim it
-                // cannot be focused.
-                focus: ctx.tty.is_some(),
+                // Nothing to bring forward without a terminal or an app (a
+                // Desktop-hosted thread), and §4.15 says an agent that does
+                // not claim it cannot be focused.
+                focus: ctx.tty.is_some() || ctx.app.is_some(),
                 transcribe: Default::default(),
             },
             slot_hint: None,
@@ -536,6 +533,7 @@ mod tests {
                 tty: Some("/dev/ttys004".into()),
                 cli_pid: Some(4242),
                 pid_kind: Some(deck_model::PidKind::Cli),
+                app: Some("com.mitchellh.ghostty".into()),
             },
             120,
         );
@@ -556,6 +554,29 @@ mod tests {
         let terminal = reg.terminal.expect("a terminal");
         assert_eq!(terminal.program.as_deref(), Some("ghostty"));
         assert_eq!(terminal.tty.as_deref(), Some("/dev/ttys004"));
+        assert_eq!(terminal.app.as_deref(), Some("com.mitchellh.ghostty"));
+    }
+
+    /// A session the helper found an app for but no tty (a Desktop-hosted
+    /// CLI) can still be brought forward: it claims focus.
+    #[test]
+    fn an_app_without_a_tty_still_claims_focus() {
+        let codex = Codex::default();
+        let ctx = HookCtx::of(
+            &HookCall {
+                app: Some("com.openai.codex".into()),
+                ..HookCall::default()
+            },
+            120,
+        );
+        let payload =
+            serde_json::json!({"hook_event_name": "SessionStart", "session_id": "u", "cwd": "/"});
+        let reg = codex.register(&payload, &ctx).expect("a registration");
+        assert!(reg.caps.focus);
+        assert_eq!(
+            reg.terminal.and_then(|t| t.app).as_deref(),
+            Some("com.openai.codex")
+        );
     }
 
     #[test]
@@ -727,6 +748,36 @@ mod tests {
             "hook_event_name": "Stop", "session_id": "s2", "turn_id": "t1"
         });
         assert!(matches!(codex.ingest(&elsewhere, &c), Ingest::Report(_)));
+    }
+
+    /// The store speaks the ready line from the reply on file the moment
+    /// the state turns `ready`, so a finished turn stores its reply first,
+    /// whichever door reported it.
+    #[test]
+    fn a_finished_turn_stores_its_reply_before_it_turns_ready() {
+        let codex = Codex::default();
+        let c = ctx("ag_1");
+        let stop = serde_json::json!({
+            "hook_event_name": "Stop", "session_id": "s1", "turn_id": "t1",
+            "last_assistant_message": "Done: the migration ran."
+        });
+        let notify = serde_json::json!({
+            "type": "agent-turn-complete", "thread-id": "s1", "turn-id": "t2",
+            "last-assistant-message": "And the second one."
+        });
+        for (payload, said) in [
+            (stop, "Done: the migration ran."),
+            (notify, "And the second one."),
+        ] {
+            let Ingest::Report(reqs) = codex.ingest(&payload, &c) else {
+                panic!("a finished turn reports")
+            };
+            assert!(
+                matches!(reqs.as_slice(), [Request::Reply(r), Request::AgentUpdate(u)]
+                    if r.text == said && u.state == Some(AgentState::Ready)),
+                "{reqs:?}"
+            );
+        }
     }
 
     #[test]

@@ -62,13 +62,16 @@ impl TokenBucket {
 
 /// The limits of §11: `agent.register` 30/min per principal, `agent.update`
 /// 10/s per agent, `op.order` 2/s per principal, `voice.say` 4/s per
-/// principal. Only external principals are metered.
+/// principal; and `agent.order.result` 2/s per principal with a burst of 4,
+/// because each failure it reports can put a card on the deck. Only
+/// external principals are metered.
 #[derive(Debug, Default)]
 pub struct RateLimits {
     register: HashMap<Principal, TokenBucket>,
     update: HashMap<String, TokenBucket>,
     order: HashMap<Principal, TokenBucket>,
     say: HashMap<Principal, TokenBucket>,
+    order_result: HashMap<Principal, TokenBucket>,
 }
 
 impl RateLimits {
@@ -114,6 +117,7 @@ impl RateLimits {
                 .try_take(now)
                 .map_err(|wait| ApiError::rate_limited(wait.as_millis().max(1) as u32)),
             Request::OpOrder(_) => Self::take(&mut self.order, principal, 2, 2.0, now),
+            Request::OrderOutcome(_) => Self::take(&mut self.order_result, principal, 4, 2.0, now),
             // B5: `voice.say` became a reducer method, so its 4/s limit
             // has to be taken **here** — the `check_say` entry point the
             // core-answered version used is not on this path at all, and a
@@ -146,11 +150,16 @@ impl RateLimits {
         keep(&mut self.update, now);
         keep(&mut self.order, now);
         keep(&mut self.say, now);
+        keep(&mut self.order_result, now);
     }
 
     /// Buckets held, across every limit (tests, `metrics.get`).
     pub fn tracked(&self) -> usize {
-        self.register.len() + self.update.len() + self.order.len() + self.say.len()
+        self.register.len()
+            + self.update.len()
+            + self.order.len()
+            + self.say.len()
+            + self.order_result.len()
     }
 }
 
@@ -485,6 +494,22 @@ mod tests {
         }
         assert!(limits.check_say(&uid, t0).is_err());
         assert!(limits.check_say(&Principal::Device, t0).is_ok());
+        // An owner's order reports: a burst of 4, then 2 a second, its own
+        // bucket (the orders above spent theirs).
+        let report = Request::OrderOutcome(deck_model::OrderOutcome {
+            agent: AgentId("ag_1".into()),
+            order: "or_1".into(),
+            ok: false,
+            reason: None,
+        });
+        for _ in 0..4 {
+            assert!(limits.check(&uid, &report, t0).is_ok());
+        }
+        let err = limits.check(&uid, &report, t0).unwrap_err();
+        assert_eq!(err.data["retry_ms"], 500);
+        assert!(limits
+            .check(&Principal::Adapter(AdapterKind::Codex), &report, t0)
+            .is_ok());
         // The guard meters first: the third order in a second is rate
         // limited, not confirmation-requested, whatever the trust says.
         let mut guard = Guard::new();

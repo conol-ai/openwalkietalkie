@@ -307,9 +307,12 @@ pub fn age_words(at: Option<Ts>, now: Ts, language: Language) -> String {
     )
 }
 
-/// What a press on the deck does to bring a source's session forward. A
-/// word this build does not know is shown as it came. The service can focus
-/// a terminal tab only in Ghostty, so that is what the words promise.
+/// What a press on the deck does to bring a source's session forward: the
+/// service raises a Claude Code session's app (`app`), Codex has nothing yet
+/// (`none`) and a connected app does it itself (`self`). `terminal` is what
+/// a 0.13 service says of Claude Code, which could focus a tab only in
+/// Ghostty, so its words say so. A word this build does not know is shown
+/// as it came.
 pub fn handoff_words(handoff: &Handoff, language: Language) -> String {
     match handoff {
         Handoff::Terminal => language.text("Focuses its Ghostty tab").to_string(),
@@ -2339,7 +2342,7 @@ fn fresh_sources() -> Value {
         "sources": [
             {"id": "claude", "kind": "tool", "name": "Claude Code", "enabled": true,
              "state": null, "on_deck": 0, "sessions": 0, "unit": "sessions",
-             "last_event_at": null, "handoff": "terminal", "hooks": 13, "stale": null,
+             "last_event_at": null, "handoff": "app", "hooks": 13, "stale": null,
              "does": null},
             {"id": "claude_channels", "kind": "channel", "name": "Claude Channels",
              "enabled": false, "state": "off", "on_deck": 0, "sessions": 0, "unit": "sessions",

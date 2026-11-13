@@ -6,7 +6,8 @@
 //! since: the installer's `outdated` explained with the button the page
 //! has, the count's hint, the sessions no row counts, a connected app whose
 //! chats are heard on this Mac, Codex hooks left from an older setup, and
-//! the Ghostty-only hand-off ("Focuses its tab" promised every terminal).
+//! the Ghostty-only hand-off a 0.13 service reports ("Focuses its tab"
+//! promised every terminal), beside the app hand-off of later ones.
 //! A word the page shares with another page (Paused, Not set up, Needs
 //! repair, the test question's lines, On the deck, the ages, Copy
 //! Command…) is in `crate::i18n::kit`, and one the built-in tables already

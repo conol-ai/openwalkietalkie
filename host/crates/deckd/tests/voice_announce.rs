@@ -23,6 +23,8 @@ use deck_model::{
     AgentId, AgentState, AgentUpdate, AudioCmd, CardKind, CardSet, Choice, Deliver, DeviceLine,
     DeviceSet, FaceEntry, Origin, ReplySet, Request, SessionId, SetKey, Template,
 };
+use deckd::adapters::claude::Claude;
+use deckd::adapters::{Adapter, HookCtx, HookPayload, Ingest};
 use deckd::audio::{AudioHandle, FromAudio};
 use deckd::config::Config;
 use deckd::core::Core;
@@ -157,6 +159,76 @@ impl Rig {
         drop(self);
         let _ = std::fs::remove_dir_all(dir);
     }
+
+    /// A Claude hook event, run against `agent` the way the hook door runs
+    /// the adapter's plan: request by request, in order. The register and
+    /// the Ready card are the adapter's own (its session, `Deliver::None`)
+    /// and are left out; the agent stands in for the one they resolve to.
+    fn claude_hook(&mut self, agent: &AgentId, payload: serde_json::Value) {
+        let ctx = HookCtx {
+            now: Some(Instant::now()),
+            ..HookCtx::default()
+        };
+        let Ingest::Report(plan) = Claude::default().ingest(&HookPayload(payload), &ctx) else {
+            panic!("a report-only event");
+        };
+        for mut req in plan {
+            if matches!(req, Request::Reply(_) | Request::AgentUpdate(_)) {
+                deckd::adapters::address(&mut req, agent);
+                self.call(req).expect("a request of the plan");
+            }
+        }
+    }
+}
+
+/// A turn's end speaks that turn's answer. The ready line is spoken from
+/// the reply on file the moment the state turns `ready`; the Claude adapter
+/// used to turn the session ready first and store the reply after, so the
+/// deck read out the answer before. And whichever of `agent_completed` and
+/// `Stop` comes first, the line is the turn's own, said once.
+#[test]
+fn a_stop_speaks_this_turns_reply_never_the_last_one() {
+    let mut rig = Rig::new("voice-announce-stop");
+    rig.config(|_| {});
+    let bot = rig.agent("cohdl-api");
+    let pool = Config::default().voice_pool();
+    let said = |text: &str| vec![("ready".to_string(), text.to_string(), Some(pool[0].clone()))];
+    let stop = |answer: &str| {
+        serde_json::json!({
+            "session_id": "s1", "cwd": "/w/cohdl-api", "hook_event_name": "Stop",
+            "last_assistant_message": answer,
+        })
+    };
+    rig.call(Request::Reply(ReplySet {
+        message: None,
+        agent: bot.clone(),
+        text: "The old answer.".into(),
+        announce: None,
+        speak: false,
+        lane: None,
+    }))
+    .expect("agent.reply");
+    rig.state(&bot, AgentState::Ready);
+    rig.drain();
+
+    rig.state(&bot, AgentState::Working);
+    rig.claude_hook(&bot, stop("The new answer. Details follow."));
+    assert_eq!(rig.said(), said("cohdl-api: The new answer."));
+
+    // Claude's agent view also says `agent_completed`, and nobody has
+    // measured whether it comes before the `Stop`.
+    rig.state(&bot, AgentState::Working);
+    rig.claude_hook(
+        &bot,
+        serde_json::json!({
+            "session_id": "s1", "cwd": "/w/cohdl-api", "hook_event_name": "Notification",
+            "notification_type": "agent_completed",
+        }),
+    );
+    assert_eq!(rig.said(), vec![], "not the last turn's answer");
+    rig.claude_hook(&bot, stop("The third answer."));
+    assert_eq!(rig.said(), said("cohdl-api: The third answer."));
+    rig.cleanup();
 }
 
 /// Exit row 8: every branch of §7.7's announce policy, and the two gates

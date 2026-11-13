@@ -878,15 +878,13 @@ impl Store {
         }
     }
 
-    /// `op.order{source:"ptt"}` as the session's own principal (§4.9).
+    /// `op.order{source:"ptt"}` as the session's own principal (§4.9). A
+    /// refusal shows on the deck after the final line this session already
+    /// put there (`orders`).
     fn dispatch_order(&mut self, p: &PttInfo, text: &str, ctx: &str) {
         let Some(agent) = p.agent.clone() else {
             // No agent on the slot: there is nobody to order.
-            self.emit(
-                EventKind::OrderFailed,
-                p.principal.clone(),
-                serde_json::json!({"agent": null, "reason": "no_agent", "text_kept": true}),
-            );
+            self.order_failed(p.principal.clone(), None, "no_agent", None, None, false);
             return;
         };
         let session = p.session.unwrap_or(crate::SessionId(0));
@@ -2117,6 +2115,71 @@ mod tests {
         assert!(sim.effects.iter().any(|e| matches!(e, Effect::Device(crate::DeviceOp::Control(crate::Control::Transcript { press: Some(42), last: true, failed: true, channel_tip: false, rec: false, .. })))));
     }
 
+    /// An order refused at its dispatch shows on the deck, and only after
+    /// the press's own final line: the deck drops a line for a press it is
+    /// no longer waiting on, and a press-less failed line ends that wait.
+    #[test]
+    fn a_dictated_order_refused_at_dispatch_shows_the_toast_after_its_final_line() {
+        let mut sim = Sim::new();
+        sim.link_live(Some(0));
+        // A Claude session with its permission dialog open: guard 2 refuses
+        // the words, and the held card is not the failure's to replace.
+        let mut r = crate::testkit::register("cohdl-api", Some("claude:1"));
+        r.kind = crate::Kind::Claude;
+        r.caps.answer = crate::AnswerCap::Hold;
+        r.caps.order = crate::OrderCap::Inject;
+        let adapter = crate::testkit::claude_adapter();
+        let res = sim
+            .api(adapter, SessionId(100), crate::Request::AgentRegister(r))
+            .unwrap();
+        let id = crate::AgentId(res["agent"].as_str().unwrap().into());
+        let mut ask = crate::testkit::card_set(
+            &id,
+            crate::CardKind::Q,
+            crate::Deliver::Hold,
+            &["Allow", "Deny"],
+        );
+        ask.origin.kind = crate::OriginKind::Permission;
+        sim.hold(ask, crate::HoldId(1)).unwrap();
+        let slot = sim.slot_of(&id).unwrap().0;
+        let edge = |act| {
+            Command::Device(DeviceLine::Ptt {
+                act,
+                slot,
+                ctx: PttCtx::Talk,
+                card: None,
+                abort: false,
+                press: Some(7),
+            })
+        };
+        sim.apply(edge(1));
+        sim.apply(edge(0));
+        sim.apply(final_("deploy the api"));
+        assert!(sim.kinds().contains(&EventKind::OrderFailed));
+        let lines: Vec<(Option<u16>, bool)> = sim
+            .effects
+            .iter()
+            .filter_map(|e| match e {
+                Effect::Device(crate::DeviceOp::Control(crate::Control::Transcript {
+                    press,
+                    failed,
+                    last: true,
+                    ..
+                })) => Some((*press, *failed)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(lines, vec![(Some(7), false), (None, true)]);
+        assert_eq!(
+            sim.store.snapshot().agents[&id]
+                .card
+                .as_ref()
+                .map(|c| c.kind),
+            Some(crate::CardKind::Q),
+            "the question stays"
+        );
+    }
+
     /// B2: a PTT session records **who** started it, including the session
     /// id, and the deck's press is one caller of `start_listen` among
     /// others rather than the only way in.
@@ -2452,7 +2515,13 @@ mod tests {
     #[test]
     fn a_stale_finalizing_session_cannot_dispatch_the_next_sessions_words() {
         let mut sim = Sim::new();
-        sim.register(UID, SessionId(1), "bot", None);
+        // The two minutes below outlast a 30 s lease, and an owner whose
+        // lease lapsed is refused orders (`owner_gone`): this owner keeps
+        // its lease for the whole test, as a heartbeating client would.
+        let mut bot = crate::testkit::register("bot", None);
+        bot.lease_ttl_s = 600;
+        sim.api(UID, SessionId(1), crate::Request::AgentRegister(bot))
+            .unwrap();
         sim.drain();
 
         // Session A: pressed, dictated, released.
@@ -2835,21 +2904,22 @@ mod tests {
         );
         assert!(
             !sim.effects.iter().any(|e| matches!(e, Effect::Desktop(_))),
-            "no terminal is raised under a dictating operator: {:?}",
+            "nothing is raised under a dictating operator: {:?}",
             sim.effects
         );
         assert!(sim.events.is_empty(), "{:?}", sim.kinds());
         assert_eq!(sim.store.snapshot().focus.agent, None);
 
-        // The release applies it, once, with the seq the deck sent.
+        // The release applies it, once, with the seq the deck sent — and
+        // still raises nothing: a channel is never a hand-off.
         sim.apply(ptt(0, PttCtx::Talk, None, false));
         assert_eq!(sim.store.snapshot().focus.agent.as_ref(), Some(&b));
         assert_eq!(sim.store.snapshot().focus.seq, Some(7));
-        assert!(sim
-            .effects
-            .contains(&Effect::Desktop(crate::DesktopCmd::Focus {
-                agent: b.clone()
-            })));
+        assert!(
+            !sim.effects.iter().any(|e| matches!(e, Effect::Desktop(_))),
+            "{:?}",
+            sim.effects
+        );
         let moved = sim
             .events
             .iter()

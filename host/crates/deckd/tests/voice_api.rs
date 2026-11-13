@@ -627,7 +627,10 @@ fn the_permission_methods_exist_and_the_request_says_it_did_not_prompt() {
     assert_eq!(status["microphone"], "unknown");
     assert_eq!(status["speech"], "unknown");
     assert_eq!(status["bluetooth"], "unknown");
-    assert_eq!(status["automation"]["ghostty"], "unknown");
+    assert!(
+        status.get("automation").is_none(),
+        "no Apple Event is sent any more, so there is no Automation grant to report"
+    );
     assert_eq!(status["accessibility"], "unknown");
     assert_eq!(status["limits"], serde_json::json!(PERM_LIMITS));
     assert!(!PERM_LIMITS.is_empty());
@@ -725,7 +728,6 @@ fn the_voice_table_is_hot_and_the_reload_re_reads_it() {
     for key in [
         "voice.device_uid",
         "voice.fallback_output",
-        "voice.fallback_input",
         "voice.mic_warm",
         "voice.speak_over_sco",
         "voice.slow_sco_ms",
@@ -746,7 +748,6 @@ fn the_voice_table_is_hot_and_the_reload_re_reads_it() {
     let mut cfg = Config::default();
     cfg.voice.stt.locale = "de-DE".into();
     cfg.voice.device_uid = Some("C2-2D-81-AB-88-81".into());
-    cfg.voice.fallback_input = "none".into();
     h.core.set_config(Arc::new(cfg.clone()));
 
     // The device selection is **pushed**: §7 selects by UID and never
@@ -763,7 +764,6 @@ fn the_voice_table_is_hot_and_the_reload_re_reads_it() {
         AudioCmd::Devices {
             device_uid: Some("C2-2D-81-AB-88-81".into()),
             fallback_output: "none".into(),
-            fallback_input: "none".into(),
         }
     );
     // V1/V2's timing policy is pushed too, and it is a **separate**

@@ -246,6 +246,33 @@ pub fn last_linked(device: &DeviceState, now: Ts, language: Language) -> Option<
     Some(language.format("Last linked {0}", &[&when]))
 }
 
+/// What the not-linked page says under "The background service is waiting
+/// for your deck" once the service went quiet (`service.dormancy`): when it
+/// stopped collecting from agent sessions, on this Mac's clock, or only that
+/// it did when that was on an earlier day. `None` while it still collects,
+/// from a service with no dormancy (one that predates it, or a test
+/// service), and when no deck was ever linked, which gives it no time to
+/// say.
+pub fn stopped_collecting(service: &ServiceState, now: Ts, language: Language) -> Option<String> {
+    let since = service.dormancy?.dormant_since?;
+    let (year, month, day, hour, minute) = present::local_clock(since);
+    let (now_year, now_month, now_day, _, _) = present::local_clock(now);
+    Some(if (year, month, day) == (now_year, now_month, now_day) {
+        language.format(
+            "It stopped collecting from your agent sessions at {0},\n\
+             ten minutes after the link dropped.",
+            &[&format!("{hour:02}:{minute:02}")],
+        )
+    } else {
+        language
+            .text(
+                "It stopped collecting from your agent sessions\n\
+                 ten minutes after the link dropped.",
+            )
+            .to_string()
+    })
+}
+
 /// The caption under the deck: the face it shows, `Linked` while it has not
 /// said which, and while it is away when it was last linked (nothing when
 /// it never was).
@@ -789,7 +816,15 @@ impl Shell {
         let first = match absent {
             None => Row::new()
                 .lead(ui::bare(ui::icon(ic::INFO, 18., p.text2)))
-                .title(self.tr("The background service is waiting for your deck")),
+                .title(self.tr("The background service is waiting for your deck"))
+                .when_some(
+                    stopped_collecting(
+                        &self.state.mirror().service,
+                        present::now(),
+                        self.language(),
+                    ),
+                    |row, line| row.sub(line),
+                ),
             Some(why) => {
                 // Not running is something wrong; never set up, or waiting
                 // for the owner's approval, is the owner's turn.

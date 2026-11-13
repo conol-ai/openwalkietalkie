@@ -22,10 +22,11 @@ use crate::events::{ApiEvent, AppEvent};
 use crate::ApiClient;
 use deck_model::{
     EventKind, FaceEntry, Focus, LastLinked, Link, LinkDrop, MacroKey, MacroLayout, Permission,
-    Principal, Route, SessionState, SetKey, Snapshot, Speaking,
+    Principal, Route, SessionState, SetKey, Settings, Snapshot, Speaking,
     Transport, Ts, Usage, VoiceTransport,
 };
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 /// §8.1's reconnect schedule, and `deck-client`'s: one definition, so what
@@ -206,10 +207,10 @@ pub enum UiAction {
     TokenRotate {
         name: String,
     },
-    /// `perm.status` — where §8.2's **Ghostty Automation** card comes from.
-    /// It is not an `integrations.*` target: nothing is written for it, and
-    /// what there is to report is a TCC grant the injector learned by
-    /// trying (§5.5).
+    /// `perm.status`: the grants the service holds (microphone, speech,
+    /// Bluetooth, Accessibility). It is not an `integrations.*` target:
+    /// nothing is written for it. A 0.13 service also reported Ghostty's
+    /// Automation grant, which went with its tab path.
     PermStatus,
 
     // ---- the Service screen (§8.2) -------------------------------------
@@ -829,6 +830,22 @@ impl HostState {
                     self.mirror.macros.insert(f, layout);
                 }
             }
+            EventKind::DeviceProfile => {
+                // Another deck's strip, settings and keys, all four parts
+                // whole or none of them. The language is the Mac's and stays.
+                if let Some(profile) = Profile::parse(data) {
+                    let keep = |held: &Settings| Settings {
+                        language: held.language,
+                        language_revision: held.language_revision,
+                        ..profile.settings
+                    };
+                    self.mirror.settings = keep(&self.mirror.settings);
+                    self.mirror.device.settings = keep(&self.mirror.device.settings);
+                    self.mirror.faces = profile.faces;
+                    self.mirror.macros = profile.macros;
+                    self.mirror.device.deck = profile.deck;
+                }
+            }
             EventKind::DeviceSet => {
                 let key =
                     serde_json::from_value::<SetKey>(data.get("k").cloned().unwrap_or(Value::Null));
@@ -855,6 +872,12 @@ impl HostState {
                 }
             }
             EventKind::ServiceDegraded => return self.fold_degraded(data),
+            // The service's collectors stopped or started again: the whole
+            // state, or `null` for a service with no dormancy. Nothing to
+            // raise; the not-linked page and the Usage panel read it.
+            EventKind::ServiceDormancy => {
+                self.mirror.service.dormancy = serde_json::from_value(data.clone()).unwrap_or(None);
+            }
             EventKind::ServiceShutdown => {
                 self.mirror.service.degraded = Some(SHUTTING_DOWN.into());
                 return vec![HostEffect::Toast(self.ui_language().text("The service is shutting down").into())];
@@ -1045,6 +1068,29 @@ impl DeviceStatus {
             board: serde_json::from_value(field("board")?).ok()?,
             last: serde_json::from_value(field("last")?).ok()?,
             drops: serde_json::from_value(field("drops")?).ok()?,
+        })
+    }
+}
+
+/// `device.profile{deck, faces, settings, macros}`: the deck that linked,
+/// and the strip, settings and keys the service keeps for it.
+struct Profile {
+    deck: Option<String>,
+    faces: Vec<FaceEntry>,
+    settings: Settings,
+    macros: BTreeMap<u8, MacroLayout>,
+}
+
+impl Profile {
+    /// `None` unless every part reads, so a malformed event replaces
+    /// nothing.
+    fn parse(data: &Value) -> Option<Profile> {
+        let field = |key: &str| data.get(key).cloned();
+        Some(Profile {
+            deck: serde_json::from_value(field("deck")?).ok()?,
+            faces: serde_json::from_value(field("faces")?).ok()?,
+            settings: serde_json::from_value(field("settings")?).ok()?,
+            macros: serde_json::from_value(field("macros")?).ok()?,
         })
     }
 }

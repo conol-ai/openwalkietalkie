@@ -1,6 +1,5 @@
-//! The Claude Code adapter (design §5.1, corrected by C1–C11 and C25 of
-//! the week-3 contract, all measured against the installed `claude
-//! 2.1.276`).
+//! The Claude Code adapter (design §5.1, corrected by C1–C11 of the week-3
+//! contract, all measured against the installed `claude 2.1.276`).
 //!
 //! Five facts from that measurement shape everything below, and each one
 //! is a bug if it is dropped:
@@ -27,9 +26,10 @@
 //! * **C10** — 2.1.276 has 17 `Notification` types where the docs list 12.
 //!   Anything unknown is ignored, never a panic.
 //!
-//! And **C25**: the OSC 2 stamp does not survive the next title write, so
-//! `terminalSequence` is a one-shot beacon on `SessionStart` alone — §5.1's
-//! plan of re-emitting it on `UserPromptSubmit`/`Stop` is dropped.
+//! `SessionStart` used to answer with a one-shot OSC 2 `terminalSequence`
+//! (C25) so the Ghostty resolver could find the session's tab. The hand-off
+//! now raises the app the helper found (`terminal.app`), so the answer is
+//! `{}` and nothing is written into the session's title.
 use super::{
     is_pending, pending, Adapter, GroupPlan, GroupQuestion, HookCfg, HookCtx, HookOutput,
     HookPayload, Ingest,
@@ -78,8 +78,10 @@ pub const ALLOW_ALWAYS: &str = "Allow always";
 pub const DENY: &str = "Deny";
 /// The deny message a card answer carries back to Claude.
 pub const DENIED: &str = "Denied from the deck";
-/// The one choice of an informational focus card (§5.6).
-pub const FOCUS: &str = "Focus terminal";
+/// The one choice of an informational focus card (§5.6), in English: the
+/// wire encoder draws a hook session's focus card in the deck's language
+/// (`deck_model::handoff::OPEN_APP`).
+pub const FOCUS: &str = deck_model::OPEN_APP[0];
 
 /// A session's open card and the tool call it asked about.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -183,30 +185,6 @@ struct Questions {
 #[derive(Debug, Default)]
 pub struct Claude {
     memo: Mutex<Memo>,
-}
-
-/// The tab stamp of a CLI session: `deck:<4 hex>`, derived from the
-/// session id so the beacon a test reads is the beacon the daemon wrote.
-///
-/// C26 resolves the terminal by finding this string in a Ghostty title and
-/// then **pins** the tab; the stamp itself is one-shot (C25), so it only
-/// has to be unique among the sessions alive at once, which a per-session
-/// digest is.
-#[must_use]
-pub fn stamp(session_id: &str) -> String {
-    let digest = blake3::hash(session_id.as_bytes());
-    let bytes = digest.as_bytes();
-    format!("deck:{:02x}{:02x}", bytes[0], bytes[1])
-}
-
-/// The complete OSC 2 sequence `ESC ] 2 ; <stamp> BEL`.
-///
-/// Claude's allowlist takes OSC 0/1/2/9/99/777 terminated by BEL or ST and
-/// **silently drops** the whole field for anything else, so this is built
-/// in one place and asserted byte for byte.
-#[must_use]
-pub fn terminal_sequence(session_id: &str) -> String {
-    format!("\u{1b}]2;{}\u{7}", stamp(session_id))
 }
 
 /// `{"hookSpecificOutput":{"hookEventName":<event>, …}}` — C2: the name is
@@ -331,6 +309,20 @@ impl Claude {
     pub fn agent(&self, payload: &HookPayload) -> Option<AgentId> {
         let session = payload.str("session_id")?;
         self.memo.lock().ok()?.agents.get(session).cloned()
+    }
+
+    /// Drop every window and card of every CLI session, keeping only the
+    /// adapter's own internal session: the service went quiet
+    /// (`crate::dormancy`) and the core released every agent this adapter
+    /// had. A card id kept past that would read as still on the deck and
+    /// keep the session's next card off it.
+    pub fn reset(&self) {
+        if let Ok(mut memo) = self.memo.lock() {
+            *memo = Memo {
+                session: memo.session,
+                ..Memo::default()
+            };
+        }
     }
 
     /// Drop every window and card this CLI session owned.
@@ -466,7 +458,7 @@ impl Claude {
         // the helper learned. With the plugin every event is a command
         // hook, which is what lets a session that started before the daemon
         // get its terminal and inbox on its *next* hook rather than never.
-        let terminal = Self::terminal(payload, ctx, session_id);
+        let terminal = Self::terminal(ctx);
         AgentRegister {
             kind: Kind::Claude,
             name: name_of(cwd, session_id),
@@ -490,15 +482,11 @@ impl Claude {
         }
     }
 
-    fn terminal(payload: &HookPayload, ctx: &HookCtx, session_id: &str) -> Option<Terminal> {
-        // C25: the beacon is one shot, on the event whose answer carries it.
-        let stamped = payload.event() == "SessionStart";
+    fn terminal(ctx: &HookCtx) -> Option<Terminal> {
         // An http hook ran no helper: nothing to learn, and `None` leaves
         // what an earlier command hook recorded untouched (`roster.rs`
-        // writes the terminal only when the register carries one). The
-        // stamp is not environment-derived, so `SessionStart` always
-        // writes one.
-        if !stamped && ctx.env.is_empty() && ctx.tty.is_none() {
+        // writes the terminal only when the register carries one).
+        if ctx.env.is_empty() && ctx.tty.is_none() && ctx.app.is_none() {
             return None;
         }
         let terminal = Terminal {
@@ -510,10 +498,12 @@ impl Claude {
             // Apple Terminal only.
             iterm_session: ctx.env("ITERM_SESSION_ID"),
             term_session: ctx.env("TERM_SESSION_ID"),
-            title_stamp: stamped.then(|| stamp(session_id)),
+            title_stamp: None,
             // The session's message inbox (`crate::inbox`): the one field
             // a Desktop-app session has, since it has no terminal at all.
             inbox: ctx.env("CLAUDE_CODE_MESSAGING_SOCKET"),
+            // The app a press on its `Open app` card brings forward.
+            app: ctx.app.clone(),
         };
         (terminal != Terminal::default()).then_some(terminal)
     }
@@ -579,8 +569,9 @@ impl Claude {
         }
     }
 
-    /// An informational card whose ENTER focuses the terminal (§5.6): the
-    /// dialog is already on screen there and the deck only points at it.
+    /// An informational card whose ENTER raises the session's app (§5.6,
+    /// the hand-off): the dialog is already on screen there and the deck
+    /// only points at it.
     fn focus_card(text: &str, tool: Option<&str>) -> CardSet {
         CardSet {
             agent: pending(),
@@ -732,7 +723,7 @@ impl Claude {
     /// right now, and replacing it releases that hold with `{}` — the
     /// operator's dialog answers itself while they are still reading it.
     /// An **open** card is a live permission card or the degraded
-    /// `⌨ Focus terminal` a release left behind; replacing that one loses
+    /// `⌨ … Open app` a release left behind; replacing that one loses
     /// nothing the store cannot rebuild, but it is a second card saying
     /// what the first already says, with a chime of its own.
     ///
@@ -930,17 +921,9 @@ impl Adapter for Claude {
                 } else {
                     plan.push(Self::update(Some(AgentState::Idle), None));
                 }
-                // C25: one shot. The tab's title is rewritten by Claude
-                // itself and by the shell prompt, so re-emitting this on
-                // every turn (as §5.1 planned) would only cost a field on
-                // every response; deckd pins the tab instead (C26).
-                Ingest::Beacon(
-                    HookOutput::Json(serde_json::json!({
-                        "hookSpecificOutput": {"hookEventName": "SessionStart"},
-                        "terminalSequence": terminal_sequence(session_id),
-                    })),
-                    plan,
-                )
+                // Answered `{}`: nothing is written into the session's
+                // title any more (the Ghostty tab path is gone).
+                Ingest::Report(plan)
             }
             "UserPromptSubmit" => {
                 let mut plan = lead();
@@ -1064,71 +1047,81 @@ impl Adapter for Claude {
             }
             "Stop" => {
                 let mut plan = lead();
+                // `last_assistant_message` is the documented source; the
+                // transcript lags the turn and is never read here.
+                //
+                // Two different budgets on one string. The **reply** is
+                // kept whole (§4.3: the store holds all of it, the GUI
+                // shows all of it, and the device's own 200 bytes are
+                // applied by the wire encoder, `Caps::reply`); §5.6's 128
+                // bytes are a **card text** rule and belong only to the
+                // Ready card beside it, which has to fit a deck line.
+                // Cutting the reply to 128 threw away most of what the
+                // model said before anything could show it. The Codex
+                // adapter already keeps its reply whole, so this also
+                // makes the two agree.
+                let reply = payload
+                    .str("last_assistant_message")
+                    .map(|raw| {
+                        let reply = sanitize::clean(raw);
+                        let text = sanitize::cut(&reply, sanitize::TEXT_MAX);
+                        (reply, text)
+                    })
+                    .filter(|(_, text)| !text.trim().is_empty());
+                // The reply goes in before the state turns ready: the
+                // store speaks the ready line from the reply on file the
+                // moment the state changes (`Store::after_state_change`).
+                // The other way round, the deck read out the previous
+                // answer, or whatever the transcript watcher had posted
+                // last.
+                if let Some((reply, _)) = &reply {
+                    plan.push(Request::Reply(ReplySet {
+                        message: None,
+                        agent: pending(),
+                        text: reply.clone(),
+                        speak: false,
+                        announce: None,
+                        lane: None,
+                    }));
+                }
                 plan.push(Self::update(Some(AgentState::Ready), None));
+                // After the state, not before it: clearing a question card
+                // first would restore the state the question interrupted,
+                // one more state line on the deck on the way to `ready`.
                 if let Some(card) = self.take_open(session_id) {
                     plan.push(clear(card, "turn_ended"));
                 }
-                // `last_assistant_message` is the documented source; the
-                // transcript lags the turn and is never read here.
-                if let Some(raw) = payload.str("last_assistant_message") {
-                    // Two different budgets on one string. The **reply**
-                    // is kept whole (§4.3: the store holds all of it, the
-                    // GUI shows all of it, and the device's own 200 bytes
-                    // are applied by the wire encoder, `Caps::reply`);
-                    // §5.6's 128 bytes are a **card text** rule and belong
-                    // only to the Ready card beside it, which has to fit a
-                    // deck line. Cutting the reply to 128 threw away most
-                    // of what the model said before anything could show
-                    // it. The Codex adapter already keeps its reply whole,
-                    // so this also makes the two agree.
-                    let reply = sanitize::clean(raw);
-                    let text = sanitize::cut(&reply, sanitize::TEXT_MAX);
-                    if !text.trim().is_empty() {
-                        plan.push(Request::Reply(ReplySet {
-                            message: None,
-                            agent: pending(),
-                            text: reply,
-                            speak: false,
-                            announce: None,
-                            lane: None,
-                        }));
-                        // A Ready card with no steps: no CLI provides them.
-                        plan.push(Request::CardSet(CardSet {
-                            agent: pending(),
-                            id: None,
-                            kind: CardKind::R,
-                            text,
-                            choices: Vec::new(),
-                            rec: None,
-                            free_text: false,
-                            deliver: Deliver::None,
-                            timeout_s: None,
-                            origin: Origin {
-                                kind: OriginKind::Ready,
-                                tool: None,
-                                request_id: None,
-                                group: None,
-                            },
-                        }));
-                    }
+                // A Ready card with no steps: no CLI provides them. Last,
+                // because a state change expires a Ready card on the deck.
+                if let Some((_, text)) = reply {
+                    plan.push(Request::CardSet(CardSet {
+                        agent: pending(),
+                        id: None,
+                        kind: CardKind::R,
+                        text,
+                        choices: Vec::new(),
+                        rec: None,
+                        free_text: false,
+                        deliver: Deliver::None,
+                        timeout_s: None,
+                        origin: Origin {
+                            kind: OriginKind::Ready,
+                            tool: None,
+                            request_id: None,
+                            group: None,
+                        },
+                    }));
                 }
                 Ingest::Report(plan)
             }
             "StopFailure" => {
                 let mut plan = lead();
-                if let Some(card) = self.take_open(session_id) {
-                    plan.push(clear(card, "turn_ended"));
-                }
-                let error = payload.str("error").unwrap_or("unknown");
-                plan.push(Self::update(
-                    Some(AgentState::Error),
-                    Some((sanitize::text(error), TitleSource::Api)),
-                ));
-                // The title above is a card-shaped field and keeps §5.6's
-                // 128 bytes; the reply below is the whole of what the API
-                // said, for the same reason as `Stop`'s — a 429's detail
-                // is the one thing that says when to try again, and it
-                // does not fit in 128 bytes.
+                // In `Stop`'s order: the reply, the state, then the card.
+                // The reply is the whole of what the API said, for the
+                // same reason as `Stop`'s — a 429's detail is the one
+                // thing that says when to try again, and it does not fit
+                // in 128 bytes. The title is a card-shaped field and keeps
+                // §5.6's 128 bytes.
                 if let Some(raw) = payload
                     .str("error_details")
                     .or_else(|| payload.str("last_assistant_message"))
@@ -1144,6 +1137,14 @@ impl Adapter for Claude {
                             lane: None,
                         }));
                     }
+                }
+                let error = payload.str("error").unwrap_or("unknown");
+                plan.push(Self::update(
+                    Some(AgentState::Error),
+                    Some((sanitize::text(error), TitleSource::Api)),
+                ));
+                if let Some(card) = self.take_open(session_id) {
+                    plan.push(clear(card, "turn_ended"));
                 }
                 Ingest::Report(plan)
             }
@@ -1392,7 +1393,7 @@ impl Adapter for Claude {
     ///
     /// **The card, if there still is one.** A snooze, the hold budget, a
     /// dropped handler and an orphaned agent all leave the same card id on
-    /// the deck, degraded to `⌨ Focus terminal` and pointing at the dialog
+    /// the deck, degraded to `⌨ … Open app` and pointing at the dialog
     /// Claude is still showing. It belongs to the turn now, not to the
     /// hold, so it becomes this session's open card and the next
     /// `PostToolUse`/`Stop` takes it off (§5.6). A release that **cleared**
@@ -1764,8 +1765,7 @@ mod tests {
                 "tool_name": "Bash", "tool_input": {"command": "date"},
                 "notification_type": "idle_prompt",
             }));
-            // `SessionStart` answers with its beacon; the plan is the same.
-            let (Ingest::Report(plan) | Ingest::Beacon(_, plan)) = claude.ingest(&next, &ctx(t0)) else {
+            let Ingest::Report(plan) = claude.ingest(&next, &ctx(t0)) else {
                 panic!("{event} is report-only");
             };
             let cleared: Vec<(CardId, Option<&str>)> = plan
@@ -1777,7 +1777,7 @@ mod tests {
                 .collect();
             assert_eq!(cleared, vec![(CardId(21), Some(reason))], "{event}");
             // Once: the next event has nothing left to clear.
-            let (Ingest::Report(plan) | Ingest::Beacon(_, plan)) = claude.ingest(&next, &ctx(t0)) else {
+            let Ingest::Report(plan) = claude.ingest(&next, &ctx(t0)) else {
                 panic!("{event} is report-only");
             };
             assert!(!plan.iter().any(|r| matches!(r, Request::CardClear(_))));
@@ -2116,7 +2116,7 @@ mod tests {
             "a card-raising Notification is not silenced by a card that is gone"
         );
 
-        // The contrast: a release that really did leave `⌨ Focus terminal`
+        // The contrast: a release that really did leave `⌨ … Open app`
         // on the deck still owns the session, and a second card there
         // would be a duplicate with a chime of its own.
         let claude = Claude::default();
@@ -2300,10 +2300,12 @@ mod tests {
         ));
     }
 
-    /// C25: the stamp is a complete OSC 2 sequence and it is emitted on
-    /// `SessionStart` and nowhere else.
+    /// `SessionStart` is report-only now: the answer is `{}` (no OSC 2
+    /// `terminalSequence`, so nothing is written into the session's title),
+    /// the register still leads the plan, and it carries no title stamp —
+    /// only the app the helper found, which is what the hand-off raises.
     #[test]
-    fn the_beacon_is_a_complete_osc2_sequence_on_session_start_alone() {
+    fn session_start_answers_empty_and_writes_no_title() {
         let claude = Claude::default();
         let t0 = Instant::now();
         let start = payload(serde_json::json!({
@@ -2312,43 +2314,28 @@ mod tests {
             "hook_event_name": "SessionStart",
             "source": "startup",
         }));
-        let Ingest::Beacon(out, plan) = claude.ingest(&start, &ctx(t0)) else {
-            panic!("SessionStart answers with the beacon");
+        let mut ctx = ctx(t0);
+        ctx.app = Some("dev.zed.Zed".into());
+        let Ingest::Report(plan) = claude.ingest(&start, &ctx) else {
+            panic!("SessionStart is report-only");
         };
-        let json = out.json();
-        let seq = json["terminalSequence"].as_str().expect("a sequence");
-        assert!(seq.starts_with("\u{1b}]2;"), "{seq:?}");
-        assert!(seq.ends_with('\u{7}'), "{seq:?}");
-        assert_eq!(seq, terminal_sequence("abc123"));
-        assert_eq!(&seq[4..seq.len() - 1], stamp("abc123"));
-        assert_eq!(stamp("abc123").len(), 9, "deck: plus four hex");
-        assert_eq!(json["hookSpecificOutput"]["hookEventName"], "SessionStart");
-        // The register carries the same stamp, which is how the resolver
-        // finds the tab (C26).
         let Request::AgentRegister(register) = &plan[0] else {
             panic!("the plan leads with the register: {plan:?}");
         };
-        assert_eq!(
-            register
-                .terminal
-                .as_ref()
-                .and_then(|t| t.title_stamp.clone()),
-            Some(stamp("abc123"))
-        );
+        let terminal = register.terminal.as_ref().expect("the helper's app");
+        assert_eq!(terminal.title_stamp, None);
+        assert_eq!(terminal.app.as_deref(), Some("dev.zed.Zed"));
         assert_eq!(register.key.as_deref(), Some("claude:abc123"));
         assert_eq!(register.name, "project");
         assert_eq!(register.caps.answer, AnswerCap::Hold);
-        // No other event re-emits it (C25).
-        for event in ["UserPromptSubmit", "Stop", "PostToolUse"] {
-            let other = payload(serde_json::json!({
-                "session_id": "abc123", "cwd": "/w/project", "hook_event_name": event,
-            }));
-            let ingest = claude.ingest(&other, &ctx(t0));
-            assert!(
-                ingest.report_output().is_empty(),
-                "{event} re-emitted the stamp"
-            );
-        }
+        // With nothing from the helper, nothing is written at all.
+        let Ingest::Report(plan) = claude.ingest(&start, &self::ctx(t0)) else {
+            panic!("SessionStart is report-only");
+        };
+        let Request::AgentRegister(register) = &plan[0] else {
+            panic!("{plan:?}");
+        };
+        assert!(register.terminal.is_none());
     }
 
     /// `SubagentStart`/`SubagentStop` keep the roster's count; a new process
@@ -2363,7 +2350,7 @@ mod tests {
             payload(v)
         };
         let count = |ingest: Ingest| match ingest {
-            Ingest::Report(plan) | Ingest::Beacon(_, plan) => plan.iter().find_map(|r| match r {
+            Ingest::Report(plan) => plan.iter().find_map(|r| match r {
                 Request::AgentUpdate(u) => u.subagents.map(|n| (n, u.task.clone())),
                 _ => None,
             }),
@@ -2419,9 +2406,19 @@ mod tests {
         let terminal = register.terminal.as_ref().expect("the helper's capture");
         assert_eq!(terminal.tty.as_deref(), Some("ttys004"));
         assert_eq!(terminal.program.as_deref(), Some("ghostty"));
-        assert!(
-            terminal.title_stamp.is_none(),
-            "the stamp is SessionStart's"
+        assert!(terminal.title_stamp.is_none(), "no title is stamped");
+        assert_eq!(terminal.app, None, "the helper found no app");
+        // The app the helper found rides on the register, beside the rest.
+        ctx.app = Some("com.mitchellh.ghostty".into());
+        let Ingest::Report(plan) = claude.ingest(&prompt, &ctx) else {
+            panic!("a prompt is report-only");
+        };
+        let Request::AgentRegister(register) = &plan[0] else {
+            panic!("{plan:?}");
+        };
+        assert_eq!(
+            register.terminal.as_ref().and_then(|t| t.app.as_deref()),
+            Some("com.mitchellh.ghostty")
         );
         assert_eq!(register.pid, Some(4242));
         assert_eq!(register.pid_kind, Some(deck_model::PidKind::Cli));
@@ -2491,6 +2488,83 @@ mod tests {
             })
             .expect("a title");
         assert!(title.len() <= sanitize::TEXT_MAX, "{title}");
+    }
+
+    /// What a turn-end plan does, step by step.
+    fn steps(plan: &[Request]) -> Vec<&'static str> {
+        plan.iter()
+            .map(|r| match r {
+                Request::AgentRegister(_) => "register",
+                Request::Reply(_) => "reply",
+                Request::AgentUpdate(u) if u.state == Some(AgentState::Ready) => "ready",
+                Request::AgentUpdate(u) if u.state == Some(AgentState::Error) => "error",
+                Request::CardClear(_) => "clear",
+                Request::CardSet(c) if c.kind == CardKind::R => "ready card",
+                _ => "other",
+            })
+            .collect()
+    }
+
+    /// The store speaks the ready line from the reply on file the moment
+    /// the state turns `ready`, so the end of a turn stores its reply
+    /// first. The open card's clear follows the state (clearing a question
+    /// first would put back, for a moment, the state it interrupted), and
+    /// the Ready card comes last (a state change expires one).
+    /// `StopFailure` ends a turn in the same order.
+    #[test]
+    fn a_stop_stores_the_reply_before_the_session_turns_ready() {
+        let t0 = Instant::now();
+        let ask = payload(permission("Bash", serde_json::json!({"command": "date"})));
+        // A fresh adapter per case, with a permission card open or not.
+        let adapter = |open: bool| {
+            let claude = Claude::default();
+            if open {
+                let Ingest::Held { cmd, .. } = claude.ingest(&ask, &ctx(t0)) else {
+                    panic!("a permission is held");
+                };
+                claude.carded(&ask, &cmd, CardId(7));
+            }
+            claude
+        };
+        let end = |claude: &Claude, fields: serde_json::Value| {
+            let mut event = serde_json::json!({"session_id": "abc123", "cwd": "/w/project"});
+            if let (Some(event), Some(fields)) = (event.as_object_mut(), fields.as_object()) {
+                event.extend(fields.clone());
+            }
+            let Ingest::Report(plan) = claude.ingest(&payload(event), &ctx(t0)) else {
+                panic!("the end of a turn is report-only");
+            };
+            steps(&plan)
+        };
+        let stop = serde_json::json!({
+            "hook_event_name": "Stop",
+            "last_assistant_message": "Done. The tests pass.",
+        });
+        assert_eq!(
+            end(&adapter(false), stop.clone()),
+            ["register", "reply", "ready", "ready card"]
+        );
+        assert_eq!(
+            end(&adapter(true), stop),
+            ["register", "reply", "ready", "clear", "ready card"]
+        );
+        assert_eq!(
+            end(
+                &adapter(true),
+                serde_json::json!({"hook_event_name": "Stop"})
+            ),
+            ["register", "ready", "clear"],
+            "a turn with nothing to say still ends"
+        );
+        let failed = serde_json::json!({
+            "hook_event_name": "StopFailure",
+            "error": "rate_limit",
+            "error_details": "Try again in 30 seconds.",
+        });
+        assert_eq!(
+            end(&adapter(true), failed),
+            ["register", "reply", "error", "clear"]
+        );
     }
 
     #[test]
@@ -2626,6 +2700,33 @@ mod tests {
             matches!(claude.ingest(&perm, &ctx(t0)), Ingest::Held { .. }),
             "nothing is parked any more"
         );
+    }
+
+    /// The service went quiet (`crate::dormancy`) and the core released
+    /// every agent with its cards. The memo forgets them too, or a card id
+    /// of a released agent would read as still parked and keep the
+    /// session's next ask off the deck when the deck is back. The adapter's
+    /// own session is kept: it is the core's, and it is still open.
+    #[test]
+    fn a_reset_forgets_every_card_and_agent_and_keeps_the_session() {
+        let claude = Claude::default();
+        claude.set_session(SessionId(9));
+        let t0 = Instant::now();
+        let perm = payload(permission("Bash", serde_json::json!({"command": "ls"})));
+        let Ingest::Held { cmd, .. } = claude.ingest(&perm, &ctx(t0)) else {
+            panic!("a permission ask is held");
+        };
+        claude.resolved(&perm, &AgentId("ag_gone".into()));
+        claude.carded(&perm, &cmd, CardId(5));
+        let again = payload(permission("Read", serde_json::json!({"file_path": "/w/a"})));
+        assert!(matches!(claude.ingest(&again, &ctx(t0)), Ingest::Nothing));
+        claude.reset();
+        assert_eq!(claude.agent(&perm), None, "the released agent is forgotten");
+        assert!(
+            matches!(claude.ingest(&again, &ctx(t0)), Ingest::Held { .. }),
+            "nothing reads as parked any more"
+        );
+        assert_eq!(claude.session(), Some(SessionId(9)));
     }
 
     /// A release hands the degraded card to `open`, where the next

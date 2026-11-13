@@ -249,6 +249,9 @@ fn redaction_list(log_content: bool) -> Vec<String> {
          the `hooks` token, so only `integrations.status` is included"
             .into(),
         "`tokens.toml`'s hashes — names, scopes and dates only".into(),
+        "each deck's id in `state.json` (its Bluetooth address): the decks are numbered \
+         `deck-1`, `deck-2`… instead"
+            .into(),
         format!(
             "any `config.toml` value whose key contains {} ",
             SECRET_KEYS
@@ -276,7 +279,10 @@ fn redaction_list(log_content: bool) -> Vec<String> {
              `deckd.launchd.log` (§11 counts a panic payload as content)"
                 .into(),
         );
-        list.push("`state.json`'s `terminal_map` values (§5.5 desktop identity)".into());
+        list.push(
+            "`state.json`'s `terminal_map` values, left by an older daemon (§5.5 desktop identity)"
+                .into(),
+        );
     }
     list
 }
@@ -287,9 +293,13 @@ fn kept_list() -> Vec<String> {
          check"
             .into(),
         "`config.toml` as the operator wrote it, minus the secret-shaped keys above".into(),
-        "`status.json`, and `state.json`'s slots, faces, settings and card ids — agent names and \
-         working directories among them, which are *state* (§4.3) and will name the operator's \
-         projects"
+        "`status.json`, and `state.json`'s slots, faces, settings, keys and card ids, each deck's \
+         own faces, settings and keys among them — agent names and working directories too, which \
+         are *state* (§4.3) and will name the operator's projects"
+            .into(),
+        "`state.json`'s delivery record: for each recent card its ids, times and what became of \
+         it, and counts of the deck's reader requests — never the words of a card, a reply, an \
+         order or an app's reason"
             .into(),
         "`codesign -dv` for both Mach-Os of the bundle, and `launchctl print` for the LaunchAgent"
             .into(),
@@ -652,15 +662,20 @@ pub fn redact_config(text: &str) -> String {
 }
 
 /// `state.json` per `[privacy]`. Nothing content-bearing is written there by
-/// design (§9: faces, settings, slots, card ids, voices, usage) — the one
-/// exception is `terminal_map`, which is §5.5's desktop identity, so its
-/// values go while `log_content` is off. Anything that cannot be parsed is
-/// dropped rather than passed through: an unparseable `state.json` is worth
-/// knowing about but not worth copying blind.
+/// design (§9: faces, settings, slots, card ids, voices, usage, and the
+/// delivery record, which is ids, times, counts and closed words). The one
+/// exception was `terminal_map`, the Ghostty tab pins: the daemon no longer
+/// writes it, but a file an older daemon left still carries it until the
+/// next save, so its values still go while `log_content` is off. Each deck
+/// is named by its number, whatever `log_content` says: its id is its
+/// Bluetooth address. Anything that cannot be parsed is dropped rather than
+/// passed through: an unparseable `state.json` is worth knowing about but
+/// not worth copying blind.
 pub fn redact_state(text: &str, log_content: bool) -> String {
     let Ok(mut value) = serde_json::from_str::<serde_json::Value>(text) else {
         return format!("state.json does not parse as JSON ({} bytes)", text.len());
     };
+    number_decks(&mut value);
     if !log_content {
         if let Some(map) = value
             .get_mut("terminal_map")
@@ -672,6 +687,36 @@ pub fn redact_state(text: &str, log_content: bool) -> String {
         }
     }
     serde_json::to_string_pretty(&value).unwrap_or_else(|e| e.to_string())
+}
+
+/// `decks` keyed `deck-1`, `deck-2`… in the file's order, and `deck` as the
+/// number of the one it names (redacted when it names none of them).
+fn number_decks(value: &mut serde_json::Value) {
+    let ids: Vec<String> = value
+        .get("decks")
+        .and_then(serde_json::Value::as_object)
+        .map(|decks| decks.keys().cloned().collect())
+        .unwrap_or_default();
+    if let Some(decks) = value
+        .get_mut("decks")
+        .and_then(serde_json::Value::as_object_mut)
+    {
+        let numbered: serde_json::Map<String, serde_json::Value> = ids
+            .iter()
+            .enumerate()
+            .filter_map(|(i, id)| Some((format!("deck-{}", i + 1), decks.remove(id)?)))
+            .collect();
+        *decks = numbered;
+    }
+    if let Some(current) = value.get_mut("deck").filter(|deck| !deck.is_null()) {
+        let number = current
+            .as_str()
+            .and_then(|id| ids.iter().position(|known| known == id));
+        *current = serde_json::Value::String(match number {
+            Some(i) => format!("deck-{}", i + 1),
+            None => REDACTED.into(),
+        });
+    }
 }
 
 /// The tail of one log, line by line through [`redact_log_line`].
@@ -836,17 +881,51 @@ mod tests {
 
     #[test]
     fn state_json_loses_its_terminal_map_and_keeps_the_rest() {
-        let text = r#"{"slots":{"claude:api":{"slot":1,"cwd":"/Users/t/p","kind":"claude","last_seen":"2026-09-22T00:00:00.000Z"}},"terminal_map":{"ttys003":{"app":"Ghostty","window":42}}}"#;
+        let text = r#"{"slots":{"claude:api":{"slot":1,"cwd":"/Users/t/p","kind":"claude","last_seen":"2026-09-22T00:00:00.000Z"}},"terminal_map":{"ttys003":{"app":"Ghostty","window":42}},"deliveries":{"cards":{"total":4,"outcomes":{"answered":3,"elsewhere":1}},"recent":[{"agent":"ag_7","card":12,"outcome":"answered"}]}}"#;
         let out = redact_state(text, false);
         assert!(out.contains("claude:api"), "{out}");
         assert!(out.contains("/Users/t/p"), "{out}");
         assert!(!out.contains("Ghostty"), "{out}");
         assert!(out.contains(REDACTED), "{out}");
+        // The delivery record is content-free by construction, and kept.
+        let kept: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(kept["deliveries"]["cards"]["outcomes"]["answered"], 3);
+        assert_eq!(kept["deliveries"]["recent"][0]["card"], 12);
         // The operator's own switch keeps it.
         assert!(redact_state(text, true).contains("Ghostty"));
         // Garbage is described, not copied.
         let out = redact_state("{not json", false);
         assert!(out.contains("does not parse"), "{out}");
+    }
+
+    /// A deck's id is its Bluetooth address, which a support file has no use
+    /// for: each deck is a number, with its strip, settings and keys kept,
+    /// and the current one says which number it is. The operator's
+    /// `log_content` switch does not bring the addresses back.
+    #[test]
+    fn state_json_names_decks_by_number_not_by_address() {
+        let text = r#"{"faces":[{"f":1,"t":"agents","n":"Agents"}],"deck":"F6E5D4C3B2A1","decks":{
+            "A1B2C3D4E5F6":{"faces":[],"settings":{"speaker":3}},
+            "F6E5D4C3B2A1":{"faces":[{"f":1,"t":"agents","n":"Agents"}],"settings":{"speaker":6}}}}"#;
+        for log_content in [false, true] {
+            let out = redact_state(text, log_content);
+            let value: serde_json::Value = serde_json::from_str(&out).unwrap();
+            assert!(
+                !out.contains("A1B2C3D4E5F6") && !out.contains("F6E5D4C3B2A1"),
+                "{out}"
+            );
+            assert_eq!(value["deck"], "deck-2");
+            assert_eq!(value["decks"]["deck-1"]["settings"]["speaker"], 3);
+            assert_eq!(value["decks"]["deck-2"]["faces"][0]["t"], "agents");
+            assert_eq!(value["faces"][0]["n"], "Agents", "the rest is kept");
+        }
+        // A current deck the file does not list is redacted, not copied;
+        // a file from before decks is as it was.
+        let out = redact_state(r#"{"deck":"A1B2C3D4E5F6","decks":{}}"#, false);
+        assert!(!out.contains("A1B2C3D4E5F6"), "{out}");
+        assert!(out.contains(REDACTED), "{out}");
+        let old = redact_state(r#"{"card_ids":{"1":5}}"#, false);
+        assert!(!old.contains("deck"), "{old}");
     }
 
     #[test]

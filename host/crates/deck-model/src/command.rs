@@ -160,6 +160,35 @@ pub struct OpOrder {
     pub utterance: Option<String>,
 }
 
+/// What became of an order the daemon handed to its agent's owner.
+///
+/// Every order `op.order` sends, dictated or typed, reaches the owner with
+/// its `order` id: in the `agent.order` notification, and in a
+/// `{kind:"order"}` result of `agent.wait`. A step chosen on a Ready card
+/// (`ctx:"step"`) carries none: the deck reverts it by itself. An owner that
+/// could not deliver an order to its conversation reports it once, with
+/// `ok: false` and a `reason`, and the deck shows that the order was not
+/// delivered. `ok: true` is accepted and changes nothing. Only the agent's
+/// owning session may report (another is refused `-32004`), only on an
+/// order of the last ten minutes that was not reported already (`-32003`
+/// otherwise), and only with a `reason` that is such a word (`-32009`
+/// otherwise). The result is `{rev, shown}`: `card`, `toast` or `none`, what
+/// the deck was given.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct OrderOutcome {
+    /// The agent the order was for.
+    pub agent: AgentId,
+    /// The `order` id the order carried.
+    pub order: String,
+    /// Whether the order reached the conversation.
+    pub ok: bool,
+    /// Why it did not: one word of lowercase letters, digits and
+    /// underscores, at most 32 bytes (`backend_refused`). `undeliverable`
+    /// when absent.
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct FocusReport {
     pub agent: Option<AgentId>,
@@ -257,6 +286,8 @@ pub enum Request {
     CardClear(CardClear),
     #[serde(rename = "agent.reply")]
     Reply(ReplySet),
+    #[serde(rename = "agent.order.result")]
+    OrderOutcome(OrderOutcome),
     #[serde(rename = "op.answer")]
     OpAnswer(OpAnswer),
     #[serde(rename = "op.order")]
@@ -513,6 +544,15 @@ pub enum Command {
     Link(LinkEvent),
     /// From the hid thread too: the deck's own status, and why a link ends.
     DeviceReport(DeviceReport),
+    /// From the core, once the deck the hid thread opened is identified (by
+    /// its serial number): the strip, settings and Macropad keys the service
+    /// keeps for that deck, and `deck`, the opaque label it is known by
+    /// (`device.deck`). Sent after the link's `Linked` and before its first
+    /// hello, so the sync that hello starts is this deck's.
+    DeckProfile {
+        deck: Option<String>,
+        profile: crate::DeckProfile,
+    },
     /// From the audio side (B1), the way `Device`/`Link` are from the hid
     /// thread.
     Voice(VoiceIn),
@@ -522,25 +562,34 @@ pub enum Command {
         card: CardId,
         ok: bool,
     },
-    /// Result of an `Effect::Desktop(DesktopCmd::Inject)` — the injector
-    /// chain of §5.5, which runs off the core thread because every step of
-    /// it is a ~118 ms AppleScript round trip.
+    /// Result of an `Effect::Desktop(DesktopCmd::Inject)`: what the
+    /// session's inbox or Claude Channels made of the order, both of which
+    /// post off the core thread, or `no_route` when the session has
+    /// neither.
     ///
     /// It has to be a command rather than a return value: `op.order`
     /// answers `{via:"inject"}` and writes `order.dispatched{text}`
-    /// **before** anything is typed (§5.5), so the refusal — guard 3's
-    /// `not_foreground`, an `ambiguous` resolution, a `-1743` — necessarily
+    /// **before** anything is posted (§5.5), so the refusal — an inbox that
+    /// does not answer, a dialog that opened meanwhile — necessarily
     /// arrives later, and only the reducer can put `order.failed` on the
     /// bus with a `rev` the mirror will accept. `ok` writes nothing: the
     /// dispatch already told that story.
+    ///
+    /// The core sends the same for an order it could not hand to its
+    /// owner — a connection gone or full, mail dropped unread — so every
+    /// failure reaches the deck through one door (`Store::order_failed`).
     OrderResult {
         principal: Principal,
         agent: AgentId,
         text: String,
         ok: bool,
-        /// The `order.failed{reason}` word (§4.12): `ambiguous`,
-        /// `not_foreground`, `dialog_open`, or what the desktop side named.
+        /// The `order.failed{reason}` word (§4.12): `no_route`,
+        /// `dialog_open`, `owner_gone`, `expired`, or what the inbox or
+        /// Claude Channels named.
         reason: Option<String>,
+        /// The order's id (`order.dispatched{order}`), when the route that
+        /// failed carried it.
+        order: Option<String>,
     },
     /// A guarded operation was refused to an untrusted `principal` (§4.2):
     /// the store emits `op.confirm_requested` so the GUI can show its sheet.
@@ -568,6 +617,29 @@ pub enum Command {
         /// Who holds the port while degraded (§4.1: `lsof`), `None` on a
         /// clean bind — the event and `service.info` carry it.
         listener: Option<crate::Listener>,
+    },
+    /// From the core: the collectors stopped or started again
+    /// (`service.dormancy`). `None` is a service with no dormancy.
+    Dormancy(Option<crate::DormancyState>),
+    /// From the core, for the lazy reader feed (`deckd::reader`): a
+    /// session's history, read again from its source because the deck
+    /// opened it or it holds a card. It replaces the history kept for the
+    /// agent, in order, so messages missed while nobody read the session
+    /// do not land after newer ones. The reply on file is not touched: the
+    /// adapters store each turn's reply as it ends, read or not. The core
+    /// checks that the caller's session owns the agent first.
+    ChatReplace {
+        agent: AgentId,
+        messages: Vec<(crate::MessageMeta, String)>,
+    },
+    /// From the core, for an agent the service collects itself (a Claude or
+    /// Codex session): the deck stopped reading it (`deckd::reader`, once
+    /// its linger ran out). Its history stays for the next read; the
+    /// workflow runs only the reader's feed kept current go, so the roster
+    /// counts the session's subagents alone until it is read again. A
+    /// connected app publishes its own runs and is never sent this.
+    ReaderLeft {
+        agent: AgentId,
     },
     Tick(Instant),
     /// Orderly shutdown: release every hold, mark the device offline.

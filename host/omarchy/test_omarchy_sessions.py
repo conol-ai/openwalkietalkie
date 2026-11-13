@@ -2,12 +2,14 @@
 import json
 import os
 import queue
+import shutil
 import socket
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).parent))
 import omarchy_sessions as s  # noqa: E402
@@ -139,27 +141,91 @@ class BridgeSessions(unittest.TestCase):
         bridge.on_hook(hook('Stop'))
         self.assertEqual([m for m, _ in deck.calls].count('agent.update'), 1)
 
+    def kimi_wire(self):
+        """A Kimi wire log for sid1 whose last assistant message says 'It is done.'."""
+        home = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, home, True)
+        wire = os.path.join(home, 'sessions', 'wd_x', 'sid1', 'agents', 'main')
+        os.makedirs(wire)
+        line = {'type': 'agent.message.appended', 'message': {'message': {'role': 'assistant', 'content': [
+            {'type': 'think', 'think': 'hidden'}, {'type': 'text', 'text': 'It is\n done.'}]}}}
+        with open(os.path.join(wire, 'wire.jsonl'), 'w') as f:
+            f.write(json.dumps(line) + '\n')
+        os.environ['KIMI_CODE_HOME'] = home
+        self.addCleanup(os.environ.pop, 'KIMI_CODE_HOME')
+
     def test_a_kimi_turn_end_pushes_its_reply_once_and_not_for_other_clis(self):
-        import json, tempfile
-        with tempfile.TemporaryDirectory() as home:
-            wire = os.path.join(home, 'sessions', 'wd_x', 'sid1', 'agents', 'main')
-            os.makedirs(wire)
-            line = {'type': 'agent.message.appended', 'message': {'message': {'role': 'assistant', 'content': [
-                {'type': 'think', 'think': 'hidden'}, {'type': 'text', 'text': 'It is\n done.'}]}}}
-            with open(os.path.join(wire, 'wire.jsonl'), 'w') as f:
-                f.write(json.dumps(line) + '\n')
-            os.environ['KIMI_CODE_HOME'] = home
-            self.addCleanup(os.environ.pop, 'KIMI_CODE_HOME')
-            deck = FakeDeck()
-            bridge = make_bridge(deck)
-            bridge.on_hook({**hook('Stop'), 'cli': 'kimi'})
-            bridge.on_hook({**hook('Stop'), 'cli': 'kimi'})
-            self.assertEqual(dict(deck.calls)['agent.register']['name'], 'Kimi: proj')
-            replies = [p for m, p in deck.calls if m == 'agent.reply']
-            self.assertEqual(replies, [{'agent': 'ag_1', 'text': 'It is done.', 'speak': False}])
-            other = FakeDeck()
-            make_bridge(other).on_hook(hook('Stop'))
-            self.assertNotIn('agent.reply', [m for m, _ in other.calls])
+        self.kimi_wire()
+        deck = FakeDeck()
+        bridge = make_bridge(deck)
+        bridge.on_hook({**hook('UserPromptSubmit'), 'cli': 'kimi'})
+        bridge.on_hook({**hook('Stop'), 'cli': 'kimi'})
+        bridge.on_hook({**hook('Stop'), 'cli': 'kimi'})
+        self.assertEqual(dict(deck.calls)['agent.register']['name'], 'Kimi: proj')
+        replies = [p for m, p in deck.calls if m == 'agent.reply']
+        self.assertEqual(replies, [{'agent': 'ag_1', 'text': 'It is done.', 'speak': False}])
+        # deckd speaks the stored reply the moment the state turns ready: the reply goes first.
+        methods = [m for m, _ in deck.calls]
+        ready = deck.calls.index(('agent.update', {'agent': 'ag_1', 'state': 'ready', 'title': ''}))
+        self.assertLess(methods.index('agent.reply'), ready)
+        other = FakeDeck()
+        make_bridge(other).on_hook(hook('Stop'))
+        self.assertNotIn('agent.reply', [m for m, _ in other.calls])
+
+    def test_a_session_registered_just_now_gets_its_state_before_the_reply_it_already_had(self):
+        # First seen at its turn's end (the bridge started late), and again after a reconnect:
+        # neither is the end of a turn, so the last reply must not be read out as if it were.
+        self.kimi_wire()
+        deck = FakeDeck()
+        bridge = make_bridge(deck)
+        bridge.on_hook({**hook('Stop'), 'cli': 'kimi'})
+        self.assertEqual([m for m, _ in deck.calls], ['agent.register', 'agent.update', 'agent.reply'])
+        deck.calls = []
+        bridge.reregister()
+        self.assertEqual([m for m, _ in deck.calls], ['agent.register', 'agent.update', 'agent.reply'])
+
+    def test_while_quiet_a_hook_moves_the_table_but_reads_and_sends_nothing(self):
+        deck = FakeDeck()
+        bridge = make_bridge(deck)
+        bridge.on_hook(hook('UserPromptSubmit'))
+        deck.calls = []
+        with mock.patch('omarchy_kimi.find_wire', side_effect=AssertionError('a Kimi log read while quiet')):
+            bridge.on_hook(hook('PermissionRequest', message='Run it?'), quiet=True)
+            bridge.on_hook({**hook('Stop'), 'cli': 'kimi'}, quiet=True)
+        self.assertEqual(deck.calls, [])
+        mine = bridge.sessions['omarchy:box:claude:sid1']
+        self.assertEqual((mine.state, mine.title), ('question', 'Run it?'))
+        self.assertEqual(bridge.sessions['omarchy:box:kimi:sid1'].state, 'ready')
+
+    def test_the_wake_sends_each_session_as_it_is_now(self):
+        deck = FakeDeck()
+        bridge = make_bridge(deck)
+        bridge.on_hook(hook('UserPromptSubmit'))
+        bridge.on_hook(hook('Stop'), quiet=True)
+        deck.calls = []
+        bridge.reregister()
+        self.assertEqual(deck.calls[-1], ('agent.update', {'agent': 'ag_1', 'state': 'ready', 'title': ''}))
+
+    def test_a_session_that_ended_while_quiet_is_released_at_the_wake(self):
+        deck = FakeDeck()
+        bridge = make_bridge(deck)
+        bridge.on_hook(hook('UserPromptSubmit'))
+        bridge.on_hook(hook('SessionEnd'), quiet=True)
+        self.assertEqual([m for m, _ in deck.calls], ['agent.register', 'agent.update'], 'nothing sent while quiet')
+        bridge.reregister()
+        self.assertEqual(deck.calls[-1], ('agent.release', {'agent': 'ag_1', 'reason': 'session_end'}))
+        self.assertEqual(bridge.sessions, {})
+
+    def test_a_kimi_turn_that_ended_while_quiet_has_its_reply_read_at_the_wake(self):
+        self.kimi_wire()
+        deck = FakeDeck()
+        bridge = make_bridge(deck)
+        bridge.on_hook({**hook('UserPromptSubmit'), 'cli': 'kimi'})
+        bridge.on_hook({**hook('Stop'), 'cli': 'kimi'}, quiet=True)
+        deck.calls = []
+        bridge.reregister()
+        self.assertIn(('agent.update', {'agent': 'ag_1', 'state': 'ready', 'title': ''}), deck.calls)
+        self.assertIn(('agent.reply', {'agent': 'ag_1', 'text': 'It is done.', 'speak': False}), deck.calls)
 
     def test_a_question_carries_the_notification_line(self):
         deck = FakeDeck()
@@ -368,6 +434,70 @@ class BridgeOrders(unittest.TestCase):
         bridge, _ = self.bridge()
         bridge.on_event({'type': 'agent.order', 'data': {'agent': 'ag_other', 'text': 'x'}})
         self.assertEqual(self.typed, [])
+
+    def test_a_delivered_order_is_not_reported(self):
+        bridge, _ = self.bridge()
+        bridge.on_event({'type': 'agent.order', 'data': {'agent': 'ag_1', 'text': 'hi', 'order': 'or_1'}})
+        self.assertEqual(self.typed[-1], ['wtype', '-k', 'Return'])
+        self.assertNotIn('agent.order.result', [m for m, _ in bridge.call.calls])
+
+
+class MethodNotFound(Exception):
+    code = -32601
+
+
+class OrderResults(unittest.TestCase):
+    """A voice order the bridge could not type is reported to deckd, which shows it on the deck."""
+
+    def bridge(self, deck):
+        bridge = make_bridge(deck)
+        bridge.on_hook(hook('Stop'))
+        next(iter(bridge.sessions.values())).state = 'question'  # an open dialog: never typed into
+        deck.calls.clear()
+        return bridge
+
+    @staticmethod
+    def order(order_id=None):
+        data = {'agent': 'ag_1', 'text': 'run the tests'}
+        if order_id is not None:
+            data['order'] = order_id
+        return {'type': 'agent.order', 'data': data}
+
+    def test_a_failed_order_is_reported_once_with_its_id(self):
+        deck = FakeDeck()
+        bridge = self.bridge(deck)
+        bridge.on_event(self.order('or_3'))
+        self.assertEqual(deck.calls, [('agent.order.result',
+                                       {'agent': 'ag_1', 'order': 'or_3', 'ok': False, 'reason': 'dialog_open'})])
+
+    def test_no_order_id_no_report(self):
+        deck = FakeDeck()
+        bridge = self.bridge(deck)
+        bridge.on_event(self.order())
+        self.assertEqual(deck.calls, [])
+
+    def test_an_older_daemon_is_not_asked_again(self):
+        class Older(FakeDeck):
+            def __call__(self, method, params=None):
+                if method == 'agent.order.result':
+                    self.calls.append((method, params))
+                    raise MethodNotFound('method_not_found')
+                return super().__call__(method, params)
+
+        deck = Older()
+        bridge = self.bridge(deck)
+        bridge.on_event(self.order('or_1'))
+        bridge.on_event(self.order('or_2'))
+        self.assertEqual([m for m, _ in deck.calls], ['agent.order.result'])
+
+    def test_a_refused_report_is_logged_and_the_next_one_still_sent(self):
+        deck = FakeDeck()
+        bridge = self.bridge(deck)
+        deck.fail = RuntimeError('not_found')
+        bridge.on_event(self.order('or_1'))
+        deck.fail = None
+        bridge.on_event(self.order('or_2'))
+        self.assertEqual([p['order'] for _, p in deck.calls], ['or_1', 'or_2'])
 
 
 class Control(unittest.TestCase):

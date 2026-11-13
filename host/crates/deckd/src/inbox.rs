@@ -30,8 +30,8 @@
 //! your consent, so it can't answer a pending permission prompt", and one
 //! that lands while a dialog is open has been reported to cancel the dialog
 //! as a rejection (anthropics/claude-code#93720). Guard 2 of §5.5 — no open
-//! dialog — therefore runs in front of this path exactly as it does in front
-//! of the injector, and here it is a correctness rule rather than a courtesy.
+//! dialog — therefore runs in front of this path, and here it is a
+//! correctness rule rather than a courtesy.
 //!
 //! Content discipline (§11): the text is the operator's dictation and the
 //! token is a secret. Neither reaches a log line; [`Inbox`]'s `Debug`
@@ -143,21 +143,27 @@ fn post_to(socket: &Path, bytes: &[u8]) -> Result<(), DesktopError> {
     Ok(())
 }
 
-/// Post from a short-lived thread and report the outcome the way the
-/// injector does, as a [`FromDesktop::Order`] on the core's own channel —
-/// so `order.failed{reason}` reaches the bus through the one path the
-/// reducer already has for it.
+/// Post from a short-lived thread and report the outcome as a
+/// [`FromDesktop::Order`] on the core's own channel, as Claude Channels
+/// does — so `order.failed{reason}` reaches the bus through the one path
+/// the reducer already has for it.
 ///
 /// `dialog_open` is guard 2 as the core last saw it: a post into a session
 /// whose dialog is up would cancel that dialog, so it fails here with the
-/// same `dialog_open` word the injector uses, and nothing is sent.
+/// `dialog_open` word, and nothing is sent.
+///
+/// `order` is the id `order.dispatched` gave the words, carried back so the
+/// failure names its order. A thread that cannot be started fails the
+/// order the same way (`inbox_worker_failed`), rather than losing it.
 pub fn post_async(
     out: crossbeam_channel::Sender<FromDesktop>,
     agent: AgentId,
     text: String,
+    order: Option<String>,
     inbox: Inbox,
     dialog_open: bool,
 ) {
+    let unsent = (out.clone(), agent.clone(), text.clone(), order.clone());
     let spawned = std::thread::Builder::new()
         .name("deckd-inbox".into())
         .spawn(move || {
@@ -169,11 +175,19 @@ pub fn post_async(
             let _ = out.send(FromDesktop::Order {
                 agent,
                 text,
+                order,
                 result,
             });
         });
     if let Err(e) = spawned {
         tracing::warn!(error = %e, "inbox: could not spawn the posting thread");
+        let (out, agent, text, order) = unsent;
+        let _ = out.send(FromDesktop::Order {
+            agent,
+            text,
+            order,
+            result: Err(DesktopError::Inbox("inbox_worker_failed")),
+        });
     }
 }
 
@@ -273,15 +287,25 @@ mod tests {
             tx.clone(),
             AgentId("ag_1".into()),
             "go".into(),
+            Some("or_4".into()),
             Inbox::socket_only(&path),
             true,
         );
-        let FromDesktop::Order { result, text, .. } =
-            rx.recv_timeout(Duration::from_secs(5)).unwrap()
+        let FromDesktop::Order {
+            result,
+            text,
+            order,
+            ..
+        } = rx.recv_timeout(Duration::from_secs(5)).unwrap()
         else {
             panic!("not an order outcome");
         };
         assert_eq!(text, "go");
+        assert_eq!(
+            order.as_deref(),
+            Some("or_4"),
+            "the failure names its order"
+        );
         assert_eq!(result.unwrap_err().reason(), "dialog_open");
         // And the real thing, delivered.
         let listener = UnixListener::bind(&path).unwrap();
@@ -295,6 +319,7 @@ mod tests {
             tx,
             AgentId("ag_1".into()),
             "go".into(),
+            Some("or_5".into()),
             Inbox::socket_only(&path),
             false,
         );

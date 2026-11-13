@@ -8,18 +8,17 @@
   identifier: sign them differently and the daemon's Microphone grant is not
   the GUI's, and hardened-runtime capture from `deckd` fails even with a grant.
 
-  No App Sandbox: the UDS lives in Application Support, the deck is reached
-  through hidapi, and the terminal is driven with AppleScript (§10.1).
+  No App Sandbox: the UDS lives in Application Support and the deck is reached
+  through hidapi (§10.1). No Apple Events: the hand-off opens the session's
+  own app with `/usr/bin/open -b`, which asks for no Automation grant, and
+  nothing in either Mach-O scripts another app since the Ghostty path was
+  retired.
 -->
 <plist version="1.0">
 <dict>
     <!-- PTT capture from the HFP input (§7.1). Without it the hardened
          runtime kills the capture before TCC is ever consulted. -->
     <key>com.apple.security.device.audio-input</key>
-    <true/>
-    <!-- Focus and `input text` into Ghostty (§5.5): NSAppleScript is
-         Apple-events traffic, which the hardened runtime blocks by default. -->
-    <key>com.apple.security.automation.apple-events</key>
     <true/>
 </dict>
 </plist>

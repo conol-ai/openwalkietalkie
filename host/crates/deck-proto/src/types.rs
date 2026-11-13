@@ -210,6 +210,77 @@ pub struct FaceEntry {
     pub n: String,
 }
 
+/// The most faces a strip holds: the deck's `MAX_FACES`, so a face's id is
+/// 1..=8.
+pub const STRIP_MAX: usize = 8;
+
+/// The most Macropads a strip holds: the deck keeps keys for three
+/// (`MAX_MACRO_SETS`).
+pub const MACROPADS_MAX: usize = 3;
+
+/// The most Timers a strip holds: the deck's clocks are one per deck, and
+/// its gallery offers no second Timer.
+pub const TIMERS_MAX: usize = 1;
+
+/// Why the deck would not take `list` as its strip, in the words
+/// `device.faces.set` refuses it with; `None` when it would.
+///
+/// The deck restores a strip only with Agents first and Settings last,
+/// neither of them in between, unique ids in 1..=8 and at most
+/// [`MACROPADS_MAX`] Macropads (`valid_strip`, `src/ui/state/manager.rs`).
+/// It answers any other with an `err range` the host cannot tie to the line,
+/// and drops it; its parser refuses a ninth face. Two rules are the host's
+/// own: every face has a name, and a strip holds one Timer at most
+/// ([`TIMERS_MAX`]), as the deck's gallery has it (its restore would take a
+/// second). The checks run in this order and the first one broken is the
+/// answer, so the four refusals `device.faces.set` made before the rest
+/// existed keep their words. The contract tests hold this to the firmware's
+/// text.
+#[must_use]
+pub fn strip_problem(list: &[FaceEntry]) -> Option<&'static str> {
+    if list.len() > STRIP_MAX {
+        return Some("max 8");
+    }
+    let mut seen = [false; STRIP_MAX + 1];
+    for entry in list {
+        if !(1..=STRIP_MAX as u8).contains(&entry.f) {
+            return Some("f 1..=8");
+        }
+        if std::mem::replace(&mut seen[usize::from(entry.f)], true) {
+            return Some("duplicate f");
+        }
+        if entry.n.trim().is_empty() {
+            return Some("empty name");
+        }
+    }
+    let Some((first, rest)) = list.split_first() else {
+        return Some("agents first");
+    };
+    if first.t != Template::Agents {
+        return Some("agents first");
+    }
+    let Some((last, middle)) = rest.split_last() else {
+        return Some("settings last");
+    };
+    if last.t != Template::Settings {
+        return Some("settings last");
+    }
+    if middle
+        .iter()
+        .any(|entry| matches!(entry.t, Template::Agents | Template::Settings))
+    {
+        return Some("agents or settings in the middle");
+    }
+    let count = |template: Template| list.iter().filter(|entry| entry.t == template).count();
+    if count(Template::Macropad) > MACROPADS_MAX {
+        return Some("max 3 macropads");
+    }
+    if count(Template::Timer) > TIMERS_MAX {
+        return Some("max 1 timer");
+    }
+    None
+}
+
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
 )]
@@ -737,5 +808,116 @@ mod tests {
         assert_eq!(HostLine::CardClear { slot: 1, id: 1 }.m(), "card");
         assert_eq!(DeviceLine::WsGo(1).m(), "ws");
         assert_eq!(DeviceLine::Up.m(), "up");
+    }
+
+    /// A strip of `(f, t)`, each face called by its template.
+    fn strip(faces: &[(u8, Template)]) -> Vec<FaceEntry> {
+        faces
+            .iter()
+            .map(|&(f, t)| FaceEntry { f, t, n: format!("{t:?}") })
+            .collect()
+    }
+
+    #[test]
+    fn the_decks_power_on_strip_and_the_boards_pass() {
+        use Template::{Agents, Arcade, Macropad, Omarchy, Settings, System, Timer, Usage};
+        // The deck's power-on strip, each face by its own id.
+        let power_on = strip(&[
+            (1, Agents),
+            (2, Omarchy),
+            (3, Macropad),
+            (4, Usage),
+            (7, System),
+            (6, Arcade),
+            (5, Settings),
+        ]);
+        // The app's boards: seven faces with a Timer, and all eight.
+        let board = strip(&[
+            (1, Agents),
+            (3, Macropad),
+            (4, Usage),
+            (7, System),
+            (8, Timer),
+            (6, Arcade),
+            (5, Settings),
+        ]);
+        let mut full = board.clone();
+        full.insert(1, FaceEntry { f: 2, t: Omarchy, n: "Omarchy".into() });
+        assert_eq!(full.len(), STRIP_MAX);
+        // The barest strip, and the most Macropads and Timers, any ids.
+        let bare = strip(&[(8, Agents), (1, Settings)]);
+        let most = strip(&[
+            (1, Agents),
+            (2, Macropad),
+            (3, Macropad),
+            (4, Macropad),
+            (5, Timer),
+            (6, Settings),
+        ]);
+        for list in [power_on, board, full, bare, most] {
+            assert_eq!(strip_problem(&list), None, "{list:?}");
+        }
+    }
+
+    /// One strip for each refusal, and strips that break several rules:
+    /// the first rule in the order is the answer.
+    #[test]
+    fn a_strip_the_deck_would_refuse_says_why_and_the_first_rule_broken_is_the_answer() {
+        use Template::{Agents, Arcade, Macropad, Settings, Timer, Usage};
+        let blank = |n: &str| {
+            vec![
+                FaceEntry { f: 1, t: Agents, n: n.into() },
+                FaceEntry { f: 5, t: Settings, n: "Settings".into() },
+            ]
+        };
+        let nine: Vec<(u8, Template)> = (1..=9).map(|f| (f, Usage)).collect();
+        // Four Macropads, and with two Timers as well: eight faces.
+        let pads = [
+            (1, Agents),
+            (2, Macropad),
+            (3, Macropad),
+            (4, Macropad),
+            (6, Macropad),
+            (5, Settings),
+        ];
+        let mut pads_and_timers = pads.to_vec();
+        pads_and_timers.insert(5, (7, Timer));
+        pads_and_timers.insert(6, (8, Timer));
+        let inside = "agents or settings in the middle";
+        for (list, why) in [
+            // Today's four, in today's order.
+            (strip(&nine), "max 8"),
+            (strip(&[(0, Agents), (5, Settings)]), "f 1..=8"),
+            (strip(&[(1, Agents), (9, Settings)]), "f 1..=8"),
+            (strip(&[(1, Agents), (1, Settings)]), "duplicate f"),
+            (blank(""), "empty name"),
+            (blank(" \u{3000}"), "empty name"),
+            // The ends.
+            (Vec::new(), "agents first"),
+            (strip(&[(5, Settings)]), "agents first"),
+            (strip(&[(4, Usage), (1, Agents), (5, Settings)]), "agents first"),
+            (strip(&[(1, Agents)]), "settings last"),
+            (strip(&[(1, Agents), (4, Usage)]), "settings last"),
+            (strip(&[(1, Agents), (5, Settings), (4, Usage)]), "settings last"),
+            // Neither end in between.
+            (strip(&[(1, Agents), (2, Agents), (5, Settings)]), inside),
+            (strip(&[(1, Agents), (6, Settings), (5, Settings)]), inside),
+            // The Macropads and the Timer.
+            (strip(&pads), "max 3 macropads"),
+            (strip(&[(1, Agents), (7, Timer), (8, Timer), (5, Settings)]), "max 1 timer"),
+            // Several at once.
+            (strip(&[(0, Settings), (0, Settings)]), "f 1..=8"),
+            (strip(&[(4, Usage), (4, Usage)]), "duplicate f"),
+            (strip(&[(5, Settings), (1, Agents)]), "agents first"),
+            (strip(&[(1, Agents), (5, Settings), (2, Agents), (6, Arcade)]), "settings last"),
+            (strip(&pads_and_timers), "max 3 macropads"),
+        ] {
+            assert_eq!(strip_problem(&list), Some(why), "{list:?}");
+        }
+        // The words carry the limits.
+        assert_eq!(format!("max {STRIP_MAX}"), "max 8");
+        assert_eq!(format!("f 1..={STRIP_MAX}"), "f 1..=8");
+        assert_eq!(format!("max {MACROPADS_MAX} macropads"), "max 3 macropads");
+        assert_eq!(format!("max {TIMERS_MAX} timer"), "max 1 timer");
     }
 }

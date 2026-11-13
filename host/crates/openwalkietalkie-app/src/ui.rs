@@ -20,11 +20,11 @@
 //! [`radio_dot`], [`combo`]), the controls ([`Btn`], [`CopyButton`],
 //! [`Switch`], [`Level`], [`Segmented`], [`PopupButton`], [`Chip`],
 //! [`field`], and [`Press`] for anything else that is pressed), the
-//! containers ([`section`], [`card`], [`Row`], [`tile`], [`bare`],
-//! [`attention`], and a table's [`table_row`], [`cell`] and [`cell_end`])
-//! and the frame ([`brand`], [`nav_item`], [`link_out`], [`Header`],
-//! [`page`]). The deck's own pictures — the device, the face plates, the
-//! battery — are in [`crate::art`].
+//! containers ([`section`], [`card`], [`Row`], [`Group`], [`tile`],
+//! [`bare`], [`attention`], and a table's [`table_row`], [`cell`] and
+//! [`cell_end`]) and the frame ([`brand`], [`nav_item`], [`link_out`],
+//! [`Header`], [`page`]). The deck's own pictures — the device, the face
+//! plates, the battery — are in [`crate::art`].
 //!
 //! **Every control is a stop on the window's Tab order.** It keeps a focus
 //! handle of its own under its id, Return and Space press it (a menu button
@@ -32,17 +32,27 @@
 //! while it has the keyboard it draws the one blue, `info`, as a 2 px ring
 //! 2 px outside itself ([`ring`]). A click with the pointer never takes the
 //! keyboard, so a ring always means the keyboard is there. Selection is the
-//! other ring, in `outline`. Two things follow for a page: a control's id
-//! must be unique among the ids around it (its focus is kept under it), and
-//! a control needs 4 px of room before anything that clips (8 around a
-//! selected tile), or its ring is cut.
+//! other ring, in `outline`.
+//!
+//! **Controls that are one choice or one set are one stop** ([`Group`]): a
+//! segmented control's options, the sidebar's pages, the face strip, the
+//! key grid, a card of radio choices. Tab enters a group on its selected
+//! member, the arrow keys (Home and End too) move the keyboard from member
+//! to member, Return or Space presses the one that has it, and Tab leaves.
+//! The arrows only move the ring: choosing is a press, because a choice
+//! writes a setting or, for a model, starts a download.
+//!
+//! Two things follow for a page: a control's id must be unique among the
+//! ids around it (its focus is kept under it), and a control needs 4 px of
+//! room before anything that clips (8 around a selected tile), or its ring
+//! is cut.
 use crate::style::{deck_colors, hex, palette, Palette, MONO};
 use deck_model::Tone;
 use gpui::{
     canvas, div, percentage, prelude::*, px, svg, AlignItems, Animation, AnimationExt as _,
     AnyElement, AnyView, App, Bounds, ClickEvent, ClipboardItem, Context, Corner, DismissEvent,
     Div, DragMoveEvent, ElementId, Entity, EntityId, FocusHandle, Focusable as _, FontFeatures,
-    FontWeight, Hsla, Interactivity, KeyDownEvent, MouseButton, MouseDownEvent, Pixels,
+    FontWeight, Hsla, Interactivity, KeyDownEvent, Modifiers, MouseButton, MouseDownEvent, Pixels,
     SharedString, Stateful, StyleRefinement, Svg, Transformation, Window,
 };
 use gpui_component::input::{Input, InputState};
@@ -269,13 +279,24 @@ pub fn status(text: impl Into<SharedString>, tone: Tone, p: &Palette) -> Div {
     // The word on a pill takes its state's text step; beside a bare dot it
     // is a sub-line, and only the dot says the state.
     let state = match p.tone_wash(tone) {
-        Some(wash) => state
-            .h(px(22.))
-            .px(px(9.))
-            .rounded(px(11.))
-            .bg(wash)
-            .medium()
-            .text_color(p.tone_text(tone)),
+        Some(wash) => {
+            let word = p.tone_text(tone);
+            state
+                .h(px(22.))
+                .rounded(px(11.))
+                .bg(wash)
+                .medium()
+                .text_color(word)
+                // With Increase contrast the word's colour rims the pill,
+                // taking a pixel of each side, so the pill keeps its size.
+                .map(|pill| {
+                    if p.contrast {
+                        pill.px(px(8.)).border_1().border_color(word)
+                    } else {
+                        pill.px(px(9.))
+                    }
+                })
+        }
         None => state.text_color(p.text2),
     };
     state.child(text.into())
@@ -475,6 +496,80 @@ fn inset_ring(inset: f32, radius: f32, color: Hsla) -> Div {
         .border_color(color)
 }
 
+/// How a [`Group`]'s members lie, which decides the arrow keys that move the
+/// keyboard between them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Layout {
+    /// Side by side: Left and Right.
+    Row,
+    /// One over another: Up and Down.
+    Column,
+    /// `columns` to a row, filled row by row: Left and Right along a row,
+    /// Up and Down along a column.
+    Grid { columns: usize },
+}
+
+/// Where `key` moves the keyboard from the member at `at` of a group laid
+/// out as `layout`, whose members are each `enabled` or not: one member
+/// along the layout, past the ones that are not enabled, and never round an
+/// end (nor, in a grid, off the end of a row); Home and End to the first and
+/// the last that are. `None` for any other key, and when the keyboard would
+/// stay where it is.
+pub fn group_step(key: &str, at: usize, layout: Layout, enabled: &[bool]) -> Option<usize> {
+    let count = enabled.len();
+    if at >= count {
+        return None;
+    }
+    // The members the key passes over, nearest first.
+    let path: Vec<usize> = match (layout, key) {
+        (_, "home") => (0..count).collect(),
+        (_, "end") => (0..count).rev().collect(),
+        (Layout::Row, "left") | (Layout::Column, "up") => (0..at).rev().collect(),
+        (Layout::Row, "right") | (Layout::Column, "down") => (at + 1..count).collect(),
+        (Layout::Grid { columns }, _) => {
+            let columns = columns.max(1);
+            let row = at - at % columns;
+            match key {
+                "left" => (row..at).rev().collect(),
+                "right" => (at + 1..count.min(row + columns)).collect(),
+                "up" => (0..=at).rev().step_by(columns).skip(1).collect(),
+                "down" => (at..count).step_by(columns).skip(1).collect(),
+                _ => return None,
+            }
+        }
+        _ => return None,
+    };
+    path.into_iter()
+        .find(|&member| enabled[member])
+        .filter(|&member| member != at)
+}
+
+/// The member of a group that is its one stop on the Tab order: the one
+/// that has the keyboard if it is `enabled`, else the selected one if it
+/// is, else the first that is. `None` while none is: Tab passes the group
+/// by.
+pub fn group_stop(
+    focused: Option<usize>,
+    selected: Option<usize>,
+    enabled: &[bool],
+) -> Option<usize> {
+    let on = |at: &usize| enabled.get(*at).copied().unwrap_or(false);
+    focused
+        .filter(on)
+        .or_else(|| selected.filter(on))
+        .or_else(|| (0..enabled.len()).find(on))
+}
+
+/// A [`Group`]'s keyboard as one member of it has it: the focus handle the
+/// group keeps for the member, and whether the member is the group's stop on
+/// the Tab order. A member takes it with [`Press::roving`] or
+/// [`Row::roving`].
+#[derive(Clone)]
+pub struct Roving {
+    focus: FocusHandle,
+    stop: bool,
+}
+
 /// Something pressed that is not a [`Btn`]: a face on the strip, a macro
 /// key, a sidebar row, a link, a segment. It is the kit's focus in one
 /// place — its own Tab stop while it has a click, pressed by Return and
@@ -486,7 +581,8 @@ fn inset_ring(inset: f32, radius: f32, color: Hsla) -> Div {
 /// Its look is otherwise the caller's: it is a `div` to style and to fill,
 /// with every `Styled`, `ParentElement` and interactive method a `div` has.
 /// Its click stops at it, so a press inside a clickable row does not also
-/// press the row.
+/// press the row. In a [`Group`] it is one of the group's members
+/// ([`Press::roving`]).
 #[derive(IntoElement)]
 pub struct Press {
     id: ElementId,
@@ -498,6 +594,7 @@ pub struct Press {
     disabled: bool,
     shown_focused: bool,
     on_click: Option<ClickHandler>,
+    roving: Option<Roving>,
 }
 
 impl Press {
@@ -513,6 +610,7 @@ impl Press {
             disabled: false,
             shown_focused: false,
             on_click: None,
+            roving: None,
         }
     }
 
@@ -561,6 +659,13 @@ impl Press {
         self.shown_focused = true;
         self
     }
+
+    /// One of a [`Group`]'s members: the group's focus handle in place of
+    /// its own, and a stop on the Tab order only while it is the group's.
+    pub fn roving(mut self, roving: &Roving) -> Press {
+        self.roving = Some(roving.clone());
+        self
+    }
 }
 
 impl Styled for Press {
@@ -596,15 +701,19 @@ impl RenderOnce for Press {
             disabled,
             shown_focused,
             on_click,
+            roving,
         } = self;
         let enabled = on_click.is_some() && !disabled;
-        let focus = on_click
-            .is_some()
-            .then(|| focus_handle(&id, window, cx));
+        // A group's member is a stop only while it is the group's one stop.
+        let stop = roving.as_ref().is_none_or(|roving| roving.stop);
+        let focus = on_click.is_some().then(|| match roving {
+            Some(roving) => roving.focus,
+            None => focus_handle(&id, window, cx),
+        });
         let focused =
             shown_focused || (enabled && focus.as_ref().is_some_and(|f| f.is_focused(window)));
         let base = match &focus {
-            Some(focus) => keyboard_stop(base, focus, enabled),
+            Some(focus) => keyboard_stop(base, focus, enabled && stop),
             None => base,
         };
         let gap = if selected {
@@ -651,13 +760,15 @@ pub enum Kind {
 
 impl Kind {
     /// Its fill, its words and its rim, at rest. The rim is always drawn,
-    /// clear where there is none, so every kind is the same size.
+    /// clear where there is none, so every kind is the same size. With
+    /// Increase contrast a quiet button is rimmed too: its well on a card is
+    /// 1.1:1, so the fill alone does not show where the button is.
     pub fn colors(self, p: &Palette) -> (Hsla, Hsla, Hsla) {
         let clear = gpui::transparent_black();
         match self {
             Kind::Primary => (p.solid, p.on_solid, p.solid),
             Kind::Secondary => (clear, p.text, p.edge),
-            Kind::Quiet => (p.well, p.text, clear),
+            Kind::Quiet => (p.well, p.text, if p.contrast { p.edge } else { clear }),
             Kind::Danger => (clear, p.bad_text, p.edge),
         }
     }
@@ -1308,9 +1419,28 @@ pub fn segment_colors(chosen: bool, p: &Palette) -> (Hsla, Hsla, Hsla) {
     }
 }
 
+/// The well a [`Segmented`]'s options sit in, drawn on `track`: 2 px around
+/// them, so 26 high around 22 px options. With Increase contrast a
+/// control's edge rims it (a well on a card is 1.1:1) and takes a pixel of
+/// that, so the options and the size stay where they are.
+fn segment_track<E: Styled>(track: E, p: &Palette) -> E {
+    let track = track
+        .h_flex()
+        .flex_none()
+        .gap(px(2.))
+        .rounded(px(8.))
+        .bg(p.well);
+    if p.contrast {
+        track.p(px(1.)).border_1().border_color(p.edge)
+    } else {
+        track.p(px(2.))
+    }
+}
+
 /// A short choice of one, side by side on a well (Text size, the case
-/// colour, a provider). Each option is its own Tab stop, chosen by a press
-/// or by Return or Space; the arrow keys do not move between them.
+/// colour, a provider). It is one stop on the Tab order, a [`Group`] of its
+/// options: Tab reaches the chosen one, Left and Right (and Home and End)
+/// move the keyboard along them, and a press, Return or Space chooses.
 #[derive(IntoElement)]
 pub struct Segmented {
     id: ElementId,
@@ -1358,45 +1488,43 @@ impl RenderOnce for Segmented {
         let selected = self.selected;
         let on_select = self.on_select.filter(|_| !self.disabled);
         let shown_focused = self.shown_focused;
-        h_flex()
-            .id(self.id)
-            .flex_none()
-            .gap(px(2.))
-            .p(px(2.))
-            .rounded(px(8.))
-            .bg(p.well)
+        let segments = self.options.into_iter().enumerate().map(|(i, option)| {
+            let chosen = i == selected;
+            let (fill, words, rim) = segment_colors(chosen, &p);
+            let segment = Press::new(i)
+                .radius(6.)
+                .own_border(1.)
+                .flex()
+                .flex_none()
+                .items_center()
+                .h(px(22.))
+                .px(px(11.))
+                .rounded(px(6.))
+                .border_1()
+                .border_color(rim)
+                .bg(fill)
+                .ts(13., 18.)
+                .medium()
+                .whitespace_nowrap()
+                .text_color(words)
+                .when(!chosen, |s| s.hover(|s| s.text_color(p.text)))
+                .when(shown_focused == Some(i), Press::shown_focused)
+                .child(option);
+            match on_select.clone() {
+                Some(f) => segment.on_click(move |_, window, cx| {
+                    if !chosen {
+                        f(&i, window, cx);
+                    }
+                }),
+                None => segment,
+            }
+        });
+        // The arrows move the keyboard and never choose: choosing writes
+        // the setting, so it waits for a press.
+        segment_track(Group::new(self.id, Layout::Row), &p)
             .when(self.disabled, |el| el.opacity(DISABLED))
-            .children(self.options.into_iter().enumerate().map(|(i, option)| {
-                let chosen = i == selected;
-                let (fill, words, rim) = segment_colors(chosen, &p);
-                let segment = Press::new(i)
-                    .radius(6.)
-                    .own_border(1.)
-                    .flex()
-                    .flex_none()
-                    .items_center()
-                    .h(px(22.))
-                    .px(px(11.))
-                    .rounded(px(6.))
-                    .border_1()
-                    .border_color(rim)
-                    .bg(fill)
-                    .ts(13., 18.)
-                    .medium()
-                    .whitespace_nowrap()
-                    .text_color(words)
-                    .when(!chosen, |s| s.hover(|s| s.text_color(p.text)))
-                    .when(shown_focused == Some(i), Press::shown_focused)
-                    .child(option);
-                match on_select.clone() {
-                    Some(f) => segment.on_click(move |_, window, cx| {
-                        if !chosen {
-                            f(&i, window, cx);
-                        }
-                    }),
-                    None => segment,
-                }
-            }))
+            .selected(Some(selected))
+            .members(segments)
     }
 }
 
@@ -1445,11 +1573,23 @@ impl RenderOnce for Trigger {
     }
 }
 
+/// Whether a key pressed on a menu button opens its menu: Return or Space,
+/// with no modifier, and not the repeat of a key held down (the Return
+/// that chose an item, still down once the keyboard is back on the
+/// button).
+pub fn opens_menu(key: &str, modifiers: &Modifiers, held: bool) -> bool {
+    matches!(key, "enter" | "space") && !modifiers.modified() && !held
+}
+
 /// A button that opens a menu of choices (Idle home, Language, the deck
 /// button of a macro key): the value chosen and a chevron, on a well, 28
 /// high. A press opens the menu under it, and so do Return and Space while
-/// it has the keyboard; in the menu the arrow keys move, Return chooses and
-/// Escape closes. The menu is gpui-component's, built each time it opens by
+/// it has the keyboard ([`opens_menu`]); in the menu the arrow keys move,
+/// Return chooses and Escape closes, and the keyboard comes back to the
+/// button. The keys open it as they go down: gpui presses a focused control
+/// as a key comes **up**, and the Return that chose an item comes up on the
+/// button once the menu has handed the keyboard back, which would open the
+/// menu again. The menu is gpui-component's, built each time it opens by
 /// [`PopupButton::menu`]:
 ///
 /// ```text
@@ -1576,16 +1716,19 @@ impl RenderOnce for PopupButton {
                 .when(self.disabled, |b| b.opacity(DISABLED))
                 .into_any_element();
         };
-        // Return or Space while the button has the keyboard: the menu
-        // opens with the keyboard in it. The pointer opens it through the
-        // popover, on the press itself.
+        // Return or Space going down while the button has the keyboard: the
+        // menu opens with the keyboard in it. The pointer opens it through
+        // the popover, on the press itself. The button has no click at all,
+        // so a key that comes up on it presses nothing.
         let button = keyboard_stop(button, &focus, true)
             .cursor_pointer()
             .hover(|b| b.border_color(p.text3))
-            .on_click({
+            .on_key_down({
                 let state = state.clone();
                 move |event, _, cx| {
-                    if event.is_keyboard() {
+                    let stroke = &event.keystroke;
+                    if opens_menu(&stroke.key, &stroke.modifiers, event.is_held) {
+                        cx.stop_propagation();
                         state.update(cx, |popup, cx| {
                             popup.open = true;
                             popup.keyboard = true;
@@ -1846,33 +1989,47 @@ pub fn section(title: impl Into<SharedString>, body: impl IntoElement, p: &Palet
 /// child is not wrapped, which is what lets a last row that
 /// [`grow`](Row::grow)s take a stretched card's spare height. A child with
 /// a fill of its own at the card's corner rounds itself: gpui clips to
-/// rectangles, never to a radius.
+/// rectangles, never to a radius. A card whose rows are one choice is a
+/// [`Group`] drawn as one ([`Group::card`]).
 pub fn card(children: Vec<AnyElement>, p: &Palette) -> Div {
-    let last = children.len().saturating_sub(1);
-    let mut card = v_flex()
+    card_frame(div(), p).children(ruled(children, p.line))
+}
+
+/// A card's own look, on `el`: a surface with a rule around it, 12 px
+/// round, its children one under another.
+fn card_frame<E: Styled>(el: E, p: &Palette) -> E {
+    el.v_flex()
         .w_full()
         .rounded(px(12.))
         .bg(p.surf)
         .border_1()
-        .border_color(p.line);
-    for (i, child) in children.into_iter().enumerate() {
-        card = if i < last {
-            card.child(
-                v_flex().relative().w_full().child(child).child(
+        .border_color(p.line)
+}
+
+/// `children` as a card holds them: a `rule` over the bottom pixel of each
+/// but the last, and the last as it is (see [`card`]).
+fn ruled(children: Vec<AnyElement>, rule: Hsla) -> impl Iterator<Item = AnyElement> {
+    let last = children.len().saturating_sub(1);
+    children.into_iter().enumerate().map(move |(i, child)| {
+        if i < last {
+            v_flex()
+                .relative()
+                .w_full()
+                .child(child)
+                .child(
                     div()
                         .absolute()
                         .left_0()
                         .right_0()
                         .bottom_0()
                         .h(px(1.))
-                        .bg(p.line),
-                ),
-            )
+                        .bg(rule),
+                )
+                .into_any_element()
         } else {
-            card.child(child)
-        };
-    }
-    card
+            child
+        }
+    })
 }
 
 /// One row of a [`card`]: an optional lead (a [`tile`], a [`bare`] icon),
@@ -1886,6 +2043,7 @@ pub struct Row {
     pad: f32,
     grow: bool,
     click: Option<(ElementId, ClickHandler)>,
+    roving: Option<Roving>,
 }
 
 impl Default for Row {
@@ -1898,6 +2056,7 @@ impl Default for Row {
             pad: 16.,
             grow: false,
             click: None,
+            roving: None,
         }
     }
 }
@@ -1956,15 +2115,24 @@ impl Row {
     }
 
     /// Make the whole row the thing pressed: a radio's choice. It is then a
-    /// Tab stop of its own, pressed by Return and Space, and its keyboard
-    /// ring is drawn just inside it, where a ring outside would cross its
-    /// card's rim. A button on the row keeps its own press.
+    /// Tab stop of its own — or, with the other choices of its card, one
+    /// member of a [`Group`] ([`Row::roving`]) — pressed by Return and Space,
+    /// and its keyboard ring is drawn just inside it, where a ring outside
+    /// would cross its card's rim. A button on the row keeps its own press.
     pub fn on_click(
         mut self,
         id: impl Into<ElementId>,
         f: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Row {
         self.click = Some((id.into(), Rc::new(f)));
+        self
+    }
+
+    /// One of a [`Group`]'s members: a row with a press takes the group's
+    /// focus handle in place of its own, and is a stop on the Tab order only
+    /// while it is the group's.
+    pub fn roving(mut self, roving: &Roving) -> Row {
+        self.roving = Some(roving.clone());
         self
     }
 }
@@ -2004,9 +2172,12 @@ impl RenderOnce for Row {
             });
         match self.click {
             Some((id, f)) => {
-                let focus = focus_handle(&id, window, cx);
+                let (focus, stop) = match self.roving {
+                    Some(roving) => (roving.focus, roving.stop),
+                    None => (focus_handle(&id, window, cx), true),
+                };
                 let focused = focus.is_focused(window);
-                keyboard_stop(row.id(id), &focus, true)
+                keyboard_stop(row.id(id), &focus, stop)
                     .cursor_pointer()
                     .when(focused, |row| {
                         row.child(inset_ring(ROW_RING_INSET, ROW_RING_RADIUS, p.info))
@@ -2023,6 +2194,250 @@ impl RenderOnce for Row {
 /// ring's radius: inside a card's 12 px corner at either end.
 const ROW_RING_INSET: f32 = 2.;
 const ROW_RING_RADIUS: f32 = 8.;
+
+// ---- groups -----------------------------------------------------------------
+
+/// What a [`Group`] takes as a member: a [`Press`], or a [`Row`] with a
+/// press.
+pub trait Member: IntoElement {
+    /// The id it is drawn under, which the group keeps its keyboard by;
+    /// `None` for a row with nothing to press.
+    fn key(&self) -> Option<ElementId>;
+
+    /// Whether the keyboard can reach it: it has a press and is not
+    /// disabled.
+    fn reachable(&self) -> bool;
+
+    /// Take the group's keyboard ([`Press::roving`], [`Row::roving`]).
+    fn roving(self, roving: &Roving) -> Self;
+}
+
+impl Member for Press {
+    fn key(&self) -> Option<ElementId> {
+        Some(self.id.clone())
+    }
+
+    fn reachable(&self) -> bool {
+        self.on_click.is_some() && !self.disabled
+    }
+
+    fn roving(self, roving: &Roving) -> Press {
+        Press::roving(self, roving)
+    }
+}
+
+impl Member for Row {
+    fn key(&self) -> Option<ElementId> {
+        self.click.as_ref().map(|(id, _)| id.clone())
+    }
+
+    fn reachable(&self) -> bool {
+        self.click.is_some()
+    }
+
+    fn roving(self, roving: &Roving) -> Row {
+        Row::roving(self, roving)
+    }
+}
+
+/// What a [`Group`] keeps between frames: a focus handle for each member,
+/// by the member's key, so the keyboard stays with a member that moves.
+struct Rover(Vec<(ElementId, FocusHandle)>);
+
+/// A member of a [`Group`] waiting to be drawn: its key, whether the
+/// keyboard can reach it, and what draws it once it has its keyboard.
+struct Seat {
+    key: ElementId,
+    enabled: bool,
+    draw: Box<dyn FnOnce(&Roving) -> AnyElement>,
+}
+
+/// Controls that are one choice or one set — a segmented control's options,
+/// the sidebar's pages, the face strip, the key grid, a card of radio
+/// choices — as **one stop** on the window's Tab order.
+///
+/// Tab enters the group on its [`selected`](Group::selected) member (on
+/// the first while none is), and from whichever member has the keyboard it
+/// leaves the group for the control after it ([`group_stop`]). Inside, the
+/// arrow keys of its [`Layout`] move the keyboard from member to member,
+/// Home and End to the first and the last, past members that cannot be
+/// pressed and never round an end ([`group_step`]); Return or Space presses
+/// the member that has it, as on any control. The arrows never choose: a
+/// choice writes a setting, or starts a download, so it waits for a press,
+/// and a press with the pointer still leaves the keyboard where it was. A
+/// key with a modifier is left to whatever holds the group (Option-Left on
+/// the face strip).
+///
+/// Its members are [`Press`]es or [`Row`]s ([`Group::members`]), or one
+/// drawn inside more than itself, as a face's plate is over its name
+/// ([`Group::wrapped`]); [`Group::after`] adds what belongs with them but
+/// is not one of them. It is a `div` to style as the container it replaces
+/// was, or a card ([`Group::card`]). It keeps its members' focus by their
+/// keys, under its id: the id is unique among the ids around it, and a key
+/// is a member's own id, never its place, so the keyboard stays on a face
+/// that moves.
+#[derive(IntoElement)]
+pub struct Group {
+    id: ElementId,
+    base: Div,
+    layout: Layout,
+    seats: Vec<Seat>,
+    selected: Option<usize>,
+    after: Vec<AnyElement>,
+    rules: Option<Hsla>,
+}
+
+impl Group {
+    pub fn new(id: impl Into<ElementId>, layout: Layout) -> Group {
+        Group {
+            id: id.into(),
+            base: div(),
+            layout,
+            seats: Vec::new(),
+            selected: None,
+            after: Vec::new(),
+            rules: None,
+        }
+    }
+
+    /// One more member, after the ones before it.
+    pub fn member(mut self, member: impl Member + 'static) -> Group {
+        // A row with nothing to press is never reached; its key only has to
+        // be one no member has.
+        let key = member
+            .key()
+            .unwrap_or_else(|| ElementId::named_usize("unpressed", self.seats.len()));
+        let enabled = member.reachable();
+        self.seats.push(Seat {
+            key,
+            enabled,
+            draw: Box::new(move |roving| member.roving(roving).into_any_element()),
+        });
+        self
+    }
+
+    /// Members, in the order they are drawn.
+    pub fn members<M: Member + 'static>(self, members: impl IntoIterator<Item = M>) -> Group {
+        members
+            .into_iter()
+            .fold(self, |group, member| group.member(member))
+    }
+
+    /// One more member drawn inside more than itself, as a face's plate is
+    /// over its name: `draw` is given the member's keyboard and hands it to
+    /// the part that is pressed ([`Press::roving`]). `key` is that part's
+    /// id, and `enabled` whether it has a press.
+    pub fn wrapped(
+        mut self,
+        key: impl Into<ElementId>,
+        enabled: bool,
+        draw: impl FnOnce(&Roving) -> AnyElement + 'static,
+    ) -> Group {
+        self.seats.push(Seat {
+            key: key.into(),
+            enabled,
+            draw: Box::new(draw),
+        });
+        self
+    }
+
+    /// The member that is chosen, by its place: Tab enters the group on it.
+    /// With `None`, or a place no member has, Tab enters on the first.
+    pub fn selected(mut self, at: Option<usize>) -> Group {
+        self.selected = at;
+        self
+    }
+
+    /// Something drawn after the members that is not one of them (the
+    /// switch under a card's choices): the arrows pass it by, and it keeps
+    /// its own stop.
+    pub fn after(mut self, el: impl IntoElement) -> Group {
+        self.after.push(el.into_any_element());
+        self
+    }
+
+    /// Draw it as a [`card`]: a surface with a rule around it and one
+    /// between each two of its children, the last left as it is, so a row
+    /// that [`grow`](Row::grow)s still takes a stretched card's spare
+    /// height.
+    pub fn card(mut self, p: &Palette) -> Group {
+        self.base = card_frame(self.base, p);
+        self.rules = Some(p.line);
+        self
+    }
+}
+
+impl Styled for Group {
+    fn style(&mut self) -> &mut StyleRefinement {
+        self.base.style()
+    }
+}
+
+impl RenderOnce for Group {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let Group {
+            id,
+            base,
+            layout,
+            seats,
+            selected,
+            after,
+            rules,
+        } = self;
+        // A handle for each member, kept by its key; a key no longer drawn
+        // lets its handle go.
+        let rover = window.use_keyed_state(id.clone(), cx, |_, _| Rover(Vec::new()));
+        let handles: Vec<FocusHandle> = rover.update(cx, |rover, cx| {
+            let kept = std::mem::take(&mut rover.0);
+            rover.0 = seats
+                .iter()
+                .map(|seat| {
+                    let handle = kept
+                        .iter()
+                        .find(|(key, _)| *key == seat.key)
+                        .map_or_else(|| cx.focus_handle(), |(_, handle)| handle.clone());
+                    (seat.key.clone(), handle)
+                })
+                .collect();
+            rover.0.iter().map(|(_, handle)| handle.clone()).collect()
+        });
+        let enabled: Vec<bool> = seats.iter().map(|seat| seat.enabled).collect();
+        let focused = handles.iter().position(|handle| handle.is_focused(window));
+        let stop = group_stop(focused, selected, &enabled);
+        let children: Vec<AnyElement> = seats
+            .into_iter()
+            .zip(&handles)
+            .enumerate()
+            .map(|(at, (seat, focus))| {
+                (seat.draw)(&Roving {
+                    focus: focus.clone(),
+                    stop: stop == Some(at),
+                })
+            })
+            .chain(after)
+            .collect();
+        // An arrow on a member moves the keyboard to its neighbour. A key
+        // on anything else in the group (a button on a row), and a key with
+        // a modifier, go on to whatever holds the group.
+        let keys = move |event: &KeyDownEvent, window: &mut Window, cx: &mut App| {
+            if event.keystroke.modifiers.modified() {
+                return;
+            }
+            let Some(at) = handles.iter().position(|handle| handle.is_focused(window)) else {
+                return;
+            };
+            if let Some(next) = group_step(&event.keystroke.key, at, layout, &enabled) {
+                cx.stop_propagation();
+                window.focus(&handles[next]);
+            }
+        };
+        let group = base.id(id).on_key_down(keys);
+        match rules {
+            Some(rule) => group.children(ruled(children, rule)),
+            None => group.children(children),
+        }
+    }
+}
 
 /// Something that needs the owner, as a card of one row: the amber wash
 /// and rim around it. The row brings its own mark (a [`bare`] warning
@@ -2658,6 +3073,285 @@ mod tests {
             assert_eq!(segment_colors(true, &p), (p.surf, p.text, p.outline));
             assert_eq!(segment_colors(false, &p), (clear, p.text2, clear));
         }
+    }
+
+    #[test]
+    fn with_increase_contrast_a_quiet_button_is_outlined() {
+        let clear = gpui::transparent_black();
+        for dark in [true, false] {
+            let more = Palette::new(dark, true);
+            assert_eq!(Kind::Quiet.colors(&more), (more.well, more.text, more.edge));
+            // The other three are drawn as they always are.
+            assert_eq!(
+                Kind::Primary.colors(&more),
+                (more.solid, more.on_solid, more.solid)
+            );
+            assert_eq!(Kind::Secondary.colors(&more), (clear, more.text, more.edge));
+            assert_eq!(
+                Kind::Danger.colors(&more),
+                (clear, more.bad_text, more.edge)
+            );
+        }
+    }
+
+    #[test]
+    fn with_increase_contrast_a_pill_gains_its_words_colour_as_an_edge() {
+        for dark in [true, false] {
+            let (standard, more) = (Palette::new(dark, false), Palette::new(dark, true));
+            for tone in [Tone::Red, Tone::Amber, Tone::Blue] {
+                let mut pill = status("Failed", tone, &more);
+                let style = pill.style();
+                assert_eq!(style.border_widths.left, Some(px(1.).into()), "{tone:?}");
+                assert_eq!(style.border_color, Some(more.tone_text(tone)), "{tone:?}");
+                // The edge takes a pixel of each side: as wide and as high
+                // as the pill without it.
+                assert_eq!(style.padding.left, Some(px(8.).into()), "{tone:?}");
+                assert_eq!(style.size.height, Some(px(22.).into()), "{tone:?}");
+                let mut plain = status("Failed", tone, &standard);
+                let style = plain.style();
+                assert_eq!(style.border_widths.left, None, "{tone:?}");
+                assert_eq!(style.border_color, None, "{tone:?}");
+                assert_eq!(style.padding.left, Some(px(9.).into()), "{tone:?}");
+            }
+            // A healthy or neutral state is a dot and a word, with no pill
+            // and no edge, either way.
+            for p in [&standard, &more] {
+                for tone in [Tone::Green, Tone::Gray] {
+                    let mut word = status("Linked", tone, p);
+                    let style = word.style();
+                    assert_eq!(style.border_widths.left, None, "{tone:?}");
+                    assert_eq!(style.border_color, None, "{tone:?}");
+                    assert_eq!(style.size.height, None, "{tone:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn with_increase_contrast_a_segmented_track_is_rimmed_and_keeps_its_size() {
+        for dark in [true, false] {
+            let more = Palette::new(dark, true);
+            let mut track = segment_track(div(), &more);
+            let style = track.style();
+            assert_eq!(style.border_widths.left, Some(px(1.).into()));
+            assert_eq!(style.border_color, Some(more.edge));
+            // The rim takes a pixel of the padding: the options stay 2 px
+            // in, and the track 26 high around them.
+            assert_eq!(style.padding.left, Some(px(1.).into()));
+            assert_eq!(style.padding.top, Some(px(1.).into()));
+            let mut plain = segment_track(div(), &Palette::new(dark, false));
+            let style = plain.style();
+            assert_eq!(style.border_widths.left, None);
+            assert_eq!(style.border_color, None);
+            assert_eq!(style.padding.left, Some(px(2.).into()));
+            assert_eq!(style.padding.top, Some(px(2.).into()));
+        }
+    }
+
+    #[test]
+    fn the_arrow_keys_move_along_a_row_a_column_or_a_grid_and_stop_at_the_ends() {
+        let all = |count: usize| vec![true; count];
+        // A row of five (a segmented control, the face strip): Left and
+        // Right, Home and End, and never round an end.
+        let row = |key: &str, at: usize| group_step(key, at, Layout::Row, &all(5));
+        assert_eq!(row("right", 0), Some(1));
+        assert_eq!(row("left", 3), Some(2));
+        assert_eq!(row("left", 0), None);
+        assert_eq!(row("right", 4), None);
+        assert_eq!(row("end", 1), Some(4));
+        assert_eq!(row("home", 3), Some(0));
+        assert_eq!(row("home", 0), None, "already at the start");
+        assert_eq!(row("up", 2), None, "a row has no up");
+        assert_eq!(row("down", 2), None);
+        // A column of five (the sidebar): Up and Down.
+        let column = |key: &str, at: usize| group_step(key, at, Layout::Column, &all(5));
+        assert_eq!(column("down", 0), Some(1));
+        assert_eq!(column("up", 4), Some(3));
+        assert_eq!(column("up", 0), None);
+        assert_eq!(column("end", 0), Some(4));
+        assert_eq!(column("left", 2), None, "a column has no left");
+        assert_eq!(column("right", 2), None);
+        // The key grid: nine keys, three to a row. Left and Right stay in
+        // their row, Up and Down in their column.
+        let grid = Layout::Grid { columns: 3 };
+        let nine = |key: &str, at: usize| group_step(key, at, grid, &all(9));
+        assert_eq!(nine("right", 0), Some(1));
+        assert_eq!(nine("right", 2), None, "off the end of a row");
+        assert_eq!(nine("left", 3), None, "off the start of a row");
+        assert_eq!(nine("left", 5), Some(4));
+        assert_eq!(nine("down", 4), Some(7));
+        assert_eq!(nine("down", 7), None);
+        assert_eq!(nine("up", 7), Some(4));
+        assert_eq!(nine("up", 1), None);
+        assert_eq!(nine("home", 8), Some(0));
+        assert_eq!(nine("end", 0), Some(8));
+        // A grid whose last row is short.
+        let eight = |key: &str, at: usize| group_step(key, at, grid, &all(8));
+        assert_eq!(eight("down", 5), None, "no key under it");
+        assert_eq!(eight("down", 4), Some(7));
+        assert_eq!(eight("right", 7), None);
+        assert_eq!(eight("end", 0), Some(7));
+        // A grid said to have no columns has one to a row.
+        let none = Layout::Grid { columns: 0 };
+        assert_eq!(group_step("down", 0, none, &all(3)), Some(1));
+        assert_eq!(group_step("right", 0, none, &all(3)), None);
+        // Every other key is left to whatever holds the group, and so is a
+        // place no member has.
+        for key in ["enter", "space", "tab", "escape", "pageup", "a", ""] {
+            for layout in [Layout::Row, Layout::Column, grid] {
+                assert_eq!(group_step(key, 1, layout, &all(9)), None, "{key:?}");
+            }
+        }
+        assert_eq!(group_step("left", 3, Layout::Row, &all(3)), None);
+        assert_eq!(group_step("home", 0, Layout::Row, &[]), None);
+    }
+
+    #[test]
+    fn members_that_cannot_be_pressed_are_passed_by_and_an_end_is_never_crossed() {
+        assert_eq!(
+            group_step("right", 0, Layout::Row, &[true, false, true]),
+            Some(2)
+        );
+        assert_eq!(
+            group_step("right", 0, Layout::Row, &[true, false, false]),
+            None
+        );
+        assert_eq!(
+            group_step("left", 2, Layout::Row, &[false, false, true]),
+            None
+        );
+        assert_eq!(
+            group_step("home", 2, Layout::Row, &[false, true, true]),
+            Some(1)
+        );
+        assert_eq!(
+            group_step("end", 0, Layout::Column, &[true, true, false]),
+            Some(1)
+        );
+        // In a grid: down a column past a key that cannot be pressed, and
+        // across a row past one.
+        let grid = Layout::Grid { columns: 3 };
+        let mut keys = [true; 9];
+        keys[4] = false;
+        assert_eq!(group_step("down", 1, grid, &keys), Some(7));
+        assert_eq!(group_step("right", 3, grid, &keys), Some(5));
+        assert_eq!(group_step("up", 7, grid, &keys), Some(1));
+        // A member disabled while it had the keyboard: the keys still move
+        // on from it.
+        assert_eq!(
+            group_step("right", 1, Layout::Row, &[true, false, true]),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn a_groups_tab_stop_is_the_keyboard_then_the_selection_then_the_first_member() {
+        let all = [true; 3];
+        assert_eq!(
+            group_stop(Some(2), Some(0), &all),
+            Some(2),
+            "it has the keyboard"
+        );
+        assert_eq!(group_stop(None, Some(1), &all), Some(1), "the chosen one");
+        assert_eq!(group_stop(None, None, &all), Some(0));
+        // The firmware board picker's "not known" is a place no member has.
+        assert_eq!(group_stop(None, Some(usize::MAX), &all), Some(0));
+        // A member that cannot be pressed is never the stop.
+        let middle_off = [true, false, true];
+        assert_eq!(group_stop(Some(1), Some(2), &middle_off), Some(2));
+        assert_eq!(group_stop(None, Some(1), &middle_off), Some(0));
+        assert_eq!(group_stop(None, None, &[false, false, true]), Some(2));
+        // Nothing to press: no stop, and Tab passes the group by.
+        assert_eq!(group_stop(Some(0), Some(0), &[false, false]), None);
+        assert_eq!(group_stop(None, None, &[]), None);
+    }
+
+    #[test]
+    fn return_or_space_opens_a_menu_but_not_held_down_or_with_a_modifier() {
+        let plain = Modifiers::default();
+        assert!(opens_menu("enter", &plain, false));
+        assert!(opens_menu("space", &plain, false));
+        // The Return that chose an item, still down on the button.
+        assert!(!opens_menu("enter", &plain, true));
+        assert!(!opens_menu("space", &plain, true));
+        for modified in [
+            Modifiers::shift(),
+            Modifiers::command(),
+            Modifiers::alt(),
+            Modifiers::control(),
+        ] {
+            assert!(!opens_menu("enter", &modified, false), "{modified:?}");
+            assert!(!opens_menu("space", &modified, false), "{modified:?}");
+        }
+        for key in ["tab", "down", "escape", "a", ""] {
+            assert!(!opens_menu(key, &plain, false), "{key:?}");
+        }
+    }
+
+    #[test]
+    fn a_group_is_drawn_exactly_as_the_container_it_replaces() {
+        for p in [
+            Palette::dark(),
+            Palette::light(),
+            Palette::new(true, true),
+            Palette::new(false, true),
+        ] {
+            // A card of choices has a card's own frame, and its rules.
+            let mut choices = Group::new("choices", Layout::Column).card(&p);
+            assert_eq!(*choices.style(), *card(Vec::new(), &p).style());
+            assert_eq!(choices.rules, Some(p.line));
+            // A segmented control's options sit on the track it had.
+            let mut options = segment_track(Group::new("options", Layout::Row), &p);
+            assert_eq!(*options.style(), *segment_track(div(), &p).style());
+            assert_eq!(options.rules, None);
+        }
+        // Styled like any div, and nothing else unless asked.
+        let mut column = Group::new("nav", Layout::Column).v_flex().gap(px(2.));
+        assert_eq!(*column.style(), *v_flex().gap(px(2.)).style());
+        let group = Group::new("nav", Layout::Column);
+        assert_eq!((group.selected, group.after.len()), (None, 0));
+    }
+
+    #[test]
+    fn a_member_is_known_by_its_own_id_and_reached_only_while_it_has_a_press() {
+        let nothing = |_: &ClickEvent, _: &mut Window, _: &mut App| {};
+        let face = Press::new(("face", 3usize)).on_click(nothing);
+        assert_eq!(face.key(), Some(ElementId::from(("face", 3usize))));
+        assert!(face.reachable());
+        assert!(!Press::new("plate").reachable(), "a picture");
+        assert!(!Press::new("key")
+            .on_click(nothing)
+            .disabled(true)
+            .reachable());
+        let choice = Row::new().on_click("voice-stt-apple", nothing);
+        assert_eq!(choice.key(), Some("voice-stt-apple".into()));
+        assert!(choice.reachable());
+        assert_eq!(Row::new().key(), None);
+        assert!(!Row::new().reachable(), "a row with nothing to press");
+        // The group takes them in order, each by its own id; a row with
+        // nothing to press has a key no member can have, and is passed by.
+        let group = Group::new("choices", Layout::Column)
+            .member(Row::new().on_click("apple", nothing))
+            .member(Row::new())
+            .members([Press::new("later").on_click(nothing).disabled(true)])
+            .wrapped(("face", 1usize), true, |_| div().into_any_element())
+            .after(Row::new());
+        let seats: Vec<(ElementId, bool)> = group
+            .seats
+            .iter()
+            .map(|seat| (seat.key.clone(), seat.enabled))
+            .collect();
+        assert_eq!(
+            seats,
+            [
+                ("apple".into(), true),
+                (ElementId::named_usize("unpressed", 1), false),
+                ("later".into(), false),
+                (("face", 1usize).into(), true),
+            ]
+        );
+        // What comes after the members is not one of them.
+        assert_eq!(group.after.len(), 1);
     }
 
     #[test]

@@ -16,10 +16,10 @@
 use deck_gui_core::{ApiEvent, AppEvent, HostEffect, HostState, MenuCommand, SheetKind, UiAction};
 use deck_model::{
     AdapterKind, Agent, AgentId, AgentState, AnswerCap, Binding, Caps, Card, CardId, CardKind,
-    CardStatus, Choice, Deliver, Event, EventKind, FaceEntry, Focus, FocusSource, Kind,
-    LastLinked, Link, LinkDrop, MacroKey, MacroLayout, OrderCap, Origin, OriginKind, Owner, Page,
-    Permission, Principal, Route, SessionId, SessionInfo, SessionState, SetKey, Snapshot, Source,
-    Template, TitleSource, Transport, Ts, Usage, UsageItem, VoiceTransport,
+    CardStatus, Choice, Deliver, DormancyState, Event, EventKind, FaceEntry, Focus, FocusSource,
+    Kind, LastLinked, Link, LinkDrop, MacroKey, MacroLayout, OrderCap, Origin, OriginKind, Owner,
+    Page, Permission, Principal, Route, SessionId, SessionInfo, SessionState, SetKey, Snapshot,
+    Source, Template, TitleSource, Transport, Ts, Usage, UsageItem, VoiceTransport,
 };
 use serde_json::{json, Value};
 use std::time::Duration;
@@ -1113,6 +1113,98 @@ fn device_macros_replaces_one_faces_keys_whole_and_leaves_the_others() {
     assert_eq!(state.mirror().macros.len(), 2);
 }
 
+/// Another deck links: its strip, settings and keys replace the mirror's,
+/// whole, and the mirror names it. The language is the Mac's: neither copy
+/// of it moves, whatever the event carries. A profile that does not read
+/// whole changes nothing.
+#[test]
+fn a_deck_profile_replaces_the_strip_settings_and_keys_but_not_the_language() {
+    let mut state = live(10);
+    state.handle_event(event(
+        11,
+        EventKind::DeviceSet,
+        json!({"k": "language", "v": 3, "rev": 4}),
+    ));
+    state.handle_event(event(
+        12,
+        EventKind::DeviceMacros,
+        json!({"f": 3, "src": null, "keys": [{"label": "build", "binding": "left", "keys": "cmd+b"}]}),
+    ));
+    assert_eq!(state.mirror().settings.language, 3);
+    let strip = vec![
+        FaceEntry {
+            f: 1,
+            t: Template::Agents,
+            n: "Agents".into(),
+        },
+        FaceEntry {
+            f: 4,
+            t: Template::Usage,
+            n: "Usage".into(),
+        },
+    ];
+    let deploy = MacroKey {
+        label: "deploy".into(),
+        binding: None,
+        keys: Some("cmd+d".into()),
+    };
+    let settings = deck_model::Settings {
+        speaker: 2,
+        textsize: 2,
+        ..deck_model::Settings::default()
+    };
+    let profile = json!({
+        "deck": "5d41402a",
+        "faces": strip,
+        // The service sends the Mac's language here; a stale one must not
+        // win either.
+        "settings": serde_json::to_value(settings).unwrap(),
+        "macros": {"6": {"src": "app", "keys": [deploy]}},
+    });
+    assert!(state
+        .handle_event(event(13, EventKind::DeviceProfile, profile))
+        .is_empty());
+    let mirror = state.mirror();
+    assert_eq!(mirror.rev, 13);
+    assert_eq!(mirror.device.deck.as_deref(), Some("5d41402a"));
+    assert_eq!(mirror.faces, strip);
+    assert_eq!((mirror.settings.speaker, mirror.settings.textsize), (2, 2));
+    assert_eq!((mirror.device.settings.speaker, mirror.device.settings.textsize), (2, 2));
+    assert_eq!(
+        (mirror.settings.language, mirror.settings.language_revision),
+        (3, 4)
+    );
+    assert_eq!(
+        (mirror.device.settings.language, mirror.device.settings.language_revision),
+        (3, 4)
+    );
+    assert_eq!(mirror.macros.keys().copied().collect::<Vec<_>>(), vec![6]);
+    assert_eq!(mirror.macros[&6].keys, vec![deploy]);
+    // A deck the service keeps nothing for yet: no strip, no keys.
+    let empty = json!({
+        "deck": "7a1f0c22", "faces": [], "macros": {},
+        "settings": serde_json::to_value(deck_model::Settings::default()).unwrap(),
+    });
+    state.handle_event(event(14, EventKind::DeviceProfile, empty));
+    let mirror = state.mirror();
+    assert!(mirror.faces.is_empty() && mirror.macros.is_empty());
+    assert_eq!(mirror.device.deck.as_deref(), Some("7a1f0c22"));
+    // Half a profile is none.
+    let before = without_rev(&state);
+    for (rev, broken) in (15..).zip([
+        json!({}),
+        json!({"deck": "5d41402a", "faces": [], "settings": {}}),
+        json!({"deck": 7, "faces": [], "settings": {}, "macros": {}}),
+        json!({"deck": null, "faces": "agents", "settings": {}, "macros": {}}),
+        json!({"deck": null, "faces": [], "settings": {}, "macros": {"x": {"src": null, "keys": []}}}),
+    ]) {
+        assert!(state
+            .handle_event(event(rev, EventKind::DeviceProfile, broken))
+            .is_empty());
+    }
+    assert_eq!(without_rev(&state), before);
+}
+
 #[test]
 fn a_malformed_status_or_key_layout_advances_the_rev_and_changes_nothing() {
     let mut state = live(10);
@@ -1372,6 +1464,34 @@ fn a_hijacked_port_is_toasted_once_by_name_and_clears_when_it_recovers() {
     );
     assert!(state.mirror().service.degraded.is_none());
     assert!(state.mirror().service.listener.is_none());
+}
+
+/// `service.dormancy` (R5) is a fact for two pages to read, never a toast:
+/// the state lands in the mirror whole, and `null`, from a service that has
+/// no dormancy, clears it.
+#[test]
+fn the_services_dormancy_folds_into_the_mirror_and_null_clears_it() {
+    let mut state = live(10);
+    assert_eq!(state.mirror().service.dormancy, None);
+    let effects = state.handle_event(event(
+        11,
+        EventKind::ServiceDormancy,
+        json!({"window_s": 600, "collecting": false, "dormant_since": "2026-09-18T19:52:03.120Z"}),
+    ));
+    assert!(effects.is_empty(), "{effects:?}");
+    assert_eq!(
+        state.mirror().service.dormancy,
+        Some(DormancyState {
+            window_s: 600,
+            collecting: false,
+            dormant_since: Some(Ts(1_789_761_123_120)),
+        })
+    );
+    assert_eq!(state.mirror().rev, 11);
+    assert!(state
+        .handle_event(event(12, EventKind::ServiceDormancy, Value::Null))
+        .is_empty());
+    assert_eq!(state.mirror().service.dormancy, None);
 }
 
 #[test]

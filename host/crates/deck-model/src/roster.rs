@@ -391,12 +391,14 @@ impl Store {
                 self.degrade_card(id, "agent_gone");
             }
             Some((_, Deliver::Push, _)) => {
-                // §12: push → focus if a terminal is known, else informational.
-                let has_terminal = self
-                    .snapshot
-                    .agents
-                    .get(id)
-                    .is_some_and(|a| a.session.terminal.is_some());
+                // §12: push → focus if the session's app can be raised, else
+                // informational. Only a hook-registered session's app is
+                // (the hand-off, §5.5): what a connected app declares about
+                // its terminal is informational, so its card would offer an
+                // **Open app** press that does nothing.
+                let has_terminal = self.snapshot.agents.get(id).is_some_and(|a| {
+                    a.source == crate::Source::Hook && a.session.terminal.is_some()
+                });
                 if has_terminal {
                     self.degrade_card(id, "owner_gone");
                 } else {
@@ -579,10 +581,17 @@ impl Store {
     /// What a state change drags along: Ready-card expiry, the auto-question
     /// bookkeeping, a slot for an agent that woke up, announcements.
     fn after_state_change(&mut self, id: &AgentId, state: AgentState) {
-        if state != AgentState::Question {
-            if let Some(aux) = self.aux.get_mut(id) {
+        if let Some(aux) = self.aux.get_mut(id) {
+            if state != AgentState::Question {
                 aux.prev_state = None;
             }
+            // A turn starts: whatever reply is on file answered the last
+            // one, and this turn's `ready` must not read it out.
+            if state == AgentState::Working {
+                aux.reply_stale = true;
+            }
+            // A line the last state owed is not this state's to speak.
+            aux.ready_line_owed = false;
         }
         let ready_card = self
             .snapshot
@@ -605,22 +614,18 @@ impl Store {
         // deck's eight slots follow the ranking.
         self.rebalance_slots();
         if self.snapshot.settings.announce == 1 {
-            let max_chars = self.cfg.announce_max_chars;
             if let Some(agent) = self.snapshot.agents.get(id) {
                 let text = match state {
-                    AgentState::Ready => agent.reply.as_ref().and_then(|r| {
-                        // §7.6's sanitiser, not a bare first sentence: what
-                        // a model writes is markdown with fences in it, and
-                        // the synthesiser would read the markup out.
-                        r.announce
-                            .clone()
-                            .or_else(|| {
-                                r.text
-                                    .as_deref()
-                                    .map(|t| crate::sanitize::speech(t, max_chars))
-                            })
-                            .map(|t| format!("{}: {t}", agent.name))
-                    }),
+                    AgentState::Ready => {
+                        // A turn that ended before its reply was stored owes
+                        // the line, and the reply speaks it when it lands
+                        // (`reply`). A `ready` that ended no turn (a
+                        // registration, a reconnect) owes nothing.
+                        if let Some(aux) = self.aux.get_mut(id) {
+                            aux.ready_line_owed = aux.reply_stale;
+                        }
+                        self.ready_line(id)
+                    }
                     AgentState::Error => Some(format!("{} failed", agent.name)),
                     _ => None,
                 };
@@ -629,6 +634,36 @@ impl Store {
                 }
             }
         }
+    }
+
+    /// §7.7's ready line, `"<name>: <announce ?? first sentence of reply>"`,
+    /// or `None` while the agent has no reply of this turn.
+    ///
+    /// A reply stored before the agent last turned `working` answered the
+    /// turn before, so it is never this one's line. The adapters store a
+    /// turn's reply before they mark it ready; this is what keeps a report
+    /// in the other order (Claude's `agent_completed` before its `Stop`, a
+    /// connected app's `ready` before its message) from reading out the
+    /// previous answer as if it were the new one.
+    fn ready_line(&self, id: &AgentId) -> Option<String> {
+        if self.aux.get(id).is_some_and(|a| a.reply_stale) {
+            return None;
+        }
+        let agent = self.snapshot.agents.get(id)?;
+        let max_chars = self.cfg.announce_max_chars;
+        agent.reply.as_ref().and_then(|r| {
+            // §7.6's sanitiser, not a bare first sentence: what a model
+            // writes is markdown with fences in it, and the synthesiser
+            // would read the markup out.
+            r.announce
+                .clone()
+                .or_else(|| {
+                    r.text
+                        .as_deref()
+                        .map(|t| crate::sanitize::speech(t, max_chars))
+                })
+                .map(|t| format!("{}: {t}", agent.name))
+        })
     }
 
     /// The daemon's own announcement (§7.7): a new utterance id, the
@@ -687,49 +722,37 @@ impl Store {
         let Some(agent) = self.snapshot.agents.get_mut(&id) else {
             return Err(ApiError::not_found("agent"));
         };
-        let mut meta = r.message.clone().unwrap_or_else(|| crate::MessageMeta { summary: None, images: Vec::new(),
+        let meta = r.message.clone().unwrap_or_else(|| crate::MessageMeta { summary: None, images: Vec::new(),
             activity: None,
             runs: None, plan: None,
             id: format!("reply-{}-{}", ts.0, agent.reply_rev),
             role: crate::ChatRole::Assistant,
             streaming: false,
         });
-        meta.images.truncate(4);
-        for image in &mut meta.images { image.id = crate::sanitize::cut(&image.id, 64); image.label = crate::sanitize::cut(&image.label, 96); }
-        meta.plan = meta.plan.map(crate::workflow::Plan::bounded);
-        meta.summary = meta.summary.filter(|_| meta.role == crate::ChatRole::Tool)
-            .map(crate::workflow::ActivitySummary::bounded);
-        meta.runs = meta.runs.map(|runs| runs.into_iter().take(crate::workflow::MAX_RUNS).map(crate::workflow::Run::bounded).collect());
         let work_before = agent.active_work();
-        crate::workflow::observe(agent, &meta);
+        let meta = absorb_message(agent, meta, &r.text, r.message.is_none(), ts);
         let work_changed = agent.active_work() != work_before;
-        let duplicate = r.message.is_none() && agent.messages.last().is_some_and(|m|
-            m.message.role == crate::ChatRole::Assistant && m.text == r.text);
-        if duplicate {
-            if let Some(last) = agent.messages.last_mut() { last.message.streaming = false; }
-        }
-        if !duplicate {
-            let text = crate::sanitize::cut(&r.text, 64 * 1024);
-            if r.message.is_some() && agent.messages.last().is_some_and(|m| m.message.id.starts_with("reply-") && m.message.role == meta.role && m.text == text) {
-                if let Some(old) = agent.messages.last_mut() { old.message = meta.clone(); }
-            } else if let Some(old) = agent.messages.iter_mut().find(|m| m.message.id == meta.id) {
-                if old.message.images != meta.images { agent.chat_rev = agent.chat_rev.wrapping_add(1).max(1); }
-                old.text = text;
-                old.message = meta.clone();
-            } else {
-                agent.messages.push(crate::ChatMessage { message: meta.clone(), text, at: ts });
-            }
-            agent.chat_rev = agent.chat_rev.max(1);
-            while agent.messages.len() > 64 || agent.messages.iter().map(|m| m.text.len()).sum::<usize>() > 512 * 1024 {
-                agent.messages.remove(0);
-                agent.chat_rev = agent.chat_rev.wrapping_add(1).max(1);
-            }
-        }
-        if meta.role == crate::ChatRole::Assistant && !meta.streaming {
+        let stored = meta.role == crate::ChatRole::Assistant && !meta.streaming;
+        if stored {
             agent.reply = Some(Reply {
                 text: Some(r.text.clone()), at: ts, announce: r.announce.clone(), redacted: false,
             });
             agent.reply_rev = agent.reply_rev.wrapping_add(1).max(1);
+        }
+        let ready = agent.state == AgentState::Ready;
+        // The line a `ready` without a reply owed is this reply's when it is
+        // the turn's own: a bare reply (no `message`), which is what every
+        // adapter and bridge stores at the end of a turn. A history message
+        // never is — a transcript read back is a burst of old messages, and
+        // the first of them would be read out as the answer.
+        let mut owed = false;
+        if let Some(aux) = self.aux.get_mut(&id) {
+            if stored {
+                aux.reply_stale = false;
+                if ready && r.message.is_none() {
+                    owed = std::mem::take(&mut aux.ready_line_owed);
+                }
+            }
         }
         self.emit(
             EventKind::ReplySet,
@@ -745,11 +768,104 @@ impl Store {
             // The roster's count of running work.
             self.put_agent_state(&id);
         }
-        if r.speak && meta.role == crate::ChatRole::Assistant && !meta.streaming && !r.text.trim().is_empty() {
+        if r.speak && stored && !r.text.trim().is_empty() {
+            // A reply that speaks for itself: the owed line would say it twice.
             let lane = r.lane.as_deref().unwrap_or("chatter").to_string();
             self.say(r.text, Some(id), &lane);
+        } else if owed && self.snapshot.settings.announce == 1 {
+            if let Some(line) = self.ready_line(&id) {
+                self.say(line, Some(id), "ready");
+            }
         }
         Ok(self.rev())
+    }
+
+    /// `Command::ChatReplace`: the session's history, read again from its
+    /// source for the lazy reader feed, in place of the one kept. Each
+    /// message is filed the way [`Store::reply`] files a history message
+    /// ([`absorb_message`]) and published as the `reply.set` it would have
+    /// been, so the bus reads as an eager feed's would. The reply on file
+    /// and its ready line are not touched: a history message never stores
+    /// or speaks one. A replacement that changes nothing changes nothing,
+    /// its document's revision included, so the deck is never sent the same
+    /// document twice. A message the kept history had keeps the time it
+    /// first arrived, as an eager feed's update of it would.
+    pub(crate) fn chat_replace(&mut self, id: &AgentId, messages: Vec<(crate::MessageMeta, String)>) {
+        let ts = self.ts_now();
+        let Some(agent) = self.snapshot.agents.get_mut(id) else {
+            return;
+        };
+        let work_before = agent.active_work();
+        // Filing bumps the revision as it trims to the bounds: only the
+        // outcome says whether there is a new document.
+        let rev_before = agent.chat_rev;
+        let kept = std::mem::take(&mut agent.messages);
+        let kept_plan = agent.workflow.take();
+        let kept_runs = std::mem::take(&mut agent.workflow_runs);
+        let mut filed = Vec::with_capacity(messages.len());
+        for (meta, text) in messages {
+            // What `reply` would refuse is left out: an empty message, an id
+            // out of bounds.
+            if (text.trim().is_empty() && meta.images.is_empty()) || meta.id.is_empty() || meta.id.len() > 256 {
+                continue;
+            }
+            let meta = absorb_message(agent, meta, &text, false, ts);
+            filed.push((meta, text));
+        }
+        for message in &mut agent.messages {
+            if let Some(old) = kept.iter().find(|old| old.message.id == message.message.id) {
+                message.at = old.at;
+            }
+        }
+        let same = agent.messages == kept && agent.workflow == kept_plan && agent.workflow_runs == kept_runs;
+        if same {
+            agent.chat_rev = rev_before;
+            return;
+        }
+        // A new document: the deck drops every line it holds of the old one.
+        agent.chat_rev = rev_before.wrapping_add(1).max(1);
+        let work_changed = agent.active_work() != work_before;
+        if let Some(aux) = self.aux.get_mut(id) {
+            aux.expanded_tools.clear();
+            aux.reply_first = None;
+        }
+        let principal = self.principal_of(id);
+        for (meta, text) in filed {
+            self.emit(
+                EventKind::ReplySet,
+                principal.clone(),
+                serde_json::json!({"agent": id, "text": text, "message": meta}),
+            );
+        }
+        self.put_reply(id);
+        if work_changed {
+            self.put_agent_state(id);
+        }
+    }
+
+    /// `Command::ReaderLeft`: nothing follows the session's workflow runs
+    /// now (its transcript watcher went with the reader), so the ones last
+    /// seen are dropped rather than counted as running for ever; the
+    /// roster's count is its subagents until the deck reads it again. Its
+    /// history stays.
+    pub(crate) fn reader_left(&mut self, id: &AgentId) {
+        let Some(agent) = self.snapshot.agents.get_mut(id) else {
+            return;
+        };
+        if agent.workflow_runs.is_empty() {
+            return;
+        }
+        let work_before = agent.active_work();
+        agent.workflow_runs.clear();
+        let work_changed = agent.active_work() != work_before;
+        self.emit(
+            EventKind::AgentChanged,
+            self.principal_of(id),
+            serde_json::json!({"agent": id, "fields": {"workflow_runs": []}}),
+        );
+        if work_changed {
+            self.put_agent_state(id);
+        }
     }
 
     /// Opening a native session can replace an unpinned sibling of the same
@@ -777,8 +893,9 @@ impl Store {
         }
     }
 
-    /// `agent.focus` / `op.focus`: the desktop, then `focus` to the device
-    /// without `ack` (§4.7).
+    /// `agent.focus` / `op.focus`: ask for the session's own app (the
+    /// hand-off, `crate::handoff`), then `focus` to the device without
+    /// `ack` (§4.7).
     pub(crate) fn focus_agent(
         &mut self,
         id: &AgentId,
@@ -1223,7 +1340,7 @@ impl Store {
         {
             // The agent and its card go together: nothing is degraded, so
             // this is `Cleared` and not the `AgentGone` of the *orphaned*
-            // path above, which does leave a `⌨ Focus terminal` behind.
+            // path above, which does leave a `⌨ … Open app` behind.
             self.effects.push(Effect::ReleaseHold {
                 agent: id.clone(),
                 card: card.id,
@@ -1276,6 +1393,50 @@ pub fn project_label(cwd: &str) -> Option<String> {
     }
 }
 
+/// One message into an agent's history, the one way every message is
+/// filed (`Store::reply`, `Store::chat_replace`): its metadata bounded, its
+/// plan and workflow runs observed, upserted by id, and the history held to
+/// 64 messages and 512 KiB. `bare` is a reply that came without a message
+/// of its own: one repeating the last assistant message only settles it.
+/// The metadata as it was filed comes back, for the event.
+fn absorb_message(
+    agent: &mut Agent,
+    mut meta: crate::MessageMeta,
+    text: &str,
+    bare: bool,
+    ts: crate::Ts,
+) -> crate::MessageMeta {
+    meta.images.truncate(4);
+    for image in &mut meta.images { image.id = crate::sanitize::cut(&image.id, 64); image.label = crate::sanitize::cut(&image.label, 96); }
+    meta.plan = meta.plan.map(crate::workflow::Plan::bounded);
+    meta.summary = meta.summary.filter(|_| meta.role == crate::ChatRole::Tool)
+        .map(crate::workflow::ActivitySummary::bounded);
+    meta.runs = meta.runs.map(|runs| runs.into_iter().take(crate::workflow::MAX_RUNS).map(crate::workflow::Run::bounded).collect());
+    crate::workflow::observe(agent, &meta);
+    let duplicate = bare && agent.messages.last().is_some_and(|m|
+        m.message.role == crate::ChatRole::Assistant && m.text == text);
+    if duplicate {
+        if let Some(last) = agent.messages.last_mut() { last.message.streaming = false; }
+        return meta;
+    }
+    let text = crate::sanitize::cut(text, 64 * 1024);
+    if !bare && agent.messages.last().is_some_and(|m| m.message.id.starts_with("reply-") && m.message.role == meta.role && m.text == text) {
+        if let Some(old) = agent.messages.last_mut() { old.message = meta.clone(); }
+    } else if let Some(old) = agent.messages.iter_mut().find(|m| m.message.id == meta.id) {
+        if old.message.images != meta.images { agent.chat_rev = agent.chat_rev.wrapping_add(1).max(1); }
+        old.text = text;
+        old.message = meta.clone();
+    } else {
+        agent.messages.push(crate::ChatMessage { message: meta.clone(), text, at: ts });
+    }
+    agent.chat_rev = agent.chat_rev.max(1);
+    while agent.messages.len() > 64 || agent.messages.iter().map(|m| m.text.len()).sum::<usize>() > 512 * 1024 {
+        agent.messages.remove(0);
+        agent.chat_rev = agent.chat_rev.wrapping_add(1).max(1);
+    }
+    meta
+}
+
 /// The wire spelling of a `Kind`, which is what an `[agents]` pin and a
 /// `state.json` voice key are written with (`"claude:cohdl-api"`).
 fn kind_name(kind: crate::Kind) -> String {
@@ -1290,6 +1451,50 @@ mod tests {
     use super::*;
     use crate::testkit::{claude_adapter, register, Sim, UID, UID2};
     use crate::{CardKind, Command, LinkEvent, PinConfig, Request, Ts};
+
+    /// A connected app that declared a `terminal` and then went away leaves
+    /// its push card informational: nothing would bring such an app forward
+    /// (the hand-off raises a hook-registered session's app only, §5.5), so
+    /// an **Open app** card would be a press that does nothing. A hook
+    /// session's card, whose app the helper found, still becomes one.
+    #[test]
+    fn an_orphaned_apps_push_card_is_informational_not_open_app() {
+        let mut sim = Sim::new();
+        sim.link_live(Some(0));
+        let mut r = register("script", Some("app:script"));
+        r.caps.order = crate::OrderCap::Push;
+        r.caps.answer = crate::AnswerCap::Push;
+        r.terminal = Some(crate::Terminal {
+            tty: Some("/dev/ttys004".into()),
+            ..Default::default()
+        });
+        let bot = AgentId(
+            sim.api(UID, SessionId(1), Request::AgentRegister(r))
+                .unwrap()["agent"]
+                .as_str()
+                .unwrap()
+                .into(),
+        );
+        assert_ne!(
+            sim.store.snapshot().agents[&bot].source,
+            crate::Source::Hook
+        );
+        let card = sim.set_card(&bot, CardKind::Q, crate::Deliver::Push, vec!["Yes", "No"]);
+        let slot = sim.slot_of(&bot).unwrap();
+        sim.apply(Command::SessionClosed(SessionId(1)));
+        let shown = sim.store.snapshot().agents[&bot].card.clone().unwrap();
+        assert_eq!(shown.deliver, crate::Deliver::None, "{shown:?}");
+        assert!(
+            !matches!(shown.status, crate::CardStatus::Degraded { .. }),
+            "{shown:?}"
+        );
+        match sim.line(crate::Key::Card(slot, card.0)) {
+            Some(crate::HostLine::Card { choices, .. }) => {
+                assert!(choices.is_empty(), "no Open app: {choices:?}")
+            }
+            other => panic!("the card stays on the deck: {other:?}"),
+        }
+    }
 
     #[test]
     fn the_task_is_the_first_prompt_or_the_session_title_and_the_count_adds_running_runs() {
@@ -2200,6 +2405,189 @@ mod tests {
         assert_eq!(
             crate::sanitize::first_sentence("no punctuation"),
             "no punctuation"
+        );
+    }
+
+    /// The reply an adapter stores at the end of a turn: no `message`.
+    fn bare_reply(id: &AgentId, text: &str) -> Request {
+        Request::Reply(ReplySet {
+            message: None,
+            agent: id.clone(),
+            text: text.into(),
+            speak: false,
+            announce: None,
+            lane: None,
+        })
+    }
+
+    /// An assistant message of the chat history, as a transcript watcher
+    /// or a connected app posts it.
+    fn history_reply(id: &AgentId, message: &str, text: &str) -> Request {
+        Request::Reply(ReplySet {
+            message: Some(crate::MessageMeta {
+                summary: None,
+                images: Vec::new(),
+                id: message.into(),
+                role: crate::ChatRole::Assistant,
+                streaming: false,
+                plan: None,
+                runs: None,
+                activity: None,
+            }),
+            agent: id.clone(),
+            text: text.into(),
+            speak: false,
+            announce: None,
+            lane: None,
+        })
+    }
+
+    /// What the last call said: `(lane, text)`.
+    fn spoken(sim: &Sim) -> Vec<(String, String)> {
+        sim.effects
+            .iter()
+            .filter_map(|e| match e {
+                Effect::Audio(AudioCmd::Say { lane, text, .. }) => {
+                    Some((lane.clone(), text.clone()))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn ready_line(text: &str) -> Vec<(String, String)> {
+        vec![("ready".to_string(), text.to_string())]
+    }
+
+    /// §7.7's ready line is the reply of the turn that just ended, never
+    /// the one before it, whichever order the turn's reply and its `ready`
+    /// arrive in: a `ready` reported first has nothing to say yet, and the
+    /// turn's reply says it when it lands.
+    #[test]
+    fn the_ready_line_speaks_this_turns_reply_never_the_last_ones() {
+        let mut sim = Sim::new();
+        let id = sim.register(UID, SessionId(1), "bot", None);
+        // A turn reported in order: the reply, then `ready`.
+        sim.api(
+            UID,
+            SessionId(1),
+            bare_reply(&id, "The old answer. It was long."),
+        )
+        .unwrap();
+        sim.api(UID, SessionId(1), update(&id, AgentState::Ready))
+            .unwrap();
+        assert_eq!(spoken(&sim), ready_line("bot: The old answer."));
+
+        // The next one reports `ready` before its reply.
+        sim.api(UID, SessionId(1), update(&id, AgentState::Working))
+            .unwrap();
+        sim.api(UID, SessionId(1), update(&id, AgentState::Ready))
+            .unwrap();
+        assert_eq!(
+            spoken(&sim),
+            vec![],
+            "the last turn's answer is not this one's"
+        );
+        sim.api(
+            UID,
+            SessionId(1),
+            bare_reply(&id, "The new answer. Details follow."),
+        )
+        .unwrap();
+        assert_eq!(
+            spoken(&sim),
+            ready_line("bot: The new answer."),
+            "the turn's own reply speaks the line it was owed"
+        );
+        // Once: a later reply of the same `ready` is not a second line.
+        sim.api(UID, SessionId(1), bare_reply(&id, "An afterthought."))
+            .unwrap();
+        assert_eq!(spoken(&sim), vec![]);
+
+        // In order again: nothing while working, the line with `ready`.
+        sim.api(UID, SessionId(1), update(&id, AgentState::Working))
+            .unwrap();
+        sim.api(UID, SessionId(1), bare_reply(&id, "The third answer."))
+            .unwrap();
+        assert_eq!(spoken(&sim), vec![]);
+        sim.api(UID, SessionId(1), update(&id, AgentState::Ready))
+            .unwrap();
+        assert_eq!(spoken(&sim), ready_line("bot: The third answer."));
+    }
+
+    /// What may pay a ready line the agent's `ready` could not speak: the
+    /// turn's own reply, once, while the agent is still ready. A history
+    /// message is not it (a transcript read back is a burst of old ones), a
+    /// reply that speaks for itself pays it with its own words, and the
+    /// next state change takes the debt away. Only a `ready` that ended a
+    /// turn owes anything: one at registration, followed by the reply a
+    /// reconnecting app publishes again, stays silent as it always was.
+    #[test]
+    fn only_the_turns_own_reply_pays_an_owed_ready_line() {
+        let mut sim = Sim::new();
+        let id = sim.register(UID, SessionId(1), "bot", None);
+        sim.api(UID, SessionId(1), update(&id, AgentState::Ready))
+            .unwrap();
+        sim.api(UID, SessionId(1), bare_reply(&id, "Republished."))
+            .unwrap();
+        assert_eq!(spoken(&sim), vec![], "no turn ended, so no line is owed");
+
+        let owe = |sim: &mut Sim| {
+            sim.api(UID, SessionId(1), update(&id, AgentState::Working))
+                .unwrap();
+            sim.api(UID, SessionId(1), update(&id, AgentState::Ready))
+                .unwrap();
+            assert_eq!(spoken(sim), vec![], "no reply of this turn yet");
+        };
+
+        owe(&mut sim);
+        sim.api(
+            UID,
+            SessionId(1),
+            history_reply(&id, "m1", "From the transcript."),
+        )
+        .unwrap();
+        assert_eq!(
+            spoken(&sim),
+            vec![],
+            "a history message is not the turn's reply"
+        );
+        sim.api(UID, SessionId(1), bare_reply(&id, "The answer."))
+            .unwrap();
+        assert_eq!(
+            spoken(&sim),
+            ready_line("bot: The answer."),
+            "the debt survived it"
+        );
+
+        owe(&mut sim);
+        let mut speaking = bare_reply(&id, "Said once.");
+        if let Request::Reply(r) = &mut speaking {
+            r.speak = true;
+        }
+        sim.api(UID, SessionId(1), speaking).unwrap();
+        assert_eq!(
+            spoken(&sim),
+            vec![("chatter".to_string(), "Said once.".to_string())],
+            "its own words, not a ready line beside them"
+        );
+        sim.api(UID, SessionId(1), bare_reply(&id, "Later."))
+            .unwrap();
+        assert_eq!(spoken(&sim), vec![], "paid");
+
+        owe(&mut sim);
+        sim.api(UID, SessionId(1), update(&id, AgentState::Error))
+            .unwrap();
+        assert_eq!(
+            spoken(&sim),
+            vec![("ready".to_string(), "bot failed".to_string())]
+        );
+        sim.api(UID, SessionId(1), bare_reply(&id, "Too late."))
+            .unwrap();
+        assert_eq!(
+            spoken(&sim),
+            vec![],
+            "the line went with the state that owed it"
         );
     }
 

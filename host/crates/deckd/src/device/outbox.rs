@@ -248,6 +248,13 @@ impl Outbox {
         self.shadow.sid
     }
 
+    /// Another deck is in the hand: the controls queued for the last one are
+    /// not this one's to receive. The hello stays.
+    pub fn keep_only_the_hello(&mut self) {
+        self.controls
+            .retain(|control| matches!(control, Control::Hello));
+    }
+
     pub fn shadow(&self) -> &Shadow {
         &self.shadow
     }
@@ -486,6 +493,8 @@ impl Outbox {
             Control::Name(_) => {
                 self.controls.retain(|c| !matches!(c, Control::Name(_)));
             }
+            // The link's own signal (`Link::apply` takes it), never a line.
+            Control::ProfileReady => return,
         }
         self.controls.push_back(control);
     }
@@ -620,8 +629,9 @@ impl Outbox {
                 }
                 _ => {}
             }
-            let line = self.control_line(control.clone());
-            return Some((line, Some(InFlight::Control(control))));
+            if let Some(line) = self.control_line(control.clone()) {
+                return Some((line, Some(InFlight::Control(control))));
+            }
         }
         if self.hold_lanes {
             return None;
@@ -866,8 +876,10 @@ impl Outbox {
         }
     }
 
-    fn control_line(&self, control: Control) -> HostLine {
-        match control {
+    /// The line a queued control writes; `None` for the one control that is
+    /// not a line (which `control` never queues).
+    fn control_line(&self, control: Control) -> Option<HostLine> {
+        Some(match control {
             Control::Hello => HostLine::Hello {
                 sid: self.shadow.sid,
                 hm: self.hm_override.clone().or_else(|| {
@@ -887,7 +899,8 @@ impl Outbox {
             Control::SessionMenu(menu) => HostLine::SessionMenu(menu),
             Control::Name(text) => HostLine::Name { text },
             Control::Synced => HostLine::Synced,
-        }
+            Control::ProfileReady => return None,
+        })
     }
 
     /// The next control to write, skipping a **partial** transcript whose

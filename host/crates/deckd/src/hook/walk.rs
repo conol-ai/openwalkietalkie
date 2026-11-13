@@ -1,6 +1,7 @@
 //! The parent walk (contract §4.3, design §5): which process is the CLI
 //! that ran this hook, so the daemon has a pid it may poll with
-//! `kill(pid, 0)` and a tty it can focus.
+//! `kill(pid, 0)` and a tty to show. The walk on from the CLI to the app
+//! that owns the session is `super::app`'s.
 //!
 //! `$PPID` is the wrong answer, and wrong in different ways per CLI:
 //!
@@ -20,9 +21,10 @@
 //!
 //! The walk is a pure function of a process table (`Procs`), so both spawn
 //! shapes and the unknown case are fixture-tested without spawning
-//! anything. `MacProcs` is the one implementation that touches the kernel,
-//! through the same `proc_pidinfo(PROC_PIDTBSDINFO)` the peer-trust
-//! ancestry cap already uses (`crate::trust`).
+//! anything. `MacProcs` is the one implementation that touches the kernel
+//! (`proc_pidinfo(PROC_PIDTBSDINFO)` and `proc_pidpath`), and the peer-trust
+//! ancestry cap (`crate::trust`) reads every hop of its own walk through it,
+//! so the two recognise a CLI the same way.
 use deck_model::PidKind;
 
 /// How far up the chain the walk looks (contract §4.3). Eight hops covers
@@ -63,6 +65,14 @@ impl Proc {
 /// Where the walk reads processes from.
 pub trait Procs {
     fn get(&self, pid: u32) -> Option<Proc>;
+
+    /// `get`, and also a process another user owns. The app walk
+    /// (`super::app`) crosses the root-owned `/usr/bin/login` that
+    /// login-shell terminals run between the shell and the app, which `get`
+    /// cannot read; the CLI walk and liveness keep `get`'s answer.
+    fn get_any(&self, pid: u32) -> Option<Proc> {
+        self.get(pid)
+    }
 }
 
 /// What the walk resolved, as the helper reports it to `hooks.<cli>`.
@@ -172,6 +182,48 @@ impl Procs for MacProcs {
     #[cfg(not(target_os = "macos"))]
     fn get(&self, _pid: u32) -> Option<Proc> {
         None
+    }
+
+    /// `PROC_PIDT_SHORTBSDINFO` and `proc_pidpath` answer for a process of
+    /// any user (the kernel exempts them from the same-user check that
+    /// `PROC_PIDTBSDINFO` makes), which is all the app walk needs: a parent
+    /// and the names.
+    #[cfg(target_os = "macos")]
+    fn get_any(&self, pid: u32) -> Option<Proc> {
+        if let Some(proc) = self.get(pid) {
+            return Some(proc);
+        }
+        let pid_t = libc::pid_t::try_from(pid).ok()?;
+        let size = std::mem::size_of::<libc::proc_bsdshortinfo>();
+        let mut info = std::mem::MaybeUninit::<libc::proc_bsdshortinfo>::zeroed();
+        // SAFETY: the buffer is exactly `size` bytes of `proc_bsdshortinfo`,
+        // which is what PROC_PIDT_SHORTBSDINFO fills; a short return is
+        // rejected.
+        let n = unsafe {
+            libc::proc_pidinfo(
+                pid_t,
+                libc::PROC_PIDT_SHORTBSDINFO,
+                0,
+                info.as_mut_ptr().cast(),
+                size as libc::c_int,
+            )
+        };
+        if n != size as libc::c_int {
+            return None;
+        }
+        // SAFETY: `proc_pidinfo` filled the whole struct (checked above).
+        let info = unsafe { info.assume_init() };
+        let mut names = vec![c_name(&info.pbsi_comm)];
+        if let Some(exe) = crate::trust::exe_path(pid) {
+            names.push(exe.to_string_lossy().into_owned());
+        }
+        names.retain(|n| !n.is_empty());
+        names.dedup();
+        Some(Proc {
+            pid,
+            ppid: info.pbsi_ppid,
+            names,
+        })
     }
 }
 
@@ -313,6 +365,20 @@ mod tests {
     fn a_process_that_is_its_own_parent_terminates_the_walk() {
         let table = Table(vec![Proc::new(3, 3, &["weird", "weird"])]);
         assert_eq!(resolve(3, &table, MAX_HOPS).pid_kind, PidKind::Unknown);
+    }
+
+    /// `launchd` is root's: `get` cannot read it from a user's process and
+    /// `get_any` can, which is what crossing `/usr/bin/login` needs. A
+    /// read-only kernel probe.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_app_walk_can_read_a_root_owned_process() {
+        let launchd = MacProcs.get_any(1).expect("pid 1 is readable");
+        assert_eq!((launchd.pid, launchd.ppid), (1, 0));
+        assert!(
+            launchd.names.iter().any(|n| n.ends_with("/launchd")),
+            "{launchd:?}"
+        );
     }
 
     #[test]

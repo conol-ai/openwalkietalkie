@@ -22,6 +22,7 @@
 //! input or an assistant message — the most sensitive data on the box.
 //! Nothing here logs it. The stderr line a failure prints names the
 //! failure and nothing else.
+pub mod app;
 pub mod env;
 pub mod walk;
 
@@ -159,17 +160,41 @@ pub fn run(
         }
     }
     let walk = walk::from_process();
-    let params = serde_json::json!({
-        "payload": payload,
-        "env": env::from_process(),
-        "tty": walk.cli_pid.and_then(walk::tty_of),
-        "cli_pid": walk.cli_pid,
-        "pid_kind": walk.pid_kind,
-    });
+    // Every form carries the app, the status line included: its register
+    // replaces the stored terminal whole, so leaving `app` out there would
+    // make it come and go.
+    let params = params(
+        payload,
+        env::from_process(),
+        walk.cli_pid.and_then(walk::tty_of),
+        &walk,
+        app::from_process(&walk),
+    );
     match call(socket, which.method(), params) {
         Ok(value) => finish(which, out, err, Some(value), ""),
         Err(why) => finish(which, out, err, None, why),
     }
+}
+
+/// The `hooks.<cli>` call's params: the payload and what the helper found
+/// out about the session around it — the environment subset, the CLI's
+/// tty, pid and pid kind, and the app the session runs in (`app`, the
+/// hand-off's; `null` when none was found).
+fn params(
+    payload: serde_json::Value,
+    env: std::collections::BTreeMap<String, String>,
+    tty: Option<String>,
+    walk: &walk::Walk,
+    app: Option<String>,
+) -> serde_json::Value {
+    serde_json::json!({
+        "payload": payload,
+        "env": env,
+        "tty": tty,
+        "cli_pid": walk.cli_pid,
+        "pid_kind": walk.pid_kind,
+        "app": app,
+    })
 }
 
 /// What the helper read, and why it may be unusable.
@@ -368,6 +393,41 @@ mod tests {
             );
         }
         assert_eq!(Which::parse("cursor"), None);
+    }
+
+    /// The call carries the app beside everything it carried before, and
+    /// says `null` when the helper found none.
+    #[test]
+    fn the_params_carry_the_app_beside_the_walk() {
+        let walk = walk::Walk {
+            cli_pid: Some(4100),
+            pid_kind: deck_model::PidKind::Cli,
+            hops: 1,
+            chain: Vec::new(),
+        };
+        let env: std::collections::BTreeMap<String, String> =
+            [("TERM_PROGRAM".to_string(), "zed".to_string())].into();
+        let got = params(
+            serde_json::json!({"hook_event_name": "Stop"}),
+            env.clone(),
+            Some("/dev/ttys004".into()),
+            &walk,
+            Some("dev.zed.Zed".into()),
+        );
+        assert_eq!(
+            got,
+            serde_json::json!({
+                "payload": {"hook_event_name": "Stop"},
+                "env": {"TERM_PROGRAM": "zed"},
+                "tty": "/dev/ttys004",
+                "cli_pid": 4100,
+                "pid_kind": "cli",
+                "app": "dev.zed.Zed",
+            })
+        );
+        let none = params(serde_json::json!({}), env, None, &walk, None);
+        assert_eq!(none["app"], serde_json::Value::Null);
+        assert!(none.as_object().unwrap().contains_key("app"));
     }
 
     #[test]

@@ -5,7 +5,10 @@
 //! capture is this process's own window ([`crate::snapshot`]), which needs no
 //! Screen Recording grant. One appearance per run
 //! (`OPENWALKIETALKIE_APPEARANCE`), at the boards' size, 1040×780
-//! ([`SIZE_ENV`] draws at another, under the same names).
+//! ([`SIZE_ENV`] draws at another, under the same names), and the standard
+//! look whatever this Mac's Increase contrast says, unless
+//! `OPENWALKIETALKIE_CONTRAST=more` asks for the contrast palette
+//! ([`crate::style::look_of`]); the names do not say which.
 //!
 //! **Two walks, and never the installed service.**
 //!
@@ -32,6 +35,18 @@
 //! `ja`) names one for every scene. Either way only the window's mirror
 //! changes, never the deck's setting.
 //!
+//! **Keys.** [`KEYS_ENV`]`=tab;down;enter` types into the window after each
+//! scene's capture, one step at a time, and captures every step as
+//! `DIR/<scene>-k<n>-<appearance>.png`: a step is keystrokes in gpui's own
+//! spelling (`tab`, `shift-tab`, `alt-right`, `cmd-2`), separated by spaces.
+//! Each is a whole press, down and then up, as a person's would be: the
+//! down through the window's own focus and key bindings
+//! (`Window::dispatch_keystroke`), and for Return and Space the release too,
+//! as an AppKit key-up to gpui's own view (`keyUp:`)
+//! ([`crate::snapshot::release_key`]), since gpui clicks a focused control
+//! when the key is let go. Nothing reaches outside this window: it is how the
+//! keyboard's way through a page is seen.
+//!
 //! **Preflight.** [`PREFLIGHT_ENV`]`=1` draws `main` and `tokens` as
 //! `DIR/preflight-<scene>-<appearance>.png` and exits: 0 when the two images
 //! differ, [`PREFLIGHT_SAME`] when they are one image — one MD5, so the
@@ -49,9 +64,9 @@ use crate::shell::{Screen, Shell};
 use deck_gui_core::i18n::Language;
 use deck_gui_core::{ApiEvent, AppEvent};
 use deck_model::{
-    Binding, DeviceState, FaceEntry, LastLinked, Link, LinkDrop, MacroKey, MacroLayout,
-    Permission, Permissions, Route, ServiceState, SessionState, Settings, Snapshot, Template,
-    Transport, Ts, VoiceState, VoiceTransport,
+    Binding, DeviceState, DormancyState, FaceEntry, LastLinked, Link, LinkDrop, MacroKey,
+    MacroLayout, Permission, Permissions, Route, ServiceState, SessionState, Settings, Snapshot,
+    Template, Transport, Ts, VoiceState, VoiceTransport,
 };
 use gpui::{App, Context, Entity, Global, Window};
 use std::collections::BTreeMap;
@@ -68,6 +83,13 @@ pub const SIZE_ENV: &str = "OPENWALKIETALKIE_SHOTS_SIZE";
 pub const LANGUAGE_ENV: &str = "OPENWALKIETALKIE_SHOTS_LANGUAGE";
 /// `1`: the preflight, and nothing else.
 pub const PREFLIGHT_ENV: &str = "OPENWALKIETALKIE_SHOTS_PREFLIGHT";
+/// Steps of keystrokes typed into each scene after its capture, `;` between
+/// steps and spaces between keystrokes: `tab;down down;enter`.
+pub const KEYS_ENV: &str = "OPENWALKIETALKIE_SHOTS_KEYS";
+/// `1`: after each scene's capture, print the menu bar as AppKit holds it
+/// (the top menus' titles and the windows menu's) on stderr as
+/// `shots-menus: <scene>: …`.
+pub const MENUS_ENV: &str = "OPENWALKIETALKIE_SHOTS_MENUS";
 
 /// The preflight's two scenes came out as one image: the window was not
 /// drawn.
@@ -525,6 +547,13 @@ pub fn board_snapshot() -> Snapshot {
         service: ServiceState {
             version: "0.13.0".into(),
             port: 47_201,
+            // A service with a deck collects while one was linked in the
+            // last ten minutes (`service.dormancy`); this one is linked.
+            dormancy: Some(DormancyState {
+                window_s: 600,
+                collecting: true,
+                dormant_since: None,
+            }),
             ..ServiceState::default()
         },
         ..Snapshot::default()
@@ -560,6 +589,12 @@ pub fn offline_snapshot() -> Snapshot {
         why: "removed".into(),
     }];
     snapshot.voice.route = Route::None;
+    // Ten minutes after the drop the service stopped collecting: 09:51.
+    snapshot.service.dormancy = Some(DormancyState {
+        window_s: 600,
+        collecting: false,
+        dormant_since: Some(gone.plus(Duration::from_secs(600))),
+    });
     snapshot
 }
 
@@ -669,6 +704,12 @@ pub fn start(shell: Entity<Shell>, window: &mut Window, cx: &mut App) {
         }
         scenes
     };
+    let keys = if preflight {
+        Vec::new()
+    } else {
+        keys_named(std::env::var(KEYS_ENV).ok().as_deref())
+    };
+    let menus = !preflight && std::env::var(MENUS_ENV).as_deref() == Ok("1");
     window
         .spawn(cx, async move |cx| {
             // A live walk gives the test service its time to answer first.
@@ -707,6 +748,54 @@ pub fn start(shell: Entity<Shell>, window: &mut Window, cx: &mut App) {
                     Err(e) => eprintln!("openwalkietalkie-app: {name}: {e}"),
                 }
                 captures.push(saved);
+                // The menu bar in the scene's language, as AppKit holds it.
+                #[cfg(target_os = "macos")]
+                if menus {
+                    let (titles, windows) = crate::macos::menu_bar_titles();
+                    eprintln!(
+                        "shots-menus: {name}: {} | windows menu: {}",
+                        titles.join(" · "),
+                        windows.as_deref().unwrap_or("none")
+                    );
+                }
+                #[cfg(not(target_os = "macos"))]
+                let _ = menus;
+                // The keyboard's way through the scene: each step typed into
+                // this window as a person would, then captured.
+                for (n, step) in keys.iter().enumerate() {
+                    cx.update(|window, cx| {
+                        for key in step {
+                            match gpui::Keystroke::parse(key) {
+                                // A whole press, down then up: gpui clicks
+                                // a focused control when Return or Space is
+                                // let go, which only a key-up carries.
+                                Ok(keystroke) => {
+                                    #[cfg(target_os = "macos")]
+                                    let released = (!keystroke.modifiers.modified())
+                                        .then(|| keystroke.key.clone());
+                                    window.dispatch_keystroke(keystroke, cx);
+                                    #[cfg(target_os = "macos")]
+                                    if let Some(key) = released {
+                                        if let Err(e) = crate::snapshot::release_key(window, &key) {
+                                            eprintln!("openwalkietalkie-app: {name}: {key}: {e}");
+                                        }
+                                    }
+                                }
+                                Err(e) => eprintln!("openwalkietalkie-app: {name}: {e}"),
+                            }
+                        }
+                    })
+                    .ok();
+                    cx.background_executor().timer(scene.settle()).await;
+                    let file = format!("{name}-k{}", n + 1);
+                    let saved = cx
+                        .update(|window, cx| save(window, cx, &dir, &file))
+                        .unwrap_or_else(|e| Err(e.to_string()));
+                    match &saved {
+                        Ok(path) => println!("{}", path.display()),
+                        Err(e) => eprintln!("openwalkietalkie-app: {file}: {e}"),
+                    }
+                }
             }
             if preflight {
                 let images: Vec<Result<Vec<u8>, String>> = captures
@@ -771,6 +860,20 @@ fn only_named(value: Option<&str>) -> Option<Vec<String>> {
         .map(str::to_string)
         .collect();
     (!names.is_empty()).then_some(names)
+}
+
+/// [`KEYS_ENV`]'s steps, each a list of keystrokes; none when it names none.
+fn keys_named(value: Option<&str>) -> Vec<Vec<String>> {
+    value
+        .unwrap_or_default()
+        .split(';')
+        .map(|step| {
+            step.split_whitespace()
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .filter(|step| !step.is_empty())
+        .collect()
 }
 
 /// [`SIZE_ENV`]'s `WxH`.
@@ -1059,6 +1162,26 @@ mod tests {
         assert_eq!(language_named(" ja"), Some(Language::Japanese));
         assert_eq!(language_named("en"), Some(Language::English));
         assert_eq!(language_named("fr"), None);
+    }
+
+    #[test]
+    fn the_keys_are_read_as_steps_of_keystrokes_in_gpuis_spelling() {
+        let steps = |value| keys_named(Some(value));
+        assert_eq!(
+            steps("tab; down  down ;; enter"),
+            vec![vec!["tab"], vec!["down", "down"], vec!["enter"]]
+        );
+        assert_eq!(
+            steps("alt-right;cmd-2"),
+            vec![vec!["alt-right"], vec!["cmd-2"]]
+        );
+        assert!(steps(" ; ").is_empty());
+        assert!(keys_named(None).is_empty());
+        // Every keystroke the checks type is one gpui reads.
+        let typed = "tab shift-tab down up left right home end enter space alt-left alt-right";
+        for key in typed.split(' ').chain(["cmd-1", "cmd-5", "escape"]) {
+            assert!(gpui::Keystroke::parse(key).is_ok(), "{key}");
+        }
     }
 
     #[test]

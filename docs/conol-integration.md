@@ -17,6 +17,15 @@ message, creates the chat and switches to it. Opening the launcher shows a blank
 Conol composer. An overflow chat can replace an unpinned busy Conol chat owned
 by the same account and connection; the launcher and other accounts are preserved.
 
+Each dictated order Conol receives carries an `order` id. When Conol cannot
+deliver one, it can say so with `agent.order.result {agent, order, ok: false,
+reason}`, and the deck shows the order as not delivered. Without that call a
+failed Conol order leaves no trace on the deck. When the deck's failure card takes
+the place of an informational card of Conol's, Conol's later `agent.card.clear`
+of that card is still answered with `{rev}`, and the failure card stays. A daemon that offers the method
+lists `order.result` in `service.info` capabilities; an older one answers
+`-32601`.
+
 AskUser forms and workflow approvals run one field at a time: paged single-choice
 options, multi-select toggles, Other answers and dictated text, followed by a
 review screen with edit, submit and cancel. Every step gets a fresh card id. Only

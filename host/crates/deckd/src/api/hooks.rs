@@ -27,8 +27,8 @@
 //!    hold a prompt hostage.
 //! 2. **Report-only events answer before they work** (§4.11). The report
 //!    hooks are synchronous http hooks with `timeout: 2`, so the daemon
-//!    writes `{}` (or `SessionStart`'s beacon) and enqueues the plan on a
-//!    task behind it; the operator's prompt never waits on the roster.
+//!    writes `{}` and enqueues the plan on a task behind it; the
+//!    operator's prompt never waits on the roster.
 //!    Those tasks take one lock per adapter so the plans land in the order
 //!    the events did — a `Stop` overtaking its own `UserPromptSubmit`
 //!    would leave the agent reading `working` after the turn ended.
@@ -70,6 +70,12 @@ pub struct HookParams {
     pub cli_pid: Option<u32>,
     #[serde(default)]
     pub pid_kind: Option<PidKind>,
+    /// The bundle identifier of the app the session runs in, as the helper
+    /// found it (`crate::hook::app`). Strict like the rest: a value that is
+    /// not a string makes the whole call unreadable, and one that does not
+    /// look like a bundle identifier is dropped at the door.
+    #[serde(default)]
+    pub app: Option<String>,
 }
 
 /// The CLI a `hooks.<cli>` method or a `/v1/hooks/{cli}` path names, when
@@ -201,12 +207,28 @@ pub async fn ingest(
     };
     let payload = HookPayload(params.payload);
     let event = payload.event().to_string();
+    // The app the hand-off raises (`crate::desktop::raise`) reaches
+    // `/usr/bin/open -b` as an argument: only a plausible bundle identifier
+    // is kept, whatever the helper sent.
+    let app = params
+        .app
+        .filter(|id| crate::hook::app::valid_bundle_id(id));
     // `[hooks] enabled = false` is the operator saying "stop answering":
     // the CLIs keep their own dialogs and nothing reaches the deck. A
     // source the owner paused (`[sources]`) is answered the same way: its
     // sessions are kept, off the deck (`care::sources`), and nothing new of
     // it arrives until it is resumed.
     if !adapters.answering(cli) {
+        return empty();
+    }
+    // No deck linked for ten minutes (`crate::dormancy`): there is nothing
+    // to show a session on, so nothing of it is collected. No plan, no hold,
+    // no settle wait, no transcript watcher, no register, and no
+    // `last_event_at` for the Integrations page: the CLI keeps its own
+    // dialogs and the hook costs it nothing. Every event, a Claude
+    // `SessionStart` included, is answered `{}`: nothing is written into a
+    // session's title any more (the Ghostty tab path is gone).
+    if !core.adapters().collecting() {
         return empty();
     }
     // What a hook is, never what it says (rule 3): the event, the session's
@@ -229,10 +251,13 @@ pub async fn ingest(
     }
     // The status line is the one call that carries the account's rate
     // limits (`rate_limits`, Pro/Max only): they go to the Usage face from
-    // here, and the adapter then reads the rest of the payload for the
-    // session's name. `send` is bounded, so a stalled core costs the line
-    // its 200 ms and nothing more.
-    if cli == "claude_statusline" && adapters.usage_enabled(crate::usage::Provider::Claude) {
+    // here, while that face is on the deck's strip, and the adapter then
+    // reads the rest of the payload for the session's name. `send` is
+    // bounded, so a stalled core costs the line its 200 ms and nothing more.
+    if cli == "claude_statusline"
+        && adapters.usage_enabled(crate::usage::Provider::Claude)
+        && core.adapters().gate().usage
+    {
         let windows = crate::usage::claude_statusline_windows(&payload.0);
         if !windows.is_empty() {
             let _ = core
@@ -262,6 +287,7 @@ pub async fn ingest(
                 tty: params.tty,
                 cli_pid: params.cli_pid,
                 pid_kind: params.pid_kind,
+                app,
             };
             let codex = core.adapters().clone();
             let (value, after_write) = rt::handle(core, &codex.codex, call).await;
@@ -281,6 +307,7 @@ pub async fn ingest(
         tty: params.tty,
         cli_pid: params.cli_pid,
         pid_kind: params.pid_kind,
+        app,
         now: None,
         // Per routed CLI, never a constant: `hold_s` is this adapter's
         // own key (B2) and the doors are one handler for every CLI.
@@ -292,10 +319,6 @@ pub async fn ingest(
         Ingest::Report(plan) => {
             defer(adapters.clone(), core.clone(), cli, payload, plan, inbox);
             empty()
-        }
-        Ingest::Beacon(out, plan) => {
-            defer(adapters.clone(), core.clone(), cli, payload, plan, inbox);
-            Reply::ok(out.json())
         }
         Ingest::Held {
             before,
@@ -588,7 +611,18 @@ async fn held(
     let Some(adapter) = adapter_of(adapters, cli) else {
         return nothing();
     };
-    if !settle(adapters, cli, payload, &note, group.is_some(), cli_pid).await {
+    let tally = &core.adapters().asks;
+    if !settle(
+        adapters,
+        tally,
+        cli,
+        payload,
+        &note,
+        group.is_some(),
+        cli_pid,
+    )
+    .await
+    {
         return nothing();
     }
     // The prologue resolves the agent. It takes the same lock as a report
@@ -669,7 +703,7 @@ async fn held(
             // Snooze, the hold budget, `agent.card.clear`, shutdown. The
             // reason goes through with the card because the two shapes are
             // not the same memo write: a snooze or an expiry leaves the
-            // card on the deck degraded to `⌨ Focus terminal` under its
+            // card on the deck degraded to `⌨ … Open app` under its
             // own id, while a clear, a retire or an ack takes it off
             // altogether (`Release::degrades_card`).
             Ok(HoldResult::Released { reason }) => {
@@ -695,9 +729,11 @@ async fn held(
 /// refused, or the turn moved on — and the hook answers `{}` with nothing
 /// ever on the deck. A question group never waits: `AskUserQuestion` is
 /// always the operator's to answer and its dialog is held off for the
-/// whole hold (C8).
+/// whole hold (C8). Every ask that waits, and how its wait ended, goes on
+/// `tally` for the delivery record.
 async fn settle(
     adapters: &Arc<Adapters>,
+    tally: &adapters::settle::Tally,
     cli: &'static str,
     payload: &HookPayload,
     note: &serde_json::Value,
@@ -726,6 +762,7 @@ async fn settle(
         .flatten()
         .zip(cli_pid);
     let (id, mut rx) = adapters.settle.wait(session, tool, &input);
+    tally.waited();
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(window);
     let outcome = loop {
         let tick = (tokio::time::Instant::now() + std::time::Duration::from_millis(250)).min(deadline);
@@ -745,6 +782,7 @@ async fn settle(
         }
     };
     adapters.settle.cancel(id);
+    tally.ended(outcome);
     match outcome {
         Some(adapters::settle::Outcome::Settled) => {
             tracing::debug!(cli, "an ask settled before the deck");
@@ -1080,12 +1118,82 @@ mod tests {
         // nothing: the usage message is sent before `ingest` returns, so
         // none queued now means none at all.
         usage(crate::config::UsageCfg::default());
+        let reply = ingest(&ctx.adapters, &ctx.core, "claude_statusline", line.clone()).await;
+        assert_eq!(reply.result.unwrap(), serde_json::json!({}));
+        tokio::task::yield_now().await;
+        while let Ok(msg) = rx.try_recv() {
+            assert!(!matches!(msg, CoreMsg::Usage { .. }), "{msg:?}");
+        }
+        // Switched on again, but with no Usage face on the deck's strip
+        // (`crate::dormancy`): nothing would show the bars, so the line
+        // feeds nothing either.
+        usage(crate::config::UsageCfg {
+            providers: vec!["claude".into()],
+            ..Default::default()
+        });
+        ctx.core.adapters().set_gate(crate::dormancy::Gate {
+            usage: false,
+            ..crate::dormancy::Gate::always()
+        });
         let reply = ingest(&ctx.adapters, &ctx.core, "claude_statusline", line).await;
         assert_eq!(reply.result.unwrap(), serde_json::json!({}));
         tokio::task::yield_now().await;
         while let Ok(msg) = rx.try_recv() {
             assert!(!matches!(msg, CoreMsg::Usage { .. }), "{msg:?}");
         }
+    }
+
+    /// With no deck linked for ten minutes (`crate::dormancy`) every hook is
+    /// answered at once with nothing behind it: no register, no card, no
+    /// hold and no settle wait reach the core, so no `last_event_at` is
+    /// stamped either. A Claude `SessionStart` is answered `{}` like the
+    /// rest (nothing is written into a session's title any more); a Codex
+    /// hook goes nowhere near its own plan layer.
+    #[tokio::test]
+    async fn a_quiet_service_answers_every_hook_at_once_and_collects_nothing() {
+        let (core, rx) = CoreHandle::detached();
+        // The window on, so an ask would otherwise wait out its six seconds.
+        let ctx = ctx_with(core, &[Scope::HooksIngest], 6);
+        ctx.core.adapters().set_gate(crate::dormancy::Gate::shut());
+        let mut ask = payload("PermissionRequest");
+        ask["payload"]["tool_name"] = "Bash".into();
+        ask["payload"]["tool_input"] = serde_json::json!({"command": "rm -rf build"});
+        let mut start = payload("SessionStart");
+        start["payload"]["source"] = "startup".into();
+        let codex = serde_json::json!({"payload": {
+            "session_id": "th_1", "cwd": "/w/project", "hook_event_name": "Stop",
+            "last_assistant_message": "Done.",
+        }});
+        for (method, params) in [
+            ("hooks.claude", ask),
+            ("hooks.claude", start),
+            ("hooks.claude", payload("UserPromptSubmit")),
+            ("hooks.claude", payload("Stop")),
+            ("hooks.codex", codex.clone()),
+            ("hooks.codex_notify", codex),
+        ] {
+            let started = Instant::now();
+            let reply = dispatch(&ctx, method, params).await;
+            assert!(
+                started.elapsed() < std::time::Duration::from_millis(100),
+                "{method}"
+            );
+            assert!(
+                reply.after_write.is_none(),
+                "{method}: nothing for the door to confirm"
+            );
+            assert_eq!(reply.result.unwrap(), serde_json::json!({}), "{method}");
+        }
+        // Whatever a deferred plan would have sent has had its chance.
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert!(rx.try_recv().is_err(), "nothing reached the core");
+        assert!(ctx.adapters.transcripts.lock().unwrap().is_empty());
+        assert_eq!(
+            ctx.adapters
+                .claude
+                .agent(&HookPayload(payload("Stop")["payload"].clone())),
+            None
+        );
     }
 
     /// The CLIs whose adapter is not in this daemon are refused by name,
@@ -1163,6 +1271,7 @@ mod tests {
         for params in [
             serde_json::json!({"payload": "not an object"}),
             serde_json::json!({"env": 7}),
+            serde_json::json!({"app": 7}),
             serde_json::json!({}),
             serde_json::Value::Null,
             serde_json::json!({"payload": {"hook_event_name": "Stop"}}),
@@ -1209,6 +1318,12 @@ mod tests {
                 "the ask never became a card"
             );
         }
+        // The delivery record hears of the ask the deck never saw.
+        let asks = ctx.core.adapters().asks.take();
+        assert_eq!(
+            (asks.waited, asks.settled, asks.prompted, asks.passed),
+            (1, 1, 0, 0)
+        );
     }
 
     /// A host approver leaves no hook behind, but an allowed Bash call
@@ -1270,6 +1385,12 @@ mod tests {
         assert!(matches!(reached, CoreMsg::OpenSession { .. }));
         assert!(at.elapsed() < std::time::Duration::from_secs(3), "{:?}", at.elapsed());
         ask.abort();
+        let asks = ctx.core.adapters().asks.take();
+        assert_eq!(
+            (asks.waited, asks.settled, asks.prompted, asks.passed),
+            (1, 0, 1, 0),
+            "a person was asked, so the deck shows it"
+        );
     }
 
     fn permission() -> serde_json::Value {

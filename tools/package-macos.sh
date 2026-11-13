@@ -325,8 +325,7 @@ jq -n \
             signing_identity: (if $sign_identity == "" then null else $sign_identity end),
             hardened_runtime: true,
             entitlements: [
-                "com.apple.security.device.audio-input",
-                "com.apple.security.automation.apple-events"
+                "com.apple.security.device.audio-input"
             ]
         },
         sparkle: {

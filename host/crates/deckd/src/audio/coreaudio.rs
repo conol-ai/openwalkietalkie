@@ -126,25 +126,47 @@ impl CpalCapture {
         }
     }
 
-    fn pick(req: &CaptureOpen) -> Result<Device, AudioError> {
-        let host = cpal::default_host();
-        if req.input == VoiceInput::Deck {
-            if let Some(uid) = req.device_uid.as_deref() {
-                if let Some(device) = device_by_uid(uid, DeviceSide::Input) {
-                    return Ok(device);
-                }
-                // §7.1's `fallback_input`. `"none"` means the press is
-                // answered with silence and a code, not with the Mac's own
-                // microphone — which would record the room instead of the
-                // headset and nobody asked for that.
-                if req.fallback != "system_default" {
-                    return Err(AudioError::NoDevice(uid.to_string()));
-                }
+    /// Which input an open asks for, decided without asking CoreAudio.
+    ///
+    /// The deck's input is opened by its UID or not at all: a press whose
+    /// deck has no UID, or whose UID is not among the devices, is answered
+    /// with silence and `no_device`, never with the Mac's own microphone,
+    /// which would record the room instead of the headset (decision 11).
+    /// Before this a deck press with no UID fell through to the system
+    /// default input whatever `[voice] fallback_input` said. The Mac's input
+    /// is for `voice.listen{input:"mac"}` alone.
+    fn choose(req: &CaptureOpen) -> Pick {
+        match (req.input, req.device_uid.as_deref()) {
+            (VoiceInput::Mac, _) => Pick::SystemDefault,
+            (VoiceInput::Deck, Some(uid)) => Pick::ByUid(uid.to_string()),
+            (VoiceInput::Deck, None) => {
+                Pick::NoDevice("the deck's input has no device UID: set [voice] device_uid".into())
             }
         }
-        host.default_input_device()
-            .ok_or_else(|| AudioError::NoDevice("system default input".into()))
     }
+
+    fn pick(req: &CaptureOpen) -> Result<Device, AudioError> {
+        match CpalCapture::choose(req) {
+            Pick::ByUid(uid) => {
+                device_by_uid(&uid, DeviceSide::Input).ok_or(AudioError::NoDevice(uid))
+            }
+            Pick::SystemDefault => cpal::default_host()
+                .default_input_device()
+                .ok_or_else(|| AudioError::NoDevice("system default input".into())),
+            Pick::NoDevice(why) => Err(AudioError::NoDevice(why)),
+        }
+    }
+}
+
+/// [`CpalCapture::choose`]'s answer.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Pick {
+    /// The deck's input, by its UID pair (`:input` appended).
+    ByUid(String),
+    /// The Mac's default input device.
+    SystemDefault,
+    /// Nothing to open, and why.
+    NoDevice(String),
 }
 
 impl CaptureSource for CpalCapture {
@@ -165,7 +187,8 @@ impl CaptureSource for CpalCapture {
         let faults = sink.faults();
         let channel_count = usize::from(channels).max(1);
         // Allocated **here**, at build time, never in the callback: a
-        // multi-channel fallback input (the Mac's own mic) has to be
+        // multi-channel input (the Mac's own mic, for
+        // `voice.listen{input:"mac"}`) has to be
         // de-interleaved to the mono §7.1 promises, and the copy needs
         // somewhere to go. Sized for 8192 frames, which is sixteen of V18's
         // quanta; a longer buffer is truncated rather than reallocated.
@@ -667,6 +690,43 @@ mod tests {
             .parse()
             .expect("cpal parses its own format");
         assert_eq!(id.id(), "C2-2D-81-AB-88-81:input");
+    }
+
+    /// Decision 11 on the Classic transport, decided without CoreAudio: a
+    /// press opens the deck by its UID or answers `no_device`, and only
+    /// `voice.listen{input:"mac"}` reaches the Mac's default input. (A UID
+    /// that is not among the devices is `NoDevice(uid)` in `pick`, from the
+    /// lookup this choice hands it to.)
+    #[test]
+    fn a_press_opens_the_deck_by_uid_or_nothing_and_never_the_macs_input() {
+        let open = |input: VoiceInput, device_uid: Option<&str>| CaptureOpen {
+            input,
+            device_uid: device_uid.map(String::from),
+            ask_deck: None,
+        };
+        assert_eq!(
+            CpalCapture::choose(&open(VoiceInput::Deck, Some("C2-2D-81-AB-88-81"))),
+            Pick::ByUid("C2-2D-81-AB-88-81".into())
+        );
+        let Pick::NoDevice(why) = CpalCapture::choose(&open(VoiceInput::Deck, None)) else {
+            panic!("a deck press with no UID must not open anything");
+        };
+        assert_eq!(
+            why,
+            "the deck's input has no device UID: set [voice] device_uid"
+        );
+        assert_eq!(
+            AudioError::NoDevice(why).code(),
+            "no_device",
+            "silence and a code"
+        );
+        for uid in [None, Some("C2-2D-81-AB-88-81")] {
+            assert_eq!(
+                CpalCapture::choose(&open(VoiceInput::Mac, uid)),
+                Pick::SystemDefault,
+                "voice.listen{{input:\"mac\"}} with {uid:?}"
+            );
+        }
     }
 
     /// V17/V19's translation table, which is the whole of what the route SM

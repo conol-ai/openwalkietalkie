@@ -6,13 +6,14 @@
 use deck_gui_core::attention::Attention;
 use deck_gui_core::i18n::Language;
 use deck_model::{
-    DeviceState, FaceEntry, LastLinked, Link, LinkDrop, Snapshot, Template, Tone, Transport, Ts,
+    DeviceState, DormancyState, FaceEntry, LastLinked, Link, LinkDrop, ServiceState, Snapshot,
+    Template, Tone, Transport, Ts,
 };
 use openwalkietalkie_app::deck::{
     battery_word, caption, drop_line, drop_reason, face_label, face_name, face_shown,
     firmware_word, idle_home_at, idle_home_word, last_linked, layout, level_shown, link_word,
-    no_service, no_service_title, notice, recent_drops, strip, Layout, NoService, Notice, Remedy,
-    Sent, IDLE_HOME, LEVEL_HOLD,
+    no_service, no_service_title, notice, recent_drops, stopped_collecting, strip, Layout,
+    NoService, Notice, Remedy, Sent, IDLE_HOME, LEVEL_HOLD,
 };
 use openwalkietalkie_app::i18n;
 use openwalkietalkie_app::present::{self, LoginItem};
@@ -441,6 +442,60 @@ fn last_linked_reads_today_yesterday_an_older_day_or_nothing() {
     assert_eq!(last_linked(&DeviceState::default(), now, EN), None);
 }
 
+/// Under "The background service is waiting for your deck", once the
+/// service went quiet (`service.dormancy`): when it stopped, ten minutes
+/// after the drop, as the NotLinked board draws it; only that it did when
+/// that was on an earlier day; and nothing while it still collects, from a
+/// service with no dormancy, or when no deck was ever linked.
+#[test]
+fn the_not_linked_page_says_when_the_service_stopped_collecting() {
+    i18n::install();
+    let now = at(10, 2);
+    let quiet = |since: Option<Ts>, collecting: bool| ServiceState {
+        dormancy: Some(DormancyState {
+            window_s: 600,
+            collecting,
+            dormant_since: since,
+        }),
+        ..ServiceState::default()
+    };
+    let today = quiet(Some(at(9, 51)), false);
+    assert_eq!(
+        stopped_collecting(&today, now, EN).as_deref(),
+        Some("It stopped collecting from your agent sessions at 09:51,\nten minutes after the link dropped.")
+    );
+    assert_eq!(
+        stopped_collecting(&today, now, ZH).as_deref(),
+        Some("连接断开十分钟后，\n它已于 09:51 停止从你的助手会话收集信息。")
+    );
+    assert_eq!(
+        stopped_collecting(&today, now, Language::Japanese).as_deref(),
+        Some("接続が切れて 10 分後の 09:51 に、\nエージェントのセッションからの情報収集を停止しました。")
+    );
+    let yesterday = quiet(present::local_ts(2026, 11, 10, 23, 5), false);
+    assert_eq!(
+        stopped_collecting(&yesterday, now, EN).as_deref(),
+        Some("It stopped collecting from your agent sessions\nten minutes after the link dropped.")
+    );
+    assert_eq!(
+        stopped_collecting(&yesterday, now, Language::TraditionalChinese).as_deref(),
+        Some("連線中斷十分鐘後，\n它已停止從你的助理工作階段收集資訊。")
+    );
+    for (why, service) in [
+        ("still collecting", quiet(None, true)),
+        ("never linked", quiet(None, false)),
+        ("no dormancy", ServiceState::default()),
+    ] {
+        assert_eq!(stopped_collecting(&service, now, EN), None, "{why}");
+    }
+    // The NotLinked board's fixture: dropped at 09:41, quiet since 09:51.
+    let board = openwalkietalkie_app::shots::offline_snapshot();
+    assert_eq!(
+        stopped_collecting(&board.service, openwalkietalkie_app::shots::board_now(), EN).as_deref(),
+        Some("It stopped collecting from your agent sessions at 09:51,\nten minutes after the link dropped.")
+    );
+}
+
 #[test]
 fn each_attention_card_says_what_is_wrong_and_offers_its_remedy() {
     i18n::install();
@@ -558,8 +613,9 @@ fn every_row_the_page_adds_is_the_only_row_of_its_key() {
     }
     // The sheet's 56 rows, copied as written, but for the three the frame's
     // strip and the Service page now say too (not installed, Set Up…, Open
-    // Service), which are shared words in `kit`.
-    assert_eq!(i18n::deck::STRINGS.len(), 53);
+    // Service), which are shared words in `kit`; and the two lines of a
+    // service that went quiet.
+    assert_eq!(i18n::deck::STRINGS.len(), 55);
 }
 
 #[test]
@@ -568,7 +624,7 @@ fn every_word_the_page_says_has_a_row() {
     assert_eq!(i18n::missing_rows(source), Vec::<String>::new());
     // Pinned, so a lookup the scanner stopped seeing fails here rather than
     // passing as a page with less to translate.
-    assert_eq!(i18n::literals(source).len(), 85);
+    assert_eq!(i18n::literals(source).len(), 87);
 }
 
 /// A fresh test service's hello (`deck-gui-core`'s recorded fixtures,

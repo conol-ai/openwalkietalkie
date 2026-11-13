@@ -15,8 +15,13 @@ mod device;
 mod device_status;
 mod effect;
 pub mod guard;
+/// The hand-off: a press on a session's `Open app` card raises its app.
+pub mod handoff;
 mod ids;
+/// Order ids, failed orders and what the deck shows for them.
+mod orders;
 mod principal;
+mod profile;
 #[cfg(test)]
 mod props;
 mod redact;
@@ -51,19 +56,25 @@ pub use agent::{
 };
 pub use command::{
     AgentRegister, AgentUpdate, CardClear, CardSet, Command, DeviceReport, DeviceSet, FocusReport,
-    LinkEvent, OpAnswer, OpOrder, ReplySet, Request, UtterancePhase, VoiceIn, VoiceListen,
-    VoiceSay,
+    LinkEvent, OpAnswer, OpOrder, OrderOutcome, ReplySet, Request, UtterancePhase, VoiceIn,
+    VoiceListen, VoiceSay,
 };
 pub use device::{Control, DeviceOp, FaceId, Key, Lane, SyncReason};
 pub use effect::{
     AudioCmd, DesktopCmd, Effect, Event, EventKind, Release, StatePatch, TimerKey, VoiceInput,
 };
+pub use handoff::{HandoffFailure, OPEN_APP};
 pub use ids::{AgentId, BadSessionId, CardId, HoldId, SessionId, Slot};
+pub use orders::{
+    FailureLine, Shown, HOST_FAILURE, NOT_DELIVERED, ORDER_RESULT_WINDOW, PENDING_ORDERS_MAX,
+    UNCONFIRMED,
+};
 pub use principal::{AdapterKind, Principal, Scope};
+pub use profile::DeckProfile;
 pub use snapshot::{
-    DeviceState, ErrCounts, Focus, FocusSource, LastLinked, Link, LinkDrop, Listener, MacroLayout,
-    Permission, Permissions, PttInfo, Route, ServiceState, SessionState, Settings, Snapshot,
-    Speaking, SttInfo, Transport, TtsInfo, Usage, VoiceState, VoiceTransport,
+    DeviceState, DormancyState, ErrCounts, Focus, FocusSource, LastLinked, Link, LinkDrop,
+    Listener, MacroLayout, Permission, Permissions, PttInfo, Route, ServiceState, SessionState,
+    Settings, Snapshot, Speaking, SttInfo, Transport, TtsInfo, Usage, VoiceState, VoiceTransport,
 };
 pub use store::{project, Persisted, PinConfig, SlotMemory, Store, StoreConfig};
 pub use time::Ts;
@@ -80,6 +91,9 @@ pub use deck_proto::{
     AgentState, Binding, CardKind, DeviceLine, DocFont, DocKind, ErrWhy, FaceEntry, HostLine,
     KeyId, Kind, MacroKey, PttCtx, SetKey, Template, Tone, UsageItem, Window,
 };
+// The deck's strip rules: `device.faces.set` refuses a strip they refuse,
+// and a client builds its strips by them.
+pub use deck_proto::{strip_problem, MACROPADS_MAX, STRIP_MAX, TIMERS_MAX};
 
 #[cfg(test)]
 mod chat_tests;

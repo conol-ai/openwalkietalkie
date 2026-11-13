@@ -65,6 +65,12 @@ impl Session {
         self.sid
     }
 
+    /// Another deck is in the hand (`hid::Link::identified`): its replies
+    /// are compared with `sid` from now on.
+    pub fn set_sid(&mut self, sid: u32) {
+        self.sid = sid;
+    }
+
     pub fn state(&self) -> SessionState {
         self.state
     }

@@ -27,6 +27,8 @@ python3 omarchy/omarchy_hook.py install kimi     # Kimi Code；claude / codex �
 
 `install.sh` 会把适配器复制到 `~/.local/share/openwalkietalkie/omarchy/`；给了二进制文件时，把 `deckd` 装到 `~/.local/bin/deckd`；再启用并启动 `systemd/` 里的两个单元（可以重复执行；`systemctl --user disable --now deckd omarchy-deck` 撤销）。`deckd.service` 以 `DECKD_DATA_DIR=~/.local/share/openwalkietalkie` 运行 `deckd run`，所以它的配置、socket 和缓存都在这个目录下；`omarchy-deck.service` 在这个 socket 上启动适配器。（不设 `DECKD_DATA_DIR` 启动的 `deckd` 改用 XDG 目录，socket 在 `$XDG_RUNTIME_DIR/openwalkietalkie/deckd.sock`，没有 `XDG_RUNTIME_DIR` 时在 `${XDG_CACHE_HOME:-~/.cache}/openwalkietalkie/deckd.sock`；不带 `--socket` 启动的适配器也去这里找。）`omarchy_hook.py install` 写进各 CLI 设置的 hook 命令指向这份副本，并且脚本不存在时放行（不会因为挪了仓库而拦住你的会话）。适配器自动找到正在运行的 Hyprland 实例和 Wayland 显示，不用写环境变量。
 
+给这个服务用的 `deckd` 命令也要指向同一个目录，否则它会去找 XDG 的 socket，找不到：`DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd care checks` 检查安装，每条维护命令前面都加同样的前缀（`deckd care sources|pause|resume|test …`、`deckd config get|set`、`deckd device get|set`、`deckd firmware status`；对照表见[主机服务设计](../../docs/host-service.md)第 10.7 节）。Linux 上没有祖先进程上限（见上文），在任何终端里都能用。
+
 ### 语音（PTT）
 
 - **识别**：本机 Whisper，没有本地麦克风（对讲机的麦克风是唯一输入）。先下载模型再用。CPU 上 `large-v3-turbo` 每次约 20 秒，建议用 `small`（约 2–4 秒）：
@@ -42,7 +44,7 @@ DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd stt install --model small
 `stt install` 走 HuggingFace；连不上时用镜像下载同名文件（`https://hf-mirror.com/ggerganov/whisper.cpp/resolve/main/ggml-small.bin`）放到 `~/.local/share/openwalkietalkie/caches/stt/`。中文会被识别为简体（Linux 上识别出中文时会用简体提示词再解码一次）。
 
 - **播报**：回复由本机一个语音程序朗读（文本走 stdin，WAV 走 stdout）。默认是 `espeak-ng`（`sudo pacman -S espeak-ng`），可以在 `[voice.tts] command` 里换成 piper 等；没装时每次播报会在日志里报错，其他功能不受影响。声音取 `[voice.tts] voices` 的第一项，没配置时按文本含不含中文选 `cmn` / `en-us`。
-- **输入到会话**：识别出的文字被输入选中会话的终端并回车。会话在 herdr 窗格里时用 `herdr pane run`（窗格被移动后会按会话 pid 重新查找），否则聚焦它的窗口再用 `wtype`。
+- **输入到会话**：识别出的文字被输入选中会话的终端并回车。会话在 herdr 窗格里时用 `herdr pane run`（窗格被移动后会按会话 pid 重新查找），否则聚焦它的窗口再用 `wtype`。无法输入的指令（对话框开着、找不到窗口、`wtype` 失败）会连同原因报告给 `deckd`（`agent.order.result`），对讲机会显示指令未送达；不支持这个报告的旧版 `deckd` 不会再被询问。
 
 ### Kimi Code
 
@@ -70,6 +72,8 @@ Kimi Code 有 hook（`config.toml` 里的 `[[hooks]]`），`omarchy_hook.py inst
 - **少转发内容。** 只发事件名、状态、项目名，以及 Claude 自己显示的那行通知（用作 question 的标题）。提示词和工具输入不会离开 Omarchy；Kimi Code 的回复只发一段摘要（最多 600 字）到对讲机。
 - **不把 pid 或终端信息发给 deckd。** `deckd` 会把 pid 当成本机进程去检查，所以注册时只发名字、项目目录和能力。
 - **hook 一律放行。** 无论守护进程在不在、数据对不对，hook 都输出 `{}` 并以 0 退出，永远不会拦住你的工具调用。
+- **对讲机不在时什么都不收集。** `deckd` 的 `device.link` 连续十分钟表示没有对讲机连接之后，桥接程序停止更新 Omarchy 页，也不再查看会话：不读 Kimi Code 日志、不检查进程，也不向 `deckd` 发送任何会话信息。这期间 hook 报告的内容只更新桥接程序自己的会话表。对讲机一连上，它就按每个会话当时的状态重新注册（静默期间打开的对话框重新显示为提问，结束的会话被释放，新开的会话出现，结束了一轮的 Kimi Code 会话会读取它的回复），并发送页面。`deckd` 对自己的采集程序也是这样（`docs/host-service.md` §5.8）。
+- **`deckd` 会自己检查新版本。** 启动五分钟后，以及之后在过去十分钟内连接过对讲机的期间每六小时一次，它会从 GitHub 获取发布清单（一次 `curl`，最多 128 KB），看是否有更新的对讲机固件；除了这个请求，不发送任何内容。在 `~/.local/share/openwalkietalkie/config.toml` 中写入 `[updates] check = false` 即可关闭（`docs/host-service.md` §10.3）。
 
 ## 备选：对讲机连在 Mac 上
 
@@ -142,7 +146,7 @@ CI 在仓库根目录、Ubuntu 24.04 的 Python 3.12 上运行它们，排在 Li
 python3 -m unittest discover -s host/omarchy -p 'test_*.py'
 ```
 
-覆盖：Hyprland 数据到 `ws` 行的转换、按键映射、进程树和窗口匹配、会话注册和释放、守护进程离线重连、语音指令的各种拒绝条件、hook 放行、安装和卸载，以及对假 `deckd` 的端到端流程。其中三个（Kimi Code 的安装）需要 `tomllib`，在 3.11 以前的 Python 上会报 `ModuleNotFoundError: No module named 'tomllib'`。**这些都是在伪造的 `/proc` 和 Hyprland 上跑的，没有在真实 Omarchy 上跑过。**
+覆盖：Hyprland 数据到 `ws` 行的转换、按键映射、进程树和窗口匹配、会话注册和释放、守护进程离线重连、语音指令的各种拒绝条件、hook 放行、安装和卸载、没有对讲机十分钟后静默及对讲机连上后恢复，以及对假 `deckd` 的端到端流程。其中三个（Kimi Code 的安装）需要 `tomllib`，在 3.11 以前的 Python 上会报 `ModuleNotFoundError: No module named 'tomllib'`。**这些都是在伪造的 `/proc` 和 Hyprland 上跑的，没有在真实 Omarchy 上跑过。**
 
 ---
 

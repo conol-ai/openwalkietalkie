@@ -266,46 +266,6 @@ pub fn exe_path(_pid: u32) -> Option<PathBuf> {
     None
 }
 
-/// `proc_pidinfo(PROC_PIDTBSDINFO)`: the parent pid and **both** process
-/// names. They differ: `/bin/sh` reached through a symlink named `node`
-/// reports `pbi_comm = "node"` (the path component used at `exec`) and
-/// `pbi_name = "bash"` (what the image calls itself), so a peer is capped
-/// when either one is an agent CLI.
-#[cfg(target_os = "macos")]
-fn parent_and_names(pid: libc::pid_t) -> Option<(libc::pid_t, [String; 2])> {
-    let size = std::mem::size_of::<libc::proc_bsdinfo>();
-    let mut info = std::mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
-    // SAFETY: the buffer is exactly `size` bytes of `proc_bsdinfo`, which is
-    // what PROC_PIDTBSDINFO fills; a short return is rejected below.
-    let n = unsafe {
-        libc::proc_pidinfo(
-            pid,
-            libc::PROC_PIDTBSDINFO,
-            0,
-            info.as_mut_ptr().cast(),
-            size as libc::c_int,
-        )
-    };
-    if n != size as libc::c_int {
-        return None;
-    }
-    // SAFETY: `proc_pidinfo` filled the whole struct (checked above).
-    let info = unsafe { info.assume_init() };
-    Some((
-        info.pbi_ppid as libc::pid_t,
-        [c_name(&info.pbi_comm), c_name(&info.pbi_name)],
-    ))
-}
-
-/// A NUL-terminated `c_char` array as a `String` (lossy; these are process
-/// names, never content).
-#[cfg(target_os = "macos")]
-fn c_name(bytes: &[libc::c_char]) -> String {
-    let end = bytes.iter().position(|&c| c == 0).unwrap_or(bytes.len());
-    let raw: Vec<u8> = bytes[..end].iter().map(|&c| c as u8).collect();
-    String::from_utf8_lossy(&raw).into_owned()
-}
-
 /// True when the peer, or any process up its ppid chain, is an agent CLI
 /// (§4.2). The peer itself counts: a connection *from* `claude` is exactly
 /// the case the cap exists for.
@@ -314,27 +274,38 @@ pub fn ancestry_capped(pid: u32) -> bool {
 }
 
 /// The walk with an explicit hop budget (the cap is tested with a small one).
+///
+/// Each hop is read as the hook helper's own walk reads it
+/// (`hook::walk::MacProcs`, `proc_pidinfo(PROC_PIDTBSDINFO)` and
+/// `proc_pidpath`), so the two cannot drift apart: **both** process names —
+/// they differ, `/bin/sh` reached through a symlink named `node` reports
+/// `pbi_comm = "node"` and `pbi_name = "bash"` — and the executable's path.
+/// The path is what recognises a natively installed CLI, whose names are a
+/// bare version (`2.1.322`) and whose path is `…/claude/versions/2.1.322`;
+/// a walk of names alone left every process such a Claude Code started
+/// uncapped. A hop the kernel will not describe (another user's, such as the
+/// root `login` between a terminal and its shell) ends the walk uncapped.
 #[cfg(target_os = "macos")]
 pub fn ancestry_capped_within(pid: u32, max_hops: usize) -> bool {
-    let Ok(mut cur) = libc::pid_t::try_from(pid) else {
-        return false;
-    };
+    use crate::hook::walk::{MacProcs, Procs};
+
+    let mut cur = pid;
     for _ in 0..max_hops {
-        if cur <= 0 {
+        if cur == 0 {
             return false;
         }
-        let Some((parent, names)) = parent_and_names(cur) else {
+        let Some(hop) = MacProcs.get(cur) else {
             return false;
         };
-        if names.iter().any(|name| is_agent_process_name(name)) {
+        if hop.names.iter().any(|name| is_agent_process_name(name)) {
             return true;
         }
         // pid 1 is launchd: the chain ends there, and so does a pid whose
         // parent is itself (never seen, but the walk must always stop).
-        if cur == 1 || parent == cur {
+        if cur == 1 || hop.ppid == cur {
             return false;
         }
-        cur = parent;
+        cur = hop.ppid;
     }
     false
 }
@@ -344,23 +315,25 @@ pub fn ancestry_capped_within(_pid: u32, _max_hops: usize) -> bool {
     false
 }
 
-/// The ppid chain as `(pid, comm, name)`, newest first — what the cap
-/// looked at (`deckd doctor`, the `debug` log and the tests' assertion
-/// messages). Process names only, never content.
+/// The ppid chain as `(pid, names)`, newest first, where `names` are the
+/// hop's `pbi_comm`, `pbi_name` and executable path (empty ones dropped,
+/// repeats folded) — what the cap looked at, for the tests' assertion
+/// messages. Process names and paths only, never content.
 #[cfg(target_os = "macos")]
-pub fn ancestry_chain(pid: u32) -> Vec<(u32, String, String)> {
+pub fn ancestry_chain(pid: u32) -> Vec<(u32, Vec<String>)> {
+    use crate::hook::walk::{MacProcs, Procs};
+
     let mut chain = Vec::new();
-    let Ok(mut cur) = libc::pid_t::try_from(pid) else {
-        return chain;
-    };
+    let mut cur = pid;
     for _ in 0..ANCESTRY_MAX_HOPS {
-        if cur <= 0 {
+        if cur == 0 {
             break;
         }
-        let Some((parent, [comm, name])) = parent_and_names(cur) else {
+        let Some(hop) = MacProcs.get(cur) else {
             break;
         };
-        chain.push((cur as u32, comm, name));
+        let parent = hop.ppid;
+        chain.push((cur, hop.names));
         if cur == 1 || parent == cur {
             break;
         }
@@ -370,7 +343,7 @@ pub fn ancestry_chain(pid: u32) -> Vec<(u32, String, String)> {
 }
 
 #[cfg(not(target_os = "macos"))]
-pub fn ancestry_chain(_pid: u32) -> Vec<(u32, String, String)> {
+pub fn ancestry_chain(_pid: u32) -> Vec<(u32, Vec<String>)> {
     Vec::new()
 }
 
@@ -556,6 +529,78 @@ mod tests {
         std::process::exit(0);
     }
 
+    /// Set on the fixture half of `a_natively_installed_cli_is_capped_by_its_executable_path`:
+    /// the copy only waits to be looked at, then killed.
+    #[cfg(target_os = "macos")]
+    const NATIVE_FIXTURE_ENV: &str = "DECKD_TRUST_NATIVE_FIXTURE";
+
+    /// Claude Code's native installer runs it from `~/.local/share/claude/versions/<v>`, so
+    /// both of the process's names are a bare version (`2.1.322`, measured on this Mac on
+    /// 2026-11-13) and only the executable's path says what it is. The walk reads every hop's
+    /// path too, so a process such a CLI started is capped; a look-alike directory is not.
+    ///
+    /// The fixture is a **copy** of this test binary under the versioned name: a hard link can
+    /// make `proc_pidpath` answer the other link's path, and a copy of a system binary is
+    /// killed at `exec` (the platform-binary check). With the environment variable set the
+    /// copy only sleeps. One hop: the copy alone, so whatever ran `cargo test` does not count.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_natively_installed_cli_is_capped_by_its_executable_path() {
+        use std::process::{Command, Stdio};
+
+        if std::env::var_os(NATIVE_FIXTURE_ENV).is_some() {
+            std::thread::sleep(FIXTURE_LIFE);
+            std::process::exit(0);
+        }
+        let dir = std::env::temp_dir().join(format!("deckd-trust-native-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let me = std::env::current_exe().expect("the test binary's path");
+        let look = |cli: &str| {
+            let versions = dir.join(cli).join("versions");
+            std::fs::create_dir_all(&versions).unwrap();
+            let copy = versions.join("9.9.9");
+            std::fs::copy(&me, &copy).expect("copy this binary under a version's name");
+            let mut child = Command::new(&copy)
+                .args([
+                    "--exact",
+                    "trust::tests::a_natively_installed_cli_is_capped_by_its_executable_path",
+                    "--test-threads=1",
+                ])
+                .env(NATIVE_FIXTURE_ENV, "1")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .expect("run the copy");
+            let measured = (
+                ancestry_capped_within(child.id(), 1),
+                ancestry_chain(child.id()),
+            );
+            let _ = child.kill();
+            let _ = child.wait();
+            measured
+        };
+        let (native, chain) = look("claude");
+        let (lookalike, other) = look("claudette");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            native,
+            "a CLI named by its versioned path caps what it starts: {chain:?}"
+        );
+        let names = &chain.first().expect("the copy itself").1;
+        assert!(
+            names.iter().any(|n| n == "9.9.9"),
+            "its names are the bare version: {chain:?}"
+        );
+        assert!(
+            names.iter().any(|n| n.ends_with("/claude/versions/9.9.9")),
+            "and its path is the versioned one: {chain:?}"
+        );
+        assert!(
+            !lookalike,
+            "`claudette/versions/9.9.9` is no agent: {other:?}"
+        );
+    }
+
     /// A grandchild of a process whose `pbi_comm` is `node` is capped.
     ///
     /// macOS takes `p_comm`/`p_name` from the executable **file**, not from
@@ -650,7 +695,7 @@ mod tests {
         assert!(two_hops, "`node` is exactly one hop up: {chain:?}");
         assert_eq!(chain.len().min(2), 2);
         assert!(
-            is_agent_process_name(&chain[1].1),
+            chain[1].1.iter().any(|n| is_agent_process_name(n)),
             "the second hop is the `node` copy: {chain:?}"
         );
     }

@@ -8,7 +8,7 @@
     "device",
     "hooks.claude",
     "hooks.codex",
-    "inject.ghostty",
+    "order.result",
     "transcribe.companion",
     "virtual_agents"
   ],

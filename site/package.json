@@ -8,7 +8,7 @@
     "deploy": "wrangler deploy",
     "types": "wrangler types --include-runtime=false",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/worker.test.mjs",
+    "test": "node --test tests/worker.test.mjs tests/home.test.mjs",
     "test:browser": "playwright test",
     "db:init:local": "wrangler d1 migrations apply openwalkietalkie-site --local",
     "db:init": "wrangler d1 migrations apply openwalkietalkie-site --remote",

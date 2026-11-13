@@ -22,12 +22,6 @@
     "daemon": false,
     "daemon_socket": null
   },
-  "desktop": {
-    "focus": true,
-    "inject": [
-      "ghostty"
-    ]
-  },
   "device": {
     "clock": "local",
     "hello_s": 5,
@@ -68,6 +62,9 @@
     "gui_requirement": "anchor apple generic and identifier \"ai.cohdl.openwalkietalkie\" and certificate leaf[subject.OU] = \"TEAMID\"",
     "require_trusted_for_allow": true
   },
+  "updates": {
+    "check": true
+  },
   "usage": {
     "providers": []
   },
@@ -75,7 +72,6 @@
     "announce_questions": false,
     "commands": true,
     "device_uid": null,
-    "fallback_input": "none",
     "fallback_output": "none",
     "mic_warm": "card_pending",
     "slow_sco_ms": 1500,
@@ -94,6 +90,7 @@
     "tts.engine": "cloud",
     "tts.instruct": null,
     "tts.interval_s": 0.3199999928474426,
+    "tts.key_store": "config",
     "tts.lang": "auto",
     "tts.model": "",
     "tts.provider": "openai",

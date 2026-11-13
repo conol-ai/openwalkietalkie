@@ -29,7 +29,5 @@
     <string>OpenWalkieTalkie listens only while you hold the deck's talk key, so what you say can be sent to the agent you picked.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>OpenWalkieTalkie turns what you said into text on this Mac, so the agent receives a message instead of a recording.</string>
-    <key>NSAppleEventsUsageDescription</key>
-    <string>OpenWalkieTalkie brings your terminal to the front and types your reply into it, so a press on the deck lands where the agent is waiting.</string>
 </dict>
 </plist>

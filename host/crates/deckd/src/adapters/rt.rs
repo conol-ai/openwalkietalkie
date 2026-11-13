@@ -37,6 +37,8 @@
 //!   hooks of one session stay in the order they fired.
 use super::codex;
 use crate::core::handle::{CoreHandle, Delivery, HoldResult};
+use crate::dormancy::Gate;
+use crate::reader::Reader;
 use deck_model::{
     sanitize, AdapterKind, Agent, AgentId, AgentRegister, Answer, Card, CardId, CardKind, CardSet,
     Choice, Deliver, Origin, OriginKind, PidKind, Principal, Request, SessionId, Snapshot,
@@ -95,6 +97,10 @@ pub struct HookCall {
     pub cli_pid: Option<u32>,
     #[serde(default)]
     pub pid_kind: Option<PidKind>,
+    /// The app the session runs in, as the helper found it and the door let
+    /// it through (`crate::hook::app`).
+    #[serde(default)]
+    pub app: Option<String>,
 }
 
 /// Everything an adapter may know besides the payload.
@@ -111,6 +117,9 @@ pub struct HookCtx {
     /// `[hooks.<cli>] hold_s`: what a held card of this CLI is given, per
     /// card (B2), because the store has one global budget and three CLIs.
     pub hold_s: u32,
+    /// The bundle identifier of the app the session runs in: what a press on
+    /// its `Open app` card brings forward.
+    pub app: Option<String>,
 }
 
 impl HookCtx {
@@ -124,6 +133,7 @@ impl HookCtx {
             pid_kind: call.pid_kind.unwrap_or(PidKind::Unknown),
             agent: None,
             hold_s,
+            app: call.app.clone(),
         }
     }
 
@@ -139,8 +149,9 @@ impl HookCtx {
             term_session: self.env.get("TERM_SESSION_ID").cloned(),
             title_stamp: None,
             // Codex exports no inbox; its orders ride the app-server
-            // (`turn/steer`) or the injector.
+            // (`turn/steer`).
             inbox: None,
+            app: self.app.clone(),
         }
     }
 }
@@ -243,6 +254,52 @@ pub struct Adapters {
     /// now: set once its handshake is done, cleared when the connection
     /// ends. The Codex row of `sources.list` reads it (`care::sources`).
     codex_connected: AtomicBool,
+    /// What the settle window did with Claude's permission asks, counted by
+    /// the hook door and taken into the delivery record by the core
+    /// (`crate::deliveries`).
+    pub asks: super::settle::Tally,
+    /// What the collectors may do now (`crate::dormancy`), published by the
+    /// core. It rides here because every collector and both hook doors
+    /// already hold this object; a handle with no core behind it keeps the
+    /// gate open.
+    gate: GateCell,
+    /// The sessions whose history is collected (`crate::reader`), published
+    /// by the core beside the gate. A cell of its own rather than a switch
+    /// of the gate: it moves with every channel the deck opens, and the
+    /// pollers, the usage probe and the sampler that follow the gate have
+    /// nothing to do when it does. Every session until a core says
+    /// otherwise.
+    reader: ReaderCell,
+}
+
+/// The gate's sender: open until a core says otherwise.
+struct GateCell(tokio::sync::watch::Sender<Gate>);
+
+impl Default for GateCell {
+    fn default() -> Self {
+        GateCell(tokio::sync::watch::Sender::new(Gate::always()))
+    }
+}
+
+impl std::fmt::Debug for GateCell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("GateCell").field(&*self.0.borrow()).finish()
+    }
+}
+
+/// The reader's sender: every session until a core says otherwise.
+struct ReaderCell(tokio::sync::watch::Sender<Reader>);
+
+impl Default for ReaderCell {
+    fn default() -> Self {
+        ReaderCell(tokio::sync::watch::Sender::new(Reader::all()))
+    }
+}
+
+impl std::fmt::Debug for ReaderCell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("ReaderCell").field(&*self.0.borrow()).finish()
+    }
 }
 
 /// `[hooks.<cli>] hold_s`, refreshed by `Core::set_config` so a hot
@@ -313,6 +370,64 @@ impl Adapters {
     #[must_use]
     pub fn codex_connected(&self) -> bool {
         self.codex_connected.load(Ordering::Relaxed)
+    }
+
+    /// What the collectors may do now (`crate::dormancy`).
+    #[must_use]
+    pub fn gate(&self) -> Gate {
+        *self.gate.0.borrow()
+    }
+
+    /// Whether the collectors run now: a deck was linked in the last ten
+    /// minutes, or the service has no dormancy.
+    #[must_use]
+    pub fn collecting(&self) -> bool {
+        self.gate().collect
+    }
+
+    /// The gate, followed: a collector waits on this rather than polling it.
+    #[must_use]
+    pub fn watch_gate(&self) -> tokio::sync::watch::Receiver<Gate> {
+        self.gate.0.subscribe()
+    }
+
+    /// The core's word on the gate. Whether it changed: an unchanged gate
+    /// wakes nobody.
+    pub fn set_gate(&self, gate: Gate) -> bool {
+        self.gate.0.send_if_modified(|current| {
+            let changed = *current != gate;
+            *current = gate;
+            changed
+        })
+    }
+
+    /// The sessions whose history is collected now (`crate::reader`).
+    #[must_use]
+    pub fn reader(&self) -> Reader {
+        self.reader.0.borrow().clone()
+    }
+
+    /// Whether this session's history is collected now: the deck reads it,
+    /// or the feed is not lazy.
+    #[must_use]
+    pub fn reads(&self, agent: &deck_model::AgentId) -> bool {
+        self.reader.0.borrow().reads(agent)
+    }
+
+    /// The reader, followed.
+    #[must_use]
+    pub fn watch_reader(&self) -> tokio::sync::watch::Receiver<Reader> {
+        self.reader.0.subscribe()
+    }
+
+    /// The core's word on the reader. Whether it changed: the same sessions
+    /// again wake nobody.
+    pub fn set_reader(&self, reader: Reader) -> bool {
+        self.reader.0.send_if_modified(|current| {
+            let changed = *current != reader;
+            *current = reader;
+            changed
+        })
     }
 
     /// Remember where this agent's session reads peer messages. A later
@@ -551,7 +666,7 @@ async fn held(
             // release that leaves a card on the deck runs
             // `Store::degrade_card`, which keeps the id (no new chime, the
             // drawer entry keeps its place) and makes the wire encoder
-            // draw it as `⌨ <text>` with the one `Focus terminal` row.
+            // draw it as `⌨ <text>` with the one `Open app` row.
             //
             // So there is nothing to re-push here. A re-push that added
             // the `⌨ ` itself put a *second* prefix on the line the deck
@@ -609,8 +724,9 @@ fn as_card(id: CardId, sent: &CardSet) -> Card {
 /// degraded (`deck-model::store::card_line`): an adapter never writes it
 /// into a card's text, or the deck draws it twice.
 pub const DEGRADED_PREFIX: &str = "⌨ ";
-/// The one choice a degraded card offers.
-pub const FOCUS_TERMINAL: &str = "Focus terminal";
+/// The one choice a degraded card offers, in English: the wire encoder
+/// draws it in the deck's language (`deck_model::handoff::OPEN_APP`).
+pub const OPEN_APP: &str = deck_model::OPEN_APP[0];
 
 /// The §5.6 permission card every adapter builds the same way: two or
 /// three choices, `Allow` recommended, held, `origin.kind: permission`.
@@ -695,7 +811,8 @@ mod tests {
         assert_eq!(set.text, "Bash: rm -rf build");
         // And the one degraded card an adapter does build by hand — the
         // Claude focus card — says the same.
-        assert_eq!(FOCUS_TERMINAL, "Focus terminal");
+        assert_eq!(OPEN_APP, "Open app");
+        assert_eq!(super::super::claude::FOCUS, OPEN_APP);
     }
 
     #[test]
@@ -718,6 +835,42 @@ mod tests {
         assert_eq!(adapters.hold_s(AdapterKind::Claude), 30);
         assert_eq!(adapters.hold_s(AdapterKind::Codex), 200);
         assert_eq!(adapters.hold_s(AdapterKind::Gemini), 45);
+    }
+
+    /// A handle with no core behind it collects (every door test runs as it
+    /// always did); the core's word reaches every follower, and only a
+    /// change wakes one.
+    #[test]
+    fn the_gate_is_open_until_the_core_shuts_it_and_only_a_change_is_news() {
+        let adapters = Adapters::default();
+        assert!(adapters.collecting());
+        assert_eq!(adapters.gate(), Gate::always());
+        let mut follower = adapters.watch_gate();
+        assert!(!adapters.set_gate(Gate::always()), "the same gate");
+        assert!(!follower.has_changed().unwrap());
+        assert!(adapters.set_gate(Gate::shut()));
+        assert!(follower.has_changed().unwrap());
+        assert_eq!(*follower.borrow_and_update(), Gate::shut());
+        assert!(!adapters.collecting());
+    }
+
+    /// The reader is every session until a core says which (`crate::reader`),
+    /// and a follower wakes only when the sessions change, never for the
+    /// gate.
+    #[test]
+    fn every_session_is_read_until_the_core_names_them_and_only_a_change_is_news() {
+        use deck_model::AgentId;
+        let adapters = Adapters::default();
+        let (one, two) = (AgentId("ag_1".into()), AgentId("ag_2".into()));
+        assert!(adapters.reads(&one) && !adapters.reader().lazy());
+        let mut follower = adapters.watch_reader();
+        adapters.set_gate(Gate::shut());
+        assert!(!follower.has_changed().unwrap(), "the gate is not the reader");
+        let only_one = Reader::only([one.clone()].into());
+        assert!(adapters.set_reader(only_one.clone()));
+        assert!(!adapters.set_reader(only_one.clone()), "the same sessions");
+        assert_eq!(*follower.borrow_and_update(), only_one);
+        assert!(adapters.reads(&one) && !adapters.reads(&two));
     }
 
     #[test]

@@ -31,9 +31,10 @@ use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
 /// The rate of the WAV a companion receives. Speech models want 16 kHz,
-/// and the deck's own microphone already is; the Mac-microphone fallback
-/// (44.1/48 kHz) is resampled down, which also keeps a full minute under
-/// the 4.5 MB request bodies hosted functions accept.
+/// and the deck's own microphone already is; the Mac's own microphone
+/// (44.1/48 kHz, opened only by `voice.listen{input:"mac"}`) is resampled
+/// down, which also keeps a full minute under the 4.5 MB request bodies
+/// hosted functions accept.
 pub const WAV_RATE: u32 = 16_000;
 /// How long the companion has, from the release, before the local final
 /// is used instead. Conol's hosted model answers a minute of speech in a

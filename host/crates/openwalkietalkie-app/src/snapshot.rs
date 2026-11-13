@@ -17,6 +17,7 @@ use std::ffi::{c_void, CString};
 use std::path::Path;
 
 use gpui::Window;
+use objc2::encode::{Encode, Encoding};
 use objc2::runtime::AnyObject;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
@@ -75,6 +76,76 @@ extern "C" {
     ) -> CFTypeRef;
     fn CGImageDestinationAddImage(destination: CFTypeRef, image: CGImageRef, properties: CFTypeRef);
     fn CGImageDestinationFinalize(destination: CFTypeRef) -> bool;
+}
+
+// SAFETY: `CGPoint` is `{double x; double y;}`, as AppKit declares it.
+unsafe impl Encode for CGPoint {
+    const ENCODING: Encoding = Encoding::Struct("CGPoint", &[f64::ENCODING, f64::ENCODING]);
+}
+
+/// `NSEventTypeKeyUp`.
+const KEY_UP: usize = 11;
+
+/// Let go of `key` in `window`, as the keyboard does after a press: an
+/// AppKit key-up handed to gpui's own view (`keyUp:`), which gpui turns
+/// into the click a focused control takes when the key is released
+/// (`--shots`' keys). Only Return and Space click on release, so any other
+/// key is left alone. The event goes to this process's own window and
+/// nowhere else.
+///
+/// # Errors
+/// When the window has no AppKit handle or AppKit makes no event.
+pub fn release_key(window: &Window, key: &str) -> Result<(), String> {
+    let (code, characters) = match key {
+        "enter" => (36_u16, "\r"),
+        "space" => (49_u16, " "),
+        _ => return Ok(()),
+    };
+    let handle = HasWindowHandle::window_handle(window).map_err(|e| e.to_string())?;
+    let RawWindowHandle::AppKit(appkit) = handle.as_raw() else {
+        return Err("not an AppKit window".into());
+    };
+    let view = appkit.ns_view.as_ptr().cast::<AnyObject>();
+    let characters = objc2_foundation::NSString::from_str(characters);
+    // SAFETY: `view` is gpui's live NSView for this window, on the main
+    // thread where gpui runs; the event comes from AppKit's own factory and
+    // `keyUp:` is the view's own handler for it, as AppKit itself calls it.
+    unsafe {
+        let ns_window: *mut AnyObject = objc2::msg_send![view, window];
+        if ns_window.is_null() {
+            return Err("the view has no window yet".into());
+        }
+        let number: isize = objc2::msg_send![ns_window, windowNumber];
+        let event: *mut AnyObject = objc2::msg_send![
+            objc2::class!(NSEvent),
+            keyEventWithType: KEY_UP,
+            location: CGPoint { x: 0., y: 0. },
+            modifierFlags: 0_usize,
+            timestamp: 0_f64,
+            windowNumber: number,
+            context: std::ptr::null_mut::<AnyObject>(),
+            characters: &*characters,
+            charactersIgnoringModifiers: &*characters,
+            isARepeat: false,
+            keyCode: code
+        ];
+        if event.is_null() {
+            return Err("AppKit made no key-up event".into());
+        }
+        // Straight to gpui's own view, which is what turns it into a key-up
+        // (the window's `sendEvent:` would hand it to its first responder,
+        // which need not be that view), and on the run loop's next turn: the
+        // caller is inside an update of gpui's app, and gpui drops a key
+        // event that arrives while the app is borrowed. A real key arrives
+        // from the run loop too. AppKit holds the event until then.
+        let () = objc2::msg_send![
+            view,
+            performSelector: objc2::sel!(keyUp:),
+            withObject: event,
+            afterDelay: 0_f64
+        ];
+    }
+    Ok(())
 }
 
 /// The window server's number for `window`.

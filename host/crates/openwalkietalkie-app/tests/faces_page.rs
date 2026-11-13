@@ -1,33 +1,39 @@
 //! The Faces & Keys page's rules, read without a window: the strip's pins,
-//! moves, removals and additions by the deck's own rules, the ids and names
-//! a new face gets, the strip the page reads and the face it selects, the
-//! wait for the deck; a Macropad's shortcuts in the deck's grammar (every
-//! key and every set of modifiers, checked by the service's own rule), a
-//! key pressed in the window as the deck's shortcut, the label's byte rule,
-//! a control moving from key to key, the slots; the Usage face's sources;
-//! Accessibility; the wire params of both writes; and that every word the
-//! page says has a row in all four languages.
+//! moves (and the keys that move a face), removals and additions by the
+//! deck's own rules, which are the ones the service refuses a strip by,
+//! the ids and names a new face gets, the strip the page reads and the
+//! face it selects, the wait for the deck; a Macropad's shortcuts in the
+//! deck's grammar (every key and every set of modifiers, checked by the
+//! service's own rule), a key pressed in the window as the deck's
+//! shortcut, the label's byte rule and which key the Label field's words
+//! are committed to, a control moving from key to key, the
+//! slots; the Usage face's sources; Accessibility; the wire params of both
+//! writes; and that every word the page says has a row in all four
+//! languages.
+use deck_client::ClientError;
 use deck_gui_core::i18n::Language;
 use deck_model::{
-    Binding, FaceEntry, MacroKey, Principal, Request, SessionId, Snapshot, Store, StoreConfig,
-    Template, Transport,
+    strip_problem, Binding, DormancyState, FaceEntry, MacroKey, Principal, Request, SessionId,
+    Snapshot, Store, StoreConfig, Template, Transport,
 };
 use gpui::{Keystroke, Modifiers};
 use openwalkietalkie_app::faces::{
     addable, added, can_move_left, can_move_right, can_remove, default_id, face_label, face_name,
-    free_id, moved, pinned, removed, same_strip, selection, strip, strip_write, usage_write,
-    Forget, Panel, Pending, Side, StripNote, UsageConfig, CLAUDE, CODEX, GALLERY, PENDING_HOLD,
+    free_id, moved, pinned, removed, same_strip, selection, strip, strip_move, strip_rule,
+    strip_write, strip_write_failed, usage_asked_note, usage_write, Forget, Panel, Pending, Side,
+    StripNote, StripWrites, UsageConfig, CLAUDE, CODEX, GALLERY, MAX_FACES, MAX_MACROPADS,
+    MAX_TIMERS, PENDING_HOLD,
 };
 use openwalkietalkie_app::i18n;
 use openwalkietalkie_app::keys::{
     binding_mark, binding_word, cleared, empty_key, from_gpui, key_cap, key_name, keys_shown,
-    keys_write, label_fits, modifier_only, placed, slot, trimmed, Access, KeyDraft, Sent, Shortcut,
-    BINDINGS, KEYS, KEYS_HOLD, LABEL_BYTES, SLOTS,
+    keys_write, label_commit, label_fits, modifier_only, placed, slot, trimmed, Access, KeyDraft,
+    LabelCommit, Sent, Shortcut, BINDINGS, KEYS, KEYS_HOLD, LABEL_BYTES, SLOTS,
 };
 use openwalkietalkie_app::shots::{board_now, board_snapshot, Scene, BOARD_MACROPAD};
 use openwalkietalkie_app::ui::Mod;
 use serde_json::json;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet, VecDeque};
 use std::time::{Duration, Instant};
 use Template::{Agents, Arcade, Macropad, Omarchy, Settings, System, Timer, Usage};
 
@@ -118,6 +124,32 @@ fn agents_and_settings_stay_at_the_ends_and_the_faces_between_them_move() {
     // Past the strip's end there is nothing to move or remove.
     assert!(!can_move_left(&list, 7) && !can_move_right(&list, 7) && !can_remove(&list, 7));
     assert!(!can_move_right(&[], 0) && !can_move_left(&[], 0) && !can_remove(&[], 0));
+}
+
+#[test]
+fn option_left_and_option_right_move_the_selected_face_and_no_other_key_does() {
+    let moves = |held: &str, key: &str| {
+        let stroke = stroke(held, key);
+        strip_move(&stroke.key, &stroke.modifiers)
+    };
+    assert_eq!(moves("opt", "left"), Some(Side::Left));
+    assert_eq!(moves("opt", "right"), Some(Side::Right));
+    // The arrows alone move the keyboard along the strip, not the face.
+    assert_eq!(moves("", "left"), None);
+    assert_eq!(moves("", "right"), None);
+    // Option with another modifier is another key, and so are Option's
+    // other arrows.
+    for held in ["cmd", "shift", "ctrl", "opt cmd", "opt shift", "opt ctrl"] {
+        assert_eq!(moves(held, "left"), None, "{held}");
+        assert_eq!(moves(held, "right"), None, "{held}");
+    }
+    for key in ["up", "down", "home", "end", "enter", "space", "l"] {
+        assert_eq!(moves("opt", key), None, "{key}");
+    }
+    // An arrow gpui marks with the function key is not Option alone.
+    let mut function = stroke("opt", "left");
+    function.modifiers.function = true;
+    assert_eq!(strip_move(&function.key, &function.modifiers), None);
 }
 
 #[test]
@@ -236,6 +268,90 @@ fn a_face_is_added_before_settings_under_its_own_name_and_the_deck_takes_the_str
     }
 }
 
+/// The strips one press on the page makes of `list`: each face of the
+/// gallery added (as on Linux, which offers the most), each face moved
+/// either way, each taken off.
+fn one_press(list: &[FaceEntry]) -> Vec<Vec<FaceEntry>> {
+    let mut next: Vec<Vec<FaceEntry>> = GALLERY.iter().map(|&face| added(list, face)).collect();
+    for at in 0..list.len() {
+        next.push(moved(list, at, Side::Left));
+        next.push(moved(list, at, Side::Right));
+        next.push(removed(list, at));
+    }
+    next
+}
+
+/// Every strip the page can build within `presses` presses of the boards'
+/// strip, the full one, the deck's power-on strip and the barest one.
+fn strips_within(presses: u8) -> HashSet<Vec<FaceEntry>> {
+    let power_on = [Agents, Omarchy, Macropad, Usage, System, Arcade, Settings]
+        .map(|t| face(default_id(t), t))
+        .to_vec();
+    let starts = [
+        board(),
+        Scene::FacesFull.fixture().unwrap().mirror.faces,
+        power_on,
+        vec![face(1, Agents), face(5, Settings)],
+    ];
+    let mut queue: VecDeque<(Vec<FaceEntry>, u8)> =
+        starts.into_iter().map(|list| (list, 0)).collect();
+    let mut seen = HashSet::new();
+    while let Some((list, depth)) = queue.pop_front() {
+        if depth < presses && !seen.contains(&list) {
+            queue.extend(one_press(&list).into_iter().map(|next| (next, depth + 1)));
+        }
+        seen.insert(list);
+    }
+    seen
+}
+
+#[test]
+fn every_strip_the_page_builds_is_one_the_service_takes() {
+    let built = strips_within(3);
+    for list in &built {
+        assert_eq!(strip_problem(list), None, "{list:?}");
+    }
+    // The walk reaches the limits: eight faces, three Macropads, the Timer,
+    // Omarchy, and the barest strip again.
+    let count = |list: &Vec<FaceEntry>, t: Template| list.iter().filter(|f| f.t == t).count();
+    assert!(built.iter().any(|list| list.len() == MAX_FACES));
+    assert!(built.iter().any(|list| count(list, Macropad) == MAX_MACROPADS));
+    assert!(built.iter().any(|list| count(list, Timer) == MAX_TIMERS));
+    assert!(built.iter().any(|list| count(list, Omarchy) > 0));
+    assert!(built.iter().any(|list| list.len() == 2));
+    assert!(built.len() > 1_000, "{}", built.len());
+}
+
+/// What the page's gallery leaves out — a ninth face, a fourth Macropad, a
+/// second Timer, Agents or Settings — is exactly what the service refuses:
+/// the page offers a face (Omarchy too, as on Linux) when, and only when,
+/// the service takes the strip with it.
+#[test]
+fn the_page_offers_a_face_exactly_when_the_service_takes_it() {
+    let all = [
+        Agents, Omarchy, Macropad, Usage, Settings, Arcade, System, Timer,
+    ];
+    for list in strips_within(2) {
+        let offered = addable(&list, true);
+        for t in all {
+            let mut with = list.clone();
+            let f = free_id(&list, t).unwrap_or(9);
+            let entry = FaceEntry {
+                f,
+                t,
+                n: face_label(t).into(),
+            };
+            with.insert(list.len() - 1, entry);
+            assert_eq!(
+                offered.contains(&t),
+                strip_problem(&with).is_none(),
+                "{t:?} on {list:?}: {:?}",
+                strip_problem(&with)
+            );
+        }
+    }
+}
+
 #[test]
 fn the_page_reads_the_linked_decks_strip_else_the_one_the_service_keeps() {
     let mut mirror = Snapshot {
@@ -347,6 +463,54 @@ fn a_macropad_removed_from_the_deck_takes_its_keys_once_the_deck_has_taken_it_of
     assert_eq!(free_id(&without, Macropad), Some(BOARD_MACROPAD));
 }
 
+/// Each deck keeps its own strip and keys. When the service says another
+/// deck is in the hand, the strip sent for the last one is no longer
+/// waited for, nor said to be refused, and the keys of the Macropad taken
+/// off it are never cleared on the deck that came after it, which may have
+/// a Macropad of its own in that place.
+#[test]
+fn another_deck_in_the_hand_lets_go_of_the_strip_and_the_keys_sent_for_the_last_one() {
+    let mirror = board_snapshot();
+    let list = board();
+    let at = list
+        .iter()
+        .position(|face| face.f == BOARD_MACROPAD)
+        .expect("the boards' Macropad");
+    let mut writes = StripWrites::default();
+    assert!(writes.follow(Some("5d41402a")), "the first deck the page hears of");
+    writes.pending = Some(Pending {
+        list: removed(&list, at),
+        at: board_now(),
+    });
+    writes.forget = Forget::of(&list[at], &mirror);
+    assert!(writes.forget.is_some());
+    // The same deck: everything is still waited on.
+    assert!(!writes.follow(Some("5d41402a")));
+    assert!(writes.pending.is_some() && writes.forget.is_some());
+    // Another deck: nothing of the last one is.
+    assert!(writes.follow(Some("7a1f0c22")));
+    assert_eq!(
+        writes,
+        StripWrites {
+            deck: Some("7a1f0c22".into()),
+            ..StripWrites::default()
+        }
+    );
+    // A refusal of the last deck's strip is not this one's either.
+    writes.refused = true;
+    assert!(writes.follow(Some("5d41402a")));
+    assert!(!writes.refused);
+    assert_eq!(
+        StripNote::of(true, writes.pending.is_some(), writes.refused),
+        StripNote::Limits
+    );
+    // A service that names no deck (one that predates them) is one more
+    // change of deck, and then none.
+    assert!(writes.follow(None));
+    assert!(!writes.follow(None));
+    assert_eq!(writes, StripWrites::default());
+}
+
 #[test]
 fn the_line_beside_the_buttons_says_what_the_strip_can_do() {
     i18n::install();
@@ -444,6 +608,35 @@ fn the_usage_sources_are_read_from_config_get_and_written_whole() {
     );
     let (_, none) = usage_write(Vec::new()).request();
     assert_eq!(none, json!({"patch": {"usage.providers": []}}));
+}
+
+/// The panel says when its sources are asked only for a service that asks
+/// that way (`service.dormancy`): quiet or collecting, but there. A service
+/// that predates the quiet, and a test service with no deck to wait for,
+/// get no note, so it never claims what they do not do.
+#[test]
+fn the_usage_panel_says_when_it_asks_only_for_a_service_that_does() {
+    i18n::install();
+    let mut service = board_snapshot().service;
+    assert!(usage_asked_note(&service), "the boards' service, linked");
+    service.dormancy = Some(DormancyState {
+        window_s: 600,
+        collecting: false,
+        dormant_since: None,
+    });
+    assert!(usage_asked_note(&service));
+    service.dormancy = None;
+    assert!(!usage_asked_note(&service));
+    let note = "Asked only while this face is on the strip,\n\
+                and for up to ten minutes after the deck was last linked.";
+    assert_eq!(
+        ZH.text(note),
+        "仅当此页面在页面列表中时才会查询；\n设备断开连接后，最多再持续十分钟。"
+    );
+    assert_eq!(
+        JA.text(note),
+        "このページがページ一覧にある間だけ取得します。\nデバイスの接続が切れてからは最大 10 分間です。"
+    );
 }
 
 // ---- shortcuts ----------------------------------------------------------------------
@@ -611,6 +804,64 @@ fn a_label_fits_in_twelve_bytes_twelve_letters_or_four_chinese_characters() {
     assert!(label_fits("ab 推送中"));
     assert!(!label_fits("abc 推送中"));
     assert!(label_fits(""));
+}
+
+/// The Label field's words are committed only for the key they were given
+/// for. Another deck in the hand lets go of what the field was given (its
+/// keys are not the last deck's), and so does a face or slot selected
+/// without the field being given that key's words: committing what the
+/// field still holds then would write one key's label onto another, on the
+/// deck in the hand. The field takes the selected key's label back instead.
+#[test]
+fn the_label_field_commits_only_words_given_for_the_selected_key() {
+    let m = BOARD_MACROPAD;
+    // Typed over slot 4's label, as given: sent, and an empty slot given a
+    // label becomes a key.
+    assert_eq!(
+        label_commit("deploy2", Some((m, 4)), m, 4, "deploy"),
+        LabelCommit::Send("deploy2".into())
+    );
+    assert_eq!(
+        label_commit(" new ", Some((m, 7)), m, 7, ""),
+        LabelCommit::Send("new".into())
+    );
+    // The last deck's words for its own Macropad in the same place, after
+    // another deck came into the hand: never sent to this one.
+    assert_eq!(
+        label_commit("deploy", None, m, 0, "build"),
+        LabelCommit::Restore
+    );
+    assert_eq!(
+        label_commit("deploy", None, m, 4, ""),
+        LabelCommit::Restore,
+        "not even into an empty slot"
+    );
+    // Words given for another slot, or another Macropad.
+    assert_eq!(
+        label_commit("deploy", Some((m, 4)), m, 0, "build"),
+        LabelCommit::Restore
+    );
+    assert_eq!(
+        label_commit("deploy", Some((m + 1, 0)), m, 0, "build"),
+        LabelCommit::Restore
+    );
+    // The label it has, an emptied field, a label the deck cannot draw.
+    assert_eq!(
+        label_commit(" build ", Some((m, 0)), m, 0, "build"),
+        LabelCommit::Same
+    );
+    assert_eq!(
+        label_commit("build", None, m, 0, "build"),
+        LabelCommit::Same
+    );
+    assert_eq!(
+        label_commit("  ", Some((m, 0)), m, 0, "build"),
+        LabelCommit::Restore
+    );
+    assert_eq!(
+        label_commit("screenshot123", Some((m, 0)), m, 0, "build"),
+        LabelCommit::TooLong
+    );
 }
 
 #[test]
@@ -844,6 +1095,76 @@ fn the_boards_deck_is_linked_over_bluetooth_with_its_macropad_second() {
     assert_eq!(board_keys()[4].keys.as_deref(), Some("shift+cmd+4"));
 }
 
+/// The service refuses a strip by one of `strip_problem`'s rules
+/// (`device.faces.set`'s `invalid{field:"list", why}`). The toast says the
+/// rule as a sentence in the window's language, never the error's code;
+/// any other failure is said in the service's own words. Every rule the
+/// service refuses with has its sentence.
+#[test]
+fn a_refused_strip_says_which_rule_in_the_windows_language() {
+    i18n::install();
+    let refused = |why: &str| ClientError::Rpc {
+        code: -32009,
+        message: "invalid".into(),
+        data: Some(json!({"field": "list", "why": why})),
+    };
+    assert_eq!(
+        strip_write_failed(&refused("max 1 timer"), EN),
+        "Change the deck's faces failed: The strip can hold one Timer."
+    );
+    for language in [EN, ZH, Language::TraditionalChinese, JA] {
+        let said = strip_write_failed(&refused("max 1 timer"), language);
+        assert!(
+            !said.contains("-32009") && !said.contains("max 1 timer"),
+            "{said}"
+        );
+        assert!(
+            said.contains(language.text("The strip can hold one Timer.")),
+            "{said}"
+        );
+    }
+    let other = ClientError::Rpc {
+        code: -32009,
+        message: "invalid".into(),
+        data: Some(json!({"field": "f", "why": "the deck is not linked"})),
+    };
+    assert_eq!(
+        strip_write_failed(&other, EN),
+        "Change the deck's faces failed: the deck is not linked"
+    );
+    // Each rule, broken by a strip the service would refuse.
+    let named = |n: &str, f: u8, t: Template| FaceEntry { f, t, n: n.into() };
+    let ends = |middle: &[FaceEntry]| {
+        let mut list = vec![face(1, Agents)];
+        list.extend_from_slice(middle);
+        list.push(face(8, Settings));
+        list
+    };
+    let broken = [
+        (1..=9).map(|f| face(f, Usage)).collect::<Vec<_>>(),
+        vec![face(0, Agents)],
+        vec![face(1, Agents), face(1, Settings)],
+        vec![named(" ", 1, Agents)],
+        vec![face(2, Usage), face(1, Agents), face(8, Settings)],
+        vec![face(1, Agents)],
+        ends(&[face(2, Settings)]),
+        ends(&[
+            face(2, Macropad),
+            face(3, Macropad),
+            face(4, Macropad),
+            face(5, Macropad),
+        ]),
+        ends(&[face(2, Timer), face(3, Timer)]),
+    ];
+    let mut words = BTreeSet::new();
+    for list in &broken {
+        let why = strip_problem(list).unwrap_or_else(|| panic!("{list:?} is refused"));
+        assert!(strip_rule(why, EN).is_some(), "{why:?} has no sentence");
+        words.insert(why);
+    }
+    assert_eq!(words.len(), 9, "every rule: {words:?}");
+}
+
 // ---- the words ------------------------------------------------------------------------
 
 #[test]
@@ -854,8 +1175,9 @@ fn every_row_the_page_adds_is_the_only_row_of_its_key() {
         let rows = all.iter().filter(|row| row.0 == english).count();
         assert_eq!(rows, 1, "{english:?} is in another table too");
     }
-    // The sheet's 52 rows, copied as written.
-    assert_eq!(i18n::faces::STRINGS.len(), 52);
+    // The sheet's 52 rows, copied as written, the note of a service that
+    // asks only while a deck was linked, and the nine strip rules.
+    assert_eq!(i18n::faces::STRINGS.len(), 62);
 }
 
 #[test]
@@ -867,7 +1189,7 @@ fn every_word_the_page_says_has_a_row() {
     assert_eq!(i18n::missing_rows(source), Vec::<String>::new());
     // Pinned, so a lookup the scanner stopped seeing fails here rather than
     // passing as a page with less to translate.
-    assert_eq!(i18n::literals(source).len(), 71);
+    assert_eq!(i18n::literals(source).len(), 81);
 }
 
 /// A fresh test service's own replies (`deck-gui-core`'s recorded fixtures,

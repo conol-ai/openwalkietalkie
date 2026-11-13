@@ -449,7 +449,7 @@ mod tests {
         let plan = v.barrier_plan(true);
         assert_eq!(plan[0], BarrierItem::Agent(Slot(1)));
         assert_eq!(plan.last(), Some(&BarrierItem::Synced));
-        assert!(plan.contains(&BarrierItem::SetDefault(SetKey::Demo, 1)));
+        assert!(plan.contains(&BarrierItem::SetDefault(SetKey::Demo, 0)));
         assert_eq!(v.slots(), vec![Slot(1), Slot(2)]);
     }
 

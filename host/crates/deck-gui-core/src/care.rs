@@ -87,9 +87,11 @@ words! {
     /// What a press on the deck does to bring a source's session forward
     /// (`handoff`).
     Handoff {
-        /// Focuses the session's terminal tab.
+        /// Focuses the session's Ghostty tab: what a 0.13 service says of
+        /// Claude Code. Later services raise its app instead.
         Terminal = "terminal",
-        /// Raises the app that owns the session.
+        /// Raises the app the session runs in, on a press of its
+        /// `Open app` card.
         App = "app",
         /// Nothing yet (`none` on the wire).
         NotYet = "none",
@@ -338,9 +340,11 @@ impl Checks {
 /// The footprint's item ids, in the order the Footprint page lists them; it
 /// finds each by its id. `codex_desktop` is the launcher the Integrations
 /// page's Codex Desktop **Set Up** writes, listed here beside the Codex
-/// setup. The service lists the other nine in this order and the launcher
-/// after them, and one from before the launcher names the nine alone.
-pub const FOOTPRINT_IDS: [&str; 10] = [
+/// setup. `keychain` is the Keychain item that holds the cloud voice's key
+/// on a Mac, listed with what goes with Uninstall, before the logs. The
+/// service lists the other nine in this order, then the launcher, then the
+/// Keychain item; one from before them names fewer.
+pub const FOOTPRINT_IDS: [&str; 11] = [
     "service",
     "claude_plugin",
     "codex_hooks",
@@ -350,6 +354,7 @@ pub const FOOTPRINT_IDS: [&str; 10] = [
     "firmware",
     "data",
     "prefs",
+    "keychain",
     "logs",
 ];
 
@@ -655,7 +660,22 @@ mod tests {
             "absent is not present"
         );
         assert_eq!(footprint.total_bytes, Some(0));
-        assert_eq!(FOOTPRINT_IDS.len(), 10);
+        assert_eq!(FOOTPRINT_IDS.len(), 11);
+    }
+
+    #[test]
+    fn the_keychain_item_is_listed_after_the_preferences_and_read_like_the_rest() {
+        let at = |id: &str| FOOTPRINT_IDS.iter().position(|known| *known == id);
+        assert_eq!(at("keychain"), at("prefs").map(|prefs| prefs + 1));
+        assert_eq!(at("logs"), at("keychain").map(|keychain| keychain + 1));
+        let footprint = Footprint::parse(&json!({"items": [
+            {"id": "keychain", "path": "ai.cohdl.openwalkietalkie",
+             "bytes": null, "count": null, "present": true}
+        ]}));
+        let item = footprint.get("keychain").expect("the Keychain item");
+        assert!(item.present);
+        assert_eq!((item.bytes, item.count), (None, None));
+        assert_eq!(item.path.as_deref(), Some("ai.cohdl.openwalkietalkie"));
     }
 
     #[test]

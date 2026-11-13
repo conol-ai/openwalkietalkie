@@ -163,7 +163,7 @@ impl Core {
             Ok(card) => {
                 self.test_agent.install_asked(card);
                 let status = self.firmware.await_confirmation(install);
-                Reply::ok(serde_json::to_value(status).unwrap())
+                Reply::ok(self.firmware_reply(status))
             }
             Err(error) => Reply::err(error),
         }

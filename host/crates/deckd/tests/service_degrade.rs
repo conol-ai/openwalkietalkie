@@ -24,6 +24,12 @@
 //! `~/.claude`/`~/.codex` or their LaunchAgents: the daemon runs
 //! `--no-device` on a fresh `$TMPDIR` directory, and the port under test is
 //! an ephemeral one this process holds first.
+//!
+//! The daemon checks its peers with the real verifier, so where this test
+//! runs inside Claude Code or Codex (an agent running `cargo test`), §4.2's
+//! ancestry cap refuses it `admin`: the `admin` calls are then checked as
+//! that refusal (and the port is changed in the file by hand, as the owner's
+//! own editor would), and CI checks their answers.
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 use std::os::unix::net::UnixStream;
@@ -176,6 +182,46 @@ fn sub(dir: &Path, name: &str) -> PathBuf {
     path
 }
 
+/// Whether this test process runs inside Claude Code or Codex: the macOS
+/// service then refuses it `admin` (§4.2's ancestry cap, `reason:
+/// "agent_ancestry"`).
+fn capped() -> bool {
+    deckd::trust::ancestry_capped(std::process::id())
+}
+
+/// The `session.hello` answer alone.
+fn hello(socket: &Path, scopes: &[&str]) -> serde_json::Value {
+    let stream = UnixStream::connect(socket).expect("the uds door");
+    stream
+        .set_read_timeout(Some(PATIENCE))
+        .expect("a read timeout");
+    let mut writer = stream.try_clone().expect("a write half");
+    let request = serde_json::json!({
+        "jsonrpc": "2.0", "id": 1, "method": "session.hello",
+        "params": {"client": {"name": "gate", "version": "1"}, "scopes": scopes},
+    });
+    writer
+        .write_all(format!("{request}\n").as_bytes())
+        .expect("the request is written");
+    let mut text = String::new();
+    BufReader::new(stream).read_line(&mut text).expect("a line");
+    serde_json::from_str(&text).unwrap_or_else(|_| panic!("not json: {text:?}"))
+}
+
+/// Assert that a session asking for `admin` is refused by the ancestry cap.
+fn assert_refused_by_the_cap(socket: &Path) {
+    let hello = hello(socket, &["admin"]);
+    assert_eq!(
+        hello["error"]["code"],
+        deck_model::ApiError::FORBIDDEN,
+        "{hello}"
+    );
+    assert_eq!(
+        hello["error"]["data"]["reason"], "agent_ancestry",
+        "{hello}"
+    );
+}
+
 /// One `session.hello` + one call over the UDS, as `deckd ctl` does.
 fn call(
     socket: &Path,
@@ -300,21 +346,26 @@ fn a_degraded_daemon_keeps_the_uds_door_and_the_deck_channel_alive() {
     assert!(ping["error"].is_null(), "{ping}");
     // The hid thread: `metrics.get` is its counters and `device.sync` puts a
     // barrier on its queue. Both answer, so the deck's channel is up with
-    // the TCP door down.
-    let metrics = call(
-        &daemon.socket(),
-        "metrics.get",
-        serde_json::json!({}),
-        &["admin"],
-    );
-    assert!(metrics["error"].is_null(), "{metrics}");
-    let sync = call(
-        &daemon.socket(),
-        "device.sync",
-        serde_json::json!({}),
-        &["admin"],
-    );
-    assert!(sync["error"].is_null(), "{sync}");
+    // the TCP door down. Both are `admin`, which the cap refuses inside
+    // Claude Code or Codex.
+    if capped() {
+        assert_refused_by_the_cap(&daemon.socket());
+    } else {
+        let metrics = call(
+            &daemon.socket(),
+            "metrics.get",
+            serde_json::json!({}),
+            &["admin"],
+        );
+        assert!(metrics["error"].is_null(), "{metrics}");
+        let sync = call(
+            &daemon.socket(),
+            "device.sync",
+            serde_json::json!({}),
+            &["admin"],
+        );
+        assert!(sync["error"].is_null(), "{sync}");
+    }
     // Well past the door's retry, and still there.
     std::thread::sleep(Duration::from_millis(500));
     assert!(daemon.alive(), "the daemon exited over a taken port");
@@ -404,20 +455,27 @@ fn change_the_port_and_repair_the_hooks_is_the_way_out_of_a_squatted_port() {
     );
 
     // Step 1: `config.set{api.port}`. It is not a hot key, so the daemon
-    // says so rather than claiming it took effect.
+    // says so rather than claiming it took effect. Inside Claude Code or
+    // Codex the cap refuses the `admin` session, and the port is changed in
+    // the file by hand instead.
     let free = free_port();
-    let set = call(
-        &daemon.socket(),
-        "config.set",
-        serde_json::json!({"patch": {"api.port": free}}),
-        &["admin"],
-    );
-    assert!(set["error"].is_null(), "{set}");
-    assert_eq!(
-        set["result"]["restart_needed"],
-        serde_json::json!(["api.port"]),
-        "{set}"
-    );
+    if capped() {
+        assert_refused_by_the_cap(&daemon.socket());
+        daemon.write_config(free);
+    } else {
+        let set = call(
+            &daemon.socket(),
+            "config.set",
+            serde_json::json!({"patch": {"api.port": free}}),
+            &["admin"],
+        );
+        assert!(set["error"].is_null(), "{set}");
+        assert_eq!(
+            set["result"]["restart_needed"],
+            serde_json::json!(["api.port"]),
+            "{set}"
+        );
+    }
 
     // Step 2: `integrations.repair claude` has nothing port-shaped to
     // rewrite and rewrites nothing.

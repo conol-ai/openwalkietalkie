@@ -69,6 +69,13 @@
       "bytes": null,
       "count": null,
       "present": false
+    },
+    {
+      "id": "keychain",
+      "path": "ai.cohdl.openwalkietalkie",
+      "bytes": null,
+      "count": null,
+      "present": true
     }
   ],
   "total_bytes": 2142803723

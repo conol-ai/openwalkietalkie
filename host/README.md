@@ -46,9 +46,12 @@ Privacy & Security → Bluetooth. The daemon attaches to the deck macOS
 already holds connected for HID. Speech Recognition authorization depends
 on the STT engine; strictly on-device Apple recognition has been measured
 without that grant (design §7.8). The Microphone grant is needed for the
-Mac's input, including `fallback_input = "system_default"` when the deck is
-unavailable and `voice.listen` with `input: "mac"`; the BLE deck microphone
-uses the Bluetooth grant.
+Mac's own input, which only `voice.listen` with `input: "mac"` opens, and
+for a Classic deck's input on `transport = "coreaudio"`; the BLE deck
+microphone uses the Bluetooth grant. A press while the deck's
+microphone is unavailable gets silence and `no_device`, never the Mac's
+microphone: `[voice] fallback_input` is no longer read, and an old line is
+named in the log so it can be removed.
 
 After rebuilding, replace the installed app or service binary and restart
 the running app and service. `tools/build-host.sh` only builds `deckd`;
@@ -234,7 +237,15 @@ flood|sync|metrics` are `admin` calls, and `deckd doctor` checks both doors
 (socket path length, a `session.ping`, `/v1/info` being ours and not a
 squatter's or the door being off, `tokens.toml` at 0600). All of them go
 through `deck-client`, so they hit exactly the code a third party's client
-does.
+does. So do the care verbs, one for everything the Mac app does for the
+deck through the service, each calling the method the app's control calls
+and printing its reply as it came with `--json`: `deckd care …` (the setup
+checks, the footprint, the sources and their pause, the Usage face's
+sources, the tests, the permissions, the decks this Mac keeps a setup for,
+the two updates),
+`deckd firmware status|check|install`, `deckd config get|set|reload`,
+`deckd service restart|stop` and `deckd device get|set|faces|set-faces|set-macro`
+(§10.7 of `docs/host-service.md` has the table).
 
 **Scopes.** A call carries a principal (`uid:501` over the socket, the token's
 name over TCP) and a scope set: `observe`, `observe:content`, `observe:raw`,
@@ -255,8 +266,9 @@ is redacted per subscriber at fan-out for anyone without `observe:content`
 (`operate` and `admin` imply it; `observe:raw` is never implied and has to be
 named), except that a session always sees its own agents whole. Two limits
 are not scopes: a peer whose own process or ancestry is an agent CLI
-(`claude`, `codex`, `gemini`, `node`) is capped at
-`observe,agent,voice,hooks:ingest` and asking past that is
+(`claude`, `codex`, `gemini`, `node`, by process name or by executable path,
+which is what names Claude Code's native install, `…/claude/versions/<v>`)
+is capped at `observe,agent,voice,hooks:ingest` and asking past that is
 `-32002 {reason:"agent_ancestry"}`; and while `[trust] require_trusted_for_allow`
 holds, an *allow* on a permission or elicitation card, an `op.order` that would
 be injected, and `voice.listen{ctx:"answer"}` on such a card are refused
@@ -360,9 +372,19 @@ orders use that inbox without focusing a terminal or requiring Automation
 permission. Claude may label fallback messages as coming from another Claude
 session. An uncertain channel write reports `channel_delivery_uncertain`
 instead of retrying through the inbox, to avoid duplicate commands; a changed
-conversation reports `channel_session_changed`. The existing guarded Ghostty
-injector remains the last resort for sessions with neither route. Inbox tokens
-remain inside the daemon, absent from snapshots, events and logs.
+conversation reports `channel_session_changed`. A session with neither route
+gets `order.failed{reason:"no_route"}`, which the deck shows; the Ghostty
+injector that used to type into such a session is gone, and with it the
+Automation grant. Inbox tokens remain inside the daemon, absent from
+snapshots, events and logs.
+
+**Hand-off.** The hook helper reports the macOS bundle identifier of the app
+each session runs in (`terminal.app`: Zed, Ghostty, Terminal, iTerm2, VS Code,
+Claude Desktop), found from the process ancestry above the CLI or, under
+`tmux`, from `__CFBundleIdentifier`. ENTER on a session's **Open app** card
+brings that app forward if it is running (LaunchServices, never a launch);
+a channel change or a PTT press raises nothing. A hand-off that cannot happen
+says so on the deck.
 
 `integrations.status` includes `claude_channels: [{session, state}]`, where
 `state` is `checking` or `ready`. It is a connection check at the time of the
@@ -457,9 +479,34 @@ not running — answers `{}` and lets the terminal dialog appear. Holding a
 Claude `PermissionRequest` does **not** suppress that dialog (spike S1), so a
 permission card is "first answer wins": answer it in the terminal and the
 `PostToolUse`/`Stop` that follows takes it off the deck. Snooze, expiry or a
-hook client that went away re-push the **same card id** as `⌨ Focus terminal`
-instead, so the drawer entry still does something useful and the deck never
-chimes twice for one question.
+hook client that went away re-push the **same card id** as `⌨ …` with the one
+choice **Open app** instead, so the drawer entry still does something useful
+(it brings the session's app forward) and the deck never chimes twice for one
+question.
+
+**No deck, no collecting.** With no deck linked for ten minutes, deckd stops
+collecting from agent sessions: no `claude agents --json` and no pid checks, no
+transcript watchers, no Codex app-server connection, no usage reads (so no
+Keychain read of the Claude login and no `curl`), and every hook is answered
+`{}` with nothing behind it. The cloud voice key's Keychain item is read once,
+when the service starts, deck or not, and never on a timer. The Claude and Codex sessions leave the roster
+(`agent.removed{reason:"dormant"}`) and come back the way they come at start-up
+the moment the deck links. Even with the deck there, the account's usage is
+asked for only while the Usage face is on the strip, and the Mac's load sampled
+only while the System face is. `service.dormancy` says when it stops and
+starts, and `deckd status` has a `collectors:` line. `deckd run --no-device`
+has no deck to wait for and collects as it always did (`docs/host-service.md`
+§5.8).
+
+**Only what the deck reads is read in full.** A session's history, tool rows,
+images and plans are collected only while the deck reads it: the channel open
+on it, the slot it last showed, or a card it shows, Ready cards included, and
+for a minute after. Every session's state, cards and each turn's final reply
+stay eager. A Claude session's transcript watcher starts when the deck opens it
+and stops when the deck has moved on; a Codex thread's chat is recorded only
+while it is read, and its latest items are read again when the deck opens it.
+That first read replaces whatever history the deck was shown before, in order.
+`--no-device` reads every session, as before (`docs/host-service.md` §5.9).
 
 **`deckd hook <claude|codex|codex-notify|claude-statusline|gemini>`** is the
 helper a CLI actually runs. It reads the event on stdin (16 MiB cap; a bigger
@@ -581,7 +628,13 @@ daemon runs being accepted (the `tokens.toml` watcher),
 `host/examples/virtual_agent.py` answered end to end, then `SIGTERM` and a
 log with no panic in it. `websocat` is used if it is installed and skipped
 with a printed reason if it is not — the Rust WS test covers that door
-either way.
+either way. Run from inside Claude Code or Codex (a terminal one of them
+started), the gate is itself an agent's process, so the service it tests
+refuses it `operate`, `admin` and `device` (the ancestry cap): each row so
+refused, and only for that reason, prints `skip` and says to run the gate
+from a terminal of its own. The Rust tests that drive the real `deckd run`
+(`no_device`, `tcp_door`, `service_exit`, `service_degrade`) assert that
+refusal instead of the answer in the same case.
 
 Its `adapters` step then exercises the installer against the CLIs that are
 actually installed. It runs `deckd integrations install claude` and `install
@@ -625,7 +678,7 @@ one is `target/host-app/$H/release/deckd`.
 ```sh
 deckd run --foreground --demo      # the deck link plus the mockup roster, logging to stderr
 deckd run --no-device              # the API only: no HID, for CI and the gate's `api` step
-deckd status                       # running? sid, link, hello counts, barriers, errors
+deckd status                       # running? sid, link, hello counts, barriers, errors, cards
 deckd status --live                # the above plus `service.info` asked over the socket
 deckd doctor                       # data dir, config, state, socket, tcp door, tokens, device, LaunchAgents
 deckd ctl session.ping             # call one API method; the result JSON goes to stdout
@@ -644,7 +697,7 @@ deckd device dry-run --sid 314159 --hm 19:42 --flood 3 --send '{"m":"set","k":"b
 | Command | What it does | Exit codes |
 | --- | --- | --- |
 | `run [--foreground] [--demo] [--no-device]` | The service. `--foreground` logs to stderr, `--demo` loads the mockup roster, `--no-device` never opens the deck. | 0 on an orderly `SIGTERM`/Ctrl-C; 0 with "already running" when the lock is held. |
-| `status [--json] [--live]` | `status.json` as the daemon last wrote it; `--live` adds `service.info` over the socket. | 0; 2 when `--live` cannot reach the daemon. |
+| `status [--json] [--live]` | `status.json` as the daemon last wrote it, the delivery record's counts among it (its `cards since …` line; `ctl --scopes admin metrics.get` has the whole record, `docs/host-service.md` §10.6); `--live` adds `service.info` over the socket. | 0; 2 when `--live` cannot reach the daemon. |
 | `ctl [--scopes a,b] [--client N] [--timeout S] <method> [json]` | One API method over the UDS door; the result JSON is printed compact on stdout, a JSON-RPC error object on stderr. | 0 ok; 1 JSON-RPC error; 2 daemon unreachable; 3 `-32002 {need:"trusted"}` (the answer has to come from the deck or the app). |
 | `events [--kinds a,b] [--since REV] [--content] [--snapshot]` | One JSON line per event until Ctrl-C. `--kinds` are subscription globs (default `*`), `--since` replays the ring first, `--content` asks `observe:content`, `--snapshot` prints the snapshot first. Reconnects show as `{"type":"disconnected"}` / `{"type":"reconnected",…}` and a `{"type":"resync","rev"}` line means "call `state.get`". | 0; 2 when the daemon is unreachable at the start. |
 | `token create\|list\|revoke\|rotate` | Bearer tokens for the TCP door, in `tokens.toml` (mode 0600, blake3 hashes); they open nothing while the door is off, its default, and go with it in the next release. `create` and `rotate` print the plaintext once, on stdout, and nothing else — it is never stored or logged. Edits the file directly, no daemon needed. | 0; 1 on a duplicate name, an unknown scope, a bad expiry or an unknown token. |
@@ -767,3 +820,11 @@ Apple Silicon and Intel releases, automatic Sparkle app updates, and the
 USB firmware updater in **Service → Updates**. Stable `vMAJOR.MINOR.PATCH`
 tags publish after tests, signing, and notarization pass. Publishing requires
 the GitHub `release` environment's signing secrets.
+
+`deckd` looks for a release by itself (`firmware::schedule`): every six
+hours while a deck was linked in the last ten minutes, the first time five
+minutes after it starts, with the app's window closed or the app not
+running. `firmware.status` then says what there is to update: the deck's
+firmware (by cable, or by the version the deck named in its hello) and the
+app (`app`, from the release manifest's `app.version`). `[updates] check =
+false` stops the looks; `--no-device` never makes one.

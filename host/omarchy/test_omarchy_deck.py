@@ -1,7 +1,14 @@
 """Tests for omarchy_deck.py: python3 -m unittest host/examples/test_omarchy_deck.py"""
+import json
+import os
+import socket
 import sys
+import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -145,6 +152,234 @@ class KimiSeed(unittest.TestCase):
         with mock.patch.object(o, 'hooks_installed', return_value=False):
             self.assertEqual(remote.kimi_messages(), ['m'])
             self.assertEqual(remote.kimi_messages(), ['m'])
+
+
+class Quiet(unittest.TestCase):
+    """Like deckd, the bridge goes quiet after ten minutes of `device.link` saying no deck,
+    and wakes the moment one links."""
+
+    def remote(self):
+        remote = o.Remote()
+        remote.bridge = mock.Mock()
+        remote.try_push = mock.Mock()
+        return remote
+
+    def test_ten_minutes_without_a_deck_make_it_quiet_and_a_link_wakes_it_at_once(self):
+        remote = self.remote()
+        remote.on_link({'link': 'offline', 'session': 'absent', 'host_online': False}, 100.0)
+        self.assertFalse(remote.tick_quiet(100.0 + o.DORMANT_AFTER_S - 1), '9:59')
+        # A second report of the same drop does not restart the window.
+        remote.on_link({'link': 'offline', 'session': 'absent', 'host_online': False}, 650.0)
+        self.assertTrue(remote.tick_quiet(100.0 + o.DORMANT_AFTER_S))
+        remote.bridge.reregister.assert_not_called()
+        remote.try_push.assert_not_called()
+        remote.on_link({'link': 'connected', 'session': 'live', 'host_online': True}, 900.0)
+        self.assertFalse(remote.tick_quiet(900.0))
+        remote.bridge.reregister.assert_called_once_with()
+        remote.try_push.assert_called_once_with(force=True)
+
+    def test_a_deck_back_inside_the_window_never_makes_it_quiet(self):
+        remote = self.remote()
+        remote.on_link({'host_online': False}, 0.0)
+        remote.on_link({'host_online': True}, 300.0)
+        remote.on_link({'host_online': False}, 500.0)
+        self.assertFalse(remote.tick_quiet(1_000.0), 'ten minutes since the second drop have not passed')
+        self.assertTrue(remote.tick_quiet(1_100.0))
+
+    def test_the_hello_reads_the_link_and_a_deckd_already_quiet(self):
+        remote = self.remote()
+        remote.rpc = mock.Mock(call=mock.Mock(return_value={'session': 'live', 'collecting': True}))
+        remote.link_at_hello(50.0)
+        self.assertIsNone(remote.away_since)
+        remote.rpc.call.return_value = {'session': 'absent', 'collecting': False}
+        remote.link_at_hello(50.0)
+        self.assertTrue(remote.dormant(50.0), 'deckd is quiet already: so is the bridge')
+        remote.away_since = None
+        remote.rpc.call.return_value = {'session': 'absent'}  # a deckd that predates dormancy
+        remote.link_at_hello(50.0)
+        self.assertFalse(remote.dormant(50.0 + o.DORMANT_AFTER_S - 1))
+        self.assertTrue(remote.dormant(50.0 + o.DORMANT_AFTER_S))
+        remote.away_since = None
+        remote.rpc.call.side_effect = o.RpcError({'code': -32002, 'message': 'forbidden'})
+        remote.link_at_hello(50.0)
+        self.assertEqual(remote.away_since, 50.0)
+        remote.rpc.call.assert_called_with('service.info')
+
+    def test_while_quiet_the_hooks_reach_the_bridge_marked_quiet(self):
+        remote = self.remote()
+        for event in ('SessionStart', 'Stop'):
+            remote.hooks.put({'cli': 'claude', 'event': event, 'session_id': 's1', 'pid': 4242})
+        remote.take_hooks(quiet=True)
+        self.assertTrue(remote.hooks.empty())
+        self.assertEqual([(c.args[0]['event'], c.kwargs) for c in remote.bridge.on_hook.call_args_list],
+                         [('SessionStart', {'quiet': True}), ('Stop', {'quiet': True})])
+
+
+class QuietDeckd(threading.Thread):
+    """A deckd whose deck is away and which is quiet itself (or, with `info`, whatever `service.info`
+    says); `link()` brings the deck back and `unlink()` takes it away again."""
+
+    def __init__(self, path, info=None):
+        super().__init__(daemon=True)
+        self.calls, self.requests, self.conn, self.lock = [], [], None, threading.Lock()
+        self.info = info or {'session': 'absent', 'collecting': False}
+        self.agents = {}
+        self.server = socket.socket(socket.AF_UNIX)
+        self.server.bind(str(path))
+        self.server.listen(1)
+
+    def answer(self, method, params):
+        if method == 'service.info':
+            return self.info
+        if method == 'agent.register':  # one agent per session key, as deckd's register is
+            return {'agent': self.agents.setdefault(params['key'], f'ag_{len(self.agents) + 1}')}
+        return {}
+
+    def close(self):
+        """End the connection, which ends the bridge's `serve`."""
+        if self.conn is not None:
+            try:
+                self.conn.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+
+    def send(self, message):
+        with self.lock:
+            self.conn.sendall(json.dumps(message).encode() + b'\n')
+
+    def run(self):
+        self.conn, _ = self.server.accept()
+        buffer = b''
+        with self.conn:
+            while True:
+                try:
+                    chunk = self.conn.recv(65536)
+                except OSError:
+                    return
+                if not chunk:
+                    return
+                buffer += chunk
+                while b'\n' in buffer:
+                    line, buffer = buffer.split(b'\n', 1)
+                    request = json.loads(line)
+                    self.calls.append(request['method'])
+                    self.requests.append((request['method'], request.get('params') or {}))
+                    result = self.answer(request['method'], request.get('params') or {})
+                    self.send({'jsonrpc': '2.0', 'id': request['id'], 'result': result})
+
+    def link(self):
+        self.send({'jsonrpc': '2.0', 'method': 'event', 'params': {
+            'type': 'device.link', 'rev': 9,
+            'data': {'link': 'connected', 'session': 'live', 'host_online': True}}})
+
+    def unlink(self):
+        self.send({'jsonrpc': '2.0', 'method': 'event', 'params': {
+            'type': 'device.link', 'rev': 10,
+            'data': {'link': 'offline', 'session': 'absent', 'host_online': False}}})
+
+
+class FakeHypr:
+    """One window, owned by this test process, which takes focus when asked."""
+
+    def __init__(self):
+        self.active = None
+
+    def clients(self):
+        return [{'address': '0xa', 'pid': os.getpid(), 'title': 'proj'}]
+
+    def active_address(self):
+        return self.active
+
+    def focus(self, address):
+        self.active = address
+
+
+def wait_for(done, what, timeout=5.0):
+    deadline = time.time() + timeout
+    while not done():
+        if time.time() > deadline:
+            raise AssertionError(f'timed out waiting for {what}')
+        time.sleep(0.02)
+
+
+class QuietServe(unittest.TestCase):
+    def test_a_quiet_deckd_gets_no_face_and_no_session_until_the_deck_links(self):
+        directory = Path(tempfile.mkdtemp())
+        deckd = QuietDeckd(directory / 'deckd.sock')
+        deckd.start()
+        remote = o.Remote()
+        remote.snapshot = lambda: ({'active': 1, 'count': 1, 'sel': 0, 'windows': []}, [])
+        polls = []
+        remote.kimi_messages = lambda: polls.append(1) or []
+        hook = {'cli': 'claude', 'event': 'Stop', 'session_id': 'sid1', 'cwd': '/home/me/proj',
+                'pid': os.getpid()}
+        remote.hooks.put(hook)
+
+        def serve():
+            try:
+                remote.serve(directory / 'deckd.sock')
+            except (ConnectionError, OSError):
+                pass
+
+        threading.Thread(target=serve, daemon=True).start()
+        time.sleep(1.0)  # several turns of the loop
+        self.assertEqual(deckd.calls, ['session.hello', 'service.info'], 'no face, no roster')
+        self.assertEqual(polls, [], 'no Kimi log read')
+        self.assertTrue(remote.hooks.empty(), 'the hook was taken, and nothing sent for it')
+        deckd.link()
+        remote.hooks.put(hook)
+        deadline = time.time() + 5
+        while not ({'device.ws.set', 'agent.register'} <= set(deckd.calls) and polls):
+            self.assertLess(time.time(), deadline, deckd.calls)
+            time.sleep(0.05)
+
+
+    def test_the_wake_shows_each_session_as_the_hooks_left_it_while_quiet(self):
+        """Hooks that arrive while the bridge is quiet still move its own table, so the wake neither
+        shows a session as it was ten minutes ago nor types into a dialog opened meanwhile."""
+        directory = Path(tempfile.mkdtemp())
+        deckd = QuietDeckd(directory / 'deckd.sock', info={'session': 'live', 'collecting': True})
+        deckd.start()
+        self.addCleanup(deckd.close)
+        typed = []
+        remote = o.Remote()
+        remote.bridge = o.Bridge(remote.call, FakeHypr(), host='box',
+                                 run=lambda argv, **_: typed.append(argv) or SimpleNamespace(returncode=0),
+                                 sleep=lambda _: None, proc='/nonexistent')
+        remote.snapshot = lambda: ({'active': 1, 'count': 1, 'sel': 0, 'windows': []}, [])
+        remote.kimi_messages = lambda: []
+        hook = {'cli': 'claude', 'cwd': '/home/me/proj', 'pid': os.getpid()}
+
+        def serve():
+            try:
+                remote.serve(directory / 'deckd.sock')
+            except (ConnectionError, OSError):
+                pass
+
+        with mock.patch.object(o, 'DORMANT_AFTER_S', 0.3):  # ten minutes, shortened
+            threading.Thread(target=serve, daemon=True).start()
+            for sid in ('s1', 's2'):
+                remote.hooks.put({**hook, 'session_id': sid, 'event': 'UserPromptSubmit'})
+            wait_for(lambda: deckd.calls.count('agent.update') == 2, 'both sessions working')
+            deckd.unlink()
+            wait_for(lambda: remote.quiet, 'the bridge going quiet')
+            before = len(deckd.requests)
+            remote.hooks.put({**hook, 'session_id': 's1', 'event': 'PermissionRequest', 'message': 'Run it?'})
+            remote.hooks.put({**hook, 'session_id': 's2', 'event': 'SessionEnd'})
+            wait_for(remote.hooks.empty, 'the quiet loop taking the hooks')
+            time.sleep(0.3)  # a few more turns of the quiet loop
+            self.assertEqual(deckd.requests[before:], [], 'nothing is sent while quiet')
+            deckd.link()
+            release = ('agent.release', {'agent': 'ag_2', 'reason': 'session_end'})
+            wait_for(lambda: release in deckd.requests and 'device.ws.set' in deckd.calls[before:],
+                     'the wake')
+        woke = deckd.requests[before:]
+        self.assertIn(('agent.update', {'agent': 'ag_1', 'state': 'question', 'title': 'Run it?'}), woke)
+        self.assertNotIn(('agent.update', {'agent': 'ag_1', 'state': 'working', 'title': ''}), woke)
+        self.assertNotIn('s2', ''.join(remote.bridge.sessions), 'the ended session is gone')
+        session = remote.bridge.by_agent('ag_1')
+        self.assertEqual(remote.bridge.deliver_order(session, 'also update the README'), 'dialog_open')
+        self.assertEqual(typed, [], 'nothing typed into the open dialog')
 
 
 class Instance(unittest.TestCase):

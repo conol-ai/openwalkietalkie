@@ -27,6 +27,8 @@ The build needs `pkg-config`, the development files of libudev (hidapi), ALSA (c
 
 `install.sh` copies the bridge to `~/.local/share/openwalkietalkie/omarchy/`, installs `deckd` to `~/.local/bin/deckd` when it is given the binary, and enables and starts the two units in `systemd/` (it is idempotent; `systemctl --user disable --now deckd omarchy-deck` undoes it). `deckd.service` runs `deckd run` with `DECKD_DATA_DIR=~/.local/share/openwalkietalkie`, so its config, socket and caches are all under that directory; `omarchy-deck.service` starts the bridge on that socket. (A `deckd` started without `DECKD_DATA_DIR` uses the XDG directories instead, and its socket is `$XDG_RUNTIME_DIR/openwalkietalkie/deckd.sock`, or `${XDG_CACHE_HOME:-~/.cache}/openwalkietalkie/deckd.sock` when `XDG_RUNTIME_DIR` is unset, which is where the bridge looks when it is started without `--socket`.) `omarchy_hook.py install` writes into each CLI's settings a hook command that points at the copy, and that command lets the call through when the script is missing, so moving the repository never blocks a session. The bridge finds the running Hyprland instance and Wayland display by itself, with no environment variables to set.
 
+A `deckd` command meant for that service needs the same directory, or it looks for the XDG socket and finds none: `DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd care checks` checks the setup, and the same prefix goes before every care verb (`deckd care sources|pause|resume|test …`, `deckd config get|set`, `deckd device get|set`, `deckd firmware status`; the table is §10.7 of [the host service design](../../docs/host-service.md)). With no ancestry cap on Linux (above), they work from any terminal.
+
 ### Voice (PTT)
 
 - **Recognition** is the local Whisper model. There is no local microphone: the deck's is the only input. Download a model before the first press. On a CPU, `large-v3-turbo` takes about 20 s per press; `small` (about 2 to 4 s) is the one to use:
@@ -42,7 +44,7 @@ DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd stt install --model small
 `stt install` downloads from Hugging Face. When that cannot be reached, fetch the same file from a mirror (`https://hf-mirror.com/ggerganov/whisper.cpp/resolve/main/ggml-small.bin`) into `~/.local/share/openwalkietalkie/caches/stt/`. Chinese comes out in Simplified characters: on Linux, speech recognised as Chinese is decoded again with a Simplified Chinese prompt.
 
 - **Spoken replies** come from a speech program on the machine (the text on its stdin, a WAV on its stdout). The default is `espeak-ng` (`sudo pacman -S espeak-ng`); `[voice.tts] command` names another, such as piper. Without one, each announcement logs an error and nothing else is affected. The voice is the first of `[voice.tts] voices`; with none set, `cmn` or `en-us`, by whether the text contains Chinese.
-- **Orders into a session**: the recognised text is typed into the selected session's terminal, followed by Enter. A session in a herdr pane gets it through `herdr pane run` (a pane that moved is found again by the session's pid); otherwise the bridge focuses the session's window and types with `wtype`.
+- **Orders into a session**: the recognised text is typed into the selected session's terminal, followed by Enter. A session in a herdr pane gets it through `herdr pane run` (a pane that moved is found again by the session's pid); otherwise the bridge focuses the session's window and types with `wtype`. An order that cannot be typed (an open dialog, no window, a failed `wtype`) is reported to `deckd` with its reason (`agent.order.result`), and the deck shows that it was not delivered; a `deckd` too old for the report is not asked again.
 
 ### Kimi Code
 
@@ -70,6 +72,8 @@ The key map is `KEYMAP` at the top of `omarchy_deck.py`; that is the one place t
 - **Little leaves Omarchy.** Only event names, states, project names and the notification line Claude itself shows (the question's title). Prompts and tool inputs stay on Omarchy; for Kimi Code, only a summary of each reply (600 characters at most) goes to the deck.
 - **No pid or terminal is sent to `deckd`.** `deckd` checks a pid as a process on its own machine, so a session is registered with its name, its project directory and its capabilities only.
 - **A hook never blocks.** Whether the bridge is there or not, and whatever the data, the hook prints `{}` and exits 0: it never stops your tool call.
+- **Nothing is collected while the deck is away.** After ten minutes in which `deckd` reports no deck linked (`device.link`), the bridge stops feeding the Omarchy face and stops looking at sessions: no Kimi Code log reads, no process checks, and nothing about a session goes to `deckd`. What the hooks report meanwhile only moves each session's entry in the bridge's own table. The moment the deck links it registers every session as it is then (a dialog opened meanwhile is a question again, a session that ended meanwhile is released, a session that started meanwhile appears, and a Kimi Code turn that ended meanwhile has its reply read) and sends the face. `deckd` does the same for its own collectors (`docs/host-service.md` §5.8).
+- **`deckd` looks for a new release by itself.** Five minutes after it starts, and then every six hours while a deck was linked in the last ten minutes, it fetches the release manifest from GitHub (one `curl`, at most 128 KB) to see whether newer deck firmware is out; nothing is sent but the request. `[updates] check = false` in `~/.local/share/openwalkietalkie/config.toml` stops it (`docs/host-service.md` §10.3).
 
 ## The deck on a Mac
 
@@ -142,7 +146,7 @@ CI runs them from the repository root, on Ubuntu 24.04's Python 3.12, after the 
 python3 -m unittest discover -s host/omarchy -p 'test_*.py'
 ```
 
-They cover turning Hyprland's data into the face's `ws` line, the key map, the process tree and window matching, registering and releasing sessions, reconnecting after the daemon goes away, every reason a voice order is refused, hooks letting calls through, install and uninstall, and an end-to-end run against a fake `deckd`. Three of them (the Kimi Code install) need `tomllib`, so on a Python older than 3.11 they fail with `ModuleNotFoundError: No module named 'tomllib'`. **They all run against a faked `/proc` and Hyprland: none of them has run on a real Omarchy.**
+They cover turning Hyprland's data into the face's `ws` line, the key map, the process tree and window matching, registering and releasing sessions, reconnecting after the daemon goes away, every reason a voice order is refused, hooks letting calls through, install and uninstall, going quiet after ten minutes without a deck and waking when it links, and end-to-end runs against a fake `deckd`. Three of them (the Kimi Code install) need `tomllib`, so on a Python older than 3.11 they fail with `ModuleNotFoundError: No module named 'tomllib'`. **They all run against a faked `/proc` and Hyprland: none of them has run on a real Omarchy.**
 
 ---
 

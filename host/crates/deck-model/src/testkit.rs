@@ -236,6 +236,26 @@ impl Sim {
             .set_card_held(&owner.principal, owner.session, cmd, hold)
     }
 
+    /// A deck that said hello and went live. `lang` is the language its
+    /// hello names, at a revision newer than the Mac's so it is adopted;
+    /// `None` is firmware with no language setting.
+    pub fn link_live(&mut self, lang: Option<u8>) {
+        let sid = self.store.config().sid;
+        self.apply(Command::Link(crate::LinkEvent::Linked));
+        self.apply(Command::Device(crate::DeviceLine::Hello {
+            v: 1,
+            fw: "0.13.0".into(),
+            sid,
+            boot: false,
+            rx: crate::LINE_MAX_U16,
+            agents: None,
+            lang,
+            lang_rev: lang.map(|_| 1_000),
+            faces: Vec::new(),
+        }));
+        self.apply(Command::Link(crate::LinkEvent::Live { sid }));
+    }
+
     /// `Command::Mute` with exactly `sessions` muted.
     pub fn mute(&mut self, sessions: &[SessionId]) {
         self.apply(Command::Mute {

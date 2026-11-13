@@ -13,6 +13,7 @@ pub mod holds;
 mod images;
 pub mod sessions;
 mod test_agent;
+mod updates;
 
 pub use handle::{
     CallCtx, ClientInfo, CoreHandle, CoreMsg, Delivery, HoldGuard, HoldResult, HoldRx, OpenSession,
@@ -31,8 +32,8 @@ use crossbeam_channel::TrySendError;
 use crossbeam_channel::{select, tick, Receiver};
 use deck_model::{
     AgentId, Answer, ApiError, ApiResult, CardId, CardKind, Command, Control, Deliver, DeviceLine,
-    DeviceOp, DeviceReport, Effect, Event, EventKind, HoldId, Key, LinkEvent, Principal, Request,
-    Scope, SessionId, Slot, Store, StoreConfig, TimerKey, Ts, VoiceIn,
+    DeviceOp, DeviceReport, Effect, Event, EventKind, FailureLine, HoldId, Key, LinkEvent,
+    Principal, Request, Scope, SessionId, Shown, Slot, Store, StoreConfig, TimerKey, Ts, VoiceIn,
 };
 use guard::{Guard, Refusal};
 use holds::Holds;
@@ -98,6 +99,24 @@ pub(crate) fn event_agent(event: &Event) -> Option<AgentId> {
         serde_json::Value::Object(agent) => Some(AgentId(agent.get("id")?.as_str()?.to_string())),
         _ => None,
     }
+}
+
+/// The app a hand-off raises for `agent`: the bundle identifier its hook
+/// helper reported (`terminal.app`), and only for a hook-registered session
+/// — a connected app's own `terminal` is informational (§4.6) and never
+/// raised. Checked again here, because the value becomes an argument of
+/// `/usr/bin/open`.
+pub(crate) fn handoff_app(agent: &deck_model::Agent) -> Option<String> {
+    if agent.source != deck_model::Source::Hook {
+        return None;
+    }
+    agent
+        .session
+        .terminal
+        .as_ref()?
+        .app
+        .clone()
+        .filter(|id| crate::hook::app::valid_bundle_id(id))
 }
 
 /// `data.card` as a card id (`card.cleared`, `card.snoozed`, …).
@@ -170,6 +189,14 @@ pub struct Core {
     /// `audio::spawn`, so a key pasted into the config speaks at the next
     /// announcement and never needs a restart.
     pub tts_settings: Arc<arc_swap::ArcSwap<crate::audio::cloud::Settings>>,
+    /// Where the cloud voice's key lives and what the store holds
+    /// (`crate::secrets`): `set_config` puts a stored key into the config in
+    /// force, so everything that reads the key from there reads it as before.
+    voice_key: crate::secrets::VoiceKey,
+    /// The `deckd-keychain` thread, which makes every store write of this
+    /// run. The core never calls the store itself, because a Keychain call
+    /// can wait on a dialog.
+    keeper: crate::secrets::Keeper<dispatch::KeyWork>,
     /// `[voice.stt]` as the local recogniser reads it at every press
     /// (`audio::whisper`), refreshed the same way.
     pub stt_settings: Arc<arc_swap::ArcSwap<crate::stt::Settings>>,
@@ -192,22 +219,12 @@ pub struct Core {
     /// Recordings offered to `caps.transcribe` companions, shared with the
     /// audio engine (`audio::companion`).
     pub transcribe: Arc<crate::audio::companion::CompanionHub>,
-    /// The desktop seam (§5.5, week 5). `DesktopHandle::none()` until
-    /// something installs a worker, which is what `--no-device` and every
-    /// unit test leave in place: `Effect::Desktop` is logged and forgotten
-    /// and `op.order` still resolves to `via:"inject"` and writes the order
-    /// history.
+    /// The desktop seam (§5.5): the hand-off and the Macropad keys.
+    /// `DesktopHandle::none()` until something installs a worker, which is
+    /// what `--no-device`, a non-macOS build and every unit test leave in
+    /// place: a hand-off or a keystroke is logged and forgotten, and the
+    /// inbox and Claude Channels still report through its outcome channel.
     pub desktop: DesktopHandle,
-    /// Orders a full desktop queue refused, for `metrics.get`. There is no
-    /// re-projection to cover a drop here, and retrying an order the
-    /// operator dictated seconds ago is worse than telling them it was
-    /// lost — so a refusal is `order.failed{reason:"undeliverable"}` and a
-    /// counter, never a queue.
-    desktop_dropped: u64,
-    /// What the injector last learned about Automation, for `perm.status`.
-    /// `None` until it has tried: an un-probed permission is `unknown`, which
-    /// is not the same claim as `not_determined` (§4.11).
-    automation_denied: Option<bool>,
     /// The Accessibility grant as the desktop side last learned it
     /// (`perm.status.accessibility`): `None` until a Macropad key was
     /// pressed or `perm.request` asked.
@@ -277,6 +294,10 @@ pub struct Core {
     /// Which source each session is, when each was last heard from, and the
     /// sessions the owner's `[sources]` switches mute (`care::sources`).
     sources: crate::care::sources::Ledger,
+    /// What became of every card and how the deck's reader was used
+    /// (`crate::deliveries`), read off every step's events and every deck
+    /// line, and kept in `state.json`.
+    deliveries: crate::deliveries::Ledger,
     /// The test agent (`care::test`): the daemon's own care session, the
     /// agent "Test" while a test is on the deck, and how the last test of
     /// each kind went; and the agent that asks before a firmware install,
@@ -294,6 +315,15 @@ pub struct Core {
     /// resolves to here ([`Core::tcp_door`]); `false` in a core `run` did
     /// not start, and in one whose file named the key, where nothing looked.
     pub legacy_hooks: bool,
+    /// Whether the collectors run (`crate::dormancy`). Off, so always
+    /// collecting, until `run` starts it for a daemon that can have a deck.
+    dormancy: crate::dormancy::Dormancy,
+    /// The deck's reader set with its linger (`crate::reader`): the lazy
+    /// feed is on exactly while dormancy is, so a core without it reads
+    /// every session.
+    readers: crate::reader::Readers,
+    /// The service's own looks for a release (`Core::check_for_updates`).
+    update_schedule: crate::firmware::Schedule,
 }
 
 /// A parked `op.answer` reply. `deck-model` answers the method before the
@@ -333,6 +363,12 @@ impl Core {
                 crate::download::Installer::default(),
             )
         };
+        // The record `state.json` kept goes on counting.
+        let deliveries = crate::deliveries::Ledger::new(
+            state.deliveries.clone(),
+            &store.snapshot().service.version,
+            wall_now(),
+        );
         Core {
             store,
             state,
@@ -345,6 +381,8 @@ impl Core {
             audio_devices: None,
             audio_policy: None,
             tts_settings: Arc::new(arc_swap::ArcSwap::from_pointee(crate::audio::cloud::Settings::default())),
+            voice_key: crate::secrets::VoiceKey::file(),
+            keeper: crate::secrets::Keeper::none(),
             stt_settings: Arc::new(arc_swap::ArcSwap::from_pointee(crate::stt::Settings::default())),
             stt_install,
             firmware,
@@ -357,8 +395,6 @@ impl Core {
             kokoro: None,
             transcribe: crate::audio::companion::CompanionHub::new(),
             desktop: DesktopHandle::none(),
-            desktop_dropped: 0,
-            automation_denied: None,
             accessibility_granted: None,
             engines: None,
             exit: Arc::default(),
@@ -393,10 +429,14 @@ impl Core {
             adapters: Arc::default(),
             usage: crate::usage::Feeder::default(),
             sources: crate::care::sources::Ledger::default(),
+            deliveries,
             test_agent: crate::care::test::TestAgent::default(),
             install_pressed: None,
             no_device: false,
             legacy_hooks: false,
+            dormancy: crate::dormancy::Dormancy::off(),
+            readers: crate::reader::Readers::default(),
+            update_schedule: crate::firmware::Schedule::default(),
         }
     }
 
@@ -406,7 +446,14 @@ impl Core {
     /// (`agents.grace_s`, `cards.ready_ttl_s`, `hooks.claude.hold_s`, the
     /// pins) through `Store::reconfigure`, which leaves the store's
     /// identity and `port` alone.
+    ///
+    /// `config` is the file's. On a store home the cloud voice's key is not
+    /// in the file, so it is put in here ([`crate::secrets::VoiceKey::overlay`]),
+    /// and the config in force is the one with the key: the synthesiser's
+    /// cell, the voice pool, `voice.engines` and `config.get`'s hint read it
+    /// from there as they always did.
     pub fn set_config(&mut self, config: Arc<Config>) {
+        let config = self.voice_key.overlay(config);
         self.guard.require_trusted = config.trust.require_trusted_for_allow;
         // The rest of `[trust]` lives in the verifier, which the doors hold
         // behind an `Arc` — it re-reads its requirements rather than being
@@ -490,11 +537,11 @@ impl Core {
         // and never touches the system default: nothing on the audio side
         // can re-derive it. Only on a change — this runs on every reload,
         // and re-selecting a device mid-session would close the stream the
-        // operator is listening to.
+        // operator is listening to. An unset `device_uid` is `None` here,
+        // and the engine keeps the deck it discovered at start for that.
         let devices = deck_model::AudioCmd::Devices {
             device_uid: config.voice.device_uid.clone(),
             fallback_output: config.voice.fallback_output.clone(),
-            fallback_input: config.voice.fallback_input.clone(),
         };
         if self.audio_devices.as_ref() != Some(&devices) {
             self.audio_devices = Some(devices.clone());
@@ -518,6 +565,17 @@ impl Core {
 
     pub fn config(&self) -> &Config {
         &self.config
+    }
+
+    /// Where the cloud voice's key lives (`crate::secrets::home_for`), its
+    /// store already read once off this thread. A store home gets its
+    /// `deckd-keychain` thread here. Set before the first `set_config`.
+    pub fn set_voice_key(&mut self, key: crate::secrets::VoiceKey) {
+        self.keeper = match key.store() {
+            Some(store) => crate::secrets::Keeper::spawn(store),
+            None => crate::secrets::Keeper::none(),
+        };
+        self.voice_key = key;
     }
 
     /// The verifier the UDS door consults, handed to the core so every
@@ -741,6 +799,7 @@ impl Core {
             tcp: self.tcp_door(),
             codex_connected: self.adapters.codex_connected(),
             firmware_busy: self.firmware.status().busy(),
+            keychain: self.voice_key.present(),
         }
     }
 
@@ -855,6 +914,39 @@ impl Core {
         self.flush_answers();
     }
 
+    /// The delivery record (`crate::deliveries`) reads every step's events.
+    /// A card's source is its agent's session's, asked of `care::sources`
+    /// as the card is set; a card that ended is copied into `state.json`.
+    fn note_deliveries(&mut self, events: &[Event], now: Instant) {
+        if events.is_empty() {
+            return;
+        }
+        let (snapshot, sources, sessions) = (self.store.snapshot(), &self.sources, &self.sessions);
+        let from = |agent: &AgentId| {
+            snapshot
+                .agents
+                .get(agent)
+                .map_or("unknown", |a| sources.word(sessions, a.owner.session))
+        };
+        if self.deliveries.observe(events, snapshot, from) {
+            self.persist_deliveries(now);
+        }
+    }
+
+    /// The delivery record into `state.json`, on the state file's own
+    /// debounce.
+    fn persist_deliveries(&mut self, now: Instant) {
+        self.state.deliveries = self.deliveries.persisted(now);
+        self.state_dirty.get_or_insert(now);
+    }
+
+    /// What the settle window did since the last look, into the delivery
+    /// record.
+    fn take_asks(&mut self) {
+        let asks = self.adapters.asks.take();
+        self.deliveries.add_asks(asks);
+    }
+
     /// Send every parked `op.answer` whose two halves are in.
     fn flush_answers(&mut self) {
         let mut i = 0;
@@ -940,6 +1032,16 @@ impl Core {
                     self.wait_call(ctx, params, WaitReply::Call(reply), now);
                     return;
                 }
+                // So does a `config.set` that names the cloud voice's key on
+                // a store home: it is answered when the keychain thread has
+                // written the key (`dispatch::KeyWork`).
+                if method == "config.set"
+                    && self.voice_key.is_store()
+                    && dispatch::names_voice_key(&params)
+                {
+                    self.config_set_keyed(ctx, &params, reply);
+                    return;
+                }
                 let answer = self.call(ctx, &method, params, now);
                 let _ = reply.send(answer);
             }
@@ -1020,8 +1122,42 @@ impl Core {
             CoreMsg::CareContext(reply) => {
                 let _ = reply.send(self.care_context());
             }
+            CoreMsg::ChatReplace {
+                session,
+                agent,
+                messages,
+                reply,
+            } => {
+                let _ = reply.send(self.chat_replace(session, agent, messages, now));
+            }
             CoreMsg::Shutdown => {}
         }
+    }
+
+    /// A session's history read again for the lazy reader feed
+    /// (`crate::reader`), in place of the one kept: only from the session
+    /// that owns the agent, the rule every write of an agent's goes by. Not
+    /// the source doing anything, so its `last_event_at` is not stamped.
+    fn chat_replace(
+        &mut self,
+        session: SessionId,
+        agent: AgentId,
+        messages: Vec<(deck_model::MessageMeta, String)>,
+        now: Instant,
+    ) -> ApiResult {
+        let owner = self
+            .store
+            .snapshot()
+            .agents
+            .get(&agent)
+            .map(|a| a.owner.clone())
+            .ok_or_else(|| ApiError::not_found("agent"))?;
+        if owner.session != session {
+            return Err(ApiError::conflict(&owner));
+        }
+        tracing::debug!(agent = %agent.0, messages = messages.len(), "reader: a session's history read again");
+        self.step(Command::ChatReplace { agent, messages }, now);
+        Ok(serde_json::json!({"rev": self.store.snapshot().rev}))
     }
 
     /// A config taken in, whichever of the three ways it came: the
@@ -1030,8 +1166,11 @@ impl Core {
     /// (a `[sources]` switch may have moved) and the Usage face is redrawn
     /// (its `[usage] providers` may have). Taking the config the core
     /// already holds changes nothing, which is what the watcher's reload of
-    /// a `config.set`'s own write comes to.
+    /// a `config.set`'s own write comes to. On a store home a cloud voice
+    /// key found in the file is sent to the store on the keychain thread;
+    /// until it has moved, the file's key is the one in force.
     fn take_config(&mut self, config: Arc<Config>, now: Instant) {
+        self.move_voice_key(&config);
         self.set_config(config);
         self.apply_pauses(now);
         self.push_usage(now);
@@ -1526,6 +1665,9 @@ impl Core {
                 ctx: "step".into(),
                 choice: answer.choice,
                 card: Some(card),
+                // A step is the card's answer, which fails by the card's own
+                // revert; it is no order of its own.
+                order: None,
             }
         } else {
             MailKind::Answer { card, answer }
@@ -1594,8 +1736,11 @@ impl Core {
                     }
                 }
                 EventKind::AgentRemoved => {
+                    // An owner that releases its agent with orders unread
+                    // leaves them undelivered: the deck says so.
                     if let Some(agent) = event_agent(event) {
-                        self.prune(|m| sessions::mailbox::prune_agent(m, &agent));
+                        let unread = self.take_mail(|m| sessions::mailbox::take_agent(m, &agent));
+                        self.fail_dropped_orders(unread, "agent_gone");
                     }
                 }
                 _ => {}
@@ -1617,29 +1762,118 @@ impl Core {
         }
     }
 
+    /// Take mail out of every session's mailbox and the orphan mailbox
+    /// with `f`, and return what came from a connected app or a closed
+    /// session. The daemon's own sessions (the demo, the care agent, the
+    /// Codex client) read no mailbox anybody waits on, so their mail goes
+    /// with no word, as it always has.
+    fn take_mail(&mut self, mut f: impl FnMut(&mut VecDeque<Mail>) -> Vec<Mail>) -> Vec<Mail> {
+        let mut taken = Vec::new();
+        let mut dropped = 0;
+        for (_, entry) in self.sessions.iter_mut() {
+            let mail = f(&mut entry.mailbox);
+            if matches!(entry.kind, SessionKind::Internal) {
+                dropped += mail.len();
+            } else {
+                taken.extend(mail);
+            }
+        }
+        taken.extend(f(self.sessions.orphans_mut()));
+        let total = dropped + taken.len();
+        if total > 0 {
+            tracing::debug!(mail = total, "mail dropped");
+        }
+        taken
+    }
+
+    /// Every order among `mail` failed for `reason`: `order.failed` and the
+    /// deck, as the next step's commands (`Command::OrderResult`). A step
+    /// is its card's answer and fails with it; answers and snoozes go with
+    /// no word, as before.
+    fn fail_dropped_orders(&mut self, mail: Vec<Mail>, reason: &str) {
+        for mail in mail {
+            let MailKind::Order {
+                text,
+                card: None,
+                order,
+                ..
+            } = mail.kind
+            else {
+                continue;
+            };
+            // The store publishes it for whoever dictated the order, while
+            // it can still be reported on; this is only the fallback.
+            let principal = self
+                .store
+                .snapshot()
+                .agents
+                .get(&mail.agent)
+                .map_or(Principal::Uid(0), |a| a.owner.principal.clone());
+            tracing::info!(agent = %mail.agent.0, reason, "an order was never read");
+            self.followups.push_back(Command::OrderResult {
+                principal,
+                agent: mail.agent,
+                text,
+                ok: false,
+                reason: Some(reason.to_string()),
+                order,
+            });
+        }
+    }
+
     /// `agent.order` never goes on the bus: it belongs to the owner alone.
+    ///
+    /// Words the owner cannot be handed fail on the deck rather than
+    /// vanish: a connection that is closed or full, a session that is gone
+    /// (`Command::OrderResult`, applied after this step).
     fn route_order(&mut self, event: &Event, now: Instant) {
+        use tokio::sync::mpsc::error::TrySendError;
         let Some(agent) = event_agent(event) else {
             return;
         };
         let Some(session) = self.owner_session(&agent) else {
             return;
         };
-        if event.data["via"].as_str() == Some("push") {
-            self.notify(session, crate::api::rpc::event_line(event));
-            return;
-        }
-        let mail = Mail {
-            agent,
-            at: now,
-            kind: MailKind::Order {
-                text: event.data["text"].as_str().unwrap_or_default().to_string(),
-                ctx: event.data["ctx"].as_str().unwrap_or("talk").to_string(),
-                choice: None,
-                card: None,
-            },
+        let text = event.data["text"].as_str().unwrap_or_default().to_string();
+        let order = event.data["order"].as_str().map(String::from);
+        let failed = if event.data["via"].as_str() == Some("push") {
+            match self.sessions.get(session).map(|e| &e.kind) {
+                Some(SessionKind::Live { tx }) => {
+                    match tx.try_send(Outbound::Line(crate::api::rpc::event_line(event))) {
+                        Ok(()) => None,
+                        Err(TrySendError::Full(_)) => Some("channel_full"),
+                        Err(TrySendError::Closed(_)) => Some("owner_gone"),
+                    }
+                }
+                // The demo is its own owner, and pushes to nobody.
+                Some(SessionKind::Internal) => None,
+                _ => Some("owner_gone"),
+            }
+        } else {
+            let mail = Mail {
+                agent: agent.clone(),
+                at: now,
+                kind: MailKind::Order {
+                    text: text.clone(),
+                    ctx: event.data["ctx"].as_str().unwrap_or("talk").to_string(),
+                    choice: None,
+                    card: None,
+                    order: order.clone(),
+                },
+            };
+            (!self.hand_to_waiter(session, mail)).then_some("owner_gone")
         };
-        self.hand_to_waiter(session, mail);
+        if let Some(reason) = failed {
+            tracing::warn!(session = %session, agent = %agent.0, reason, "an order could not be handed to its owner");
+            self.followups.push_back(Command::OrderResult {
+                principal: event.principal.clone(),
+                agent,
+                text,
+                ok: false,
+                reason: Some(reason.to_string()),
+                order,
+            });
+        }
     }
 
     /// A snooze on a push/poll card reaches its owner as well (§3.2): a
@@ -1717,16 +1951,24 @@ impl Core {
             }
         }
         let ttl = Duration::from_secs(u64::from(self.config.api.mailbox_ttl_s));
-        self.prune(|m| sessions::mailbox::prune_older(m, now, ttl));
+        // An order nobody picked up in time was not delivered: the deck says
+        // so, late but true.
+        let expired = self.take_mail(|m| sessions::mailbox::take_older(m, now, ttl));
+        self.fail_dropped_orders(expired, "expired");
+        self.drain_followups(&mut Vec::new(), now);
     }
 
     /// The orderly end: the closing metric, `Command::Shutdown` (holds
-    /// released by the store), the bus, `state.json`, `status.json`.
+    /// released by the store), the bus, the delivery record (the cards
+    /// still up end as `shutdown`), `state.json`, `status.json`.
     pub fn shutdown(&mut self) {
         let now = Instant::now();
         self.refresh_metric(now);
         self.step(Command::Shutdown, now);
         self.publish();
+        self.take_asks();
+        self.deliveries.shutdown(self.store.ts(now));
+        self.state.deliveries = self.deliveries.persisted(now);
         self.flush_state();
         self.write_status(now);
     }
@@ -1858,6 +2100,26 @@ impl Core {
         events
     }
 
+    /// Show on the deck that something the operator asked for did not
+    /// happen, the way a failed order is shown: a card on `agent` when
+    /// nothing of it waits on the deck, else the deck's own toast when
+    /// nothing was sent, else nothing (`deck_model::Store::fail_on_deck`
+    /// has the rule). `reason` is one word for the record; `line` is what
+    /// the deck shows, in each of its languages. Returns what was shown.
+    pub fn fail_on_deck(
+        &mut self,
+        agent: Option<&AgentId>,
+        reason: &str,
+        line: FailureLine,
+        now: Instant,
+    ) -> Shown {
+        let (shown, mut events, effects) = self.store.fail_on_deck(agent, reason, line, now);
+        self.execute_all(effects, &events, now);
+        self.drain_followups(&mut events, now);
+        tracing::info!(agent = ?agent.map(|a| &a.0), reason, shown = shown.as_str(), "a failure on the deck");
+        shown
+    }
+
     fn drain_followups(&mut self, events: &mut Vec<Event>, now: Instant) {
         while let Some(next) = self.followups.pop_front() {
             events.extend(self.apply(next, now));
@@ -1876,7 +2138,7 @@ impl Core {
                 // The one effect that needs the events of its own `apply`:
                 // `order.failed` is published for whoever `order
                 // .dispatched` named, and the effect itself carries no
-                // principal (`DesktopCmd::Inject` is `{agent, text}`).
+                // principal (`DesktopCmd::Inject` is `{agent, text, order}`).
                 Effect::Desktop(cmd) => self.send_desktop(cmd, events),
                 other => self.execute(other, now),
             }
@@ -1886,8 +2148,8 @@ impl Core {
         }
         self.route_events(events, now);
         self.note_answer_outcomes(events);
+        self.note_deliveries(events, now);
         self.settle_tests(events, now);
-        self.unpin_removed(events);
         self.forget_inboxes(events);
         self.pending.extend(events.iter().cloned());
     }
@@ -1919,11 +2181,17 @@ impl Core {
 
     /// A device line: the store first, then the demo client's reaction.
     pub fn on_device_line(&mut self, line: DeviceLine, now: Instant) -> Vec<Event> {
+        // The delivery record reads every line first: an image request is
+        // answered here and never reaches the store.
+        self.deliveries.device_line(&line, now);
         if let DeviceLine::Image { slot, rev, index, offset } = &line {
             self.on_device_image(*slot, *rev, *index, *offset, now);
             return Vec::new();
         }
         let events = self.step(Command::Device(line), now);
+        // The deck said which channel or card it shows: that session is
+        // read from now, not from the next tick.
+        self.reader_check(now);
         let acts = self
             .demo
             .as_mut()
@@ -1958,7 +2226,133 @@ impl Core {
     pub fn on_link(&mut self, link: LinkEvent, now: Instant) {
         tracing::info!(?link, "link");
         self.step(Command::Link(link), now);
+        // A deck that links wakes the collectors now, not at the next tick.
+        self.gate_check(now);
         self.write_status(now);
+    }
+
+    /// The adapters' per-daemon state, the collectors' gate on it: what a
+    /// handle built around this core shares with it.
+    pub fn adapters(&self) -> &Arc<crate::adapters::rt::Adapters> {
+        &self.adapters
+    }
+
+    /// Start the collectors' dormancy (`crate::dormancy`), or end it with
+    /// `Dormancy::off()`: `service.dormancy` and the gate say so at once,
+    /// before any collector has looked.
+    pub fn set_dormancy(&mut self, dormancy: crate::dormancy::Dormancy, now: Instant) {
+        self.dormancy = dormancy;
+        self.step(Command::Dormancy(self.dormancy.state()), now);
+        self.gate_check(now);
+    }
+
+    /// The collectors' gate, from the link, the deck's strip and the clock
+    /// (`crate::dormancy`), published to every collector; on every tick and
+    /// every link change. While the service is quiet the agents the Claude
+    /// and Codex adapters own are released, on every check, so one a hook
+    /// registered just as the quiet began goes too.
+    pub fn gate_check(&mut self, now: Instant) {
+        let linked = self.store.snapshot().device.host_online;
+        let wall = self.store.ts(now);
+        if self.dormancy.observe(linked, wall, now) {
+            if self.dormancy.collecting() {
+                tracing::info!("collectors on: the deck linked");
+            } else {
+                tracing::info!("collectors off: no deck linked for ten minutes");
+            }
+            self.step(Command::Dormancy(self.dormancy.state()), now);
+            self.write_status(now);
+        }
+        let gate = crate::dormancy::Gate::of(&self.dormancy, self.store.snapshot());
+        self.adapters.set_gate(gate);
+        if !gate.collect {
+            self.release_collected(now);
+        }
+        self.reader_check(now);
+    }
+
+    /// The sessions whose history is collected (`crate::reader`), published
+    /// beside the gate: on every tick, link event and line from the deck.
+    /// The feed is lazy exactly while dormancy is on. A Claude or Codex
+    /// session whose linger ran out has its workflow runs dropped
+    /// (`Command::ReaderLeft`): its transcript watcher kept them current. A
+    /// connected app publishes its own and keeps them.
+    pub fn reader_check(&mut self, now: Instant) {
+        if !self.dormancy.enabled() {
+            self.adapters.set_reader(crate::reader::Reader::all());
+            return;
+        }
+        let reading = self.store.reader();
+        let agents = &self.store.snapshot().agents;
+        let (fed, stopped) = self
+            .readers
+            .observe(reading, now, |agent| agents.contains_key(agent));
+        for agent in stopped {
+            let collected = self
+                .store
+                .snapshot()
+                .agents
+                .get(&agent)
+                .is_some_and(|a| self.collected(a));
+            if collected {
+                self.step(Command::ReaderLeft { agent }, now);
+            }
+        }
+        let sessions = fed.len();
+        if self.adapters.set_reader(crate::reader::Reader::only(fed)) {
+            tracing::debug!(sessions, "reader: the sessions the deck reads");
+        }
+    }
+
+    /// Whether the service collects this agent from its source itself: it
+    /// is the Claude or the Codex adapter's, told by the session that owns
+    /// it, never by its principal (the demo's example agent speaks as the
+    /// Claude adapter from a session of its own). These go quiet with
+    /// dormancy and are read lazily; a connected app's, the demo's and the
+    /// test agent are fed by whoever owns them.
+    fn collected(&self, agent: &deck_model::Agent) -> bool {
+        use crate::care::sources::Source;
+        self.sessions
+            .get(agent.owner.session)
+            .and_then(Source::of)
+            .is_some_and(|source| matches!(source, Source::Claude | Source::Codex))
+    }
+
+    /// The Claude and Codex adapters' agents ([`Core::collected`]), released
+    /// while the service is quiet (`agent.removed{reason:"dormant"}`). They
+    /// come back the way they come at start-up when a deck links: the
+    /// roster seed, Codex's loaded threads, the next hook. Agents of
+    /// connected apps, the demo and the test agent are kept.
+    ///
+    /// Released as the daemon's own act, the way the implicit heartbeat
+    /// runs: the source did nothing, so it stamps no `last_event_at`.
+    fn release_collected(&mut self, now: Instant) {
+        let collected: Vec<(Principal, SessionId, AgentId)> = self
+            .store
+            .snapshot()
+            .agents
+            .values()
+            .filter(|agent| self.collected(agent))
+            .map(|agent| {
+                (
+                    agent.owner.principal.clone(),
+                    agent.owner.session,
+                    agent.id.clone(),
+                )
+            })
+            .collect();
+        for (principal, session, agent) in collected {
+            let req = Request::AgentRelease {
+                agent,
+                reason: Some(crate::dormancy::DORMANT.into()),
+            };
+            let (result, mut events, effects) = self.store.call(principal, session, req, now);
+            self.execute_all(effects, &events, now);
+            self.drain_followups(&mut events, now);
+            if let Err(e) = result {
+                tracing::debug!(code = e.code, "a quiet release was refused");
+            }
+        }
     }
 
     /// What the deck said about itself, or why its link is ending: the
@@ -2086,35 +2480,76 @@ impl Core {
         self.audio_dropped += 1;
     }
 
-    /// One `DesktopCmd` from the reducer, turned into a [`DesktopJob`] the
-    /// worker can run (§5.5, week 5).
-    ///
-    /// **This is where guard 1 is applied** on the core side:
-    /// [`crate::desktop::inject::target_of`] is the only way to build a
-    /// `Target`, and it refuses every agent §5.5 says may not be an
-    /// injection target — a card choice's `push`/`poll` route, an agent
-    /// whose `source` is not `Hook` (a virtual agent's self-supplied
-    /// `terminal`/`pid` is informational, §4.6), a pid the hook helper
-    /// resolved as `shell`/`unknown`, a session with no tty. The *trust*
-    /// half of guard 1 ran earlier still, in `core::guard`, before the
-    /// reducer routed anything.
+    /// One `DesktopCmd` from the reducer (§5.5): a hand-off, an order to
+    /// deliver, or a Macropad keystroke.
     fn send_desktop(&mut self, cmd: deck_model::DesktopCmd, events: &[Event]) {
         use deck_model::DesktopCmd;
-        let agent = match &cmd {
-            DesktopCmd::Focus { agent } | DesktopCmd::Inject { agent, .. } => agent.clone(),
-            // No agent, no terminal, no guard: straight to the desktop thread.
+        match cmd {
+            // No agent and no guard: straight to the desktop thread.
             DesktopCmd::Keystroke { keys } => {
-                let job = crate::desktop::DesktopJob::Keystroke { keys: keys.clone() };
-                if let Some(crate::desktop::DesktopJob::Keystroke { keys }) = self.desktop.send_or_return(job) {
+                let job = DesktopJob::Keystroke { keys };
+                if let Some(DesktopJob::Keystroke { keys }) = self.desktop.send_or_return(job) {
                     tracing::info!(%keys, engine = self.desktop.engine(), "macro keystroke dropped: no desktop, or its queue is full");
                 }
-                return;
             }
+            DesktopCmd::Focus { agent } => self.hand_off(agent),
+            DesktopCmd::Inject { agent, text, order } => {
+                self.deliver_order(agent, text, order, events);
+            }
+        }
+    }
+
+    /// The hand-off (`deck_model::handoff`): ENTER on a session's `Open app`
+    /// card, or `op.focus`, brings forward the app the session runs in.
+    ///
+    /// Only a hook-registered session's app is raised: what a connected app
+    /// declares about itself is informational (§4.6), and such an app
+    /// brings itself forward on `card.focused` / `focus.changed`. With no
+    /// desktop in this build (`--no-device`, Linux) nothing is raised and
+    /// nothing is claimed. A hand-off that cannot happen — no app known for
+    /// the session, the app not running, macOS refusing — comes back as a
+    /// [`FromDesktop::Raised`] and is shown on the deck from there
+    /// ([`Core::on_from_desktop`]), outside the step that asked.
+    fn hand_off(&mut self, agent: AgentId) {
+        let Some(found) = self.store.snapshot().agents.get(&agent) else {
+            return;
         };
+        if found.source != deck_model::Source::Hook {
+            tracing::debug!(agent = %agent.0, "hand-off: a connected app's agent, which the app brings forward itself");
+            return;
+        }
+        if !self.desktop.engine() {
+            tracing::debug!(agent = %agent.0, "hand-off: no desktop in this build");
+            return;
+        }
+        let Some(app) = handoff_app(found) else {
+            tracing::info!(agent = %agent.0, "hand-off: no app is known for this session");
+            let _ = self.desktop.outcomes().send(FromDesktop::Raised {
+                agent,
+                app: None,
+                outcome: crate::desktop::Outcome::NoApp,
+            });
+            return;
+        };
+        if self
+            .desktop
+            .send_or_return(DesktopJob::Raise { agent, app })
+            .is_some()
+        {
+            tracing::warn!("core->desktop full; a hand-off is dropped");
+        }
+    }
+
+    /// An order to a session the daemon delivers itself (`caps.order:
+    /// "inject"`): by Claude Channels once the session has opted in, else
+    /// by the session's own inbox, else not at all — `order.failed
+    /// {reason:"no_route"}` after the `order.dispatched` that already went
+    /// out, which the deck shows like any failed order. Nothing is ever
+    /// typed into a terminal.
+    fn deliver_order(&mut self, agent: AgentId, text: String, order: String, events: &[Event]) {
         // The principal `order.failed` is published for: whoever the
-        // `order.dispatched` of this same step named. Falling back to the
-        // agent's owner keeps the event attributable when the dispatch is
-        // not in this batch (a `Focus`, or a future caller).
+        // `order.dispatched` of this same step named, else the agent's
+        // owner, so the event stays attributable.
         let principal = events
             .iter()
             .find(|e| {
@@ -2129,133 +2564,63 @@ impl Core {
                     .map(|a| a.owner.principal.clone())
             })
             .unwrap_or(Principal::Uid(0));
-        // Channels are preferred only after a notification round trip proves
-        // this session opted in. The old inbox remains the safe fallback.
-        if let DesktopCmd::Inject { text, .. } = &cmd {
-            if let Some(target) = self.store.snapshot().agents.get(&agent) {
-                let dialog_open = target.card.as_ref().is_some_and(deck_model::Card::is_open_dialog);
-                if self.adapters.claude_channels.post(
-                    target, text, self.adapters.inbox(&agent), dialog_open, self.desktop.outcomes(),
-                ) {
-                    return;
-                }
-            }
-        }
-        // The inbox fallback (§5.5, `crate::inbox`): a Claude session
-        // whose message socket a hook reported is **posted to**, never typed
-        // at — no focus, no AppleScript, no TCC, and the only route a
-        // Desktop-app session has. It needs no desktop engine, so it runs
-        // before the `engine()` check below; a `--no-device` daemon can
-        // still deliver a spoken order this way. Guard 2 is read fresh here
-        // and re-checked by the poster, exactly as the injector does.
-        if let DesktopCmd::Inject { text, .. } = &cmd {
-            if let Some(inbox) = self.adapters.inbox(&agent) {
-                let dialog_open = self
-                    .store
-                    .snapshot()
-                    .agents
-                    .get(&agent)
-                    .and_then(|a| a.card.as_ref())
-                    .is_some_and(deck_model::Card::is_open_dialog);
-                crate::inbox::post_async(
-                    self.desktop.outcomes(),
-                    agent,
-                    text.clone(),
-                    inbox,
-                    dialog_open,
-                );
-                return;
-            }
-        }
-        let target = match self
+        // Guard 2, read fresh: a post into an open dialog would cancel it,
+        // so both routes refuse with `dialog_open` and send nothing.
+        let dialog_open = self
             .store
             .snapshot()
             .agents
             .get(&agent)
-            .ok_or(crate::desktop::DesktopError::NoTerminal)
-            .and_then(crate::desktop::inject::target_of)
-        {
-            Ok(target) => target,
-            Err(refusal) => {
-                tracing::info!(
-                    agent = %agent.0, reason = refusal.reason(),
-                    "desktop: this agent is not an injection target"
-                );
-                if let DesktopCmd::Inject { text, .. } = cmd {
-                    self.followups.push_back(Command::OrderResult {
-                        principal,
-                        agent,
-                        text,
-                        ok: false,
-                        reason: Some(refusal.reason().to_string()),
-                    });
-                }
+            .and_then(|a| a.card.as_ref())
+            .is_some_and(deck_model::Card::is_open_dialog);
+        // Channels are preferred only after a notification round trip proves
+        // this session opted in.
+        if let Some(target) = self.store.snapshot().agents.get(&agent) {
+            if self.adapters.claude_channels.post(
+                target,
+                &text,
+                Some(order.clone()),
+                self.adapters.inbox(&agent),
+                dialog_open,
+                self.desktop.outcomes(),
+            ) {
                 return;
             }
-        };
-        let job = match cmd {
-            // Sent to the desktop thread above, before any agent was resolved.
-            DesktopCmd::Keystroke { .. } => return,
-            DesktopCmd::Focus { agent } => DesktopJob::Focus { agent, target },
-            DesktopCmd::Inject { agent, text } => {
-                // The card half of guard 2, **read again here** rather than
-                // inherited as a constant. The reducer refuses
-                // `dialog_open` before `order.dispatched`, so in the
-                // ordinary case this is `false` — but a hardcoded `false`
-                // gave the worker's own re-check no producer at all, which
-                // is a guard that cannot fail and therefore is not one.
-                // `Card::is_open_dialog` is the reducer's own predicate, so
-                // the two sides cannot drift.
-                let dialog_open = self
-                    .store
-                    .snapshot()
-                    .agents
-                    .get(&agent)
-                    .and_then(|a| a.card.as_ref())
-                    .is_some_and(deck_model::Card::is_open_dialog);
-                DesktopJob::Inject {
-                    agent,
-                    target,
-                    text,
-                    dialog_open,
-                }
-            }
-        };
-        if !self.desktop.engine() {
-            tracing::debug!(?job, "desktop: no injector in this build");
-            if let DesktopJob::Inject { agent, text, .. } = job {
-                self.followups.push_back(Command::OrderResult {
-                    principal,
-                    agent,
-                    text,
-                    ok: false,
-                    reason: Some("no_injector".into()),
-                });
-            }
-            return;
         }
-        if let Some(DesktopJob::Inject { agent, text, .. }) = self.desktop.send_or_return(job) {
-            // A full queue means Ghostty is wedged; there is no
-            // re-projection to cover the drop and re-queueing an order the
-            // operator dictated is worse than saying it was lost.
-            tracing::warn!("core→desktop full; the order is dropped");
-            self.desktop_dropped += 1;
-            self.followups.push_back(Command::OrderResult {
-                principal,
+        // The inbox (`crate::inbox`): a Claude session whose message socket
+        // a hook reported is posted to — no focus, no TCC, and the only
+        // route a Desktop-app session has. It needs no desktop engine, so a
+        // `--no-device` daemon still delivers a spoken order this way.
+        if let Some(inbox) = self.adapters.inbox(&agent) {
+            crate::inbox::post_async(
+                self.desktop.outcomes(),
                 agent,
                 text,
-                ok: false,
-                reason: Some("undeliverable".into()),
-            });
+                Some(order),
+                inbox,
+                dialog_open,
+            );
+            return;
         }
+        tracing::info!(agent = %agent.0, "an order with no route: no Claude Channels connection and no inbox");
+        self.followups.push_back(Command::OrderResult {
+            principal,
+            agent,
+            text,
+            ok: false,
+            reason: Some("no_route".into()),
+            order: Some(order),
+        });
     }
 
-    /// One outcome from `deckd-desktop`.
+    /// One outcome from `deckd-desktop`, or from a worker that reports
+    /// through its channel (the inbox, Claude Channels).
     pub fn on_from_desktop(&mut self, msg: FromDesktop, now: Instant) {
         match msg {
             FromDesktop::Order {
                 agent,
                 text,
+                order,
                 result,
             } => {
                 let principal = self
@@ -2273,20 +2638,26 @@ impl Core {
                         text,
                         ok: result.is_ok(),
                         reason,
+                        order,
                     },
                     now,
                 );
             }
-            // Silent on the device — the `focus{ack}` already went out
-            // (§6.4) — and a log line the GUI's diagnostics bundle carries.
-            FromDesktop::Focus {
+            // A hand-off that happened is silent: the app is in front of the
+            // operator. One that did not is shown on the deck the way a
+            // failed order is, in the deck's language.
+            FromDesktop::Raised {
                 agent,
-                selected,
-                reason,
-            } => tracing::info!(agent = %agent.0, selected, ?reason, "desktop: focus"),
-            FromDesktop::Automation { denied } => {
-                tracing::warn!(denied, "desktop: automation permission changed");
-                self.automation_denied = Some(denied);
+                app,
+                outcome,
+            } => {
+                // Which app a session runs in is content (`terminal.app`):
+                // the log at its default level says what happened, not where.
+                tracing::info!(agent = %agent.0, outcome = %outcome.word(), "desktop: hand-off");
+                tracing::debug!(agent = %agent.0, app = app.as_deref().unwrap_or("-"), "desktop: hand-off app");
+                if let Some(failure) = outcome.failure() {
+                    self.fail_on_deck(Some(&agent), failure.reason(), failure.line(), now);
+                }
             }
             FromDesktop::Accessibility { granted } => {
                 if granted {
@@ -2298,37 +2669,6 @@ impl Core {
                     );
                 }
                 self.accessibility_granted = Some(granted);
-            }
-            FromDesktop::Pins(map) => {
-                if self.state.terminal_map != map {
-                    self.state.terminal_map = map;
-                    self.state_dirty.get_or_insert(now);
-                }
-            }
-        }
-    }
-
-    /// An agent that has gone gets its tab unpinned (§5.5 step 7, M7).
-    ///
-    /// Driven off `agent.removed` rather than off a `SessionEnd` hook,
-    /// because every way an agent can go — the hook, `agent.release`, a
-    /// lease expiry, the liveness poller's `gone`, shutdown — ends in that
-    /// one event, and a tab left reading `deck:cd34` after the session
-    /// behind it died is a title the operator cannot get rid of without
-    /// knowing about us. The job names the `ag_…` id: by the time the event
-    /// exists the agent is out of the snapshot, so its key cannot be read
-    /// any more, and the resolver remembers both.
-    fn unpin_removed(&mut self, events: &[Event]) {
-        if !self.desktop.engine() {
-            return;
-        }
-        for event in events.iter().filter(|e| e.kind == EventKind::AgentRemoved) {
-            if let Some(agent) = event_agent(event) {
-                // A refused unpin is not worth a retry queue: shutdown
-                // unpins everything that is left anyway.
-                let _ = self.desktop.send_or_return(DesktopJob::Release {
-                    key: agent.0.clone(),
-                });
             }
         }
     }
@@ -2344,17 +2684,11 @@ impl Core {
         }
     }
 
-    /// Install a real desktop worker's handle (week 5). Before this, and in
-    /// every build without one, `Effect::Desktop` fails the order with
-    /// `no_injector` rather than pretending it was typed.
+    /// Install a real desktop worker's handle. Before this, and in every
+    /// build without one, a hand-off or a keystroke is logged and
+    /// forgotten.
     pub fn set_desktop(&mut self, desktop: DesktopHandle) {
         self.desktop = desktop;
-    }
-
-    /// Orders a full desktop queue refused (`metrics.get`).
-    #[must_use]
-    pub fn desktop_dropped(&self) -> u64 {
-        self.desktop_dropped
     }
 
     /// `Say`/`Chime`/`Gain` a full audio queue refused (`metrics.get`).
@@ -2549,6 +2883,13 @@ impl Core {
             self.timers = self.timers.split_off(&(now, u64::MAX));
             self.step(Command::Tick(now), now);
         }
+        // The delivery record: the settle window's counts, and the reader's
+        // into `state.json` at most once a minute (a card that ended is
+        // copied at once).
+        self.take_asks();
+        if self.deliveries.due(now) {
+            self.persist_deliveries(now);
+        }
         if self
             .state_dirty
             .is_some_and(|since| now.duration_since(since) >= STATE_DEBOUNCE)
@@ -2570,6 +2911,11 @@ impl Core {
         if self.usage.due(now) {
             self.push_usage(now);
         }
+        // The window running out, and a strip that gained or lost the
+        // Usage or System face.
+        self.gate_check(now);
+        // After the gate, so a look waits on the deck as it is now.
+        self.check_for_updates(now);
     }
 
     pub fn flush_state(&mut self) {
@@ -2610,6 +2956,9 @@ impl Core {
             battery: snap.device.battery,
             charging: snap.device.charging,
             board: snap.device.board.clone(),
+            deliveries: Some(self.deliveries.brief()),
+            collecting: self.dormancy.state().map(|state| state.collecting),
+            dormant_since: self.dormancy.state().and_then(|state| state.dormant_since),
         }
     }
 
@@ -2653,8 +3002,35 @@ impl Core {
             }
             FromHid::Link(link) => self.on_link(link, now),
             FromHid::Report(report) => self.on_device_report(report, now),
+            FromHid::Identity(serial) => self.on_identity(serial.as_deref(), now),
             FromHid::Metric(m) => self.on_metric(m, now),
         }
+    }
+
+    /// The deck the hid thread opened lists `serial`: when it names a deck,
+    /// that deck becomes the current one in `state.json`, the store takes
+    /// its own strip, settings and keys (and the hid thread's view with
+    /// them, on the same ordered channel), and then `ProfileReady` lets the
+    /// link's first hello go, so the sync it starts is this deck's. A deck
+    /// that names none changes nothing, and the hid thread does not wait
+    /// for it. Logs carry the deck's label, never its serial number.
+    pub fn on_identity(&mut self, serial: Option<&str>, now: Instant) {
+        let was = self.state.deck.clone();
+        let selected = self.state.select(serial);
+        if selected == crate::state::Selected::Unidentified {
+            tracing::debug!("the deck lists no serial number: the last deck identified stays");
+            return;
+        }
+        // The same deck is no news, unless the cable just named for good a
+        // record a Bluetooth spelling had made.
+        if selected != crate::state::Selected::Same || self.state.deck != was {
+            self.state_dirty.get_or_insert(now);
+        }
+        let deck = self.state.deck_label();
+        tracing::info!(deck = deck.as_deref().unwrap_or_default(), ?selected, "deck identified");
+        let profile = self.state.profile();
+        self.step(Command::DeckProfile { deck, profile }, now);
+        self.send_op(DeviceOp::Control(Control::ProfileReady));
     }
 }
 
@@ -2689,7 +3065,7 @@ pub struct RunOptions {
 /// SIGTERM/SIGINT; then the doors stop, the core shuts down (holds
 /// released, status written) and the hid thread is joined. Returns the
 /// exit code.
-pub fn run(opts: RunOptions) -> Result<i32, CoreError> {
+pub fn run(mut opts: RunOptions) -> Result<i32, CoreError> {
     let _lock = match crate::service::lock(&opts.paths.lock) {
         Ok(lock) => lock,
         Err(crate::service::ServiceError::AlreadyRunning) => {
@@ -2705,10 +3081,24 @@ pub fn run(opts: RunOptions) -> Result<i32, CoreError> {
         }
     }
     crate::service::install_panic_hook(opts.config.privacy.log_content);
+    // A line the service no longer reads (`config::RETIRED_KEYS`) loaded
+    // as nothing; the log names it, as every reload will.
+    if let Ok(text) = std::fs::read_to_string(&opts.paths.config) {
+        crate::config::warn_retired(&text);
+    }
     let (state, loaded) = State::load(&opts.paths.state);
     if loaded == crate::state::Loaded::Corrupt {
         tracing::warn!("state.json was corrupt; moved aside and started empty");
     }
+    // The cloud voice's key (`crate::secrets`): its store read here, on the
+    // main thread before the core exists, because a Keychain call can wait
+    // on a dialog, and a key still in config.toml moved into the store. The
+    // config in force carries the stored key; the file, the watcher and the
+    // doors do not.
+    let mut voice_key =
+        crate::secrets::VoiceKey::open(crate::secrets::home_for(&opts.paths, opts.no_device));
+    opts.config = voice_key.adopt(&opts.paths, opts.config);
+    let in_force = voice_key.overlay(Arc::new(opts.config.clone()));
     // The TCP door, decided once: `[api] tcp` when the file names it, else
     // off — unless Claude's settings still carry the pre-plugin hooks that
     // post to it, which are looked for only then (`config::Api::tcp_door`).
@@ -2729,7 +3119,7 @@ pub fn run(opts: RunOptions) -> Result<i32, CoreError> {
     cfg.hold_s = opts.config.hooks.claude.hold_s;
     cfg.pins = opts.config.pins();
     cfg.announce_questions = opts.config.voice.announce_questions;
-    cfg.voice_pool = opts.config.voice_pool();
+    cfg.voice_pool = in_force.voice_pool();
     cfg.announce_max_chars = opts.config.voice.tts.announce_max_chars;
     cfg.companion_stt = opts.config.voice.stt.companion;
     cfg.persisted = state.persisted();
@@ -2755,13 +3145,16 @@ pub fn run(opts: RunOptions) -> Result<i32, CoreError> {
         hardware: !opts.no_device,
         audio: voice_link.as_ref().map(crate::ble::BleAudio::usb_port),
         status_every: opts.config.device.status_every(),
+        identify_wait: Some(crate::hid::IDENTIFY_WAIT),
     });
     let mut core = Core::new(store, state, hid, opts.paths.clone());
+    core.set_voice_key(voice_key);
     // `--no-device` never opens the deck, and a firmware check is the one
     // request that would: it probes USB from a thread of its own, which
     // `hardware: false` above does not reach, and then fetches the release
-    // manifest. The app sends one on every connection, so here it answers
-    // with the idle status the updater has (B2).
+    // manifest. The app sends one when the owner asks, so here it answers
+    // with the idle status the updater has (B2); and the service's own
+    // looks never start (`Core::check_for_updates`).
     if opts.no_device {
         core.firmware = crate::firmware::Updater::offline();
     }
@@ -2776,7 +3169,7 @@ pub fn run(opts: RunOptions) -> Result<i32, CoreError> {
     #[cfg(target_os = "macos")]
     if !opts.no_device {
         core.tts_settings
-            .store(Arc::new(crate::audio::cloud::Settings::from_config(&opts.config)));
+            .store(Arc::new(crate::audio::cloud::Settings::from_config(&in_force)));
         core.stt_settings
             .store(Arc::new(crate::stt::Settings::from_config(&opts.config)));
         // The local recogniser over Apple's: a pass-through until the
@@ -2802,7 +3195,6 @@ pub fn run(opts: RunOptions) -> Result<i32, CoreError> {
             transport: opts.config.voice.transport,
             device_uid: opts.config.voice.device_uid.clone(),
             fallback_output: opts.config.voice.fallback_output.clone(),
-            fallback_input: opts.config.voice.fallback_input.clone(),
             link: voice_link,
             tts_engine: opts.config.voice.tts.engine.clone(),
             sidecar: Some(crate::audio::sidecar_config(&opts.config, &opts.paths)),
@@ -2829,7 +3221,6 @@ pub fn run(opts: RunOptions) -> Result<i32, CoreError> {
             transport: opts.config.voice.transport,
             device_uid: opts.config.voice.device_uid.clone(),
             fallback_output: opts.config.voice.fallback_output.clone(),
-            fallback_input: opts.config.voice.fallback_input.clone(),
             link: voice_link,
             tts_engine: opts.config.voice.tts.engine.clone(),
             sidecar: None,
@@ -2844,13 +3235,11 @@ pub fn run(opts: RunOptions) -> Result<i32, CoreError> {
     }
     // The desktop side (§5.5). `--no-device` leaves `DesktopHandle::none()`
     // in place, which is what the `api` gate step runs with: a door test may
-    // not pin a tab or type into a terminal.
+    // not raise an app or post a keystroke.
     #[cfg(target_os = "macos")]
     if !opts.no_device {
-        let stored = core.state.terminal_map.clone();
         core.set_desktop(crate::desktop::spawn(
             crate::desktop::DesktopConfig::from_config(&opts.config),
-            &stored,
         ));
     }
     // The doors and the core share one verifier: the core re-reads its
@@ -2870,6 +3259,25 @@ pub fn run(opts: RunOptions) -> Result<i32, CoreError> {
     if opts.demo {
         core.enable_demo(Instant::now());
     }
+    // Quiet without a deck (`crate::dormancy`): a daemon that can have one
+    // collects only while one was linked in the last ten minutes, counted
+    // from the last link `state.json` kept. `--no-device` has no deck to
+    // wait for and collects as it always did. Set before the core thread and
+    // every collector start, so the first look any of them takes is right.
+    let now = Instant::now();
+    let dormancy = if opts.no_device {
+        crate::dormancy::Dormancy::off()
+    } else {
+        let last = core
+            .store
+            .snapshot()
+            .device
+            .last
+            .as_ref()
+            .map(|last| last.at);
+        crate::dormancy::Dormancy::start(crate::dormancy::WINDOW, last, wall_now(), now)
+    };
+    core.set_dormancy(dormancy, now);
     core.write_status(Instant::now());
     let stop = install_signal_handlers();
     // `service.restart`/`service.stop`: the core writes the code here and
@@ -2953,8 +3361,24 @@ pub fn run(opts: RunOptions) -> Result<i32, CoreError> {
             stop_liveness.subscribe(),
         ));
         let system = tokio::spawn(crate::system_status::run(api.core.clone(), stop_liveness.subscribe()));
+        // The doors' half of the quiet: the transcript watchers and the
+        // Claude adapter's memo go when the collectors stop.
+        let follower = tokio::spawn(crate::dormancy::follow(
+            api.clone(),
+            stop_liveness.subscribe(),
+        ));
+        // The lazy reader feed's Claude half: a transcript watcher for each
+        // Claude session the deck opens (`crate::reader`).
+        let reader = tokio::spawn(crate::reader::follow(
+            api.clone(),
+            stop_liveness.subscribe(),
+        ));
         let usage = tokio::spawn(crate::usage::claude::run(api, usage_rx));
-        (served, stop_liveness, (liveness, codexd, usage, channels, system))
+        (
+            served,
+            stop_liveness,
+            (liveness, codexd, usage, channels, system, follower, reader),
+        )
     });
     // **B10.** §2.3 requires a CFRunLoop on the main thread, and V13 makes
     // it load-bearing rather than decorative: AVSpeech's `writeUtterance`
@@ -2981,12 +3405,14 @@ pub fn run(opts: RunOptions) -> Result<i32, CoreError> {
     }
     runtime.block_on(async {
         let _ = stop_liveness.send(true);
-        let (liveness, codexd, usage, channels, system) = liveness;
+        let (liveness, codexd, usage, channels, system, follower, reader) = liveness;
         let _ = tokio::time::timeout(Duration::from_secs(2), liveness).await;
         let _ = tokio::time::timeout(Duration::from_secs(2), codexd).await;
         let _ = tokio::time::timeout(Duration::from_secs(2), usage).await;
         let _ = tokio::time::timeout(Duration::from_secs(2), channels).await;
         let _ = tokio::time::timeout(Duration::from_secs(2), system).await;
+        let _ = tokio::time::timeout(Duration::from_secs(2), follower).await;
+        let _ = tokio::time::timeout(Duration::from_secs(2), reader).await;
         served.shutdown().await;
     });
     runtime.shutdown_timeout(Duration::from_secs(2));
@@ -2994,10 +3420,10 @@ pub fn run(opts: RunOptions) -> Result<i32, CoreError> {
     handle.send_blocking(CoreMsg::Shutdown);
     match core_thread.join() {
         Ok(core) => {
-            // Dropping the job sender ends `deckd-desktop`, whose last act
-            // is to unpin every tab it pinned (§6: leave the operator's
-            // Ghostty as we found it). Joined before the hid thread because
-            // it is the one that still touches something outside us.
+            // Dropping the job sender ends `deckd-desktop` once the job it
+            // is running (an `open -b`, a keystroke) is done. Joined before
+            // the hid thread because it is the one that still touches
+            // something outside us.
             core.desktop.join();
             core.hid.join();
         }
@@ -3044,9 +3470,14 @@ pub fn run_core(mut core: Core, msgs: Receiver<CoreMsg>) -> Core {
             },
             // Same reasoning as the audio arm: the handle keeps a sender
             // of its own so this can never be permanently ready, and a
-            // daemon with no injector has everything else to do.
+            // daemon with no desktop has everything else to do.
             recv(core.desktop.events) -> msg => if let Ok(msg) = msg {
                 core.on_from_desktop(msg, Instant::now());
+            },
+            // The keychain thread's answers (`crate::secrets::Keeper`). Its
+            // handle keeps a sender of its own too.
+            recv(core.keeper.events) -> msg => if let Ok(done) = msg {
+                core.on_keeper(done, Instant::now());
             },
             recv(ticker) -> _ => core.tick(Instant::now()),
         }
@@ -3088,6 +3519,43 @@ pub(crate) mod testkit {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    /// What `f` logs at `WARN` and above on this thread, as the service's
+    /// log would print it (without colour). Only this thread's events are
+    /// seen, so tests running beside it cannot add to the text.
+    pub fn warnings_of(f: impl FnOnce()) -> String {
+        logged_at(tracing::Level::WARN, f)
+    }
+
+    /// [`warnings_of`] at `INFO` and above: what the service's log keeps at
+    /// its default level.
+    pub fn infos_of(f: impl FnOnce()) -> String {
+        logged_at(tracing::Level::INFO, f)
+    }
+
+    fn logged_at(level: tracing::Level, f: impl FnOnce()) -> String {
+        #[derive(Clone, Default)]
+        struct Text(Arc<std::sync::Mutex<Vec<u8>>>);
+        impl std::io::Write for Text {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(bytes);
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let text = Text::default();
+        let writer = text.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(move || writer.clone())
+            .with_max_level(level)
+            .with_ansi(false)
+            .finish();
+        tracing::subscriber::with_default(subscriber, f);
+        let bytes = text.0.lock().unwrap().clone();
+        String::from_utf8(bytes).unwrap()
     }
 
     /// A core whose hid side is a pair of channels the test holds.
@@ -3196,7 +3664,13 @@ pub(crate) mod testkit {
 
     impl LiveCore {
         pub fn start(name: &str) -> LiveCore {
-            let (core, ops, lines, debug, dir) = detached_core(name);
+            LiveCore::start_with(name, |_| {})
+        }
+
+        /// `start`, with the core set up first (a key home, say).
+        pub fn start_with(name: &str, setup: impl FnOnce(&mut Core)) -> LiveCore {
+            let (mut core, ops, lines, debug, dir) = detached_core(name);
+            setup(&mut core);
             let (handle, join) = core.spawn();
             LiveCore {
                 handle,
@@ -3354,8 +3828,10 @@ mod tests {
                 .events
                 .recv_timeout(Duration::from_secs(2))
                 .expect("inbox delivery without terminal automation");
+            // Both routes carry the order's id back, so a failure would name it.
             assert!(
-                matches!(&result, FromDesktop::Order { agent: to, text: sent, result: Ok(()) } if to == &agent && sent == text),
+                matches!(&result, FromDesktop::Order { agent: to, text: sent, order: Some(order), result: Ok(()) }
+                    if to == &agent && sent == text && order == "or_1"),
                 "{result:?}"
             );
             if let Some(received) = received {
@@ -3854,6 +4330,561 @@ mod tests {
             (s.transport, s.battery, s.charging, s.board),
             (None, None, None, None)
         );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// The core's ticker from `from` up to `to` on a simulated clock,
+    /// compressed to one tick every 10 s: the implicit heartbeat still
+    /// keeps every agent's lease, as it would.
+    fn tick_through(c: &mut Core, from: Instant, to: Instant) {
+        let mut at = from;
+        while at < to {
+            c.tick(at);
+            at += Duration::from_secs(10);
+        }
+    }
+
+    /// R5, the core's half of the phase-3 gate, on a simulated clock: ten
+    /// minutes after the deck's link drops the gate shuts, the agents of
+    /// the Claude and Codex adapters are released as `dormant` and a
+    /// connected app's are kept; `service.dormancy`, the snapshot and
+    /// `status.json` say so once. Nine minutes fifty-nine still collects. A
+    /// deck that links again opens the gate on the spot.
+    #[test]
+    fn ten_minutes_without_a_deck_shut_the_gate_and_release_the_collected_agents() {
+        use crate::dormancy::{Dormancy, Gate, WINDOW};
+        use deck_model::{AdapterKind, DormancyState};
+        let dir = temp("dormancy");
+        let (mut c, _ops, _lines, _debug) = detached(&dir);
+        let t0 = Instant::now();
+        let wall = c.store.ts(t0);
+        c.set_dormancy(Dormancy::start(WINDOW, None, wall, t0), t0);
+        assert_eq!(
+            c.adapters.gate(),
+            Gate::shut(),
+            "no deck was ever linked here"
+        );
+        assert_eq!(
+            c.store.snapshot().service.dormancy,
+            Some(DormancyState {
+                window_s: 600,
+                collecting: false,
+                dormant_since: None
+            })
+        );
+        c.on_from_hid(FromHid::Link(LinkEvent::Linked), t0);
+        assert!(
+            !c.adapters.collecting(),
+            "a link still saying hello is no deck yet"
+        );
+        c.on_from_hid(FromHid::Link(LinkEvent::Live { sid: 7 }), t0);
+        assert!(c.adapters.collecting(), "a deck linked: at once");
+        // The two adapters' internal sessions, as their doors open them, and
+        // a connected app on a socket of its own.
+        let (claude_session, codex_session) = (SessionId(91), SessionId(92));
+        let claude_principal = Principal::Adapter(AdapterKind::Claude);
+        c.sessions
+            .open_internal(claude_session, claude_principal, "claude-adapter", t0);
+        c.sessions.open_internal(
+            codex_session,
+            Principal::Adapter(AdapterKind::Codex),
+            "codex-adapter",
+            t0,
+        );
+        let (app, _app_rx) = live(&mut c, t0);
+        let claude = register_on(&mut c, claude_session, "claude", t0);
+        let codex = register_on(&mut c, codex_session, "codex", t0);
+        let conol = register_on(&mut c, app, "conol", t0);
+        c.publish();
+        let mut events = c.bus.subscribe();
+
+        let t1 = t0 + Duration::from_secs(90);
+        tick_through(&mut c, t0, t1);
+        c.on_from_hid(FromHid::Link(LinkEvent::Down), t1);
+        let gone = c.store.snapshot().device.last.as_ref().unwrap().at;
+        let almost = WINDOW - Duration::from_secs(1);
+        tick_through(&mut c, t1, t1 + almost);
+        c.tick(t1 + almost);
+        assert!(c.adapters.collecting(), "9:59 after the drop");
+        assert_eq!(c.store.snapshot().agents.len(), 3);
+        c.tick(t1 + WINDOW);
+        assert_eq!(c.adapters.gate(), Gate::shut());
+        let since = gone.plus(WINDOW);
+        assert_eq!(
+            c.store.snapshot().service.dormancy,
+            Some(DormancyState {
+                window_s: 600,
+                collecting: false,
+                dormant_since: Some(since)
+            })
+        );
+        let agents = &c.store.snapshot().agents;
+        assert!(!agents.contains_key(&claude) && !agents.contains_key(&codex));
+        assert!(agents.contains_key(&conol), "a connected app's agent stays");
+        let status = Status::read(&dir.join("status.json")).unwrap();
+        assert_eq!(
+            (status.collecting, status.dormant_since),
+            (Some(false), Some(since))
+        );
+        c.publish();
+        let mut quiet = Vec::new();
+        let mut removed = Vec::new();
+        while let Ok(published) = events.try_recv() {
+            match published.event.kind {
+                EventKind::ServiceDormancy => quiet.push(published.event.data.clone()),
+                EventKind::AgentRemoved => removed.push(published.event.data.clone()),
+                _ => {}
+            }
+        }
+        assert_eq!(quiet.len(), 1, "{quiet:?}");
+        assert_eq!(quiet[0]["collecting"], false);
+        let reasons: BTreeMap<String, String> = removed
+            .iter()
+            .map(|data| {
+                (
+                    data["agent"].as_str().unwrap().into(),
+                    data["reason"].as_str().unwrap().into(),
+                )
+            })
+            .collect();
+        let dormant = |agent: &AgentId| (agent.0.clone(), "dormant".to_string());
+        assert_eq!(reasons, BTreeMap::from([dormant(&claude), dormant(&codex)]));
+        // A register that lands while it is quiet is released at the next look.
+        let late = register_on(&mut c, claude_session, "late", t1 + WINDOW);
+        c.tick(t1 + WINDOW + Duration::from_millis(250));
+        assert!(!c.store.snapshot().agents.contains_key(&late));
+        // The deck is back: collecting at once, and said so once more.
+        let t2 = t1 + WINDOW + Duration::from_secs(60);
+        c.on_from_hid(FromHid::Link(LinkEvent::Live { sid: 7 }), t2);
+        assert_eq!(
+            c.adapters.gate(),
+            Gate {
+                collect: true,
+                usage: false,
+                system: false
+            }
+        );
+        assert_eq!(
+            c.store.snapshot().service.dormancy,
+            Some(DormancyState {
+                window_s: 600,
+                collecting: true,
+                dormant_since: None
+            })
+        );
+        assert_eq!(
+            Status::read(&dir.join("status.json")).unwrap().collecting,
+            Some(true)
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// The gate's other two switches follow the deck's strip while it
+    /// collects: the account's usage only while the Usage face is on it,
+    /// the Mac's load only while the System face is. And a link that is up
+    /// but degraded (no hello answered) counts as no deck.
+    #[test]
+    fn usage_and_the_system_sampler_follow_the_faces_on_the_strip() {
+        use crate::dormancy::{Dormancy, Gate, WINDOW};
+        use deck_model::{FaceEntry, Template};
+        let dir = temp("dormancy-strip");
+        let (mut c, _ops, _lines, _debug) = detached(&dir);
+        let t0 = Instant::now();
+        let wall = c.store.ts(t0);
+        c.set_dormancy(Dormancy::start(WINDOW, None, wall, t0), t0);
+        c.on_from_hid(FromHid::Link(LinkEvent::Live { sid: 7 }), t0);
+        let face = |f, t| FaceEntry {
+            f,
+            t,
+            n: String::new(),
+        };
+        let strip = |c: &mut Core, list: Vec<FaceEntry>| {
+            c.on_from_hid(FromHid::Line(DeviceLine::Faces { list }), t0);
+            c.tick(t0);
+            c.adapters.gate()
+        };
+        let agents = face(1, Template::Agents);
+        assert_eq!(
+            strip(&mut c, vec![agents.clone()]),
+            Gate {
+                collect: true,
+                usage: false,
+                system: false
+            }
+        );
+        assert_eq!(
+            strip(&mut c, vec![agents.clone(), face(4, Template::Usage)]),
+            Gate {
+                collect: true,
+                usage: true,
+                system: false
+            }
+        );
+        assert_eq!(
+            strip(
+                &mut c,
+                vec![
+                    agents.clone(),
+                    face(4, Template::Usage),
+                    face(7, Template::System)
+                ]
+            ),
+            Gate::always()
+        );
+        assert_eq!(
+            strip(&mut c, vec![agents, face(7, Template::System)]),
+            Gate {
+                collect: true,
+                usage: false,
+                system: true
+            }
+        );
+        // Degraded: the window starts, as for a drop.
+        let t1 = t0 + Duration::from_secs(5);
+        c.on_from_hid(FromHid::Link(LinkEvent::Degraded), t1);
+        c.tick(t1 + WINDOW - Duration::from_secs(1));
+        assert!(c.adapters.collecting());
+        c.tick(t1 + WINDOW);
+        assert_eq!(c.adapters.gate(), Gate::shut());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// A core no `run` started, and `--no-device`, have no dormancy: the
+    /// gate stays open whatever the link does, and nothing about it is in
+    /// the snapshot or `status.json`.
+    #[test]
+    fn without_dormancy_the_gate_is_always_open() {
+        use crate::dormancy::{Dormancy, Gate, WINDOW};
+        let dir = temp("dormancy-off");
+        let (mut c, _ops, _lines, _debug) = detached(&dir);
+        let t0 = Instant::now();
+        c.set_dormancy(Dormancy::off(), t0);
+        c.on_from_hid(FromHid::Link(LinkEvent::Down), t0);
+        c.tick(t0 + WINDOW * 3);
+        assert_eq!(c.adapters.gate(), Gate::always());
+        assert_eq!(c.store.snapshot().service.dormancy, None);
+        let status = c.status(t0);
+        assert_eq!((status.collecting, status.dormant_since), (None, None));
+        assert_eq!(
+            c.adapters.reader(),
+            crate::reader::Reader::all(),
+            "no lazy feed either"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// R6, the core's half of the lazy reader feed: with dormancy on, the
+    /// reader names the sessions the deck reads. A `channel` line moves it
+    /// at once, a card on another agent at the next look. A history read
+    /// again is taken only from the session that owns the agent. A session
+    /// the deck stops reading is still read for a minute; then a Claude
+    /// session loses the workflow runs its watcher kept, not its history,
+    /// and a connected app keeps the runs it published itself.
+    #[test]
+    fn the_reader_follows_the_deck_and_a_history_is_replaced_only_by_its_owner() {
+        use crate::dormancy::{Dormancy, WINDOW};
+        use crate::reader::{Reader, LINGER};
+        use deck_model::{AdapterKind, CardClear, CardId, ChatRole, MessageMeta, ReplySet};
+        let dir = temp("reader");
+        let (mut c, _ops, _lines, _debug) = detached(&dir);
+        let t0 = Instant::now();
+        let wall = c.store.ts(t0);
+        c.set_dormancy(Dormancy::start(WINDOW, None, wall, t0), t0);
+        c.on_from_hid(FromHid::Link(LinkEvent::Live { sid: 7 }), t0);
+        let read = |c: &Core, agents: &[&AgentId]| {
+            c.adapters.reader() == Reader::only(agents.iter().map(|a| (*a).clone()).collect())
+        };
+        assert!(read(&c, &[]), "a deck, and nothing open on it");
+        // A Claude session under the adapter's session, as the hook door
+        // opens it, and a connected app on a socket of its own.
+        let claude = SessionId(91);
+        let adapter = Principal::Adapter(AdapterKind::Claude);
+        c.sessions.open_internal(claude, adapter, "claude-adapter", t0);
+        let (app, _app_rx) = live(&mut c, t0);
+        let a = register_on(&mut c, claude, "a", t0);
+        let b = register_on(&mut c, app, "b", t0);
+        let other = register_on(&mut c, app, "other", t0);
+        let slot_a = c.store.snapshot().agents[&a].slot.unwrap();
+        c.on_from_hid(FromHid::Line(DeviceLine::Channel { slot: slot_a.0, seq: 1 }), t0);
+        assert!(read(&c, &[&a]), "a channel line: at once");
+        let principal = Principal::Uid(501);
+        let card = c
+            .api_call(principal.clone(), app, false, Request::CardSet(testkit::card(&b, "Ship?")), t0)
+            .unwrap();
+        c.tick(t0);
+        assert!(read(&c, &[&a, &b]), "a card on the deck: at the next look");
+
+        // A history read again, with a workflow run in it: from its owner.
+        let mut runs = MessageMeta {
+            summary: None,
+            images: Vec::new(),
+            activity: None,
+            runs: None,
+            plan: None,
+            id: "workflow:runs".into(),
+            role: ChatRole::Tool,
+            streaming: false,
+        };
+        runs.runs = Some(vec![deck_model::workflow::Run {
+            id: "wf_1".into(),
+            name: "Checks".into(),
+            status: deck_model::workflow::ActivityStatus::Running,
+            completed: 0,
+            total: 2,
+            elapsed_ms: 0,
+            tokens: 0,
+        }]);
+        let history = vec![(runs.clone(), "Checks · running".to_string())];
+        let refused = c
+            .chat_replace(app, a.clone(), history.clone(), t0)
+            .unwrap_err();
+        assert_eq!(refused.code, ApiError::CONFLICT, "not the owner's");
+        assert!(c.store.snapshot().agents[&a].messages.is_empty());
+        let missing = c.chat_replace(claude, AgentId("ag_gone".into()), history.clone(), t0);
+        assert_eq!(missing.unwrap_err().code, ApiError::NOT_FOUND);
+        c.chat_replace(claude, a.clone(), history, t0).unwrap();
+        assert_eq!(c.store.snapshot().agents[&a].active_work(), 1);
+        let own_runs = ReplySet {
+            agent: b.clone(),
+            text: "Checks · running".into(),
+            message: Some(runs),
+            speak: false,
+            announce: None,
+            lane: None,
+        };
+        c.api_call(principal.clone(), app, false, Request::Reply(own_runs), t0)
+            .unwrap();
+        assert_eq!(c.store.snapshot().agents[&b].active_work(), 1);
+
+        // The deck turns to a third session and B's card goes: both linger a
+        // minute, then A loses its runs and keeps its history, and B keeps
+        // the runs it published.
+        let slot_other = c.store.snapshot().agents[&other].slot.unwrap();
+        c.on_from_hid(FromHid::Line(DeviceLine::Channel { slot: slot_other.0, seq: 2 }), t0);
+        let clear = CardClear {
+            agent: b.clone(),
+            card: CardId(u16::try_from(card["card"]["id"].as_u64().unwrap()).unwrap()),
+            delivered: false,
+            reason: None,
+        };
+        c.api_call(principal, app, false, Request::CardClear(clear), t0)
+            .unwrap();
+        let almost = t0 + LINGER - Duration::from_secs(1);
+        tick_through(&mut c, t0, almost);
+        c.tick(almost);
+        assert!(read(&c, &[&a, &b, &other]), "59 s after they left");
+        c.tick(t0 + LINGER);
+        assert!(read(&c, &[&other]));
+        let agents = &c.store.snapshot().agents;
+        assert_eq!((agents[&a].active_work(), agents[&a].messages.len()), (0, 1));
+        assert_eq!(agents[&b].active_work(), 1, "an app's own runs stay");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// Two decks on one Mac: each keeps its own strip, settings and keys.
+    /// The deck that links is identified before its first hello, the store
+    /// takes its profile, the view gets the lines that make it (then
+    /// `ProfileReady`, last, which lets the hello go), and `state.json`
+    /// keeps both.
+    #[test]
+    fn two_decks_each_keep_their_own_strip_settings_and_keys() {
+        use deck_model::{
+            Binding, DeviceSet, FaceEntry, FaceId, MacroKey, Template, Transport,
+        };
+        const A: &str = "AAAAAAAAAAAA";
+        const B: &str = "BBBBBBBBBBBB";
+        let dir = temp("two-decks");
+        let (mut c, ops, _lines, _debug) = detached(&dir);
+        let t = Instant::now();
+        let face = |f: u8, t: Template| FaceEntry {
+            f,
+            t,
+            n: format!("{t:?}"),
+        };
+        let strip_a = vec![
+            face(1, Template::Agents),
+            face(3, Template::Macropad),
+            face(5, Template::Settings),
+        ];
+        let strip_b = vec![
+            face(1, Template::Agents),
+            face(4, Template::Usage),
+            face(5, Template::Settings),
+        ];
+        let hello = |boot: bool, faces: Vec<FaceEntry>| {
+            FromHid::Line(DeviceLine::Hello {
+                v: 1,
+                fw: "0.13.0-openwalkietalkie".into(),
+                sid: 0,
+                boot,
+                rx: deck_model::LINE_MAX_U16,
+                agents: None,
+                lang: None,
+                lang_rev: None,
+                faces,
+            })
+        };
+        let link = |c: &mut Core, serial: &str| {
+            c.on_from_hid(FromHid::Link(LinkEvent::Linked), t);
+            c.on_from_hid(
+                FromHid::Report(DeviceReport::Transport(Some(Transport::Usb))),
+                t,
+            );
+            c.on_from_hid(FromHid::Identity(Some(serial.into())), t);
+        };
+        let lose = |c: &mut Core| {
+            let why = "removed".to_string();
+            c.on_from_hid(FromHid::Report(DeviceReport::Dropped { why }), t);
+            c.on_from_hid(FromHid::Link(LinkEvent::Down), t);
+        };
+        let ready = DeviceOp::Control(Control::ProfileReady);
+
+        // Deck A, the first deck identified here, with its own strip; then
+        // its speaker and its Macropad's keys from the app.
+        link(&mut c, A);
+        assert_eq!(ops_of(&ops).last(), Some(&ready));
+        let label_a = c.store.snapshot().device.deck.clone().expect("A is named");
+        c.on_from_hid(hello(false, strip_a.clone()), t);
+        let principal = Principal::Uid(501);
+        let speaker = |v| Request::DeviceSet(DeviceSet { key: SetKey::Speaker, value: v });
+        c.api_call(principal.clone(), SessionId(2), false, speaker(3), t)
+            .expect("device.set");
+        let build = MacroKey {
+            label: "build".into(),
+            binding: Some(Binding::Left),
+            keys: Some("cmd+b".into()),
+        };
+        let keys = Request::DeviceMacroSet {
+            f: 3,
+            layout: "Build".into(),
+            src: None,
+            keys: vec![build],
+        };
+        c.api_call(principal, SessionId(2), false, keys, t)
+            .expect("device.macro.set");
+        lose(&mut c);
+        ops_of(&ops);
+
+        // Deck B, new here: the firmware's defaults and no strip, so the
+        // `boot:1` sync leaves it its own, which is then remembered.
+        link(&mut c, B);
+        let sent = ops_of(&ops);
+        assert!(sent.contains(&DeviceOp::Remove(Key::Faces)), "{sent:?}");
+        assert!(sent.contains(&DeviceOp::Put(
+            Key::Set(SetKey::Speaker),
+            HostLine::Set {
+                key: SetKey::Speaker,
+                value: 6
+            }
+        )));
+        assert!(sent.contains(&DeviceOp::Remove(Key::Macro(FaceId(3)))));
+        assert_eq!(sent.last(), Some(&ready), "the hello may go only now");
+        let snap = c.store.snapshot();
+        assert_ne!(snap.device.deck.as_ref(), Some(&label_a));
+        assert!(snap.faces.is_empty() && snap.macros.is_empty());
+        assert_eq!(snap.settings.speaker, 6);
+        c.on_from_hid(hello(true, strip_b.clone()), t);
+        assert_eq!(c.store.snapshot().faces, strip_b);
+        lose(&mut c);
+        ops_of(&ops);
+
+        // Deck A again: its own strip, speaker and keys come back.
+        link(&mut c, A);
+        let sent = ops_of(&ops);
+        assert!(sent.contains(&DeviceOp::Put(
+            Key::Faces,
+            HostLine::Faces {
+                list: strip_a.clone()
+            }
+        )));
+        assert!(sent.contains(&DeviceOp::Put(
+            Key::Set(SetKey::Speaker),
+            HostLine::Set {
+                key: SetKey::Speaker,
+                value: 3
+            }
+        )));
+        assert!(sent
+            .iter()
+            .any(|op| matches!(op, DeviceOp::Put(Key::Macro(FaceId(3)), _))));
+        assert_eq!(sent.last(), Some(&ready));
+        let snap = c.store.snapshot();
+        assert_eq!(snap.device.deck.as_ref(), Some(&label_a));
+        assert_eq!((snap.faces.clone(), snap.settings.speaker), (strip_a.clone(), 3));
+        assert_eq!(snap.macros[&3].keys[0].label, "build");
+        // The same deck again is no news: only the word for the hello.
+        lose(&mut c);
+        ops_of(&ops);
+        link(&mut c, A);
+        assert_eq!(ops_of(&ops), vec![ready.clone()]);
+
+        c.flush_state();
+        let (saved, _) = State::load(&dir.join("state.json"));
+        assert_eq!(saved.deck.as_deref(), Some(A));
+        assert_eq!(saved.decks.len(), 2);
+        assert_eq!(saved.decks[A].faces, strip_a);
+        assert_eq!(saved.decks[A].settings.speaker, 3);
+        assert_eq!(saved.decks[A].macropad_bindings[&3], "Build");
+        assert_eq!(saved.decks[B].faces, strip_b);
+        assert_eq!(saved.decks[B].settings.speaker, 6);
+        assert!(saved.decks[B].macros.is_empty());
+        // The per-deck settings name a deck by its label only (§6.9); the
+        // voice link's cable port and the firmware updater are not in this core.
+        let snapshot = serde_json::to_string(c.store.snapshot()).unwrap();
+        assert!(!snapshot.contains(A) && !snapshot.contains(B));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// A Bluetooth stack that spelled the deck's address the other way
+    /// round made its record under the wrong id; the cable names it for
+    /// good, and `state.json` is written again even though it is the same
+    /// deck.
+    #[test]
+    fn the_cable_names_for_good_a_deck_a_bluetooth_spelling_made() {
+        let dir = temp("rekey");
+        let (mut c, ops, _lines, _debug) = detached(&dir);
+        let t = Instant::now();
+        c.on_identity(Some("C0:FF:EE:15:60:0D"), t);
+        assert_eq!(c.state.deck.as_deref(), Some("0D6015EEFFC0"));
+        c.flush_state();
+        assert!(c.state_dirty.is_none());
+        ops_of(&ops);
+        c.on_identity(Some("C0FFEE15600D"), t);
+        assert_eq!(c.state.deck.as_deref(), Some("C0FFEE15600D"));
+        assert!(c.state_dirty.is_some(), "the new id is written");
+        assert_eq!(
+            c.store.snapshot().device.deck,
+            Some(crate::device::identity::label("C0FFEE15600D"))
+        );
+        assert_eq!(
+            ops_of(&ops),
+            vec![DeviceOp::Control(Control::ProfileReady)],
+            "the same strip, settings and keys: nothing to send"
+        );
+        c.tick(t + STATE_DEBOUNCE);
+        let (saved, _) = State::load(&dir.join("state.json"));
+        assert_eq!(saved.deck.as_deref(), Some("C0FFEE15600D"));
+        assert_eq!(saved.decks.keys().collect::<Vec<_>>(), vec!["C0FFEE15600D"]);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// A deck that lists no serial number is linked exactly as before: the
+    /// store hears nothing, the view gets nothing, and the hid thread was
+    /// never told to wait.
+    #[test]
+    fn a_deck_with_no_serial_changes_nothing() {
+        let dir = temp("no-serial");
+        let (mut c, ops, _lines, _debug) = detached(&dir);
+        let t = Instant::now();
+        c.on_from_hid(FromHid::Link(LinkEvent::Linked), t);
+        ops_of(&ops);
+        let before = c.store.snapshot().clone();
+        for serial in [None, Some("000000000000".to_string())] {
+            c.on_from_hid(FromHid::Identity(serial), t);
+            assert!(ops_of(&ops).is_empty());
+            assert_eq!(c.store.snapshot(), &before);
+            assert_eq!((c.state.deck.as_ref(), c.state.decks.len()), (None, 0));
+        }
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -4916,6 +5947,8 @@ mod tests {
         assert_eq!(line["params"]["type"], "agent.order");
         assert_eq!(line["params"]["data"]["text"], "also run the smoke tests");
         assert_eq!(line["params"]["data"]["via"], "push");
+        // The id an owner reports a failure under (`agent.order.result`).
+        assert_eq!(line["params"]["data"]["order"], "or_1");
 
         c.api_call(
             Principal::Uid(501),
@@ -4935,14 +5968,18 @@ mod tests {
             t0,
         );
         let WaitResult::Order {
-            text, ctx, card, ..
+            text,
+            ctx,
+            card,
+            order,
+            ..
         } = rx.try_recv().unwrap()
         else {
             panic!("the poll owner did not get its order");
         };
         assert_eq!(
-            (text.as_str(), ctx.as_str(), card),
-            ("and then deploy", "talk", None)
+            (text.as_str(), ctx.as_str(), card, order.as_deref()),
+            ("and then deploy", "talk", None, Some("or_2"))
         );
 
         // A snooze on a poll card is a mail; on a push card a notification.
@@ -5019,6 +6056,980 @@ mod tests {
             !kinds.contains(&EventKind::AgentOrder),
             "an order is the owner's alone"
         );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// A deck that said hello and went live, in English.
+    fn link(c: &mut Core, now: Instant) {
+        c.on_link(LinkEvent::Linked, now);
+        c.on_device_line(
+            DeviceLine::Hello {
+                v: 1,
+                fw: "0.13.0".into(),
+                sid: 7,
+                boot: false,
+                rx: deck_model::LINE_MAX_U16,
+                agents: None,
+                lang: Some(0),
+                lang_rev: Some(1),
+                faces: Vec::new(),
+            },
+            now,
+        );
+        c.on_link(LinkEvent::Live { sid: 7 }, now);
+    }
+
+    /// An order the operator dictated, sent the way a door sends it.
+    fn order_from_deck(c: &mut Core, agent: &AgentId, text: &str, now: Instant) -> ApiResult {
+        let order = Request::OpOrder(deck_model::OpOrder {
+            agent: agent.clone(),
+            text: text.into(),
+            ctx: "talk".into(),
+            source: deck_model::OrderSource::Ptt,
+            utterance: None,
+        });
+        c.api_call(Principal::Uid(501), SessionId(9), false, order, now)
+    }
+
+    /// A push agent owned by `session`.
+    fn pusher(c: &mut Core, session: SessionId, now: Instant) -> AgentId {
+        let mut reg = testkit::register("pusher", Some("k:pusher"));
+        reg.caps.order = deck_model::OrderCap::Push;
+        let r = c
+            .api_call(
+                Principal::Uid(501),
+                session,
+                false,
+                Request::AgentRegister(reg),
+                now,
+            )
+            .unwrap();
+        serde_json::from_value(r["agent"].clone()).unwrap()
+    }
+
+    /// The `order.failed` events on the bus so far.
+    fn failures(c: &mut Core) -> Vec<Event> {
+        c.publish();
+        c.bus
+            .replay(0, 500, None)
+            .0
+            .iter()
+            .filter(|e| e.kind == EventKind::OrderFailed)
+            .map(|e| (**e).clone())
+            .collect()
+    }
+
+    /// The failure card, when the core put one on the deck.
+    fn failure_card_put(ops: &Receiver<DeviceOp>) -> bool {
+        ops.try_iter().any(|op| {
+            matches!(op, DeviceOp::Put(Key::Card(..), HostLine::Card { ref text, .. })
+                if text == deck_model::NOT_DELIVERED.text[0])
+        })
+    }
+
+    #[test]
+    fn a_push_order_to_a_full_channel_fails_on_the_deck() {
+        let dir = temp("order-full");
+        let (mut c, ops, _lines, _debug) = detached(&dir);
+        let t0 = Instant::now();
+        let (tx, _rx) = tokio::sync::mpsc::channel(1);
+        let session = c.sessions.open(
+            OpenSession {
+                kind: SessionKind::Live { tx: tx.clone() },
+                principal: Principal::Uid(501),
+                scopes: vec![deck_model::Scope::Agent],
+                trusted: false,
+                client: ClientInfo::default(),
+            },
+            t0,
+        );
+        let agent = pusher(&mut c, session, t0);
+        tx.try_send(Outbound::Line("{}".into())).unwrap();
+        ops_of(&ops);
+        let res = order_from_deck(&mut c, &agent, "deploy", t0).unwrap();
+        let failed = failures(&mut c);
+        assert_eq!(failed.len(), 1);
+        assert_eq!(failed[0].data["reason"], "channel_full");
+        assert_eq!(failed[0].data["order"], res["order"]);
+        assert_eq!(failed[0].data["text"], "deploy");
+        assert_eq!(failed[0].data["shown"], "card");
+        assert!(failure_card_put(&ops), "the deck was told");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_push_order_to_a_closed_connection_fails() {
+        let dir = temp("order-closed");
+        let (mut c, _ops, _lines, _debug) = detached(&dir);
+        let t0 = Instant::now();
+        let (session, rx) = live(&mut c, t0);
+        let agent = pusher(&mut c, session, t0);
+        drop(rx);
+        order_from_deck(&mut c, &agent, "deploy", t0).unwrap();
+        let failed = failures(&mut c);
+        assert_eq!(failed.len(), 1);
+        assert_eq!(failed[0].data["reason"], "owner_gone");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_poll_order_left_in_the_mailbox_past_the_ttl_fails_as_expired() {
+        let dir = temp("order-expired");
+        let (mut c, ops, _lines, _debug) = detached(&dir);
+        let mut cfg = crate::config::Config::default();
+        cfg.api.mailbox_ttl_s = 2;
+        c.set_config(Arc::new(cfg));
+        let t0 = Instant::now();
+        let (polling, _rx) = live(&mut c, t0);
+        let agent = register_on(&mut c, polling, "poller", t0);
+        c.tick(t0);
+        let res = order_from_deck(&mut c, &agent, "deploy", t0).unwrap();
+        assert_eq!(c.sessions.get(polling).unwrap().mailbox.len(), 1);
+        assert!(failures(&mut c).is_empty(), "waiting for its owner");
+        ops_of(&ops);
+        c.tick(t0 + HEARTBEAT_EVERY + Duration::from_secs(1));
+        assert!(c.sessions.get(polling).unwrap().mailbox.is_empty());
+        let failed = failures(&mut c);
+        assert_eq!(failed.len(), 1);
+        assert_eq!(failed[0].data["reason"], "expired");
+        assert_eq!(failed[0].data["order"], res["order"]);
+        assert_eq!(failed[0].data["text"], "deploy");
+        assert!(failure_card_put(&ops));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn an_agent_released_with_unread_orders_reports_agent_gone() {
+        let dir = temp("order-released");
+        let (mut c, ops, _lines, _debug) = detached(&dir);
+        let t0 = Instant::now();
+        link(&mut c, t0);
+        let (polling, _rx) = live(&mut c, t0);
+        let agent = register_on(&mut c, polling, "poller", t0);
+        let res = order_from_deck(&mut c, &agent, "deploy", t0).unwrap();
+        ops_of(&ops);
+        c.api_call(
+            Principal::Uid(501),
+            polling,
+            false,
+            Request::AgentRelease {
+                agent: agent.clone(),
+                reason: None,
+            },
+            t0,
+        )
+        .unwrap();
+        let failed = failures(&mut c);
+        assert_eq!(failed.len(), 1);
+        assert_eq!(failed[0].data["reason"], "agent_gone");
+        assert_eq!(failed[0].data["order"], res["order"]);
+        // The agent is gone, so the deck's own toast says it.
+        assert_eq!(failed[0].data["shown"], "toast");
+        assert!(ops.try_iter().any(|op| matches!(
+            op,
+            DeviceOp::Control(Control::Transcript {
+                failed: true,
+                press: None,
+                ..
+            })
+        )));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn orders_for_internal_sessions_never_fail_on_expiry_or_removal() {
+        let dir = temp("order-internal");
+        let (mut c, _ops, _lines, _debug) = detached(&dir);
+        let mut cfg = crate::config::Config::default();
+        cfg.api.mailbox_ttl_s = 2;
+        c.set_config(Arc::new(cfg));
+        let t0 = Instant::now();
+        // The Codex client's session: it waits for its own mail, and what
+        // it never read is nobody's to report.
+        let codex = Principal::Adapter(deck_model::AdapterKind::Codex);
+        let session = SessionId(50);
+        c.sessions
+            .open_internal(session, codex.clone(), "codex", t0);
+        let r = c
+            .api_call(
+                codex.clone(),
+                session,
+                false,
+                Request::AgentRegister(testkit::register("thread", Some("codex:t1"))),
+                t0,
+            )
+            .unwrap();
+        let agent: AgentId = serde_json::from_value(r["agent"].clone()).unwrap();
+        c.tick(t0);
+        order_from_deck(&mut c, &agent, "one", t0).unwrap();
+        c.tick(t0 + HEARTBEAT_EVERY + Duration::from_secs(1));
+        assert!(c.sessions.get(session).unwrap().mailbox.is_empty());
+        order_from_deck(&mut c, &agent, "two", t0).unwrap();
+        c.api_call(
+            codex,
+            session,
+            false,
+            Request::AgentRelease {
+                agent,
+                reason: None,
+            },
+            t0,
+        )
+        .unwrap();
+        assert!(failures(&mut c).is_empty());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// The door R3's hand-off and any other failure the core finds use: the
+    /// same card as a failed order, from one call.
+    #[test]
+    fn the_core_shows_a_failure_of_its_own_through_one_door() {
+        let dir = temp("fail-on-deck");
+        let (mut c, ops, _lines, _debug) = detached(&dir);
+        let t0 = Instant::now();
+        link(&mut c, t0);
+        let (session, _rx) = live(&mut c, t0);
+        let agent = register_on(&mut c, session, "bot", t0);
+        ops_of(&ops);
+        let shown = c.fail_on_deck(Some(&agent), "no_route", deck_model::NOT_DELIVERED, t0);
+        assert_eq!(shown, Shown::Card);
+        assert!(failure_card_put(&ops));
+        c.publish();
+        let (ring, _) = c.bus.replay(0, 500, None);
+        let set = ring
+            .iter()
+            .rev()
+            .find(|e| e.kind == EventKind::CardSet)
+            .expect("card.set");
+        assert_eq!(set.data["host"], deck_model::HOST_FAILURE);
+        assert_eq!(set.data["reason"], "no_route");
+        // No agent to put a card on: the deck's toast.
+        let shown = c.fail_on_deck(None, "no_route", deck_model::NOT_DELIVERED, t0);
+        assert_eq!(shown, Shown::Toast);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// A Claude session on the deck, registered by the Claude adapter the
+    /// way its hook does, with the app its helper found; and a detached
+    /// desktop, whose far end the test holds.
+    fn handoff_rig(
+        name: &str,
+        app: Option<&str>,
+    ) -> (
+        Core,
+        Receiver<DeviceOp>,
+        Receiver<DesktopJob>,
+        AgentId,
+        SessionId,
+        std::path::PathBuf,
+        Instant,
+    ) {
+        use deck_model::{AdapterKind, Kind, OrderCap, Terminal};
+        let dir = temp(name);
+        let (mut c, ops, _lines, _debug) = detached(&dir);
+        let (desktop, jobs, _answers) = DesktopHandle::detached();
+        c.set_desktop(desktop);
+        let t0 = Instant::now();
+        link(&mut c, t0);
+        let adapter = Principal::Adapter(AdapterKind::Claude);
+        let session = SessionId(90);
+        c.sessions
+            .open_internal(session, adapter.clone(), "claude-adapter", t0);
+        let mut reg = testkit::register(name, Some(&format!("claude:{name}")));
+        reg.kind = Kind::Claude;
+        reg.caps.order = OrderCap::Inject;
+        reg.caps.answer = deck_model::AnswerCap::Hold;
+        reg.slot_hint = Some(Slot(1));
+        reg.terminal = app.map(|app| Terminal {
+            app: Some(app.into()),
+            ..Terminal::default()
+        });
+        let r = c
+            .api_call(adapter, session, false, Request::AgentRegister(reg), t0)
+            .unwrap();
+        let agent: AgentId = serde_json::from_value(r["agent"].clone()).unwrap();
+        ops_of(&ops);
+        (c, ops, jobs, agent, session, dir, t0)
+    }
+
+    /// An informational `Open app` card on `agent`, as Claude's
+    /// `Notification` hook makes one; its id.
+    fn focus_card(c: &mut Core, agent: &AgentId, session: SessionId, now: Instant) -> u16 {
+        let mut card = testkit::card(agent, "Claude needs your permission to use Bash");
+        card.deliver = Deliver::Focus;
+        card.choices = vec![deck_model::Choice {
+            label: deck_model::OPEN_APP[0].into(),
+            detail: None,
+        }];
+        card.rec = Some(0);
+        card.origin.kind = deck_model::OriginKind::Permission;
+        let principal = Principal::Adapter(deck_model::AdapterKind::Claude);
+        testkit::card_id(
+            &c.api_call(principal, session, false, Request::CardSet(card), now)
+                .unwrap(),
+        )
+        .0
+    }
+
+    fn press(c: &mut Core, card: u16, now: Instant) {
+        c.on_device_line(
+            DeviceLine::Answer {
+                slot: 1,
+                card,
+                choice: 0,
+            },
+            now,
+        );
+    }
+
+    /// The card the core put on the deck for a failure, by its text.
+    fn put_card_text(ops: &Receiver<DeviceOp>) -> Option<String> {
+        ops.try_iter().find_map(|op| match op {
+            DeviceOp::Put(Key::Card(..), HostLine::Card { text, .. }) => Some(text),
+            _ => None,
+        })
+    }
+
+    /// ENTER on a hook session's `Open app` card asks the desktop for that
+    /// session's own app, by the bundle identifier its helper reported.
+    #[test]
+    fn a_focus_card_press_raises_the_hook_sessions_app() {
+        let (mut c, _ops, jobs, agent, session, dir, t0) =
+            handoff_rig("handoff-press", Some("com.mitchellh.ghostty"));
+        let card = focus_card(&mut c, &agent, session, t0);
+        press(&mut c, card, t0);
+        assert_eq!(
+            jobs.try_recv(),
+            Ok(DesktopJob::Raise {
+                agent: agent.clone(),
+                app: "com.mitchellh.ghostty".into(),
+            })
+        );
+        assert!(jobs.try_recv().is_err(), "once");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// A channel change and a PTT press move the focus and raise nothing:
+    /// dictating to a session in the background must not pull its app
+    /// forward.
+    #[test]
+    fn a_channel_change_and_a_ptt_press_raise_nothing() {
+        let (mut c, _ops, jobs, _agent, _session, dir, t0) =
+            handoff_rig("handoff-channel", Some("dev.zed.Zed"));
+        c.on_device_line(DeviceLine::Channel { slot: 1, seq: 4 }, t0);
+        let ptt = |act| DeviceLine::Ptt {
+            act,
+            slot: 1,
+            ctx: deck_model::PttCtx::Talk,
+            card: None,
+            abort: false,
+            press: None,
+        };
+        c.on_device_line(ptt(1), t0);
+        c.on_device_line(DeviceLine::Channel { slot: 1, seq: 5 }, t0);
+        c.on_device_line(ptt(0), t0);
+        assert!(jobs.try_recv().is_err(), "nothing was raised");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// `op.focus` is a deliberate act too: a hook agent's app is raised.
+    #[test]
+    fn op_focus_raises_a_hook_agents_app() {
+        let (mut c, _ops, jobs, agent, _session, dir, t0) =
+            handoff_rig("handoff-op", Some("dev.zed.Zed"));
+        c.api_call(
+            Principal::Uid(501),
+            SessionId(9),
+            true,
+            Request::OpFocus {
+                agent: agent.clone(),
+            },
+            t0,
+        )
+        .unwrap();
+        assert_eq!(
+            jobs.try_recv(),
+            Ok(DesktopJob::Raise {
+                agent,
+                app: "dev.zed.Zed".into(),
+            })
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// What a connected app says about its own terminal is informational
+    /// (§4.6): it is never raised, and nothing is claimed on the deck — the
+    /// app brings itself forward on `card.focused`.
+    #[test]
+    fn a_connected_apps_self_declared_app_is_never_raised() {
+        let dir = temp("handoff-app");
+        let (mut c, ops, _lines, _debug) = detached(&dir);
+        let (desktop, jobs, _answers) = DesktopHandle::detached();
+        c.set_desktop(desktop);
+        let t0 = Instant::now();
+        link(&mut c, t0);
+        let (session, _rx) = live(&mut c, t0);
+        let mut reg = testkit::register("conol", Some("conol:chat"));
+        reg.terminal = Some(deck_model::Terminal {
+            app: Some("com.apple.Terminal".into()),
+            ..deck_model::Terminal::default()
+        });
+        let r = c
+            .api_call(Principal::Uid(501), session, false, Request::AgentRegister(reg), t0)
+            .unwrap();
+        let agent: AgentId = serde_json::from_value(r["agent"].clone()).unwrap();
+        assert_eq!(
+            c.store.snapshot().agents[&agent]
+                .session
+                .terminal
+                .as_ref()
+                .and_then(|t| t.app.as_deref()),
+            Some("com.apple.Terminal"),
+            "kept, as information"
+        );
+        assert_eq!(handoff_app(&c.store.snapshot().agents[&agent]), None);
+        ops_of(&ops);
+        c.api_call(
+            Principal::Uid(501),
+            SessionId(9),
+            true,
+            Request::OpFocus {
+                agent: agent.clone(),
+            },
+            t0,
+        )
+        .unwrap();
+        assert!(jobs.try_recv().is_err());
+        assert!(c.desktop.events.try_recv().is_err(), "no failure either");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// A hook session whose helper found no app: nothing is asked of
+    /// macOS, and the press is answered on the deck, in its language.
+    #[test]
+    fn a_session_with_no_app_is_not_raised_and_the_deck_says_so() {
+        let (mut c, ops, jobs, agent, session, dir, t0) = handoff_rig("handoff-none", None);
+        let card = focus_card(&mut c, &agent, session, t0);
+        press(&mut c, card, t0);
+        assert!(jobs.try_recv().is_err(), "no job");
+        let outcome = c.desktop.events.try_recv().expect("the core's own answer");
+        assert_eq!(
+            outcome,
+            FromDesktop::Raised {
+                agent: agent.clone(),
+                app: None,
+                outcome: crate::desktop::Outcome::NoApp,
+            }
+        );
+        ops_of(&ops);
+        c.on_from_desktop(outcome, t0);
+        assert_eq!(
+            put_card_text(&ops).as_deref(),
+            Some(deck_model::HandoffFailure::NoApp.line().text[0])
+        );
+        c.publish();
+        let (ring, _) = c.bus.replay(0, 500, None);
+        let set = ring
+            .iter()
+            .rev()
+            .find(|e| e.kind == EventKind::CardSet)
+            .expect("card.set");
+        assert_eq!(set.data["host"], deck_model::HOST_FAILURE);
+        assert_eq!(set.data["reason"], "no_app");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// An app that is not running, or one macOS will not bring forward:
+    /// the desktop's answer is shown on the deck the same way. One that
+    /// came forward shows nothing.
+    #[test]
+    fn a_hand_off_that_did_not_happen_is_shown_on_the_deck() {
+        for (outcome, failure) in [
+            (
+                crate::desktop::Outcome::NotRunning,
+                Some(deck_model::HandoffFailure::NotRunning),
+            ),
+            (
+                crate::desktop::Outcome::Refused("refused".into()),
+                Some(deck_model::HandoffFailure::Refused),
+            ),
+            (crate::desktop::Outcome::Raised, None),
+        ] {
+            let (mut c, ops, _jobs, agent, session, dir, t0) =
+                handoff_rig(&format!("handoff-{}", outcome.word()), Some("dev.zed.Zed"));
+            let card = focus_card(&mut c, &agent, session, t0);
+            press(&mut c, card, t0);
+            ops_of(&ops);
+            c.on_from_desktop(
+                FromDesktop::Raised {
+                    agent: agent.clone(),
+                    app: Some("dev.zed.Zed".into()),
+                    outcome: outcome.clone(),
+                },
+                t0,
+            );
+            assert_eq!(
+                put_card_text(&ops).as_deref(),
+                failure.map(|f| f.line().text[0]),
+                "{outcome:?}"
+            );
+            std::fs::remove_dir_all(dir).unwrap();
+        }
+    }
+
+    /// Which app a session runs in is the session's own business (§5.5 keeps
+    /// `terminal.app` as content), so the hand-off's line in the log at its
+    /// default level names the agent and the outcome only; the app is a
+    /// `debug` line.
+    #[test]
+    fn the_hand_off_logs_its_outcome_and_never_the_app_at_info() {
+        use crate::core::testkit::infos_of;
+        let (mut c, _ops, _jobs, agent, _session, dir, t0) =
+            handoff_rig("handoff-log", Some("com.example.Private"));
+        let logged = infos_of(|| {
+            c.on_from_desktop(
+                FromDesktop::Raised {
+                    agent: agent.clone(),
+                    app: Some("com.example.Private".into()),
+                    outcome: crate::desktop::Outcome::Raised,
+                },
+                t0,
+            );
+        });
+        assert!(logged.contains("desktop: hand-off"), "{logged}");
+        assert!(logged.contains("outcome=raised"), "{logged}");
+        assert!(!logged.contains("com.example.Private"), "{logged}");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// An order to a session the daemon delivers itself, with neither a
+    /// Claude Channels connection nor an inbox: dispatched, then failed
+    /// `no_route` with the words kept, and nothing reaches the desktop —
+    /// with an engine or without one. Nothing is ever typed.
+    #[test]
+    fn an_inject_order_with_no_channel_and_no_inbox_fails_no_route() {
+        for engine in [false, true] {
+            let (mut c, _ops, jobs, agent, _session, dir, t0) =
+                handoff_rig(&format!("no-route-{engine}"), Some("dev.zed.Zed"));
+            if !engine {
+                c.set_desktop(DesktopHandle::none());
+            }
+            // Dictated on the deck: the device's own principal, which an
+            // `inject` order needs (a uid caller must be trusted).
+            let order = Request::OpOrder(deck_model::OpOrder {
+                agent: agent.clone(),
+                text: "deploy the api".into(),
+                ctx: "talk".into(),
+                source: deck_model::OrderSource::Ptt,
+                utterance: None,
+            });
+            let r = c
+                .api_call(Principal::Device, SessionId(9), true, order, t0)
+                .unwrap();
+            assert_eq!(r["via"], "inject");
+            c.publish();
+            let (ring, _) = c.bus.replay(0, 500, None);
+            let kinds: Vec<EventKind> = ring.iter().map(|e| e.kind).collect();
+            let dispatched = kinds
+                .iter()
+                .position(|k| *k == EventKind::OrderDispatched)
+                .expect("order.dispatched");
+            let failed = ring
+                .iter()
+                .position(|e| e.kind == EventKind::OrderFailed)
+                .expect("order.failed");
+            assert!(dispatched < failed, "{kinds:?}");
+            assert_eq!(ring[failed].data["reason"], "no_route");
+            assert_eq!(ring[failed].data["text_kept"], true);
+            assert_eq!(ring[failed].data["text"], "deploy the api");
+            assert!(jobs.try_recv().is_err(), "nothing for the desktop");
+            std::fs::remove_dir_all(dir).unwrap();
+        }
+    }
+
+    /// The Codex client's session and a poll agent on it. Nothing waits
+    /// in `agent.wait` for it here, so an answer counts as handed over the
+    /// moment it arrives (`Core::deliver_poll`).
+    fn codex_agent(c: &mut Core, now: Instant) -> (AgentId, Principal) {
+        let codex = Principal::Adapter(deck_model::AdapterKind::Codex);
+        c.sessions
+            .open_internal(SessionId(50), codex.clone(), "codex", now);
+        let r = c
+            .api_call(
+                codex.clone(),
+                SessionId(50),
+                false,
+                Request::AgentRegister(testkit::register("thread", Some("codex:t1"))),
+                now,
+            )
+            .unwrap();
+        (serde_json::from_value(r["agent"].clone()).unwrap(), codex)
+    }
+
+    /// `metrics.get`'s `deliveries`, as `deckd ctl --scopes admin` reads it.
+    fn deliveries_of(c: &mut Core, now: Instant) -> serde_json::Value {
+        let admin = testkit::ctx(2, &[deck_model::Scope::Admin]);
+        let mut metrics = c
+            .call(admin, "metrics.get", serde_json::Value::Null, now)
+            .result
+            .unwrap();
+        metrics["deliveries"].take()
+    }
+
+    /// A card answered on the deck, read back from `metrics.get`: its
+    /// source by its word, where it was answered, that it reached the deck
+    /// and that the deck was used; never its words.
+    #[test]
+    fn metrics_get_serves_the_delivery_record() {
+        let dir = temp("deliveries-metrics");
+        // No hid thread to wait for: `metrics.get` answers at once.
+        let (mut c, _ops, _lines, _) = detached(&dir);
+        let t0 = Instant::now();
+        link(&mut c, t0);
+        let (agent, codex) = codex_agent(&mut c, t0);
+        let set = c
+            .api_call(
+                codex,
+                SessionId(50),
+                false,
+                Request::CardSet(testkit::card(&agent, "Run the migration?")),
+                t0,
+            )
+            .unwrap();
+        let card = testkit::card_id(&set).0;
+        let slot = c.store.snapshot().agents[&agent]
+            .slot
+            .expect("on the deck")
+            .0;
+        c.on_device_line(
+            DeviceLine::Answer {
+                slot,
+                card,
+                choice: 0,
+            },
+            t0,
+        );
+        let record = deliveries_of(&mut c, t0);
+        let cards = &record["cards"];
+        assert_eq!(cards["outcomes"]["answered"], 1, "{record}");
+        assert_eq!(cards["answered_on"]["deck"], 1);
+        assert_eq!(cards["reached"], 1);
+        assert_eq!(cards["deck_used"], 1);
+        assert_eq!(record["by_from"]["codex"]["total"], 1);
+        assert_eq!(record["recent"][0]["from"], "codex");
+        assert_eq!(record["recent"][0]["card"], card);
+        assert_eq!(record["open"], 0);
+        assert!(!record.to_string().contains("migration"), "{record}");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// Every deck line reaches the record before anything else handles it,
+    /// an image request among them, which the core answers itself and
+    /// never hands to the store; `status.json` carries the counts.
+    #[test]
+    fn reader_lines_reach_the_counters_including_images() {
+        let dir = temp("deliveries-reader");
+        let (mut c, _ops, _lines, _) = detached(&dir);
+        let t0 = Instant::now();
+        link(&mut c, t0);
+        for line in [
+            DeviceLine::Channel { slot: 1, seq: 1 },
+            DeviceLine::DocLines {
+                slot: 1,
+                doc: deck_model::DocKind::Reply,
+                id: 1,
+                first: 0,
+            },
+            DeviceLine::Tool {
+                slot: 1,
+                id: 1,
+                index: 0,
+            },
+            DeviceLine::Image {
+                slot: 1,
+                rev: 1,
+                index: 0,
+                offset: 0,
+            },
+        ] {
+            c.on_device_line(line, t0);
+        }
+        let reader = deliveries_of(&mut c, t0)["reader"].take();
+        for (counter, n) in [
+            ("channels", 1),
+            ("history", 1),
+            ("tool_rows", 1),
+            ("images", 1),
+            ("lines", 3),
+        ] {
+            assert_eq!(reader[counter], n, "{counter}: {reader}");
+        }
+        let brief = c.status(t0).deliveries.expect("the record in brief");
+        assert_eq!((brief.reader.images, brief.reader.channels), (1, 1));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// The record is in `state.json` when the daemon stops, the card still
+    /// up ending as `shutdown`, and the next daemon goes on from it.
+    #[test]
+    fn the_record_survives_a_restart() {
+        let dir = temp("deliveries-restart");
+        let (mut c, _ops, _lines, _) = detached(&dir);
+        let t0 = Instant::now();
+        link(&mut c, t0);
+        let (agent, codex) = codex_agent(&mut c, t0);
+        let ask = |c: &mut Core, text: &str| {
+            let set = c
+                .api_call(
+                    codex.clone(),
+                    SessionId(50),
+                    false,
+                    Request::CardSet(testkit::card(&agent, text)),
+                    t0,
+                )
+                .unwrap();
+            testkit::card_id(&set).0
+        };
+        let first = ask(&mut c, "first");
+        c.on_device_line(
+            DeviceLine::Answer {
+                slot: 1,
+                card: first,
+                choice: 0,
+            },
+            t0,
+        );
+        ask(&mut c, "still up");
+        c.on_device_line(DeviceLine::Channel { slot: 1, seq: 1 }, t0);
+        let before = deliveries_of(&mut c, t0);
+        assert_eq!(before["open"], 1);
+        c.shutdown();
+
+        let paths = Paths::from_data_dir(dir.clone(), dir.join("logs"), dir.join("caches"));
+        let (state, loaded) = State::load(&paths.state);
+        assert_eq!(loaded, crate::state::Loaded::Read);
+        let store = Store::new(StoreConfig::new(Instant::now(), Ts(1_789_760_600_000), 8));
+        let (hid, _ops, _lines, _) = crate::hid::HidHandle::detached();
+        let mut next = Core::new(store, state, hid, paths);
+        let after = deliveries_of(&mut next, Instant::now());
+        assert_eq!(after["since"], before["since"]);
+        assert_eq!(after["version"], before["version"]);
+        let outcomes = &after["cards"]["outcomes"];
+        assert_eq!(outcomes["answered"], 1);
+        assert_eq!(outcomes["shutdown"], 1, "the card still up when it stopped");
+        assert_eq!(after["reader"]["channels"], 1);
+        assert_eq!(after["recent"].as_array().map(Vec::len), Some(2));
+        assert_eq!(after["open"], 0);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// R2's card for an order that did not reach its agent is a failure
+    /// card in the record, kept apart from the cards the sources asked,
+    /// and the order is counted by route and by why it failed.
+    #[test]
+    fn an_order_failure_card_is_a_failure_card_in_the_record() {
+        let dir = temp("deliveries-order-failed");
+        let (mut c, _ops, _lines, _) = detached(&dir);
+        let t0 = Instant::now();
+        link(&mut c, t0);
+        let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+        let session = c.sessions.open(
+            OpenSession {
+                kind: SessionKind::Live { tx: tx.clone() },
+                principal: Principal::Uid(501),
+                scopes: vec![deck_model::Scope::Agent],
+                trusted: false,
+                client: ClientInfo::default(),
+            },
+            t0,
+        );
+        let agent = pusher(&mut c, session, t0);
+        tx.try_send(Outbound::Line("{}".into())).unwrap();
+        order_from_deck(&mut c, &agent, "SECRET-ORDER", t0).unwrap();
+        while rx.try_recv().is_ok() {}
+        // It goes like any Ready card: at the agent's next state change.
+        c.api_call(
+            Principal::Uid(501),
+            session,
+            false,
+            Request::AgentUpdate(deck_model::AgentUpdate {
+                agent: agent.clone(),
+                state: Some(AgentState::Working),
+                title: None,
+                title_source: None,
+                since: None,
+                name: None,
+                meta: None,
+                task: None,
+                subagents: None,
+            }),
+            t0,
+        )
+        .unwrap();
+        let record = deliveries_of(&mut c, t0);
+        assert_eq!(record["failure_cards"]["total"], 1, "{record}");
+        assert_eq!(record["failure_cards"]["outcomes"]["expired"], 1);
+        assert_eq!(record["recent"][0]["failure"], "channel_full");
+        assert_eq!(record["recent"][0]["from"], "app");
+        assert_eq!(record["cards"]["total"], 0, "no source asked anything");
+        let orders = &record["orders"];
+        assert_eq!(orders["dispatched"]["push"], 1);
+        assert_eq!(orders["failed"]["channel_full"], 1);
+        assert_eq!(orders["shown"]["card"], 1);
+        assert!(!record.to_string().contains("SECRET"), "{record}");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// R4 and R5 together: a card whose agent the quiet service released
+    /// (`crate::dormancy`) ends as `agent_gone` with the daemon's own reason
+    /// word, `dormant`, and not as an app's own text (`other`).
+    #[test]
+    fn a_card_released_with_its_agent_into_the_quiet_is_recorded_as_dormant() {
+        use crate::dormancy::{Dormancy, WINDOW};
+        let dir = temp("deliveries-dormant");
+        let (mut c, _ops, _lines, _) = detached(&dir);
+        let t0 = Instant::now();
+        let wall = c.store.ts(t0);
+        c.set_dormancy(Dormancy::start(WINDOW, None, wall, t0), t0);
+        c.on_from_hid(FromHid::Link(LinkEvent::Live { sid: 7 }), t0);
+        assert!(c.adapters.collecting());
+        let (agent, codex) = codex_agent(&mut c, t0);
+        c.api_call(
+            codex,
+            SessionId(50),
+            false,
+            Request::CardSet(testkit::card(&agent, "SECRET-ASK")),
+            t0,
+        )
+        .unwrap();
+        c.on_from_hid(FromHid::Link(LinkEvent::Down), t0);
+        tick_through(&mut c, t0, t0 + WINDOW);
+        c.tick(t0 + WINDOW);
+        assert!(!c.adapters.collecting(), "ten minutes without the deck");
+        assert!(!c.store.snapshot().agents.contains_key(&agent));
+        let record = deliveries_of(&mut c, t0 + WINDOW);
+        let last = &record["recent"][0];
+        assert_eq!(
+            (last["outcome"].as_str(), last["reason"].as_str()),
+            (Some("agent_gone"), Some("dormant")),
+            "{record}"
+        );
+        assert_eq!(record["cards"]["outcomes"]["agent_gone"], 1);
+        assert!(!record.to_string().contains("SECRET"), "{record}");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// R10, R7 and R4 together: forgetting a deck that is not in use
+    /// (`care.decks.forget`) drops that deck's record and nothing else. The
+    /// deck in use keeps its own strip, at the top level and in its record,
+    /// and the delivery record is kept whole, in the core and in
+    /// `state.json`.
+    #[test]
+    fn forgetting_a_deck_keeps_the_delivery_record_and_the_deck_in_use() {
+        use deck_model::{FaceEntry, Template};
+        let dir = temp("forget-keeps-deliveries");
+        let (mut c, _ops, _lines, _) = detached(&dir);
+        let t0 = Instant::now();
+        let (a, b) = ("A1B2C3D4E5F6", "C0FFEE15600D");
+        c.on_identity(Some(a), t0);
+        c.on_identity(Some(b), t0);
+        // Deck B, the one in use, links with a strip of its own.
+        let face = |f, t, n: &str| FaceEntry { f, t, n: n.into() };
+        let strip = vec![
+            face(1, Template::Agents, "Agents"),
+            face(4, Template::Usage, "Usage"),
+            face(5, Template::Settings, "Settings"),
+        ];
+        c.on_link(LinkEvent::Linked, t0);
+        c.on_device_line(
+            DeviceLine::Hello {
+                v: 1,
+                fw: "0.13.0".into(),
+                sid: 7,
+                boot: false,
+                rx: deck_model::LINE_MAX_U16,
+                agents: None,
+                lang: Some(0),
+                lang_rev: Some(1),
+                faces: strip.clone(),
+            },
+            t0,
+        );
+        c.on_link(LinkEvent::Live { sid: 7 }, t0);
+        assert_eq!(c.store.snapshot().faces, strip);
+        // A card answered on the deck: the record holds it.
+        let (agent, codex) = codex_agent(&mut c, t0);
+        let set = c
+            .api_call(
+                codex,
+                SessionId(50),
+                false,
+                Request::CardSet(testkit::card(&agent, "ship it?")),
+                t0,
+            )
+            .unwrap();
+        let card = testkit::card_id(&set).0;
+        c.on_device_line(
+            DeviceLine::Answer {
+                slot: 1,
+                card,
+                choice: 0,
+            },
+            t0,
+        );
+        let before = deliveries_of(&mut c, t0);
+        assert_eq!(before["cards"]["outcomes"]["answered"], 1, "{before}");
+
+        let admin = testkit::ctx(2, &[deck_model::Scope::Admin]);
+        let label_a = crate::device::identity::label(a);
+        let forgotten = c
+            .call(
+                admin,
+                "care.decks.forget",
+                serde_json::json!({ "deck": label_a }),
+                t0,
+            )
+            .result
+            .unwrap();
+        assert_eq!(forgotten["forgotten"], true);
+        assert_eq!(deliveries_of(&mut c, t0), before, "the record is the Mac's");
+        assert_eq!(c.store.snapshot().faces, strip, "the deck in use keeps its strip");
+        c.tick(t0 + STATE_DEBOUNCE);
+        let (saved, _) = State::load(&dir.join("state.json"));
+        assert_eq!(saved.decks.keys().collect::<Vec<_>>(), vec![b]);
+        assert_eq!(saved.deck.as_deref(), Some(b));
+        assert_eq!((&saved.faces, &saved.decks[b].faces), (&strip, &strip));
+        let outcome = |record: &crate::deliveries::Record| record.outcome.clone();
+        assert_eq!(
+            saved.deliveries.recent.iter().map(outcome).collect::<Vec<_>>(),
+            vec!["answered".to_string()]
+        );
+        assert_eq!(saved.deliveries.cards.total, 1);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// What the settle window did with Claude's asks, counted on the hook
+    /// door's side, reaches the record on the core's next tick.
+    #[test]
+    fn the_settle_windows_counts_reach_the_record_on_a_tick() {
+        use crate::adapters::settle::Outcome;
+        let dir = temp("deliveries-asks");
+        let (mut c, _ops, _lines, _) = detached(&dir);
+        let t0 = Instant::now();
+        for outcome in [Some(Outcome::Settled), Some(Outcome::Settled), None] {
+            c.adapters.asks.waited();
+            c.adapters.asks.ended(outcome);
+        }
+        c.adapters.asks.waited();
+        c.tick(t0);
+        assert_eq!(
+            c.deliveries.json()["asks"],
+            serde_json::json!({"waited": 4, "settled": 2, "prompted": 0, "passed": 1})
+        );
+        c.adapters.asks.ended(Some(Outcome::Ask));
+        let asks = deliveries_of(&mut c, t0)["asks"].take();
+        assert_eq!(asks["prompted"], 1, "metrics.get takes them too: {asks}");
+        assert_eq!(asks["waited"], 4);
         std::fs::remove_dir_all(dir).unwrap();
     }
 

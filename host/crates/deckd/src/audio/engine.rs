@@ -286,8 +286,19 @@ pub struct Engine {
     speaking: Option<String>,
     queue: std::collections::VecDeque<(AudioCmd, Option<Instant>)>,
 
+    /// The deck's UID pair in force: `[voice] device_uid` when the file
+    /// names one, else [`Engine::discovered_uid`].
     device_uid: Option<String>,
-    fallback_input: String,
+    /// The deck §7's rule found at start (CoreAudio only:
+    /// `coreaudio::discover_deck`), or at a later press. Kept apart from the
+    /// file's key, so the core's `Devices{device_uid: None}` for an unset
+    /// key never erases it.
+    discovered_uid: Option<String>,
+    /// How the deck is looked for again, CoreAudio only: a press on the deck
+    /// with no UID in force asks it before answering `no_device`, so a
+    /// Classic deck that connected after the service started is found
+    /// ([`Engine::set_rediscover`]).
+    rediscover: Option<Box<dyn Fn() -> Option<String> + Send>>,
     /// §7.1/§7.5, measured: `card_pending` keeps the input open while a
     /// question card is pending, because SCO bring-up costs ~1 s of real
     /// audio (V1) and that second is the operator's first syllables.
@@ -358,7 +369,8 @@ impl Engine {
             speaking: None,
             queue: std::collections::VecDeque::new(),
             device_uid: None,
-            fallback_input: "system_default".into(),
+            discovered_uid: None,
+            rediscover: None,
             mic_warm: "card_pending".into(),
             speak_over_sco: true,
             slow_sco_ms: 1500,
@@ -389,6 +401,20 @@ impl Engine {
     #[must_use]
     pub fn transport(&self) -> VoiceTransport {
         self.transport
+    }
+
+    /// The deck §7's rule found at start (`audio::spawn` sets it once,
+    /// before the first `Devices`): what a press records and a reply plays
+    /// to while `[voice] device_uid` names no UID of its own.
+    pub fn set_discovered_uid(&mut self, uid: Option<String>) {
+        self.discovered_uid = uid;
+    }
+
+    /// How a press looks for the deck when no UID is in force (CoreAudio
+    /// only: `coreaudio::discover_deck`, a read-only enumeration). The BLE
+    /// engine has none: its deck is the link's.
+    pub fn set_rediscover(&mut self, find: impl Fn() -> Option<String> + Send + 'static) {
+        self.rediscover = Some(Box::new(find));
     }
 
     pub fn set_stt(&mut self, engine: Arc<dyn SttEngine>) {
@@ -494,11 +520,15 @@ impl Engine {
             AudioCmd::Devices {
                 device_uid,
                 fallback_output,
-                fallback_input,
             } => {
-                self.device_uid.clone_from(&device_uid);
-                self.output.set_device(device_uid);
-                self.fallback_input = fallback_input;
+                // The file's UID wins; without one, the deck found at start.
+                // The core pushes the key as the file has it, `None` when
+                // unset, and taking that as it came erased the discovered
+                // deck: a Classic press then recorded the Mac's default
+                // input, and replies played from its default output.
+                let uid = device_uid.or_else(|| self.discovered_uid.clone());
+                self.device_uid.clone_from(&uid);
+                self.output.set_device(uid);
                 self.route.set_fallback_output(&fallback_output);
             }
             AudioCmd::Policy {
@@ -580,10 +610,21 @@ impl Engine {
                 .frames
                 .fetch_add(samples.len() as u64, Ordering::Relaxed);
         });
+        // A Classic deck that connected after the service started: nothing
+        // was found at start, so it is looked for again now rather than
+        // answering `no_device` until a restart. Found, it is the deck from
+        // here on, for the replies too; still absent, the press has no UID.
+        if matches!(input, VoiceInput::Deck) && self.device_uid.is_none() {
+            if let Some(uid) = self.rediscover.as_ref().and_then(|find| find()) {
+                tracing::info!("audio: the Classic deck, connected since the service started, found at the press");
+                self.discovered_uid = Some(uid.clone());
+                self.device_uid = Some(uid.clone());
+                self.output.set_device(Some(uid));
+            }
+        }
         let req = CaptureOpen {
             input,
             device_uid: self.device_uid.clone(),
-            fallback: self.fallback_input.clone(),
             ask_deck,
         };
         self.rearm_meter();
@@ -1333,15 +1374,14 @@ mod tests {
     }
 
     fn rig() -> Rig {
+        rig_with(Box::new(NullOutput::default()))
+    }
+
+    fn rig_with(output: Box<dyn OutputSink>) -> Rig {
         let lanes = Lanes::new();
         let (capture, capture_handle) = FakeCapture::new();
         let (to_core, from_core) = crossbeam_channel::unbounded();
-        let mut engine = Engine::new(
-            lanes.clone(),
-            Box::new(capture),
-            Box::new(NullOutput::default()),
-            to_core,
-        );
+        let mut engine = Engine::new(lanes.clone(), Box::new(capture), output, to_core);
         let (stt, stt_handle) = FakeStt::new();
         engine.set_stt(Arc::new(stt));
         let (tts_engine, _tts_handle) = FakeTts::new();
@@ -1383,7 +1423,6 @@ mod tests {
             AudioCmd::Devices {
                 device_uid: Some("C2-2D-81-AB-88-81".into()),
                 fallback_output: "none".into(),
-                fallback_input: "system_default".into(),
             },
             t0,
         );
@@ -1437,6 +1476,126 @@ mod tests {
         assert!(
             rig.engine.bring_up().is_some(),
             "V2: *now* the mic is known to be alive"
+        );
+    }
+
+    /// An output that only remembers where it was pointed.
+    struct Pointed(Arc<std::sync::Mutex<Vec<Option<String>>>>);
+
+    impl OutputSink for Pointed {
+        fn open(&mut self, _: u32, _: Mixer, _: Arc<StreamFaults>) -> Result<(), AudioError> {
+            Ok(())
+        }
+
+        fn close(&mut self) {}
+
+        fn is_open(&self) -> bool {
+            false
+        }
+
+        fn set_device(&mut self, uid: Option<String>) {
+            self.0.lock().unwrap().push(uid);
+        }
+    }
+
+    /// Decision 11's third path: a Classic deck found at start stays the
+    /// device while `[voice] device_uid` is unset. The core pushes the key
+    /// as the file has it, `None` when unset, and that used to erase the
+    /// discovered deck: every press then recorded the Mac's default input
+    /// and every reply played from its default output. A configured UID
+    /// wins, and taking it out again returns to the deck.
+    #[test]
+    fn an_unset_device_uid_keeps_the_deck_found_at_start() {
+        const DECK: &str = "C2-2D-81-AB-88-81";
+        const OTHER: &str = "AA-BB-CC-DD-EE-FF";
+        let t0 = Instant::now();
+        let press = |rig: &mut Rig, device_uid: Option<&str>| {
+            rig.engine.on_cmd(
+                AudioCmd::Devices {
+                    device_uid: device_uid.map(String::from),
+                    fallback_output: "none".into(),
+                },
+                t0,
+            );
+            rig.engine.on_cmd(listen(), t0);
+            rig.engine.on_cmd(AudioCmd::Finish { abort: true }, t0);
+            rig.capture.opens().last().and_then(|open| open.device_uid.clone())
+        };
+        let pointed = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mut classic = rig_with(Box::new(Pointed(pointed.clone())));
+        classic.engine.set_discovered_uid(Some(DECK.into()));
+        let first = press(&mut classic, None);
+        assert_eq!(first.as_deref(), Some(DECK), "the core's first push");
+        let configured = press(&mut classic, Some(OTHER));
+        assert_eq!(configured.as_deref(), Some(OTHER), "the file's wins");
+        let unset = press(&mut classic, None);
+        assert_eq!(unset.as_deref(), Some(DECK), "and gives way again");
+        let to = |uid: &str| Some(uid.to_string());
+        assert_eq!(
+            *pointed.lock().unwrap(),
+            [to(DECK), to(OTHER), to(DECK)],
+            "the output follows the same UID"
+        );
+
+        // Nothing found at start (the BLE transport, or no deck connected):
+        // no UID, which the CoreAudio capture answers with `no_device`.
+        let mut nothing = rig();
+        assert_eq!(press(&mut nothing, None), None);
+        assert_eq!(press(&mut nothing, Some(OTHER)).as_deref(), Some(OTHER));
+    }
+
+    /// Decision 11 keeps the Classic transport: a Classic deck that
+    /// connects after the service started (deckd starts at login, a
+    /// headset reconnects later) is looked for again at the press, which
+    /// then records it by UID and points replies at it; with no deck still,
+    /// the press has no UID (`no_device`), never the Mac's input. What the
+    /// press found stays the deck when the file's key is pushed unset again.
+    #[test]
+    fn a_classic_deck_that_connects_after_start_is_found_at_the_press() {
+        const DECK: &str = "C2-2D-81-AB-88-81";
+        let t0 = Instant::now();
+        let press = |rig: &mut Rig| {
+            rig.engine.on_cmd(
+                AudioCmd::Devices {
+                    device_uid: None,
+                    fallback_output: "none".into(),
+                },
+                t0,
+            );
+            rig.engine.on_cmd(listen(), t0);
+            rig.engine.on_cmd(AudioCmd::Finish { abort: true }, t0);
+            rig.capture.opens().last().and_then(|open| open.device_uid.clone())
+        };
+        let pointed = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mut classic = rig_with(Box::new(Pointed(pointed.clone())));
+        let connected = Arc::new(std::sync::Mutex::new(None::<String>));
+        let looked = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let (deck, count) = (connected.clone(), looked.clone());
+        classic.engine.set_rediscover(move || {
+            count.fetch_add(1, Ordering::Relaxed);
+            deck.lock().unwrap().clone()
+        });
+        assert_eq!(press(&mut classic), None, "no deck yet: no_device");
+        *connected.lock().unwrap() = Some(DECK.into());
+        assert_eq!(
+            press(&mut classic).as_deref(),
+            Some(DECK),
+            "found at the press"
+        );
+        assert_eq!(
+            pointed.lock().unwrap().last(),
+            Some(&Some(DECK.to_string())),
+            "and replies go to it"
+        );
+        assert_eq!(
+            press(&mut classic).as_deref(),
+            Some(DECK),
+            "it stays the deck"
+        );
+        assert_eq!(
+            looked.load(Ordering::Relaxed),
+            2,
+            "not looked for once known"
         );
     }
 

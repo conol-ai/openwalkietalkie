@@ -30,23 +30,47 @@
 use crate::assets::Assets;
 use crate::prefs::Prefs;
 use crate::present::LoginItem;
-use crate::shell::{initial_screen, Shell};
+use crate::shell::{initial_screen, Screen, Shell};
 use crate::shots::Shots;
-use crate::style::{self, Palette};
+use crate::style;
+use deck_gui_core::i18n::Language;
 use deck_gui_core::{
-    api_client, events, ApiClient, EventReceiver, HostState, TokioBridge, UiAction,
+    api_client, events, ApiClient, EventReceiver, HostState, MenuCommand, TokioBridge, UiAction,
 };
 use gpui::{
-    point, px, size, App, AppContext, Application, Bounds, Global, KeyBinding, Menu, MenuItem,
-    Pixels, Point, Result, TitlebarOptions, WindowBackgroundAppearance, WindowBounds,
-    WindowOptions,
+    point, px, size, Action, App, AppContext, Application, Bounds, Global, KeyBinding, Menu,
+    MenuItem, OsAction, Pixels, Point, Result, TitlebarOptions, WindowBackgroundAppearance,
+    WindowBounds, WindowOptions,
 };
-use gpui_component::Root;
+use gpui_component::{input, Root};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-gpui::actions!(openwalkietalkie, [Quit]);
+gpui::actions!(
+    openwalkietalkie,
+    [
+        /// **Quit OpenWalkieTalkie** (⌘Q).
+        Quit,
+        /// View ▸ **Deck** (⌘1).
+        ShowDeck,
+        /// View ▸ **Faces & Keys** (⌘2).
+        ShowFacesKeys,
+        /// View ▸ **Integrations** (⌘3).
+        ShowIntegrations,
+        /// View ▸ **Voice** (⌘4).
+        ShowVoice,
+        /// View ▸ **Service** (⌘5).
+        ShowService,
+        /// Window ▸ **Minimize** (⌘M).
+        Minimize,
+        /// Window ▸ **Zoom**.
+        Zoom,
+        /// Window ▸ **Close** (⌘W), which is what the window's close button
+        /// does ([`close_window`]).
+        CloseWindow,
+    ]
+);
 
 /// `app_id` (§8.1) — and the bundle identifier TCC keys every grant to
 /// (§10.1), so it is not a string to vary between builds.
@@ -160,10 +184,11 @@ impl Launch {
     ///
     /// `firmware.check` has the service open the deck over USB and fetch the
     /// release manifest from the network. Only the installed app, run for
-    /// real, has it do that; in any other run a check — asked for, or the
-    /// one every connection makes — goes as the `firmware.status` read the
-    /// check would have ended in, whose reply has the same shape. Everything
-    /// else goes as it was asked for.
+    /// real, has it do that; in any other run a check the owner asks for
+    /// goes as the `firmware.status` read the check would have ended in,
+    /// whose reply has the same shape. Everything else goes as it was asked
+    /// for. (The service's own looks are its own: `--no-device`, which a
+    /// test service runs with, never starts one.)
     pub fn outgoing(self, action: UiAction) -> UiAction {
         match action {
             UiAction::FirmwareCheck { .. } if !self.installed() => UiAction::FirmwareStatus,
@@ -356,7 +381,8 @@ fn boot(
     let language = crate::shell::spoken(prefs.language(), state.mirror().settings.language);
     cx.set_global(prefs);
     cx.on_action(|_: &Quit, cx: &mut App| cx.quit());
-    cx.bind_keys([KeyBinding::new("cmd-q", Quit, None)]);
+    // Before the menus: a menu item shows the key bound to its action.
+    cx.bind_keys(key_bindings());
     apply_menu_language(language, cx);
     // The status item, before the window: it has to be there whether or not
     // a window ever opens, and a menu bar that refused it is not fatal — the
@@ -375,12 +401,118 @@ fn boot(
     cx.activate(true);
 }
 
-/// Keep the app-owned menu item in the same language as the shared snapshot.
-pub fn apply_menu_language(language: deck_gui_core::i18n::Language, cx: &mut App) {
-    cx.set_menus(vec![Menu {
-        name: "OpenWalkieTalkie".into(),
-        items: vec![MenuItem::action(deck_gui_core::MenuCommand::Quit.label_localized(language), Quit)],
-    }]);
+/// Keep the menu bar in the same language as the shared snapshot.
+pub fn apply_menu_language(language: Language, cx: &mut App) {
+    cx.set_menus(menus(language));
+    // gpui 0.2.2 makes a menu AppKit's windows menu only when it is titled
+    // "Window", so in 简体中文, 繁體中文 and 日本語 macOS added no window list
+    // and no tiling items to it, and after a switch it kept the detached
+    // English one. `set_menus` has built the menu bar by now.
+    #[cfg(target_os = "macos")]
+    crate::macos::adopt_windows_menu(WINDOW_MENU);
+}
+
+/// The Window menu's place in the menu bar: after the app's menu, Edit and
+/// View ([`menus`]).
+pub const WINDOW_MENU: usize = 3;
+
+/// The menu bar in `language`, in macOS's own words for it: the app's menu
+/// (Quit), **Edit** for the text fields (a macro key's label, the cloud
+/// voice's key, the Local API's port and a token's name), **View** with
+/// the five pages and **Window**.
+///
+/// Edit's items are a text field's own actions, each marked as the macOS
+/// command it is ([`OsAction`]): they are enabled only while a field has
+/// the keyboard, and their keys are the ones the field binds. View's are
+/// dimmed under a dialog and through first run, where no page can open (the
+/// shell takes them only then). Window's Close does what the close button
+/// does.
+pub fn menus(language: Language) -> Vec<Menu> {
+    let pages = Screen::NAV
+        .into_iter()
+        .filter_map(|screen| {
+            Some(MenuItem::Action {
+                name: language.text(screen.label()).into(),
+                action: page_action(screen)?,
+                os_action: None,
+            })
+        })
+        .collect();
+    vec![
+        Menu {
+            name: "OpenWalkieTalkie".into(),
+            items: vec![MenuItem::action(
+                MenuCommand::Quit.label_localized(language),
+                Quit,
+            )],
+        },
+        Menu {
+            name: language.text("Edit").into(),
+            items: vec![
+                MenuItem::os_action(language.text("Undo"), input::Undo, OsAction::Undo),
+                MenuItem::os_action(language.text("Redo"), input::Redo, OsAction::Redo),
+                MenuItem::separator(),
+                MenuItem::os_action(language.text("Cut"), input::Cut, OsAction::Cut),
+                MenuItem::os_action(language.text("Copy"), input::Copy, OsAction::Copy),
+                MenuItem::os_action(language.text("Paste"), input::Paste, OsAction::Paste),
+                MenuItem::os_action(
+                    language.text("Select All"),
+                    input::SelectAll,
+                    OsAction::SelectAll,
+                ),
+            ],
+        },
+        Menu {
+            name: language.text("View").into(),
+            items: pages,
+        },
+        Menu {
+            name: language.text("Window").into(),
+            items: vec![
+                MenuItem::action(language.text("Minimize"), Minimize),
+                MenuItem::action(language.text("Zoom"), Zoom),
+                MenuItem::separator(),
+                MenuItem::action(language.text("Close"), CloseWindow),
+            ],
+        },
+    ]
+}
+
+/// What opens `screen` from the View menu: one of the sidebar's five pages.
+/// A sub-page and the harness's own screens have none.
+pub fn page_action(screen: Screen) -> Option<Box<dyn Action>> {
+    match screen {
+        Screen::Deck => Some(Box::new(ShowDeck)),
+        Screen::FacesKeys => Some(Box::new(ShowFacesKeys)),
+        Screen::Integrations => Some(Box::new(ShowIntegrations)),
+        Screen::Voice => Some(Box::new(ShowVoice)),
+        Screen::Service => Some(Box::new(ShowService)),
+        Screen::Footprint | Screen::LocalApi | Screen::Kit | Screen::MenuPreview => None,
+    }
+}
+
+/// The app's own keys: ⌘Q; ⌘1 to ⌘5 for the five pages, in the sidebar's
+/// order; ⌘M and ⌘W for the window. They hold wherever the keyboard is in
+/// the window, a text field included, as a menu's keys do. Edit's keys are
+/// the text field's own (gpui-component binds them in the field).
+pub fn key_bindings() -> Vec<KeyBinding> {
+    vec![
+        KeyBinding::new("cmd-q", Quit, None),
+        KeyBinding::new("cmd-1", ShowDeck, None),
+        KeyBinding::new("cmd-2", ShowFacesKeys, None),
+        KeyBinding::new("cmd-3", ShowIntegrations, None),
+        KeyBinding::new("cmd-4", ShowVoice, None),
+        KeyBinding::new("cmd-5", ShowService, None),
+        KeyBinding::new("cmd-m", Minimize, None),
+        KeyBinding::new("cmd-w", CloseWindow, None),
+    ]
+}
+
+/// What the window's close button does, and Window ▸ Close: the app hides.
+/// The service keeps running and the deck keeps working, and the status
+/// item (or the dock icon) opens the window again.
+pub fn close_window(cx: &mut App) {
+    cx.hide();
 }
 
 /// The window. `first_run` hands it to first run from its first frame, step
@@ -409,12 +541,12 @@ fn open(state: HostState, receiver: EventReceiver, first_run: bool, cx: &mut App
         ..Default::default()
     };
     cx.open_window(options, |window, cx| {
-        style::install(Palette::for_appearance(window.appearance()), cx);
+        style::install(style::look(window, cx), cx);
         // Closing the window hides the app; the service keeps running and
         // the deck keeps working, and the status item stays in the menu
         // bar to open the window again.
         window.on_window_should_close(cx, |_, cx| {
-            cx.hide();
+            close_window(cx);
             false
         });
         let shell = cx.new(|cx| Shell::new(state, receiver, initial_screen(), window, cx));
@@ -533,6 +665,224 @@ fn kickstart() -> std::result::Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A menu as its words, each item's action and the macOS command it is
+    /// marked as: a separator is `—`.
+    fn items(menu: &Menu) -> Vec<(String, &'static str, &'static str)> {
+        menu.items
+            .iter()
+            .map(|item| match item {
+                MenuItem::Action {
+                    name,
+                    action,
+                    os_action,
+                } => {
+                    let command = match os_action {
+                        Some(OsAction::Cut) => "cut",
+                        Some(OsAction::Copy) => "copy",
+                        Some(OsAction::Paste) => "paste",
+                        Some(OsAction::SelectAll) => "select all",
+                        Some(OsAction::Undo) => "undo",
+                        Some(OsAction::Redo) => "redo",
+                        None => "",
+                    };
+                    (name.to_string(), action.name(), command)
+                }
+                MenuItem::Separator => ("—".to_string(), "", ""),
+                MenuItem::Submenu(_) | MenuItem::SystemMenu(_) => ("?".to_string(), "", ""),
+            })
+            .collect()
+    }
+
+    /// The menu bar's titles.
+    fn titles(menus: &[Menu]) -> Vec<String> {
+        menus.iter().map(|menu| menu.name.to_string()).collect()
+    }
+
+    #[test]
+    fn the_menu_bar_is_the_apps_menu_edit_view_and_window() {
+        crate::i18n::install();
+        let menus = menus(Language::English);
+        assert_eq!(
+            titles(&menus),
+            ["OpenWalkieTalkie", "Edit", "View", "Window"]
+        );
+        let row = |name: &str, action: &'static str, command: &'static str| {
+            (name.to_string(), action, command)
+        };
+        assert_eq!(
+            items(&menus[0]),
+            [row("Quit OpenWalkieTalkie", "openwalkietalkie::Quit", "")]
+        );
+        // A text field's own actions, each marked as the Mac's command.
+        assert_eq!(
+            items(&menus[1]),
+            [
+                row("Undo", "input::Undo", "undo"),
+                row("Redo", "input::Redo", "redo"),
+                row("—", "", ""),
+                row("Cut", "input::Cut", "cut"),
+                row("Copy", "input::Copy", "copy"),
+                row("Paste", "input::Paste", "paste"),
+                row("Select All", "input::SelectAll", "select all"),
+            ]
+        );
+        // The sidebar's five pages, in its order.
+        assert_eq!(
+            items(&menus[2]),
+            [
+                row("Deck", "openwalkietalkie::ShowDeck", ""),
+                row("Faces & Keys", "openwalkietalkie::ShowFacesKeys", ""),
+                row("Integrations", "openwalkietalkie::ShowIntegrations", ""),
+                row("Voice", "openwalkietalkie::ShowVoice", ""),
+                row("Service", "openwalkietalkie::ShowService", ""),
+            ]
+        );
+        assert_eq!(
+            items(&menus[3]),
+            [
+                row("Minimize", "openwalkietalkie::Minimize", ""),
+                row("Zoom", "openwalkietalkie::Zoom", ""),
+                row("—", "", ""),
+                row("Close", "openwalkietalkie::CloseWindow", ""),
+            ]
+        );
+        for (i, screen) in Screen::NAV.into_iter().enumerate() {
+            assert_eq!(
+                page_action(screen).map(|action| action.name()),
+                Some(items(&menus[2])[i].1),
+                "{screen:?}"
+            );
+        }
+        // A sub-page and the harness's own screens are not in the menu.
+        for screen in [
+            Screen::Footprint,
+            Screen::LocalApi,
+            Screen::Kit,
+            Screen::MenuPreview,
+        ] {
+            assert!(page_action(screen).is_none(), "{screen:?}");
+        }
+    }
+
+    /// AppKit is told which menu is the Window menu by its place in the menu
+    /// bar (`macos::adopt_windows_menu`), because gpui tells it only for a
+    /// menu titled "Window" in English. The place holds in every language.
+    #[test]
+    fn the_window_menu_is_at_its_place_in_every_language() {
+        crate::i18n::install();
+        for (language, window) in [
+            (Language::English, "Window"),
+            (Language::SimplifiedChinese, "窗口"),
+            (Language::TraditionalChinese, "視窗"),
+            (Language::Japanese, "ウインドウ"),
+        ] {
+            assert_eq!(
+                menus(language)[WINDOW_MENU].name.as_ref(),
+                window,
+                "{language:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_menus_say_what_the_macs_own_menus_say_in_each_language() {
+        crate::i18n::install();
+        for (language, edit, view, window) in [
+            (Language::SimplifiedChinese, "编辑", "显示", "窗口"),
+            (Language::TraditionalChinese, "編輯", "顯示方式", "視窗"),
+            (Language::Japanese, "編集", "表示", "ウインドウ"),
+        ] {
+            let menus = menus(language);
+            assert_eq!(
+                titles(&menus),
+                ["OpenWalkieTalkie", edit, view, window],
+                "{language:?}"
+            );
+            // Every item is in the language, in the same order and with the
+            // same action as in English: nothing is left in English.
+            let english = menus_items(Language::English);
+            let said = menus_items(language);
+            assert_eq!(said.len(), english.len());
+            for (said, english) in said.iter().zip(&english) {
+                assert_eq!(said.1, english.1, "{language:?}");
+                if english.0 != "—" {
+                    assert_ne!(said.0, english.0, "{language:?}");
+                }
+            }
+        }
+        let japanese = menus(Language::Japanese);
+        assert_eq!(items(&japanese[3])[0].0, "しまう");
+        assert_eq!(items(&japanese[3])[1].0, "拡大/縮小");
+        let traditional = menus(Language::TraditionalChinese);
+        assert_eq!(items(&traditional[3])[0].0, "縮到最小");
+        assert_eq!(items(&traditional[1])[4].0, "拷貝");
+        let simplified = menus(Language::SimplifiedChinese);
+        assert_eq!(items(&simplified[1])[4].0, "拷贝");
+        assert_eq!(items(&simplified[3])[3].0, "关闭");
+    }
+
+    /// Every item of every menu bar but the app's own, in `language`.
+    fn menus_items(language: Language) -> Vec<(String, &'static str, &'static str)> {
+        menus(language)[1..].iter().flat_map(items).collect()
+    }
+
+    #[test]
+    fn the_pages_and_the_window_have_the_macs_keys_wherever_the_keyboard_is() {
+        let keys: Vec<(String, &str)> = key_bindings()
+            .iter()
+            .map(|binding| {
+                let strokes: Vec<String> = binding
+                    .keystrokes()
+                    .iter()
+                    .map(|stroke| stroke.unparse())
+                    .collect();
+                (strokes.join(" "), binding.action().name())
+            })
+            .collect();
+        let key = |stroke: &str, action: &'static str| (stroke.to_string(), action);
+        assert_eq!(
+            keys,
+            [
+                key("cmd-q", "openwalkietalkie::Quit"),
+                key("cmd-1", "openwalkietalkie::ShowDeck"),
+                key("cmd-2", "openwalkietalkie::ShowFacesKeys"),
+                key("cmd-3", "openwalkietalkie::ShowIntegrations"),
+                key("cmd-4", "openwalkietalkie::ShowVoice"),
+                key("cmd-5", "openwalkietalkie::ShowService"),
+                key("cmd-m", "openwalkietalkie::Minimize"),
+                key("cmd-w", "openwalkietalkie::CloseWindow"),
+            ]
+        );
+        // None is bound in a context: a menu's key holds wherever the
+        // keyboard is, a text field included.
+        assert!(key_bindings()
+            .iter()
+            .all(|binding| binding.predicate().is_none()));
+        // Every command of the app's own menus has a key but Zoom, which
+        // has none on any Mac; Edit's keys are the text field's.
+        let bound: Vec<&str> = key_bindings()
+            .iter()
+            .map(|binding| binding.action().name())
+            .collect();
+        for menu in [0, 2, 3] {
+            for (name, action, _) in items(&menus(Language::English)[menu]) {
+                if !action.is_empty() && name != "Zoom" {
+                    assert!(bound.contains(&action), "{name}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn every_word_the_menus_say_has_a_row() {
+        let source = include_str!("app.rs");
+        assert_eq!(crate::i18n::missing_rows(source), Vec::<String>::new());
+        // Pinned, so a lookup the scanner stopped seeing fails here rather
+        // than passing as menus with less to translate: Edit's title and its
+        // six items, View's title, and Window's with its three.
+        assert_eq!(crate::i18n::literals(source).len(), 12);
+    }
 
     #[test]
     fn the_window_is_the_designs_size_and_can_never_be_squeezed_past_its_minimum() {
@@ -730,8 +1080,8 @@ mod tests {
                 installed.outgoing(UiAction::FirmwareCheck { force }),
                 UiAction::FirmwareCheck { force }
             );
-            // The connection's own check and one asked for alike: no other
-            // run has the service open the deck or fetch the manifest.
+            // A check asked for, forced or not: no other run has the service
+            // open the deck or fetch the manifest.
             for launch in others {
                 assert_eq!(
                     launch.outgoing(UiAction::FirmwareCheck { force }),

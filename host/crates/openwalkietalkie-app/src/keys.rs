@@ -30,7 +30,7 @@
 use crate::present;
 use crate::shell::{Screen, Shell};
 use crate::style::{deck_colors, hex, Palette};
-use crate::ui::{self, canonical, Btn, Chip, Mod, PopupButton, Press, Row, Type as _};
+use crate::ui::{self, canonical, Btn, Chip, Layout, Mod, PopupButton, Press, Row, Type as _};
 use deck_gui_core::i18n::Language;
 use deck_gui_core::UiAction;
 use deck_model::{Binding, MacroKey, Template, Tone, Ts};
@@ -148,6 +148,8 @@ pub const BINDINGS: [Binding; 8] = [
 // The grid and the inspector, in the design's numbers.
 /// The grid's column, beside the inspector.
 const GRID_WIDTH: f32 = 420.;
+/// Keys to a row of the grid, as on the deck's face.
+const COLUMNS: u16 = 3;
 /// A key: its height and its corner.
 const KEY_HEIGHT: f32 = 80.;
 const KEY_RADIUS: f32 = 14.;
@@ -533,6 +535,44 @@ pub fn label_fits(label: &str) -> bool {
     label.len() <= LABEL_BYTES
 }
 
+/// What committing the Label field does with the words it holds.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LabelCommit {
+    /// They are the key's label already: nothing to send.
+    Same,
+    /// The field takes the key's label back: it was emptied (**Clear This
+    /// Key** removes a key, an empty label does not), or its words were
+    /// given for another key — another slot, another face, or the last
+    /// deck in the hand — and never for this one.
+    Restore,
+    /// Longer than the deck draws: said, and not sent.
+    TooLong,
+    /// Send this label for the selected key.
+    Send(String),
+}
+
+/// The Label field's rule. `typed` is what it holds, `given` the face and
+/// slot it was last given words for (none since another deck came into the
+/// hand), `f` and `at` the key selected now, and `was` that key's label.
+pub fn label_commit(
+    typed: &str,
+    given: Option<(u8, usize)>,
+    f: u8,
+    at: usize,
+    was: &str,
+) -> LabelCommit {
+    let typed = typed.trim();
+    if typed == was {
+        LabelCommit::Same
+    } else if typed.is_empty() || given != Some((f, at)) {
+        LabelCommit::Restore
+    } else if !label_fits(typed) {
+        LabelCommit::TooLong
+    } else {
+        LabelCommit::Send(typed.to_string())
+    }
+}
+
 /// What sets a face's keys: the whole list, the empty slots at its end
 /// dropped, under this app's layout name and with the tag the deck shows
 /// in the face's header as it was.
@@ -669,6 +709,23 @@ impl KeysPane {
         self.slot = 0;
         self.too_long = false;
         self.recording = false;
+    }
+
+    /// Another deck is in the hand, with keys of its own: `reset`, and the
+    /// keys sent for the last one are no longer shown. The Label field is no
+    /// longer counted as given words for any key, so what it holds is never
+    /// committed to this deck ([`label_commit`]); the shell empties it and
+    /// gives it this deck's label (`Shell::on_faces_event`).
+    pub(crate) fn other_deck(&mut self) {
+        self.reset();
+        self.sent = None;
+        self.given = None;
+    }
+
+    /// Empty the Label field.
+    pub(crate) fn clear_label(&self, window: &mut Window, cx: &mut Context<Shell>) {
+        self.label
+            .update(cx, |field, cx| field.set_value("", window, cx));
     }
 }
 
@@ -836,46 +893,44 @@ impl Shell {
     /// a key that fits is sent, an empty slot given a label becomes a key,
     /// and a label too long for the deck is said and not sent. Emptying a
     /// key's label does not remove the key (**Clear This Key** does): the
-    /// field takes the label back.
+    /// field takes the label back, as it does when its words were given for
+    /// another key than the one selected ([`label_commit`]).
     pub(crate) fn commit_label(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(face) = self.macro_face() else {
             return;
         };
         let at = self.faces.keys.slot;
-        let typed = self.faces.keys.label.read(cx).value().trim().to_string();
+        let typed = self.faces.keys.label.read(cx).value().to_string();
         let key = slot(&face.keys, at).cloned();
         let was = key
             .as_ref()
             .map(|key| key.label.clone())
             .unwrap_or_default();
-        if typed == was {
-            self.faces.keys.too_long = false;
-            return;
+        let given = self.faces.keys.given.as_ref().map(|(f, at, _)| (*f, *at));
+        match label_commit(&typed, given, face.f, at, &was) {
+            LabelCommit::Same => self.faces.keys.too_long = false,
+            LabelCommit::Restore => {
+                self.faces.keys.too_long = false;
+                self.faces.keys.given = None;
+                self.sync_label(window, cx);
+                cx.notify();
+            }
+            LabelCommit::TooLong => {
+                self.faces.keys.too_long = true;
+                cx.notify();
+            }
+            LabelCommit::Send(label) => {
+                self.faces.keys.too_long = false;
+                let key = match key {
+                    Some(key) => MacroKey { label, ..key },
+                    None => MacroKey {
+                        label,
+                        ..empty_key()
+                    },
+                };
+                self.send_keys(&face, placed(&face.keys, at, key), window, cx);
+            }
         }
-        if typed.is_empty() {
-            self.faces.keys.too_long = false;
-            self.faces.keys.given = None;
-            self.sync_label(window, cx);
-            cx.notify();
-            return;
-        }
-        if !label_fits(&typed) {
-            self.faces.keys.too_long = true;
-            cx.notify();
-            return;
-        }
-        self.faces.keys.too_long = false;
-        let key = match key {
-            Some(key) => MacroKey {
-                label: typed,
-                ..key
-            },
-            None => MacroKey {
-                label: typed,
-                ..empty_key()
-            },
-        };
-        self.send_keys(&face, placed(&face.keys, at, key), window, cx);
     }
 
     /// Change the selected key, and send the face's keys.
@@ -922,7 +977,10 @@ impl Shell {
                 this.faces.keys.sent = None;
                 let what = this.tr("Change the macro keys");
                 this.toast(
-                    this.fmt("{0} failed: {1}", &[what, &e.to_string()]),
+                    this.fmt(
+                        "{0} failed: {1}",
+                        &[what, &crate::updates::failure_text(&e)],
+                    ),
                     window,
                     cx,
                 );
@@ -1013,28 +1071,29 @@ impl Shell {
 
     /// The nine keys, three to a row: a key's control in its top-left
     /// corner, its shortcut in the top-right one and its label in the
-    /// middle; an empty slot is a dashed **Assign**.
+    /// middle; an empty slot is a dashed **Assign**. They are one stop on
+    /// the Tab order ([`ui::Group`]): Tab reaches the selected key, the
+    /// arrows move the keyboard across and down the grid, and Return or
+    /// Space selects the key that has it.
     fn key_grid(&self, keys: &[MacroKey], p: &Palette, cx: &Context<Self>) -> Div {
         let selected = self.faces.keys.slot;
         let cells = (0..SLOTS).map(|at| match slot(keys, at) {
-            Some(key) => self
-                .key_cell(at, key, at == selected, p, cx)
-                .into_any_element(),
-            None => self
-                .assign_cell(at, at == selected, p, cx)
-                .into_any_element(),
+            Some(key) => self.key_cell(at, key, at == selected, p, cx),
+            None => self.assign_cell(at, at == selected, p, cx),
         });
-        let grid = div()
+        let columns = usize::from(COLUMNS);
+        let grid = ui::Group::new("macro-keys", Layout::Grid { columns })
             .w_full()
             .grid()
-            .grid_cols(3)
+            .grid_cols(COLUMNS)
             .gap(px(12.))
             .p(px(16.))
             .rounded(px(12.))
             .bg(p.surf)
             .border_1()
             .border_color(p.line)
-            .children(cells);
+            .selected(Some(selected))
+            .members(cells);
         let away =
             (!self.linked()).then(|| ui::hint(self.tr("Sent to the deck when it links."), p));
         v_flex()

@@ -143,6 +143,10 @@ pub enum Control {
     },
     Name(String),
     Synced,
+    /// Not a line: the core has put the identified deck's own strip,
+    /// settings and keys in the view (`Command::DeckProfile`), so the link's
+    /// first hello, which the hid thread holds until this arrives, may go.
+    ProfileReady,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

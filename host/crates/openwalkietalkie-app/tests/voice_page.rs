@@ -17,13 +17,15 @@ use deck_model::{Permission, Snapshot, Tone};
 use openwalkietalkie_app::i18n;
 use openwalkietalkie_app::shots::Scene;
 use openwalkietalkie_app::voice::{
-    bluetooth_grant, dialog_provider, key_tail, locale_language, locale_name, percent,
+    bluetooth_grant, dialog_provider, key_kept, key_tail, locale_language, locale_name, percent,
     provider_name, recogniser, recognises, save_key_action, signal_path, speaks, speech_choice,
     speech_grant, speech_language_action, speech_locales, speech_reported, speech_state, staged,
     stt_slot, synthesiser, test_line, tts_slot, Grant, Offer, Recogniser, Route, Slot,
     SpeechChoice, Stop, Synthesiser, TestLine, NAMED_LOCALES,
 };
-use openwalkietalkie_app::voice_actions::{chime_complaint, refusal, Prompts, Refusal};
+use openwalkietalkie_app::voice_actions::{
+    chime_complaint, refusal, write_failure, Prompts, Refusal,
+};
 use serde_json::json;
 
 const EN: Language = Language::English;
@@ -538,7 +540,7 @@ fn speech_recognition_is_what_the_service_reports_and_not_checked_only_when_it_c
     let status = |speech: serde_json::Value| {
         json!({
             "microphone": "unknown", "speech": speech, "bluetooth": "granted",
-            "automation": {"ghostty": "unknown"}, "accessibility": "unknown", "limits": []
+            "accessibility": "unknown", "limits": []
         })
     };
     // `perm.status` in each of macOS's answers.
@@ -774,6 +776,32 @@ fn a_service_without_a_method_is_told_apart_from_a_call_that_failed() {
     }
 }
 
+/// A write the service refused says why in its own words: the Keychain
+/// that would not take the key, not the error's code.
+#[test]
+fn a_refused_write_says_why_in_the_services_words() {
+    i18n::install();
+    let why = "the Keychain did not take the key: User interaction is not allowed. (-25308)";
+    let refused = ClientError::Rpc {
+        code: -32009,
+        message: "invalid".into(),
+        data: Some(json!({"field": "keychain", "why": why})),
+    };
+    assert_eq!(
+        write_failure("voice.tts.api_key", &refused, Language::English),
+        format!("Could not write voice.tts.api_key: {why}")
+    );
+    let bare = ClientError::Rpc {
+        code: -32009,
+        message: "invalid".into(),
+        data: None,
+    };
+    assert_eq!(
+        write_failure("voice.tts.api_key", &bare, Language::Japanese),
+        format!("voice.tts.api_key を書き込めません: {bare}")
+    );
+}
+
 #[test]
 fn the_chime_claims_a_queue_and_never_a_sound_anybody_heard() {
     i18n::install();
@@ -863,6 +891,10 @@ fn the_harness_scenes_are_the_services_replies_parsed_as_the_page_reads_them() {
     assert_eq!(synthesiser(&key.tts), Some(Synthesiser::Cloud));
     assert_eq!(key_tail(&key.tts.key_hint), "\u{2026}mnop");
     assert_eq!(dialog_provider(Some(&key.tts)), "elevenlabs");
+    assert_eq!(
+        key_kept(Some(&key.tts), EN),
+        "The key is kept in your Keychain on this Mac."
+    );
     assert_eq!(recogniser(&key.stt_config), Some(Recogniser::Apple));
     assert_eq!(stt_slot(&key.whisper), Slot::Installed);
     assert!(matches!(
@@ -913,8 +945,42 @@ fn every_row_the_page_adds_is_the_only_row_of_its_key() {
         let rows = all.iter().filter(|row| row.0 == english).count();
         assert_eq!(rows, 1, "{english:?} is in another table too");
     }
-    // The sheet's 67 rows, copied as written.
-    assert_eq!(i18n::voice::STRINGS.len(), 67);
+    // The sheet's 67 rows, copied as written, and the key dialog's line
+    // for a key kept in the Keychain.
+    assert_eq!(i18n::voice::STRINGS.len(), 68);
+}
+
+/// The key dialog says where the service keeps the key: the Keychain when
+/// it says so, its own settings otherwise (config.toml: Linux, a service on
+/// a data directory of its own, or one from before the Keychain), in the
+/// window's language.
+#[test]
+fn the_key_dialog_says_where_the_service_keeps_the_key() {
+    i18n::install();
+    let kept = |store: &str| TtsConfig {
+        key_store: store.into(),
+        ..tts("cloud", "openai", "\u{2026}abcd (22 chars)")
+    };
+    assert_eq!(
+        key_kept(Some(&kept("keychain")), EN),
+        "The key is kept in your Keychain on this Mac."
+    );
+    let settings = "The key is kept in the service's settings on this Mac.";
+    assert_eq!(key_kept(Some(&kept("config")), EN), settings);
+    assert_eq!(key_kept(Some(&kept("")), EN), settings, "an older service");
+    assert_eq!(key_kept(None, EN), settings, "nothing read yet");
+    assert_eq!(
+        key_kept(Some(&kept("keychain")), ZH),
+        "密钥保存在此 Mac 上的钥匙串中。"
+    );
+    assert_eq!(
+        key_kept(Some(&kept("keychain")), Language::TraditionalChinese),
+        "金鑰儲存在此 Mac 上的鑰匙圈中。"
+    );
+    assert_eq!(
+        key_kept(Some(&kept("keychain")), Language::Japanese),
+        "キーはこの Mac のキーチェーンに保存されます。"
+    );
 }
 
 #[test]
@@ -925,8 +991,9 @@ fn every_word_the_page_says_has_a_row() {
     );
     assert_eq!(i18n::missing_rows(source), Vec::<String>::new());
     // Pinned, so a lookup the scanner stopped seeing fails here rather than
-    // passing as a page with less to translate.
-    assert_eq!(i18n::literals(source).len(), 120);
+    // passing as a page with less to translate. (121: the key dialog's
+    // line became one of two, by where the key is kept.)
+    assert_eq!(i18n::literals(source).len(), 121);
 }
 
 /// A fresh test service's own replies (`deck-gui-core`'s recorded fixtures,

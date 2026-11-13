@@ -170,6 +170,14 @@ pub const STRINGS: &[Entry] = &[
         "每個用量週期顯示一條進度列。",
         "使用量の枠ごとにバーを 1 本表示します。",
     ),
+    // Under the two sources, from a service that asks only then
+    // (`service.dormancy`).
+    (
+        "Asked only while this face is on the strip,\nand for up to ten minutes after the deck was last linked.",
+        "仅当此页面在页面列表中时才会查询；\n设备断开连接后，最多再持续十分钟。",
+        "僅當此頁面在頁面清單中時才會查詢；\n裝置中斷連線後，最多再持續十分鐘。",
+        "このページがページ一覧にある間だけ取得します。\nデバイスの接続が切れてからは最大 10 分間です。",
+    ),
     // The other faces' few settings.
     ("Demo data", "演示数据", "展示資料", "デモデータ"),
     (
@@ -186,5 +194,61 @@ pub const STRINGS: &[Entry] = &[
         "此页面在 Mac 上没有可设置的项目。",
         "此頁面在 Mac 上沒有可設定的項目。",
         "このページには Mac で変更できる設定はありません。",
+    ),
+    // The strip rule the service refused a strip by (`strip_problem`), in a
+    // toast: one sentence for each of its words.
+    (
+        "The strip holds eight faces at most.",
+        "页面列表最多容纳八个页面。",
+        "頁面清單最多容納八個頁面。",
+        "ページ一覧に置けるページは最大 8 つです。",
+    ),
+    (
+        "Each face needs a number from 1 to 8.",
+        "每个页面的编号须在 1 到 8 之间。",
+        "每個頁面的編號須在 1 到 8 之間。",
+        "各ページの番号は 1 から 8 である必要があります。",
+    ),
+    (
+        "Two faces have the same number.",
+        "有两个页面的编号相同。",
+        "有兩個頁面的編號相同。",
+        "番号が同じページが 2 つあります。",
+    ),
+    (
+        "Every face needs a name.",
+        "每个页面都需要名称。",
+        "每個頁面都需要名稱。",
+        "各ページに名前が必要です。",
+    ),
+    (
+        "Agents must be the first face.",
+        "“助手”必须是第一个页面。",
+        "「助理」必須是第一個頁面。",
+        "「エージェント」は最初のページである必要があります。",
+    ),
+    (
+        "Settings must be the last face.",
+        "“设置”必须是最后一个页面。",
+        "「設定」必須是最後一個頁面。",
+        "「設定」は最後のページである必要があります。",
+    ),
+    (
+        "Agents and Settings cannot be in the middle.",
+        "“助手”和“设置”不能放在中间。",
+        "「助理」和「設定」不能放在中間。",
+        "「エージェント」と「設定」は中間に置けません。",
+    ),
+    (
+        "The strip can hold three Macropads at most.",
+        "页面列表最多容纳三个“快捷键”页面。",
+        "頁面清單最多容納三個「快捷鍵」頁面。",
+        "ページ一覧に置けるマクロパッドは最大 3 つです。",
+    ),
+    (
+        "The strip can hold one Timer.",
+        "页面列表只能容纳一个“计时器”页面。",
+        "頁面清單只能容納一個「計時器」頁面。",
+        "ページ一覧に置けるタイマーは 1 つだけです。",
     ),
 ];

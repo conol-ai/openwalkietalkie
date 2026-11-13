@@ -185,10 +185,14 @@ locale = \"en-US\"
         serde_json::json!({}),
         serde_json::json!({"patch": {"trust.require_trusted_for_allow": false}}),
         serde_json::json!({"patch": {"trust.dev_requirement": "anchor apple"}}),
-        serde_json::json!({"patch": {"desktop.inject": ["ghostty", "Terminal"]}}),
         serde_json::json!({"patch": {"privacy.log_content": true}}),
+        // The Ghostty injector's old key is no key at all now.
+        serde_json::json!({"patch": {"desktop.inject": ["ghostty", "Terminal"]}}),
         serde_json::json!({"patch": {"api.allowed_origins": ["https://evil.example"]}}),
         serde_json::json!({"patch": {"voice.stt.allow_server": true}}),
+        // Decision 11: the Mac microphone fallback is gone, and asking for
+        // it is refused by name rather than written for nothing to read.
+        serde_json::json!({"patch": {"voice.fallback_input": "system_default"}}),
         // All or nothing: the good key in a patch with a bad one is not
         // written either. A port that moved while `[trust]` was refused
         // would leave the hooks pointing at a port nothing answers on.

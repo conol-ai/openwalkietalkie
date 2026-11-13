@@ -324,6 +324,7 @@ impl Store {
                 self.owned(&r.agent, session)?;
                 self.reply(r)
             }
+            Request::OrderOutcome(o) => self.order_outcome(session, o),
             Request::OpAnswer(OpAnswer {
                 agent,
                 card,

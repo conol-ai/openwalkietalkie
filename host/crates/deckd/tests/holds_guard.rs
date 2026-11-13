@@ -3,7 +3,7 @@
 //! without disarming it is the hook client going away (Claude's own
 //! timeout, Ctrl-C, a reset connection): the hold is released with no
 //! decision and the **same card id** comes back at once as the degraded
-//! `⌨ Focus terminal` card (§4.8, §12) — not after `hold_s`.
+//! `⌨ … Open app` card (§4.8, §12) — not after `hold_s`.
 mod core_support;
 
 use core_support::{
@@ -61,7 +61,7 @@ async fn abandoned_hold_replies_degrade_without_a_guard() {
             .await;
         let (again, _, choices) = card_put(&degraded).unwrap();
         assert_eq!(again, id, "cancellation keeps the original card identity");
-        assert_eq!(choices, vec!["Focus terminal"]);
+        assert_eq!(choices, vec!["Open app"]);
         let json = agent_json(&handle, session, &agent).await;
         assert_eq!(json["card"]["status"], "degraded");
         assert_eq!(json["card"]["deliver"], "focus");
@@ -126,7 +126,7 @@ async fn hold_guard_drop_sends_hold_gone() {
     let (again, text, choices) = card_put(&put).unwrap();
     assert_eq!(again, card.0, "a same-id re-push: no new chime");
     assert_eq!(text, "⌨ Bash: psql -f migrate.sql staging");
-    assert_eq!(choices, vec!["Focus terminal"]);
+    assert_eq!(choices, vec!["Open app"]);
     assert!(
         !live
             .parts
