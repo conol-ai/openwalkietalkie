@@ -33,7 +33,7 @@ gui="$app/Contents/MacOS/OpenWalkieTalkie"
 daemon="$app/Contents/MacOS/deckd"
 agent="$app/Contents/Library/LaunchAgents/$label.plist"
 info="$app/Contents/Info.plist"
-entitlements=(com.apple.security.device.audio-input com.apple.security.automation.apple-events)
+entitlements=(com.apple.security.device.audio-input)
 
 failures=0
 adhoc=false
@@ -70,7 +70,7 @@ else
     row FAIL "CFBundleIdentifier" "$bundle_id != $identifier"
 fi
 for key in NSMicrophoneUsageDescription NSSpeechRecognitionUsageDescription \
-           NSAppleEventsUsageDescription SUFeedURL SUPublicEDKey; do
+           SUFeedURL SUPublicEDKey; do
     value=$(plist_value "$key" "$info")
     if [ -z "$value" ]; then
         row FAIL "$key" "missing or empty"

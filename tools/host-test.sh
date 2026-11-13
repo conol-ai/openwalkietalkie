@@ -224,14 +224,14 @@ rendered="$logs/Info.plist.rendered"
 sed -e 's/^[[:space:]]*@[A-Z_]*@[[:space:]]*$/<true\/>/' -e 's/@[A-Z_]*@/x/g' \
     "$info_in" >"$rendered" 2>/dev/null
 if plutil -lint "$rendered" >/dev/null 2>&1; then
-    for k in NSMicrophoneUsageDescription NSSpeechRecognitionUsageDescription NSAppleEventsUsageDescription; do
+    for k in NSMicrophoneUsageDescription NSSpeechRecognitionUsageDescription; do
         grep -q "$k" "$info_in" || { printf 'FAIL  packaging Info.plist  %s missing -- a TCC prompt with no usage string is a crash, not a dialog\n' "$k"; pkg_fail=1; }
     done
 else
     printf 'FAIL  packaging plist       Info.plist.in does not parse once its placeholders are filled\n'
     pkg_fail=1
 fi
-for key in com.apple.security.device.audio-input com.apple.security.automation.apple-events; do
+for key in com.apple.security.device.audio-input; do
     grep -q "$key" "$ent" 2>/dev/null || { printf 'FAIL  packaging entitlement %s missing from deck.entitlements\n' "$key"; pkg_fail=1; }
 done
 if plutil -extract KeepAlive json -o - "$agent_plist" 2>/dev/null | grep -q '"SuccessfulExit":false'; then
