@@ -20,6 +20,11 @@
 //! LaunchAgent or their `~/.claude`: `--data-dir` is a fresh `$TMPDIR`
 //! directory with `[api] port = 0` and `HOME` and the CLI homes inside it,
 //! and the daemon runs `--no-device`.
+//!
+//! The daemon checks its peers with the real verifier, so where this test
+//! runs inside Claude Code or Codex (an agent running `cargo test`), §4.2's
+//! ancestry cap refuses it `admin`: the two exits are then checked as that
+//! refusal and a service that stays up, and CI checks the exits themselves.
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
@@ -131,6 +136,50 @@ impl Drop for Daemon {
     }
 }
 
+/// Whether this test process runs inside Claude Code or Codex: the macOS
+/// service then refuses it `admin` (§4.2's ancestry cap, `reason:
+/// "agent_ancestry"`).
+fn capped() -> bool {
+    deckd::trust::ancestry_capped(std::process::id())
+}
+
+/// Where [`capped`]: a session asking for `admin` is refused by the cap,
+/// and the daemon, asked for nothing, is still up well past the exit's
+/// grace. The caller then stops. Elsewhere, false.
+fn refused_by_the_cap(daemon: &mut Daemon) -> bool {
+    if !capped() {
+        return false;
+    }
+    let stream = UnixStream::connect(daemon.socket()).expect("the uds door");
+    stream
+        .set_read_timeout(Some(PATIENCE))
+        .expect("a read timeout");
+    let mut writer = stream.try_clone().expect("a write half");
+    let request = serde_json::json!({
+        "jsonrpc": "2.0", "id": 1, "method": "session.hello",
+        "params": {"client": {"name": "gate", "version": "1"}, "scopes": ["admin"]},
+    });
+    writer
+        .write_all(format!("{request}\n").as_bytes())
+        .expect("the request is written");
+    let mut text = String::new();
+    BufReader::new(stream).read_line(&mut text).expect("a line");
+    let hello: serde_json::Value =
+        serde_json::from_str(&text).unwrap_or_else(|_| panic!("not json: {text:?}"));
+    assert_eq!(
+        hello["error"]["code"],
+        deck_model::ApiError::FORBIDDEN,
+        "{hello}"
+    );
+    assert_eq!(
+        hello["error"]["data"]["reason"], "agent_ancestry",
+        "{hello}"
+    );
+    std::thread::sleep(deckd::service::Exit::GRACE * 4);
+    assert!(daemon.alive(), "a refused session stops nothing");
+    true
+}
+
 /// One `session.hello` + one call, over the socket, as `deckd ctl` does.
 /// Returns the call's whole JSON-RPC response.
 fn call(socket: &Path, method: &str, scopes: &[&str]) -> serde_json::Value {
@@ -173,6 +222,9 @@ fn call(socket: &Path, method: &str, scopes: &[&str]) -> serde_json::Value {
 #[test]
 fn service_restart_answers_its_caller_and_then_the_process_exits_seventy_five() {
     let mut daemon = Daemon::start("restart");
+    if refused_by_the_cap(&mut daemon) {
+        return;
+    }
     let response = call(&daemon.socket(), "service.restart", &["admin"]);
 
     // The reply is in hand, and the daemon is still there to have sent it.
@@ -208,6 +260,9 @@ fn service_restart_answers_its_caller_and_then_the_process_exits_seventy_five() 
 #[test]
 fn service_stop_answers_its_caller_and_then_the_process_exits_zero() {
     let mut daemon = Daemon::start("stop");
+    if refused_by_the_cap(&mut daemon) {
+        return;
+    }
     let response = call(&daemon.socket(), "service.stop", &["admin"]);
     assert!(response["error"].is_null(), "{response}");
     assert_eq!(response["result"]["action"], "stop");

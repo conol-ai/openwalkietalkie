@@ -92,6 +92,10 @@ before enabling them. Bump the notice version when it should be shown again.
 ## Content and releases
 
 - `public/index.html`: product information, interactive deck, gallery, downloads.
+  While the deck is waitlist-only, the hero offers the waitlist, the browser
+  demo and the source, but no Mac download; the nav, the Blueprint section and
+  the Download section still lead to it. `tests/home.test.mjs` checks the hero
+  and both versioned Mac downloads; update it when the deck goes on sale.
 - `public/js/main.js`: theme, demo, PTT simulation, and galleries. The browser
   demo uses scripted text; it does not record audio or connect to real agents.
 - `src/worker.ts` and `migrations/`: waitlist API and retention task.

@@ -232,7 +232,6 @@ pub struct AudioConfig {
     /// [`crate::audio::coreaudio::discover_deck`]). CoreAudio only.
     pub device_uid: Option<String>,
     pub fallback_output: String,
-    pub fallback_input: String,
     /// The deck's voice link, when the daemon made one before the hid
     /// thread (which drives its cable port); `None` spawns one here, with
     /// its Bluetooth port only. BLE transport only.
@@ -267,7 +266,6 @@ impl std::fmt::Debug for AudioConfig {
             .field("transport", &self.transport)
             .field("device_uid", &self.device_uid)
             .field("fallback_output", &self.fallback_output)
-            .field("fallback_input", &self.fallback_input)
             .field("tts_engine", &self.tts_engine)
             .field("sidecar", &self.sidecar)
             .field("stt", &self.stt.as_ref().map(|e| e.info().name))
@@ -282,8 +280,6 @@ impl Default for AudioConfig {
             transport: crate::config::VoiceTransport::default(),
             device_uid: None,
             fallback_output: "none".into(),
-            // `[voice] fallback_input`'s own default: no Mac microphone.
-            fallback_input: "none".into(),
             link: None,
             tts_engine: "apple".into(),
             sidecar: None,
@@ -363,9 +359,12 @@ pub fn sidecar_config(config: &crate::config::Config, paths: &crate::config::Pat
 ///   microphone and speaker ([`ble::BleCapture`], [`ble::BleOutput`]) and
 ///   `deckd-ble-link` turning link states into route events. No CoreAudio
 ///   discovery and no property watcher: nothing about this transport is a
-///   CoreAudio device. The Mac's own input stays the `fallback_input`.
-/// * `transport = "coreaudio"`: exactly what this did before the BLE
-///   transport existed.
+///   CoreAudio device. The Mac's own input is opened for
+///   `voice.listen{input:"mac"}` only; a press never falls back to it.
+/// * `transport = "coreaudio"`: what this did before the BLE transport
+///   existed, except that the deck discovered at start stays the device
+///   while `[voice] device_uid` is unset, and a press without the deck's
+///   input is `no_device` rather than the Mac's microphone.
 ///
 /// The handle it returns is the same one the core already knows how to use
 /// ([`AudioHandle`]), so installing an engine is one `set_audio` and no
@@ -472,7 +471,6 @@ fn ble_engine(
         AudioCmd::Devices {
             device_uid: cfg.device_uid.clone(),
             fallback_output: cfg.fallback_output.clone(),
-            fallback_input: cfg.fallback_input.clone(),
         },
         std::time::Instant::now(),
     );
@@ -484,7 +482,8 @@ fn ble_engine(
 }
 
 /// The engine around a Classic deck's CoreAudio devices: the pre-BLE
-/// engine, unchanged.
+/// engine, with the deck it discovers kept for as long as `[voice]
+/// device_uid` is unset.
 #[cfg(target_os = "macos")]
 fn coreaudio_engine(
     cfg: &AudioConfig,
@@ -492,7 +491,10 @@ fn coreaudio_engine(
     events_tx: &Sender<FromAudio>,
     routes_tx: &Sender<traits::RouteEvent>,
 ) -> engine::Engine {
-    let uid = cfg.device_uid.clone().or_else(coreaudio::discover_deck);
+    // Always looked for, so a `device_uid` taken out of the file later
+    // returns to the deck rather than to no device at all.
+    let discovered = coreaudio::discover_deck();
+    let uid = cfg.device_uid.clone().or_else(|| discovered.clone());
     let mut engine = engine::Engine::new(
         lanes,
         Box::new(coreaudio::CpalCapture::new()),
@@ -500,11 +502,16 @@ fn coreaudio_engine(
         events_tx.clone(),
     );
     engine.set_transport(crate::config::VoiceTransport::Coreaudio);
+    // The engine keeps it: the core's first `Devices` carries the file's
+    // key, `None` when unset, and must not put the Mac's default input and
+    // output in the deck's place. A deck that connects later is looked for
+    // again at the press that finds no UID.
+    engine.set_discovered_uid(discovered);
+    engine.set_rediscover(coreaudio::discover_deck);
     engine.on_cmd(
         AudioCmd::Devices {
-            device_uid: uid.clone(),
+            device_uid: cfg.device_uid.clone(),
             fallback_output: cfg.fallback_output.clone(),
-            fallback_input: cfg.fallback_input.clone(),
         },
         std::time::Instant::now(),
     );

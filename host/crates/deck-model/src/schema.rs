@@ -55,6 +55,7 @@ mod tests {
             "CardSet",
             "OpAnswer",
             "OpOrder",
+            "OrderOutcome",
             "FocusReport",
         ] {
             assert!(defs[name].is_object(), "{name}");

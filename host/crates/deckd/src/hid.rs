@@ -49,6 +49,10 @@ pub enum FromHid {
     /// on (each after the link's `Linked`), and why a link is ending (just
     /// before its `Down`).
     Report(DeviceReport),
+    /// The serial number HID lists for the instance opened (after the
+    /// link's `Linked` and its transport, before any hello reply): which
+    /// deck it is (`device::identity`). `None` when HID lists none.
+    Identity(Option<String>),
     Metric(Metric),
 }
 
@@ -130,7 +134,18 @@ pub struct HidConfig {
     /// (`device::status`); `None` asks it nothing there at all
     /// (`[device] status_poll_s = 0`).
     pub status_every: Option<Duration>,
+    /// How long the first hello of a link to a deck with a serial number
+    /// waits for the core to put that deck's own strip, settings and keys
+    /// in the view (`Control::ProfileReady`), so the sync the hello starts
+    /// is planned from them; `None` sends it at once.
+    pub identify_wait: Option<Duration>,
 }
+
+/// The longest a link's first hello waits for the identified deck's own
+/// settings. The core answers in well under a millisecond; this only
+/// bounds a core that is busy or gone, which then costs the link this
+/// much and today's race (the settings follow the sync on the lanes).
+pub const IDENTIFY_WAIT: Duration = Duration::from_millis(500);
 
 #[derive(Debug, thiserror::Error)]
 pub enum HidError {
@@ -251,10 +266,12 @@ pub fn pick(found: &[Instance]) -> Option<&Instance> {
 }
 
 /// The bus of every instance of the deck's vendor collection HID lists
-/// now, in hidapi's order (`deckd probe`). It enumerates on the probe
-/// thread and opens nothing.
-pub fn instance_buses() -> Result<Vec<hidapi::BusType>, HidError> {
-    probe_mut(|api| instances(api).map(|found| found.into_iter().map(|i| i.bus).collect()))?
+/// now, in hidapi's order, with the serial number it lists for it
+/// (`deckd probe`). It enumerates on the probe thread and opens nothing.
+pub fn instance_buses() -> Result<Vec<(hidapi::BusType, Option<String>)>, HidError> {
+    probe_mut(|api| {
+        instances(api).map(|found| found.into_iter().map(|i| (i.bus, i.serial)).collect())
+    })?
 }
 
 /// Open the deck's vendor collection, non-exclusively.
@@ -329,6 +346,16 @@ pub struct Link {
     status: StatusPoll,
     /// Whose report the write in flight carries.
     carrying: Carrying,
+    /// `HidConfig::identify_wait`.
+    identify_wait: Option<Duration>,
+    /// Until when the link's first hello waits for `Control::ProfileReady`;
+    /// `None` while nothing is waited for.
+    hello_gate: Option<Instant>,
+    /// The deck the last identified link of this run named (its first
+    /// identity candidate). A link that names none is taken for it, as the
+    /// core takes it (R7's fallback); a link that names another deck gets a
+    /// fresh sid ([`Link::identified`]).
+    last_deck: Option<String>,
 }
 
 /// Whose report a write carries. Only the outbox's are paced and make up a
@@ -406,6 +433,9 @@ impl Link {
             audio: cfg.audio.clone(),
             status: StatusPoll::new(cfg.status_every),
             carrying: Carrying::Line,
+            identify_wait: cfg.identify_wait,
+            hello_gate: None,
+            last_deck: None,
         }
     }
 
@@ -455,8 +485,14 @@ impl Link {
         std::mem::take(&mut self.drop_handle)
     }
 
-    /// A `DeviceOp` from the core: view first, outbox second (§6.2).
+    /// A `DeviceOp` from the core: view first, outbox second (§6.2). The
+    /// core's word that the identified deck's profile is in the view is
+    /// neither: it lets the first hello go.
     pub fn apply(&mut self, op: DeviceOp, now: Instant) {
+        if matches!(op, DeviceOp::Control(Control::ProfileReady)) {
+            self.hello_gate = None;
+            return;
+        }
         self.view.apply(&op);
         self.outbox.enqueue(&self.view, op, now);
     }
@@ -482,6 +518,7 @@ impl Link {
         self.view.set_language_supported(false);
         self.linked = true;
         self.drop_handle = false;
+        self.hello_gate = None;
         self.assembler.clear();
         self.outbox.clear_link(now);
         self.status.start(now);
@@ -502,6 +539,44 @@ impl Link {
             .push(FromHid::Report(DeviceReport::Transport(transport)));
     }
 
+    /// The device `link_up` reported lists `serial` (after `opened`, before
+    /// anything is written): the core learns which deck it is. When the
+    /// serial names one, the first hello waits for the core to put that
+    /// deck's own strip, settings and keys in the view, at most
+    /// `identify_wait`; a deck with no serial, or one that names none, is
+    /// linked exactly as before.
+    pub fn identified(&mut self, serial: Option<&str>, now: Instant) {
+        let serial = serial.map(str::trim).filter(|s| !s.is_empty());
+        let deck = serial.and_then(|s| crate::device::identity::candidates(s).into_iter().next());
+        if let Some(deck) = deck {
+            self.hello_gate = self.identify_wait.map(|wait| now + wait);
+            if self.last_deck.as_ref().is_some_and(|last| *last != deck) {
+                self.another_deck();
+            }
+            self.last_deck = Some(deck);
+        }
+        self.out.push(FromHid::Identity(serial.map(str::to_owned)));
+    }
+
+    /// Another deck than the last link's is in the hand, before its hello
+    /// goes. What the outbox holds was the last deck's: the shadow of what
+    /// it was sent, and the controls queued for it (a toast, a focus ack, a
+    /// name, an image). A deck that kept our sid from an earlier link would
+    /// answer it and go live with that shadow, so the link takes a fresh sid
+    /// instead: the deck sees a foreign one, marks its roster stale, and the
+    /// barrier its reply starts rewrites it from this deck's view. The hello
+    /// is the one control kept; it reads the sid when it is written.
+    fn another_deck(&mut self) {
+        let sid = match self.session.sid().wrapping_add(1) {
+            0 => 1,
+            sid => sid,
+        };
+        self.outbox.new_sid(sid);
+        self.outbox.keep_only_the_hello();
+        self.session.set_sid(sid);
+        tracing::info!("another deck than the last link's: a fresh session, so it is synced whole");
+    }
+
     /// Read/write error or removal: the handle is gone.
     pub fn link_down(&mut self, now: Instant, why: &str) {
         if !self.linked {
@@ -517,6 +592,7 @@ impl Link {
     fn dropped(&mut self, now: Instant, why: &str) {
         self.view.set_language_supported(false);
         self.linked = false;
+        self.hello_gate = None;
         self.stats.link_drops += 1;
         self.carrying = Carrying::Line;
         self.status.stop();
@@ -708,11 +784,18 @@ impl Link {
         }
     }
 
-    /// Periodic work: the hello timers, the channel-2 request's timeout,
-    /// and the cable port's LISTEN deadline.
+    /// Periodic work: the hello timers, the first hello's wait for the
+    /// deck's profile, the channel-2 request's timeout, and the cable
+    /// port's LISTEN deadline.
     pub fn tick(&mut self, now: Instant) {
         if !self.linked {
             return;
+        }
+        if self.hello_gate.is_some_and(|until| now >= until) {
+            self.hello_gate = None;
+            tracing::warn!(
+                "the deck's own settings were not ready in time: the first hello goes without them"
+            );
         }
         self.session_step(Input::Tick, now);
         self.status.tick(now);
@@ -741,9 +824,11 @@ impl Link {
         self.status.next_request(now)
     }
 
-    /// The next report to write, if the pacer allows one.
+    /// The next report to write, if the pacer allows one. Nothing while the
+    /// first hello waits for the deck's profile: until the deck answers a
+    /// hello only controls could go, and they wait with it.
     pub fn next_report(&mut self, now: Instant) -> Option<[u8; REPORT_LEN]> {
-        if !self.linked {
+        if !self.linked || self.hello_gate.is_some() {
             return None;
         }
         self.outbox.next_report(&self.view, now)
@@ -1051,6 +1136,7 @@ fn thread_main(
                         last_open_error = None;
                         link.link_up(now);
                         link.opened(instance.bus);
+                        link.identified(instance.serial.as_deref(), now);
                         if matches!(instance.bus, hidapi::BusType::Usb) {
                             link.cable_up(instance.serial.as_deref());
                         }
@@ -1266,6 +1352,7 @@ pub(crate) mod tests {
             hardware: false,
             audio: None,
             status_every: Some(crate::device::status::STATUS_EVERY),
+            identify_wait: None,
         }
     }
 
@@ -1553,6 +1640,225 @@ pub(crate) mod tests {
         assert!(links(&mut link).is_empty());
         assert_eq!(link.view().faces().len(), 1, "boot:0 adopts the strip");
         assert!(link.view().get(&Key::Faces).is_some());
+    }
+
+    /// The deck's own serial number as the cable lists it.
+    const SERIAL: &str = "A1B2C3D4E5F6";
+
+    const HELLO_LINE: &str = "{\"m\":\"hello\",\"v\":1,\"sid\":314159}";
+
+    /// `cfg()` with the service's wait for the deck's profile.
+    fn waiting() -> HidConfig {
+        HidConfig {
+            identify_wait: Some(IDENTIFY_WAIT),
+            ..cfg()
+        }
+    }
+
+    #[test]
+    fn the_identity_follows_the_transport() {
+        let mut link = Link::new(&cfg());
+        let t = Instant::now();
+        link.link_up(t);
+        link.opened(hidapi::BusType::Usb);
+        link.identified(Some(SERIAL), t);
+        assert_eq!(
+            link.drain(),
+            vec![
+                FromHid::Link(LinkEvent::Linked),
+                FromHid::Report(DeviceReport::Transport(Some(Transport::Usb))),
+                FromHid::Identity(Some(SERIAL.into())),
+            ]
+        );
+        // No serial listed, or an empty one: the core hears that too.
+        link.identified(Some("  "), t);
+        link.identified(None, t);
+        assert_eq!(
+            link.drain(),
+            vec![FromHid::Identity(None), FromHid::Identity(None)]
+        );
+    }
+
+    #[test]
+    fn the_first_hello_waits_for_the_profile() {
+        let mut link = Link::new(&waiting());
+        let mut t = Instant::now();
+        link.link_up(t);
+        link.opened(hidapi::BusType::Usb);
+        link.identified(Some(SERIAL), t);
+        t += Duration::from_millis(100);
+        link.tick(t);
+        assert!(link.next_report(t).is_none());
+        // The deck's own strip lands in the view, then the word that it is
+        // all there: the hello goes, and the sync it starts restores it.
+        let strip = vec![
+            FaceEntry {
+                f: 1,
+                t: Template::Agents,
+                n: "Agents".into(),
+            },
+            FaceEntry {
+                f: 4,
+                t: Template::Usage,
+                n: "Usage".into(),
+            },
+        ];
+        link.apply(
+            DeviceOp::Put(Key::Faces, HostLine::Faces { list: strip }),
+            t,
+        );
+        link.apply(DeviceOp::Control(Control::ProfileReady), t);
+        assert_eq!(written(&mut link, &mut t), [HELLO_LINE]);
+        assert_eq!(link.outbox().lines_sent(), 1, "ProfileReady is no line");
+        feed(&mut link, HELLO_BOOT, t);
+        let lines = written(&mut link, &mut t);
+        assert!(
+            lines.iter().any(|l| l.contains("\"t\":\"usage\"")),
+            "the deck's own strip is in the sync: {lines:?}"
+        );
+    }
+
+    #[test]
+    fn a_profile_that_never_comes_lets_the_hello_go_after_the_wait() {
+        let mut link = Link::new(&waiting());
+        let t = Instant::now();
+        link.link_up(t);
+        link.identified(Some(SERIAL), t);
+        let almost = t + IDENTIFY_WAIT - Duration::from_millis(1);
+        link.tick(almost);
+        assert!(link.next_report(almost).is_none());
+        let late = t + IDENTIFY_WAIT;
+        link.tick(late);
+        let mut at = late;
+        assert_eq!(written(&mut link, &mut at), [HELLO_LINE]);
+        // A late `ProfileReady` changes nothing.
+        link.apply(DeviceOp::Control(Control::ProfileReady), at);
+        assert!(written(&mut link, &mut at).is_empty());
+    }
+
+    #[test]
+    fn without_a_wait_the_hello_goes_at_once() {
+        let mut link = Link::new(&cfg());
+        let mut t = Instant::now();
+        link.link_up(t);
+        link.identified(Some(SERIAL), t);
+        assert_eq!(written(&mut link, &mut t), [HELLO_LINE]);
+    }
+
+    /// Another deck in the hand never gets the last one's state. Deck B is
+    /// synced and keeps our sid when the host drops its handle; deck A links
+    /// on the cable and is synced, a card is answered on it and a new one
+    /// set; then B links again and answers with the sid it kept. Had the
+    /// link kept its sid, B would go live with no barrier and keep a card
+    /// answered on A and never see the new one, and a control queued for A
+    /// would reach it. A deck that differs from the last link's gets a fresh
+    /// sid instead, so its hello reply is foreign and the barrier rewrites
+    /// it; the same deck coming back keeps the fast path.
+    #[test]
+    fn another_deck_that_answers_with_our_sid_is_synced_again() {
+        const OTHER: &str = "0D6015EEFFC0";
+        let mut link = Link::new(&cfg());
+        let mut t = Instant::now();
+        link.apply(
+            DeviceOp::Put(
+                Key::AgentState(Slot(1)),
+                HostLine::Agent {
+                    slot: 1,
+                    kind: Some(Kind::Claude),
+                    name: Some("a".into()),
+                    project: None,
+                    state: Some(AgentState::Question),
+                    title: None,
+                    since_s: None,
+                    task: None,
+                    subs: None,
+                },
+            ),
+            t,
+        );
+        link.apply(DeviceOp::Put(Key::Card(Slot(1), 7), card(7)), t);
+        // Deck B, synced.
+        link.link_up(t);
+        link.identified(Some(SERIAL), t);
+        written(&mut link, &mut t);
+        feed(&mut link, HELLO_BOOT, t);
+        written(&mut link, &mut t);
+        assert_eq!(link.session().state(), SessionState::Live);
+        link.link_down(t, "write_stall");
+        // Deck A, on the cable: synced too.
+        link.link_up(t);
+        link.identified(Some(OTHER), t);
+        let hello = written(&mut link, &mut t);
+        assert_eq!(hello.len(), 1);
+        assert!(
+            !hello[0].contains("314159"),
+            "a fresh sid for another deck: {hello:?}"
+        );
+        feed(&mut link, HELLO_BOOT, t);
+        written(&mut link, &mut t);
+        // Card 7 is answered on A and card 8 set, as the core sends them.
+        link.apply(DeviceOp::Control(Control::CardClear(Slot(1), 7)), t);
+        link.apply(DeviceOp::Remove(Key::Card(Slot(1), 7)), t);
+        link.apply(DeviceOp::Put(Key::Card(Slot(1), 8), card(8)), t);
+        written(&mut link, &mut t);
+        link.link_down(t, "removed");
+        // A control the core queued for A while it went.
+        link.apply(DeviceOp::Control(Control::Name("A's name".into())), t);
+        // Deck B again, answering with the sid it kept.
+        link.link_up(t);
+        link.identified(Some(SERIAL), t);
+        let hello = written(&mut link, &mut t);
+        assert!(
+            hello.iter().all(|l| !l.contains("\"m\":\"name\"")),
+            "nothing queued for A: {hello:?}"
+        );
+        feed(&mut link, HELLO_MINE, t);
+        let lines = written(&mut link, &mut t);
+        assert!(lines.iter().any(|l| l.contains("\"id\":8")), "{lines:?}");
+        assert!(!lines.iter().any(|l| l.contains("\"id\":7")), "{lines:?}");
+        assert_eq!(link.metric(t).barriers, 3);
+        // The same deck coming back answers our sid: no barrier.
+        link.link_down(t, "write_stall");
+        link.link_up(t);
+        link.identified(Some(SERIAL), t);
+        let hello = written(&mut link, &mut t);
+        let sid = link.session().sid();
+        assert!(hello[0].contains(&format!("\"sid\":{sid}")), "{hello:?}");
+        feed(
+            &mut link,
+            &HELLO_MINE.replace("314159", &sid.to_string()),
+            t,
+        );
+        written(&mut link, &mut t);
+        assert_eq!(link.session().state(), SessionState::Live);
+        assert_eq!(
+            link.metric(t).barriers,
+            3,
+            "the same deck keeps the fast path"
+        );
+    }
+
+    /// The identity is a no-op for a deck that lists no serial number, or
+    /// one that names no deck: its first hello goes at once, as it always
+    /// has. A link that ends while its hello waits does not leave the next
+    /// one waiting.
+    #[test]
+    fn a_deck_that_names_no_serial_is_not_waited_for() {
+        for serial in [None, Some(""), Some("000000000000"), Some("OpenWalkieTalkie")] {
+            let mut link = Link::new(&waiting());
+            let mut t = Instant::now();
+            link.link_up(t);
+            link.identified(serial, t);
+            assert_eq!(written(&mut link, &mut t), [HELLO_LINE], "{serial:?}");
+        }
+        let mut link = Link::new(&waiting());
+        let mut t = Instant::now();
+        link.link_up(t);
+        link.identified(Some(SERIAL), t);
+        link.link_down(t, "removed");
+        link.link_up(t);
+        link.identified(None, t);
+        assert_eq!(written(&mut link, &mut t), [HELLO_LINE]);
     }
 
     #[test]

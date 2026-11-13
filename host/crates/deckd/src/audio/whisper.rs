@@ -496,7 +496,8 @@ impl std::future::Future for FinalResult {
 }
 
 /// Mono at `rate` → mono at the model's rate, by linear interpolation. The
-/// deck's link is already 16 kHz; the Mac's fallback microphone is not.
+/// deck's link is already 16 kHz; the Mac's own microphone, which
+/// `voice.listen{input:"mac"}` opens, is not.
 #[must_use]
 pub fn to_model_rate(samples: &[f32], rate: u32) -> Vec<f32> {
     if rate == RATE || samples.is_empty() {

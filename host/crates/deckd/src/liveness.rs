@@ -768,6 +768,8 @@ pub async fn roster_tick(api: &Api, probe: &Probe, misses: &mut Misses, seed: bo
         if let Ok(mut watches) = api.adapters.transcripts.lock() {
             watches.retain(|id, _| current.agents.contains_key(id));
         }
+        api.adapters
+            .forget_transcripts(|id| current.agents.contains_key(id));
         for agent in current.agents.values().filter(|a| a.owner.principal == principal && a.owner.session == session) {
             crate::chat::seed(&api.adapters, &api.core, session, agent);
         }
@@ -796,6 +798,10 @@ pub fn seeds(config: &crate::config::Config) -> bool {
 /// Both pollers, until `stop`. One task: the two periods are 5 s and 2 s
 /// and neither tick ever blocks the other (the roster probe is on the
 /// blocking pool), so a second task would buy nothing.
+///
+/// Neither ticks while the service is quiet (`crate::dormancy`): no
+/// `claude agents --json`, no `kill(pid, 0)`. When a deck links both run at
+/// once, and the roster's seed brings back the sessions the quiet released.
 pub async fn run(api: Arc<Api>, mut stop: tokio::sync::watch::Receiver<bool>) {
     let mut misses = Misses::new();
     let mut roster = tokio::time::interval(Duration::from_secs(
@@ -806,12 +812,28 @@ pub async fn run(api: Arc<Api>, mut stop: tokio::sync::watch::Receiver<bool>) {
     ));
     roster.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     pids.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let mut gate = api.core.adapters().watch_gate();
+    let mut collecting = gate.borrow_and_update().collect;
     // Logged on change only: an idle daemon says so once, not every 5 s.
     let mut was_idle: Option<bool> = None;
     loop {
         tokio::select! {
             _ = stop.changed() => break,
-            _ = roster.tick() => {
+            () = crate::dormancy::changed(&mut gate) => {
+                let collect = gate.borrow_and_update().collect;
+                if collect != collecting {
+                    collecting = collect;
+                    if collect {
+                        roster.reset_immediately();
+                        pids.reset_immediately();
+                    } else {
+                        // Strikes counted before the quiet are stale by
+                        // the time it ends.
+                        misses.clear();
+                    }
+                }
+            }
+            _ = roster.tick(), if collecting => {
                 let (cfg, seed) = {
                     let config = api.config.load();
                     (config.liveness.clone(), seeds(&config))
@@ -862,7 +884,7 @@ pub async fn run(api: Arc<Api>, mut stop: tokio::sync::watch::Receiver<bool>) {
                     );
                 }
             }
-            _ = pids.tick() => {
+            _ = pids.tick(), if collecting => {
                 if !api.config.load().liveness.enabled {
                     continue;
                 }

@@ -401,6 +401,9 @@ impl Store {
 
     /// Drop the agent's current card (replaced by a new one).
     fn retire_current_card(&mut self, id: &AgentId, reason: &str) {
+        if let Some(aux) = self.aux.get_mut(id) {
+            aux.failure_replaced = None;
+        }
         let Some(agent) = self.snapshot.agents.get_mut(id) else {
             return;
         };
@@ -453,6 +456,9 @@ impl Store {
         reason: Option<&str>,
         keep_hold: bool,
     ) {
+        if let Some(aux) = self.aux.get_mut(id) {
+            aux.failure_replaced = None;
+        }
         let Some(agent) = self.snapshot.agents.get_mut(id) else {
             return;
         };
@@ -545,7 +551,8 @@ impl Store {
         }
     }
 
-    /// The same id re-pushed as a `⌨ Focus terminal` card (§4.8).
+    /// The same id re-pushed as a `⌨ …` card whose one choice is `Open app`
+    /// (§4.8): ENTER hands off to the session's own app (`crate::handoff`).
     pub(crate) fn degrade_card(&mut self, id: &AgentId, reason: &str) {
         let Some(card) = self.current_card_mut(id) else {
             return;
@@ -594,7 +601,7 @@ impl Store {
         {
             // The card is cleared here, never degraded, so the release is
             // `Cleared` — `Expiry` is the *hold budget*, which leaves the
-            // `⌨ Focus terminal` card on the deck (`tick.rs`).
+            // `⌨ … Open app` card on the deck (`tick.rs`).
             self.effects.push(Effect::ReleaseHold {
                 agent: id.clone(),
                 card: card.id,
@@ -607,8 +614,12 @@ impl Store {
     /// `agent.card.clear` (ownership already checked).
     pub(crate) fn card_clear_api(&mut self, c: CardClear) -> ApiResult {
         let id = c.agent.clone();
+        let replaced = self.aux.get(&id).and_then(|aux| aux.failure_replaced);
         match self.current_card(&id) {
             None => return Ok(self.rev()),
+            // The card a failure card took the place of: gone already, as
+            // its owner wants, and the failure card stays (§4.8).
+            Some(_) if replaced == Some(c.card) => return Ok(self.rev()),
             Some(card) if card.id != c.card => return Err(ApiError::stale_card(Some(card.id))),
             Some(card) => {
                 if card.deliver == Deliver::Hold && card.status.hold_parked() {
@@ -684,6 +695,8 @@ impl Store {
             match self.caps_of(id).order {
                 OrderCap::Push => Deliver::Push,
                 OrderCap::Poll => Deliver::Poll,
+                // On the bus only: the step stays on its card, and the
+                // deck's own five-second revert says "Not delivered".
                 OrderCap::Inject | OrderCap::None => {
                     self.emit(
                         EventKind::OrderFailed,
@@ -766,8 +779,10 @@ impl Store {
         )
     }
 
-    /// ENTER on a `focus` card: activate the terminal, clear honestly, retire
-    /// the card on the device (§4.8).
+    /// ENTER on a `focus` card: ask for the session's own app
+    /// (`DesktopCmd::Focus`, the hand-off), clear honestly, retire the card
+    /// on the device (§4.8). This press is the one deck input that raises
+    /// anything on the computer; a `channel` never does (`crate::handoff`).
     fn focus_card(&mut self, id: &AgentId, principal: Principal) -> ApiResult {
         let ts = self.ts_now();
         let Some(agent) = self.snapshot.agents.get_mut(id) else {
@@ -1124,7 +1139,12 @@ impl Store {
         }
     }
 
-    /// `op.order`: owner push/poll, or the injector for trusted operator text (§5.5).
+    /// `op.order`: owner push/poll, or the daemon's own routes (Claude
+    /// Channels, the session's inbox) for trusted operator text (§5.5).
+    ///
+    /// A refusal is `order.failed` and shows on the deck (`orders`); an
+    /// order that leaves gets an id (`or_<n>`) that its dispatch, the
+    /// owner's `agent.order` and the result carry.
     pub(crate) fn op_order(
         &mut self,
         principal: Principal,
@@ -1137,6 +1157,14 @@ impl Store {
             return Err(ApiError::invalid("text", "empty"));
         }
         let via = match self.caps_of(&id).order {
+            // The owner went away (its session closed, its lease lapsed):
+            // nothing could hand the words over, so they are refused now
+            // rather than pushed into a closed connection or a mailbox
+            // nobody reads.
+            OrderCap::Push | OrderCap::Poll if self.is_orphaned(&id) => {
+                self.order_failed(principal, Some(&id), "owner_gone", None, None, false);
+                return Err(ApiError::undeliverable("owner_gone"));
+            }
             OrderCap::Push => "push",
             OrderCap::Poll => "poll",
             OrderCap::Inject => {
@@ -1144,25 +1172,20 @@ impl Store {
                     return Err(ApiError::invalid("text", "control_chars"));
                 }
                 if self.dialog_open(&id) {
-                    self.emit(
-                        EventKind::OrderFailed,
-                        principal,
-                        serde_json::json!({"agent": id, "reason": "dialog_open", "text_kept": true}),
-                    );
+                    self.order_failed(principal, Some(&id), "dialog_open", None, None, false);
                     return Err(ApiError::undeliverable("dialog_open"));
                 }
                 "inject"
             }
             OrderCap::None => {
-                self.emit(
-                    EventKind::OrderFailed,
-                    principal,
-                    serde_json::json!({"agent": id, "reason": "no_route", "text_kept": true}),
-                );
+                self.order_failed(principal, Some(&id), "no_route", None, None, false);
                 return Err(ApiError::undeliverable("no_route"));
             }
         };
-        // Written before anything is typed (§5.5). `utterance` (B12) is the
+        // An owner can report on what it was handed (`agent.order.result`);
+        // the daemon's own routes report back themselves.
+        let order = self.next_order(&id, &principal, via != "inject");
+        // Written before anything is posted (§5.5). `utterance` (B12) is the
         // PTT session the words came from, so a client can line the order up
         // against the `transcript.final` that produced it instead of
         // matching on a text the §5.6 grammar may have rewritten.
@@ -1171,12 +1194,14 @@ impl Store {
             principal.clone(),
             serde_json::json!({
                 "agent": id, "via": via, "text": o.text, "utterance": o.utterance,
+                "order": order,
             }),
         );
         if via == "inject" {
             self.effects.push(Effect::Desktop(DesktopCmd::Inject {
                 agent: id,
                 text: o.text,
+                order: order.clone(),
             }));
         } else {
             self.emit(
@@ -1185,21 +1210,24 @@ impl Store {
                 serde_json::json!({
                     "agent": id, "text": o.text, "ctx": o.ctx, "source": o.source,
                     "principal": principal, "session": session, "via": via,
-                    "utterance": o.utterance,
+                    "utterance": o.utterance, "order": order,
                 }),
             );
         }
-        Ok(serde_json::json!({"rev": self.snapshot.rev, "via": via}))
+        Ok(serde_json::json!({"rev": self.snapshot.rev, "via": via, "order": order}))
     }
 
-    /// The injector chain's outcome (§5.5, week 5).
+    /// The outcome of an order that left: the inbox's or Claude Channels'
+    /// (§5.5), `no_route` when the session has neither, or the core's own
+    /// for words it could not hand to their owner.
     ///
-    /// `order.dispatched{text}` is written **before** the text is typed, so
-    /// a chain that then refuses has to publish its own event — and this is
+    /// `order.dispatched{text}` is written **before** the text is posted, so
+    /// a route that then refuses has to publish its own event — and this is
     /// the only place that can, because only the reducer owns `rev`. A
     /// success adds nothing: `order.dispatched` already said the exact
     /// string, and a second event per order would double the bus traffic of
-    /// the one method an operator uses by voice.
+    /// the one method an operator uses by voice. A failure shows on the
+    /// deck (`Store::order_failed`).
     ///
     /// `text_kept: true` is the GUI's cue that the order is still in the
     /// history with Copy and Retry beside it (§4.8, §8.2).
@@ -1210,17 +1238,18 @@ impl Store {
         text: &str,
         ok: bool,
         reason: Option<&str>,
+        order: Option<&str>,
     ) {
         if ok {
             return;
         }
-        self.emit(
-            EventKind::OrderFailed,
+        self.order_failed(
             principal,
-            serde_json::json!({
-                "agent": id, "reason": reason.unwrap_or("undeliverable"),
-                "text": text, "text_kept": true,
-            }),
+            Some(id),
+            reason.unwrap_or("undeliverable"),
+            Some(text),
+            order,
+            false,
         );
     }
 
@@ -1920,11 +1949,12 @@ mod tests {
         match sim.line(Key::Card(Slot(1), 2)) {
             Some(HostLine::Card { text, choices, .. }) => {
                 assert_eq!(text, "⌨ Bash: psql");
-                assert_eq!(choices, vec!["Focus terminal"]);
+                assert_eq!(choices, vec!["Open app"]);
             }
             other => panic!("{other:?}"),
         }
-        // ENTER on the degraded card focuses the terminal and clears honestly.
+        // ENTER on the degraded card asks for the session's app and clears
+        // honestly.
         sim.apply(Command::Device(DeviceLine::Answer {
             slot: 1,
             card: 2,
@@ -2713,11 +2743,104 @@ mod tests {
         assert!(sim.store.snapshot().agents[&id].card.is_none());
     }
 
+    /// Focus becomes a deliberate act: of everything a deck can send about a
+    /// hook session, only a press on its `Open app` card asks for its app.
+    /// A channel, a PTT press and its release, and an answer on an ordinary
+    /// question move nothing on the computer; ENTER on a `focus` card and
+    /// ENTER on a degraded hold each ask exactly once.
+    #[test]
+    fn only_a_focus_card_press_asks_for_the_app() {
+        let raised = |sim: &Sim| {
+            sim.effects
+                .iter()
+                .filter(|e| matches!(e, Effect::Desktop(DesktopCmd::Focus { .. })))
+                .count()
+        };
+        let mut sim = Sim::new();
+        let id = adapter_agent(&mut sim);
+        sim.apply(Command::Device(DeviceLine::Channel { slot: 1, seq: 3 }));
+        assert_eq!(raised(&sim), 0, "a channel");
+        let press = |act| {
+            Command::Device(DeviceLine::Ptt {
+                act,
+                slot: 1,
+                ctx: crate::PttCtx::Talk,
+                card: None,
+                abort: false,
+                press: None,
+            })
+        };
+        sim.apply(press(1));
+        assert_eq!(raised(&sim), 0, "a PTT press");
+        sim.apply(press(0));
+        assert_eq!(raised(&sim), 0, "its release");
+        // An ordinary question, answered on the deck.
+        sim.hold(permission(&id, None), HoldId(1)).unwrap();
+        sim.drain();
+        sim.apply(Command::Device(DeviceLine::Answer {
+            slot: 1,
+            card: 1,
+            choice: 0,
+        }));
+        assert_eq!(raised(&sim), 0, "an answer");
+        sim.apply(Command::HoldWritten {
+            agent: id.clone(),
+            card: CardId(1),
+        });
+        // An informational focus card, as Claude's `Notification` makes one.
+        let mut notice = card_set(&id, CardKind::Q, Deliver::Focus, &["Open app"]);
+        notice.origin.kind = OriginKind::Permission;
+        sim.api(claude_adapter(), SessionId(100), Request::CardSet(notice))
+            .unwrap();
+        sim.apply(Command::Device(DeviceLine::Answer {
+            slot: 1,
+            card: 2,
+            choice: 0,
+        }));
+        assert_eq!(raised(&sim), 1, "ENTER on a focus card");
+        // A degraded hold.
+        sim.hold(permission(&id, None), HoldId(3)).unwrap();
+        sim.drain();
+        sim.apply(Command::HoldGone {
+            agent: id.clone(),
+            card: CardId(3),
+        });
+        sim.apply(Command::Device(DeviceLine::Answer {
+            slot: 1,
+            card: 3,
+            choice: 0,
+        }));
+        assert_eq!(raised(&sim), 1, "ENTER on a degraded hold");
+    }
+
+    /// The degraded card's one choice is put in the language the deck
+    /// shows: the hand-off's label is the daemon's own words.
+    #[test]
+    fn a_degraded_cards_choice_is_put_in_the_decks_language() {
+        let mut sim = Sim::new();
+        sim.link_live(Some(3));
+        let id = adapter_agent(&mut sim);
+        let cid = sim.hold(permission(&id, None), HoldId(1)).unwrap();
+        sim.drain();
+        sim.apply(Command::HoldGone {
+            agent: id.clone(),
+            card: cid,
+        });
+        let slot = sim.slot_of(&id).unwrap();
+        match sim.line(Key::Card(slot, cid.0)) {
+            Some(HostLine::Card { choices, rec, .. }) => {
+                assert_eq!(choices, vec!["アプリを開く"]);
+                assert_eq!(rec, Some(0));
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
     #[test]
     fn a_focus_and_an_informational_card_behave_per_their_mode() {
         let mut sim = Sim::new();
         let id = sim.register(UID, SessionId(1), "bot", None);
-        sim.set_card(&id, CardKind::Q, Deliver::Focus, vec!["Focus terminal"]);
+        sim.set_card(&id, CardKind::Q, Deliver::Focus, vec!["Open app"]);
         sim.apply(Command::Device(DeviceLine::Answer {
             slot: 1,
             card: 1,
@@ -2786,22 +2909,24 @@ mod tests {
             status(&sim, &adapter),
             Some(CardStatus::Degraded { focused_at: None })
         );
-        // push with a terminal → focus; without → informational
-        for (terminal, expect) in [(true, Deliver::Focus), (false, Deliver::None)] {
-            let mut r = register("p", None);
+        // push → focus when the session's app can be raised (a hook
+        // session with a terminal, §5.5); a connected app's card, terminal
+        // declared or not, → informational: nothing would raise its app.
+        for (hook, expect) in [(true, Deliver::Focus), (false, Deliver::None)] {
+            let mut r = register("p", hook.then_some("claude:p"));
+            if hook {
+                r.kind = crate::Kind::Claude;
+            }
             r.caps.answer = crate::AnswerCap::Push;
-            r.terminal = terminal.then(crate::Terminal::default);
+            r.terminal = Some(crate::Terminal::default());
+            let principal = if hook { claude_adapter() } else { UID };
+            let session = SessionId(if hook { 7 } else { 8 });
             let res = sim
-                .api(
-                    UID,
-                    SessionId(if terminal { 7 } else { 8 }),
-                    Request::AgentRegister(r),
-                )
+                .api(principal.clone(), session, Request::AgentRegister(r))
                 .unwrap();
             let id = AgentId(res["agent"].as_str().unwrap().into());
-            let session = if terminal { SessionId(7) } else { SessionId(8) };
             sim.api(
-                UID,
+                principal,
                 session,
                 Request::CardSet(card_set(&id, CardKind::Q, Deliver::Push, &["a", "b"])),
             )
@@ -2916,11 +3041,14 @@ mod tests {
             .api(UID, SessionId(2), order(&bot, "run tests"))
             .unwrap();
         assert_eq!(res["via"], "poll");
+        assert_eq!(res["order"], "or_1");
         assert_eq!(
             sim.kinds(),
             vec![EventKind::OrderDispatched, EventKind::AgentOrder]
         );
         assert_eq!(sim.events[1].data["session"], "sess_2");
+        assert_eq!(sim.events[0].data["order"], "or_1");
+        assert_eq!(sim.events[1].data["order"], "or_1");
         assert!(sim.effects.is_empty());
         let err = sim.api(UID, SessionId(2), order(&bot, " ")).unwrap_err();
         assert_eq!(err.code, ApiError::INVALID);
@@ -2929,9 +3057,11 @@ mod tests {
             .api(UID, SessionId(2), order(&adapter, "fix it"))
             .unwrap();
         assert_eq!(res["via"], "inject");
+        assert_eq!(res["order"], "or_2");
         assert!(sim.effects.contains(&Effect::Desktop(DesktopCmd::Inject {
             agent: adapter.clone(),
-            text: "fix it".into()
+            text: "fix it".into(),
+            order: "or_2".into(),
         })));
         let err = sim
             .api(UID, SessionId(2), order(&adapter, "rm\n-rf"))
@@ -2945,6 +3075,10 @@ mod tests {
         assert_eq!(err.code, ApiError::UNDELIVERABLE);
         assert_eq!(err.data["reason"], "dialog_open");
         assert_eq!(sim.events[0].kind, EventKind::OrderFailed);
+        assert!(
+            sim.events[0].data.get("order").is_none(),
+            "a refused order never had an id"
+        );
         sim.apply(Command::Device(DeviceLine::Snooze { slot: 2, card: 1 }));
         let err = sim
             .api(UID, SessionId(2), order(&adapter, "yes"))

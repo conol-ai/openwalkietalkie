@@ -14,6 +14,12 @@
 //! `CODEX_HOME` inside it, `DECKD_DATA_DIR` naming it for the methods that
 //! resolve the data dir from the environment, no usage probe, no liveness
 //! poller, no Codex client, and `--no-device`.
+//!
+//! The daemon checks its peers with the real verifier, so where this test
+//! runs inside Claude Code or Codex (an agent running `cargo test`), §4.2's
+//! ancestry cap refuses it the `admin` session the app's view needs: that
+//! refusal is asserted instead, and the port file, the start-up line and the
+//! door itself are checked everywhere.
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::os::unix::net::UnixStream;
@@ -204,8 +210,23 @@ impl Daemon {
     /// What the app reads about the door, over one session: `config.get`'s
     /// `api.tcp` (the Local API row's switch) and `api.tcp_rule` (why), the
     /// doctor's `tcp` row as `care.checks` answers it, and the Integrations
-    /// page's Claude row, read from the files alone.
-    fn said(&self) -> Said {
+    /// page's Claude row, read from the files alone. `None` where this test
+    /// runs inside Claude Code or Codex, after asserting that the cap
+    /// refuses the session that would read them.
+    fn said(&self) -> Option<Said> {
+        if capped() {
+            let hello = hello(&self.socket(), &["admin", "observe"]);
+            assert_eq!(
+                hello["error"]["code"],
+                deck_model::ApiError::FORBIDDEN,
+                "{hello}"
+            );
+            assert_eq!(
+                hello["error"]["data"]["reason"], "agent_ancestry",
+                "{hello}"
+            );
+            return None;
+        }
         let replies = calls(
             &self.socket(),
             &[
@@ -223,7 +244,7 @@ impl Daemon {
         let [config, checks, status] = &replies[..] else {
             panic!("three replies: {replies:?}");
         };
-        Said {
+        Some(Said {
             switch: config["result"]["api"]["tcp"].clone(),
             rule: config["result"]["api"]["tcp_rule"].clone(),
             tcp_row: checks["result"]["checks"]
@@ -232,7 +253,7 @@ impl Daemon {
                 .cloned()
                 .unwrap_or_else(|| panic!("no tcp row: {checks}")),
             claude_row: status["result"]["targets"][0]["status"].clone(),
-        }
+        })
     }
 }
 
@@ -253,6 +274,32 @@ impl Drop for Daemon {
         }
         let _ = std::fs::remove_dir_all(&self.dir);
     }
+}
+
+/// Whether this test process runs inside Claude Code or Codex: the macOS
+/// service then refuses it `admin` (§4.2's ancestry cap, `reason:
+/// "agent_ancestry"`).
+fn capped() -> bool {
+    deckd::trust::ancestry_capped(std::process::id())
+}
+
+/// The `session.hello` answer alone.
+fn hello(socket: &Path, scopes: &[&str]) -> serde_json::Value {
+    let stream = UnixStream::connect(socket).expect("the uds door");
+    stream
+        .set_read_timeout(Some(PATIENCE))
+        .expect("a read timeout");
+    let mut writer = stream.try_clone().expect("a write half");
+    let request = serde_json::json!({
+        "jsonrpc": "2.0", "id": 0, "method": "session.hello",
+        "params": {"client": {"name": "gate", "version": "1"}, "scopes": scopes},
+    });
+    writer
+        .write_all(format!("{request}\n").as_bytes())
+        .expect("the request is written");
+    let mut text = String::new();
+    BufReader::new(stream).read_line(&mut text).expect("a line");
+    serde_json::from_str(&text).unwrap_or_else(|_| panic!("not json: {text:?}"))
 }
 
 /// One `session.hello`, with the scopes the app asks for, then each call in
@@ -328,17 +375,18 @@ fn a_file_that_leaves_the_switch_out_gets_no_tcp_door() {
     ] {
         let daemon = Daemon::start(tag, "", settings);
         assert_eq!(daemon.port(), None, "{tag}: {}", daemon.log());
-        let said = daemon.said();
-        assert_eq!(said.switch, false, "{tag}");
-        assert_eq!(said.rule, "default", "{tag}");
-        assert_eq!(said.tcp_row["ok"], true, "{tag}: {}", said.tcp_row);
-        assert_eq!(
-            said.tcp_row["detail"],
-            "off ([api] tcp is left out, and the door is off by default): the socket is the \
-             only door",
-            "{tag}"
-        );
-        assert_eq!(said.claude_row, "absent", "{tag}: nothing to repair");
+        if let Some(said) = daemon.said() {
+            assert_eq!(said.switch, false, "{tag}");
+            assert_eq!(said.rule, "default", "{tag}");
+            assert_eq!(said.tcp_row["ok"], true, "{tag}: {}", said.tcp_row);
+            assert_eq!(
+                said.tcp_row["detail"],
+                "off ([api] tcp is left out, and the door is off by default): the socket is \
+                 the only door",
+                "{tag}"
+            );
+            assert_eq!(said.claude_row, "absent", "{tag}: nothing to repair");
+        }
         let log = daemon.log();
         assert!(
             log.contains("tcp door: [api] tcp is left out, and the door is off by default"),
@@ -367,15 +415,16 @@ fn the_old_claude_hooks_keep_the_door_open_until_they_are_migrated() {
         .unwrap_or_else(|| panic!("the door is bound: {}", daemon.log()));
     assert_ne!(port, 47201, "an ephemeral port, never the operator's");
     assert_eq!(info_over_tcp(port), "HTTP/1.1 200 OK");
-    let said = daemon.said();
-    assert_eq!(said.switch, true);
-    assert_eq!(said.rule, "legacy_hooks", "and why");
-    assert_eq!(said.claude_row, "outdated", "the row asks for Repair");
-    assert_eq!(said.tcp_row["ok"], true, "{}", said.tcp_row);
-    assert_eq!(
-        said.tcp_row["detail"],
-        format!("127.0.0.1:{port}/v1/info answers and is ours")
-    );
+    if let Some(said) = daemon.said() {
+        assert_eq!(said.switch, true);
+        assert_eq!(said.rule, "legacy_hooks", "and why");
+        assert_eq!(said.claude_row, "outdated", "the row asks for Repair");
+        assert_eq!(said.tcp_row["ok"], true, "{}", said.tcp_row);
+        assert_eq!(
+            said.tcp_row["detail"],
+            format!("127.0.0.1:{port}/v1/info answers and is ours")
+        );
+    }
     let log = daemon.log();
     assert!(log.contains(LEGACY_LINE), "{log}");
 
@@ -383,10 +432,11 @@ fn the_old_claude_hooks_keep_the_door_open_until_they_are_migrated() {
     daemon.claude_settings(MIGRATED_SETTINGS);
     daemon.restart("legacy-migrated");
     assert_eq!(daemon.port(), None, "{}", daemon.log());
-    let said = daemon.said();
-    assert_eq!(said.switch, false);
-    assert_eq!(said.rule, "default");
-    assert_eq!(said.claude_row, "absent", "nothing left to repair");
+    if let Some(said) = daemon.said() {
+        assert_eq!(said.switch, false);
+        assert_eq!(said.rule, "default");
+        assert_eq!(said.claude_row, "absent", "nothing left to repair");
+    }
 }
 
 /// Only the old HTTP hooks keep the door open. A leftover of the old
@@ -400,12 +450,13 @@ fn the_old_claude_hooks_keep_the_door_open_until_they_are_migrated() {
 fn only_hooks_that_post_to_the_door_keep_it_open() {
     let leftover = Daemon::start("leftover", "", Some(PATTERN_ONLY_SETTINGS));
     assert_eq!(leftover.port(), None, "{}", leftover.log());
-    let said = leftover.said();
-    assert_eq!(
-        (said.switch.clone(), said.rule.clone()),
-        (false.into(), "default".into())
-    );
-    assert_eq!(said.claude_row, "outdated", "the row still asks for Repair");
+    if let Some(said) = leftover.said() {
+        assert_eq!(
+            (said.switch.clone(), said.rule.clone()),
+            (false.into(), "default".into())
+        );
+        assert_eq!(said.claude_row, "outdated", "the row still asks for Repair");
+    }
 
     let mut recorded = Daemon::prepare("", Some(MIGRATED_SETTINGS));
     recorded.receipts(PRE_PLUGIN_RECEIPT);
@@ -414,18 +465,20 @@ fn only_hooks_that_post_to_the_door_keep_it_open() {
         .port()
         .unwrap_or_else(|| panic!("the door is bound: {}", recorded.log()));
     assert_eq!(info_over_tcp(port), "HTTP/1.1 200 OK");
-    let said = recorded.said();
-    assert_eq!(
-        (said.switch, said.rule),
-        (true.into(), "legacy_hooks".into())
-    );
+    if let Some(said) = recorded.said() {
+        assert_eq!(
+            (said.switch, said.rule),
+            (true.into(), "legacy_hooks".into())
+        );
+    }
     assert!(recorded.log().contains(LEGACY_LINE), "{}", recorded.log());
 
     recorded.receipts(PLUGIN_RECEIPT);
     recorded.restart("receipt-plugin");
     assert_eq!(recorded.port(), None, "{}", recorded.log());
-    let said = recorded.said();
-    assert_eq!((said.switch, said.rule), (false.into(), "default".into()));
+    if let Some(said) = recorded.said() {
+        assert_eq!((said.switch, said.rule), (false.into(), "default".into()));
+    }
 }
 
 /// An explicit switch is always honoured: `tcp = false` closes the door
@@ -435,14 +488,15 @@ fn only_hooks_that_post_to_the_door_keep_it_open() {
 fn an_explicit_switch_is_always_honoured() {
     let off = Daemon::start("explicit-off", "tcp = false\n", Some(LEGACY_SETTINGS));
     assert_eq!(off.port(), None, "{}", off.log());
-    let said = off.said();
-    assert_eq!(said.switch, false);
-    assert_eq!(said.rule, "explicit");
-    assert_eq!(said.claude_row, "outdated");
-    assert_eq!(
-        said.tcp_row["detail"],
-        "off ([api] tcp = false): the socket is the only door"
-    );
+    if let Some(said) = off.said() {
+        assert_eq!(said.switch, false);
+        assert_eq!(said.rule, "explicit");
+        assert_eq!(said.claude_row, "outdated");
+        assert_eq!(
+            said.tcp_row["detail"],
+            "off ([api] tcp = false): the socket is the only door"
+        );
+    }
     assert!(
         off.log().contains("tcp door: [api] tcp = false"),
         "{}",
@@ -454,13 +508,14 @@ fn an_explicit_switch_is_always_honoured() {
         .port()
         .unwrap_or_else(|| panic!("the door is bound: {}", on.log()));
     assert_eq!(info_over_tcp(port), "HTTP/1.1 200 OK");
-    let said = on.said();
-    assert_eq!(said.switch, true);
-    assert_eq!(said.rule, "explicit");
-    assert_eq!(
-        said.tcp_row["detail"],
-        format!("127.0.0.1:{port}/v1/info answers and is ours")
-    );
+    if let Some(said) = on.said() {
+        assert_eq!(said.switch, true);
+        assert_eq!(said.rule, "explicit");
+        assert_eq!(
+            said.tcp_row["detail"],
+            format!("127.0.0.1:{port}/v1/info answers and is ours")
+        );
+    }
     assert!(
         on.log().contains("tcp door: [api] tcp = true"),
         "{}",

@@ -5,10 +5,10 @@
 //! The rows are the service's `care.footprint`, which it reads off the disk,
 //! in the board's order ([`items`]). A row is drawn for what is there and
 //! nothing else: an item the service found absent is not on this Mac, so it
-//! is not in the list and not in the count the Service page gives. The board
-//! also draws a Keychain item; nothing this app ships writes one (the cloud
-//! voice's key is kept in the service's own settings), so there is no row
-//! for it.
+//! is not in the list and not in the count the Service page gives. The
+//! Keychain item is the one row that is not a file: the cloud voice's key,
+//! which the service keeps in the Keychain on a Mac and names there only
+//! while one is saved.
 //!
 //! **Each row's button goes through the part of the app that owns the
 //! thing.** The Claude Code plugin, a Codex setup left from before the
@@ -197,6 +197,14 @@ pub fn items(footprint: &Footprint, language: Language) -> Vec<Item> {
                     size,
                     Action::WithUninstall,
                 ),
+                // A Keychain item has no path to print and nothing to
+                // weigh: its place says whose it is.
+                "keychain" => (
+                    language.text("Keychain item"),
+                    Place::Words(language.text("Your cloud voice key")),
+                    None,
+                    Action::WithUninstall,
+                ),
                 _ => (language.text("Logs"), path(), size, Action::Kept),
             };
             Some(Item {
@@ -221,7 +229,7 @@ pub fn total(footprint: &Footprint) -> (usize, u64) {
         })
 }
 
-/// The Service page's line about it: `9 items, 2.1 GB. Most can be removed
+/// The Service page's line about it: `10 items, 2.1 GB. Most can be removed
 /// one at a time.`
 pub fn summary(footprint: &Footprint, language: Language) -> String {
     let (count, bytes) = total(footprint);

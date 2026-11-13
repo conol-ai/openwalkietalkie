@@ -11,6 +11,12 @@
 //! part of `data`, and neither are the logs and the caches when a
 //! `DECKD_DATA_DIR` puts them inside it. The bootloader backups are part of
 //! nothing: Delete… keeps them, so `firmware` is what it would free.
+//!
+//! One item is not on disk: `keychain`, the Keychain item that holds the
+//! cloud voice's key on a Mac (`crate::secrets`). It has no size, its path
+//! is the item's service name, and it is there when the service last knew
+//! the store to hold a key. The Keychain is not asked here. Uninstall's
+//! `--purge` deletes it.
 use super::{Context, Homes};
 use crate::firmware::{BOOTLOADER_BACKUPS, CACHE_DIR};
 use deck_model::ApiError;
@@ -18,9 +24,9 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 
 /// The items, in the order the service lists them: the nine it always had,
-/// then `codex_desktop`, added after them. The app finds each item by its id
-/// and lists them in an order of its own.
-pub const IDS: [&str; 10] = [
+/// then `codex_desktop` and `keychain`, each added after the ones before.
+/// The app finds each item by its id and lists them in an order of its own.
+pub const IDS: [&str; 11] = [
     "service",
     "claude_plugin",
     "codex_hooks",
@@ -31,6 +37,7 @@ pub const IDS: [&str; 10] = [
     "prefs",
     "logs",
     "codex_desktop",
+    "keychain",
 ];
 
 /// One thing on disk. `bytes` and `count` are `None` where they do not
@@ -138,6 +145,15 @@ pub fn items(context: &Context, homes: &Homes) -> Vec<Item> {
             &crate::integrations::codex_desktop::launcher_in(&homes.home),
             &[],
         ),
+        // The cloud voice's key, as the service knows its store: never a
+        // Keychain read here.
+        Item {
+            id: "keychain",
+            path: crate::secrets::SERVICE.into(),
+            bytes: None,
+            count: None,
+            present: context.keychain == Some(true),
+        },
     ]
 }
 
@@ -275,9 +291,11 @@ mod tests {
     }
 
     /// Every item there, with sizes known to the byte: the data dir apart
-    /// from the logs and the caches, as on macOS.
+    /// from the logs and the caches, as on macOS, and a cloud voice key in
+    /// the store.
     fn every_item(dir: &TestDir) -> (Context, Homes) {
-        let context = context(dir);
+        let mut context = context(dir);
+        context.keychain = Some(true);
         let homes = homes(dir);
         sized(dir, "bin/deckd", 300);
         sized(dir, "data/config.toml", 40);
@@ -467,9 +485,12 @@ mod tests {
             "prefs",
             "logs",
             "codex_desktop",
+            "keychain",
         ] {
             assert_eq!(item(&items, id).count, None, "{id}");
         }
+        // The Keychain item weighs nothing the service could say.
+        assert_eq!(item(&items, "keychain").bytes, None);
         let total = measure(&context, &homes)["total_bytes"].as_u64().unwrap();
         assert_eq!(
             total,
@@ -512,11 +533,32 @@ mod tests {
             "kokoro",
             "prefs",
             "codex_desktop",
+            "keychain",
         ] {
             let absent = item(&items, id);
             assert!(!absent.present, "{absent:?}");
             assert_eq!((absent.bytes, absent.count), (None, None), "{id}");
         }
+    }
+
+    /// The Keychain item is there only while the service knows its store to
+    /// hold the cloud voice's key: not for a key kept in `config.toml`
+    /// (which is part of the data), not for an empty store. It is named by
+    /// the item's service, and has no size.
+    #[test]
+    fn the_keychain_item_is_there_only_while_the_store_holds_a_key() {
+        let dir = TestDir::new("care-footprint-keychain");
+        let mut context = context(&dir);
+        let homes = homes(&dir);
+        for (keychain, present) in [(None, false), (Some(false), false), (Some(true), true)] {
+            context.keychain = keychain;
+            let items = items(&context, &homes);
+            let row = item(&items, "keychain");
+            assert_eq!(row.present, present, "{keychain:?}");
+            assert_eq!(row.path, "ai.cohdl.openwalkietalkie");
+            assert_eq!((row.bytes, row.count), (None, None));
+        }
+        assert_eq!(IDS.last(), Some(&"keychain"), "a new item goes last");
     }
 
     /// `care.cache.clear{what:"firmware"}` takes every download and keeps

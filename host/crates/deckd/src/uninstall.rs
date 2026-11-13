@@ -15,15 +15,17 @@
 //!    the exact failure the exit test exists to catch.
 //! 2. **the LaunchAgent next**, so nothing restarts the daemon while its
 //!    files are being taken apart.
-//! 3. **the data directory last**, and only with `--purge`.
+//! 3. **the data directory last**, and only with `--purge`, and with it
+//!    the Keychain item that holds the cloud voice's key on a Mac
+//!    (`crate::secrets`), when one is there.
 //!
 //! Two things this deliberately does **not** do, and says so instead:
 //! `SMAppService.unregister()` for the agent and the `mainApp` login item
 //! is the GUI's call (there is no Rust binding for it here, and a
 //! `launchctl bootout` of an SMAppService registration is not the same
-//! thing); and the Keychain item and `tccutil reset All
-//! ai.cohdl.openwalkietalkie` are **printed, not run** — a CLI that silently
-//! revokes microphone grants is a CLI nobody can undo.
+//! thing); and `tccutil reset All ai.cohdl.openwalkietalkie` is **printed,
+//! not run** — a CLI that silently revokes microphone grants is a CLI
+//! nobody can undo.
 //!
 //! Logs are kept, always. They are the record of what ran, they contain
 //! nothing content-bearing unless the operator turned `[privacy]
@@ -31,6 +33,7 @@
 //! operator is uninstalling is the wrong shape.
 use crate::config::Paths;
 use crate::integrations::{self, Launchctl, Status, Target, Verb};
+use crate::secrets::{KeyHome, SERVICE};
 use std::path::{Path, PathBuf};
 
 /// Targets with managed files to remove before deleting receipts and backups.
@@ -86,7 +89,10 @@ impl Outcome {
 }
 
 /// Take deckd back out. See the module docs for why the order is the order.
-pub fn run(env: &integrations::Env, paths: &Paths, opts: Options) -> Outcome {
+/// `keys` is where this install keeps the cloud voice's key
+/// (`crate::secrets::home_for`): a store's item goes with `--purge`, and a
+/// key in `config.toml` goes with the data directory.
+pub fn run(env: &integrations::Env, paths: &Paths, opts: Options, keys: &KeyHome) -> Outcome {
     let mut outcome = Outcome::default();
 
     // 1. The CLIs' own files, before anything can delete `<data>/backups`.
@@ -186,11 +192,18 @@ pub fn run(env: &integrations::Env, paths: &Paths, opts: Options) -> Outcome {
                     .push(format!("cannot remove {}: {e}", prefs.display())),
             }
         }
-        outcome.next_steps.push(
-            "the Keychain item `ai.cohdl.openwalkietalkie` (cloud STT/TTS keys, if you ever set \
-             one) is not deleted by this command: remove it in Keychain Access."
-                .into(),
-        );
+        if let Some(store) = keys.store() {
+            match store.delete() {
+                Ok(true) => outcome.steps.push(format!(
+                    "removed the cloud voice key from the Keychain ({SERVICE})"
+                )),
+                Ok(false) => {}
+                Err(why) => outcome.problems.push(format!(
+                    "cannot remove the Keychain item {SERVICE}: {why}; remove it in Keychain \
+                     Access"
+                )),
+            }
+        }
         outcome.next_steps.push(
             "to give back the TCC grants as well, run `tccutil reset All \
              ai.cohdl.openwalkietalkie` — our own bundle id and nothing else. This command does \
@@ -203,6 +216,12 @@ pub fn run(env: &integrations::Env, paths: &Paths, opts: Options) -> Outcome {
              deletes them.",
             paths.data.display()
         ));
+        if keys.store().is_some_and(|store| store.exists() == Ok(true)) {
+            outcome.kept.push(format!(
+                "the cloud voice key in the Keychain item {SERVICE} — `deckd uninstall --purge` \
+                 deletes it."
+            ));
+        }
     }
     outcome.kept.push(format!(
         "{} — the logs are the record of what ran and are never deleted, purge or not.",
@@ -272,7 +291,7 @@ mod tests {
         let env = integrations::test_env(&dir);
         let paths = paths_for(&env, &dir);
         std::fs::write(paths.state.as_path(), b"{}").unwrap();
-        let outcome = run(&env, &paths, Options { purge: false });
+        let outcome = run(&env, &paths, Options { purge: false }, &KeyHome::File);
         assert!(paths.data.is_dir(), "the data dir stays");
         assert!(paths.state.exists(), "and what is in it");
         assert!(
@@ -295,11 +314,11 @@ mod tests {
         let paths = paths_for(&env, &dir);
         std::fs::write(paths.state.as_path(), b"{}").unwrap();
         std::fs::write(paths.caches.join("chime.pcm"), b"x").unwrap();
-        let outcome = run(&env, &paths, Options { purge: true });
+        let outcome = run(&env, &paths, Options { purge: true }, &KeyHome::File);
         assert!(!paths.data.exists(), "{:?}", outcome.steps);
         assert!(!paths.caches.exists(), "{:?}", outcome.steps);
         assert!(outcome.problems.is_empty(), "{:?}", outcome.problems);
-        // The two things a purge must *not* do quietly.
+        // The thing a purge must *not* do quietly.
         assert!(
             outcome
                 .next_steps
@@ -308,13 +327,117 @@ mod tests {
             "{:?}",
             outcome.next_steps
         );
+        // A key kept in config.toml went with the data directory: there is
+        // no Keychain item to remove or to talk about.
+        let all = [&outcome.steps, &outcome.next_steps, &outcome.kept];
         assert!(
-            outcome.next_steps.iter().any(|s| s.contains("Keychain")),
-            "{:?}",
-            outcome.next_steps
+            !all.iter()
+                .any(|lines| lines.iter().any(|s| s.contains("Keychain"))),
+            "{outcome:?}"
         );
         // And the logs are still named as kept.
         assert!(outcome.kept.iter().any(|k| k.contains("never deleted")));
+    }
+
+    /// On a Mac's own install the cloud voice's key is a Keychain item:
+    /// `--purge` deletes it and says so, has nothing to say when there is
+    /// none, and names a store that refuses as a problem the operator can
+    /// act on. Without `--purge` the item stays, and the outcome says how to
+    /// remove it.
+    #[test]
+    fn purge_deletes_the_keychain_item_and_a_plain_uninstall_names_it_kept() {
+        use crate::secrets::{KeyStore, MemoryKeyStore};
+        use std::sync::Arc;
+        let removed = "removed the cloud voice key from the Keychain (ai.cohdl.openwalkietalkie)";
+        let dir = TestDir::new("uninstall-keychain");
+        let env = integrations::test_env(&dir);
+        let paths = paths_for(&env, &dir);
+
+        let store = Arc::new(MemoryKeyStore::with("sk-test-0123456789abcd"));
+        let keep = run(
+            &env,
+            &paths,
+            Options { purge: false },
+            &KeyHome::Store(store.clone()),
+        );
+        assert_eq!(store.current().as_deref(), Some("sk-test-0123456789abcd"));
+        assert!(
+            keep.kept.contains(
+                &"the cloud voice key in the Keychain item ai.cohdl.openwalkietalkie — `deckd \
+                  uninstall --purge` deletes it."
+                    .to_string()
+            ),
+            "{:?}",
+            keep.kept
+        );
+
+        let purged = run(
+            &env,
+            &paths,
+            Options { purge: true },
+            &KeyHome::Store(store.clone()),
+        );
+        assert_eq!(store.current(), None);
+        assert!(
+            purged.steps.contains(&removed.to_string()),
+            "{:?}",
+            purged.steps
+        );
+        assert!(purged.problems.is_empty(), "{:?}", purged.problems);
+        assert!(
+            !purged.next_steps.iter().any(|s| s.contains("Keychain")),
+            "{:?}",
+            purged.next_steps
+        );
+
+        // Nothing stored: nothing removed, nothing kept, nothing wrong.
+        let empty = Arc::new(MemoryKeyStore::default());
+        let again = run(
+            &env,
+            &paths,
+            Options { purge: true },
+            &KeyHome::Store(empty.clone()),
+        );
+        assert!(
+            !again.steps.iter().any(|s| s.contains("Keychain")),
+            "{:?}",
+            again.steps
+        );
+        assert!(again.problems.is_empty(), "{:?}", again.problems);
+        let kept = run(
+            &env,
+            &paths,
+            Options { purge: false },
+            &KeyHome::Store(empty),
+        );
+        assert!(
+            !kept.kept.iter().any(|s| s.contains("Keychain")),
+            "{:?}",
+            kept.kept
+        );
+
+        // A store that refuses: a problem, which is a non-zero exit.
+        let locked = Arc::new(MemoryKeyStore::with("sk-1"));
+        locked.refuse(Some("User interaction is not allowed. (-25308)"));
+        let refused = run(
+            &env,
+            &paths,
+            Options { purge: true },
+            &KeyHome::Store(locked.clone()),
+        );
+        assert_eq!(
+            refused.problems,
+            [
+                "cannot remove the Keychain item ai.cohdl.openwalkietalkie: User interaction is \
+                 not allowed. (-25308); remove it in Keychain Access"
+            ]
+        );
+        locked.refuse(None);
+        assert_eq!(
+            locked.get(),
+            Ok(Some("sk-1".into())),
+            "the item is still there"
+        );
     }
 
     /// The ordering claim, as a test rather than as a comment: the backups
@@ -339,7 +462,7 @@ mod tests {
             "the backups are inside the data dir, which is what makes the order matter"
         );
 
-        let outcome = run(&env, &paths, Options { purge: true });
+        let outcome = run(&env, &paths, Options { purge: true }, &KeyHome::File);
         assert!(outcome.problems.is_empty(), "{:?}", outcome.problems);
         assert_eq!(
             std::fs::read(&settings).unwrap(),

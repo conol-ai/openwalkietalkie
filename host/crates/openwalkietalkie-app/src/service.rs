@@ -676,9 +676,10 @@ impl ServicePane {
     }
 
     /// A deck firmware newer than the deck's, by its version, once the
-    /// service has found one.
+    /// service has found one: the deck on the cable's, else the one its
+    /// hello named ([`updates::newer_firmware`]).
     pub(crate) fn firmware_available(&self) -> Option<String> {
-        updates::available(&self.firmware.status)
+        updates::newer_firmware(&self.firmware.status)
     }
 
     /// The background service's launch agent, as `SMAppService` last
@@ -1186,12 +1187,18 @@ impl Shell {
     }
 
     /// This app's version with **Check**, and the deck's firmware with
-    /// **Check**, or **Review…** once there is something to review.
+    /// **Check**, or **Review…** once there is something to review. The
+    /// app's line names a newer app once the service found one.
     fn service_updates_card(&self, dim: bool, p: &Palette, cx: &Context<Self>) -> Div {
         let (app, deck) = update_titles(
             deck_version(&self.state.mirror().device).as_deref(),
             self.language(),
         );
+        let app_line = updates::app_update_line(&self.service.firmware.status, self.language())
+            .unwrap_or_else(|| {
+                self.tr("The app and the service update together.")
+                    .to_string()
+            });
         // Sparkle updates a signed release; any other build says why not.
         let signed = self.service.staged || self.service.updater.uses_signed_updates();
         let check_app = Btn::new("service-app-check", self.tr("Check"))
@@ -1214,7 +1221,7 @@ impl Shell {
             vec![
                 Row::new()
                     .title(app)
-                    .sub(self.tr("The app and the service update together."))
+                    .sub(app_line)
                     .right(check_app)
                     .into_any_element(),
                 Row::new()
@@ -1593,12 +1600,13 @@ mod tests {
 
     /// The scenes' footprint is the fixture's, re-homed: every path the page
     /// prints starts at `~`, and the board's sizes come out as the board
-    /// writes them.
+    /// writes them. The Keychain item is no path and has no size, and the
+    /// count is the board's ten.
     #[test]
     fn the_boards_footprint_is_the_fixtures_under_this_macs_home() {
         let footprint = board_footprint();
         let rows = footprint::items(&footprint, Language::English);
-        assert_eq!(rows.len(), 9);
+        assert_eq!(rows.len(), 10);
         for row in &rows {
             if let footprint::Place::Path(path) = &row.place {
                 assert!(path.starts_with('~'), "{path}");
@@ -1616,12 +1624,13 @@ mod tests {
                 Some("9 MB"),
                 Some("180 KB"),
                 Some("4 KB"),
+                None,
                 Some("77 MB"),
             ]
         );
         assert_eq!(
             footprint::summary(&footprint, Language::English),
-            "9 items, 2.1 GB. Most can be removed one at a time."
+            "10 items, 2.1 GB. Most can be removed one at a time."
         );
     }
 

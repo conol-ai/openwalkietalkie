@@ -46,8 +46,8 @@ use deck_model::session_controls::{ModelOption, SessionControls};
 use deck_model::voice::{intent, Intent};
 use deck_model::{
     sanitize, AdapterKind, AgentId, AgentRegister, AgentState, AgentUpdate, Answer, AnswerCap,
-    Caps, CardClear, CardId, CardKind, CardSet, Choice, Deliver, Kind, OrderCap, Origin,
-    OriginKind, Principal, ReplySet, Request, SessionId, TitleSource,
+    Caps, CardClear, CardId, CardKind, CardSet, Choice, Deliver, Kind, OrderCap, OrderOutcome,
+    Origin, OriginKind, Principal, ReplySet, Request, SessionId, TitleSource,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
@@ -120,6 +120,9 @@ pub fn socket_path(configured: Option<&str>) -> Option<PathBuf> {
 pub enum Effect {
     Controls { thread: String, settled: bool, controls: SessionControls },
     Message { thread: String, message: deck_model::MessageMeta, text: String },
+    /// The thread's history, read again when the deck started reading it
+    /// (`crate::reader`), in place of the one the store kept.
+    Replace { thread: String, messages: Vec<(deck_model::MessageMeta, String)> },
     /// `agent.register` for this thread; the shell calls back
     /// [`Model::registered`] with the id.
     Register {
@@ -231,6 +234,12 @@ struct Thread {
     agent: Option<AgentId>,
     active_turn: Option<String>,
     last_message: Option<String>,
+    /// `last_message` is this turn's and is not the reply yet. A turn can
+    /// end as `turn/completed` or as the thread going idle, in either
+    /// order, and whichever comes first stores the reply before it says
+    /// `ready`; the other finds nothing due. A new turn owes nothing yet,
+    /// so the last turn's message is never stored as this one's answer.
+    reply_due: bool,
     /// The `userMessage` item the title was last taken from, so the
     /// completed echo of a started item does not re-title.
     last_title_item: Option<String>,
@@ -238,6 +247,14 @@ struct Thread {
     async_questions: questions::Questions,
     /// The underlying activity while an asynchronous question is visible.
     base_state: Option<AgentState>,
+    /// The deck started reading the thread (`crate::reader`): the next
+    /// history read of it that lands replaces the history the store kept.
+    refill: bool,
+    /// Items whose delta was let go while that read was on its way. The
+    /// read's copy of such an item may predate the delta, so the item takes
+    /// no more deltas (they would leave a hole in it) and keeps the read's
+    /// copy until `item/completed` brings it whole.
+    frozen: HashSet<String>,
 }
 
 /// The daemon-side mirror of the threads this client follows.
@@ -250,6 +267,9 @@ pub struct Model {
     /// A monotonically increasing suffix for the model's own request keys,
     /// so two cards of one request never share one.
     seq: u64,
+    /// The sessions the deck reads (`crate::reader`): only their threads'
+    /// chat is recorded. Every one until the shell says otherwise.
+    reader: crate::reader::Reader,
 }
 
 impl Model {
@@ -307,7 +327,54 @@ impl Model {
         effects
     }
 
+    /// Whether the thread's chat is recorded: the deck reads its agent, or
+    /// the feed is not lazy (then every thread is read, registered or not).
+    fn reads(&self, thread: &str) -> bool {
+        match self.reader.agents() {
+            None => true,
+            Some(agents) => self
+                .threads
+                .get(thread)
+                .and_then(|t| t.agent.as_ref())
+                .is_some_and(|agent| agents.contains(agent)),
+        }
+    }
+
+    /// The sessions the deck reads now (`crate::reader`). The threads that
+    /// just started to be read come back, marked for a refill: the shell
+    /// reads their latest history and it replaces what the store kept. The
+    /// ones that stopped forget their chat (the store keeps its copy).
+    pub fn set_reader(&mut self, reader: crate::reader::Reader) -> Vec<String> {
+        let before: Vec<(String, bool)> = self
+            .threads
+            .keys()
+            .map(|id| (id.clone(), self.reads(id)))
+            .collect();
+        self.reader = reader;
+        let mut entered = Vec::new();
+        for (id, was) in before {
+            let now = self.reads(&id);
+            let Some(t) = self.threads.get_mut(&id) else { continue; };
+            if now && !was {
+                t.refill = true;
+                t.frozen.clear();
+                entered.push(id);
+            } else if was && !now {
+                t.messages.clear();
+                t.dirty_messages.clear();
+                t.refill = false;
+                t.frozen.clear();
+            }
+        }
+        entered
+    }
+
     fn chat_notification(&mut self, thread: &str, method: &str, params: &Value) {
+        // The chat of a thread the deck does not read is not recorded; its
+        // state, cards and each turn's reply are, below.
+        if !self.reads(thread) {
+            return;
+        }
         if method == "turn/plan/updated" {
             if let (Some(turn), Some(plan)) = (params["turnId"].as_str(), deck_model::workflow::Plan::codex(params)) {
                 if self.active_turn(thread).is_some_and(|active| active != turn) {
@@ -323,13 +390,38 @@ impl Model {
                 }, text);
             }
         } else if matches!(method, "item/started" | "item/completed") {
+            // A completed item comes whole, so it takes the place of a
+            // frozen copy (and follows its deltas no more anyway).
+            if method == "item/completed" {
+                if let (Some(t), Some(id)) =
+                    (self.threads.get_mut(thread), params["item"]["id"].as_str())
+                {
+                    t.frozen.remove(id);
+                }
+            }
             if let Some((meta, text)) = chat_item(&params["item"], method == "item/started") {
                 self.record_message(thread, meta, text);
             }
         } else if matches!(method, "item/agentMessage/delta" | "item/commandExecution/outputDelta") {
             let Some(id) = params["itemId"].as_str() else { return; };
             let Some(delta) = params["delta"].as_str() else { return; };
-            let previous = self.threads.get(thread).and_then(|t| t.messages.iter().find(|(m, _)| m.id == id)).cloned();
+            let Some(t) = self.threads.get_mut(thread) else { return; };
+            if t.frozen.contains(id) {
+                return;
+            }
+            let previous = t.messages.iter().find(|(m, _)| m.id == id).cloned();
+            // A thread the deck has just started to read waits for its latest
+            // items (`crate::reader`). The delta of an item it has not seen
+            // would start that item's text mid-sentence, and win over the
+            // read's copy as the newer one, so it is let go. The read's copy
+            // may not hold it either (the server read its page first), so
+            // from then on the item is frozen: no delta lands on it until
+            // `item/completed` brings it whole. An item that starts from now
+            // on is seen whole.
+            if previous.is_none() && t.refill {
+                t.frozen.insert(id.to_string());
+                return;
+            }
             let (meta, mut text) = previous.unwrap_or_else(|| (deck_model::MessageMeta { summary: None, images: Vec::new(),
                 activity: None,
                 runs: None, plan: None,
@@ -423,7 +515,9 @@ impl Model {
                     state: Some(state),
                     title: None,
                 });
-                for (meta, text) in &thread.messages { self.record_message(&thread.id, meta.clone(), text.clone()); }
+                if self.reads(&thread.id) {
+                    for (meta, text) in &thread.messages { self.record_message(&thread.id, meta.clone(), text.clone()); }
+                }
                 effects.extend(self.show_async_question(&thread.id));
             }
             if let Some(settings) = &thread.settings { effects.extend(self.settings(&thread.id, settings)); }
@@ -536,11 +630,23 @@ impl Model {
                         // A thread going idle after a turn is `ready`
                         // (turn/completed said so); one with no turn behind
                         // it is plainly idle.
-                        let had_turn = self
-                            .threads
-                            .get(&thread)
-                            .is_some_and(|t| t.last_message.is_some());
-                        vec![Effect::Update {
+                        let Some(t) = self.threads.get_mut(&thread) else {
+                            return Vec::new();
+                        };
+                        let had_turn = t.last_message.is_some();
+                        let mut effects = Vec::new();
+                        // This can come before `turn/completed`: the reply
+                        // goes in first here too, because the ready line is
+                        // spoken from the reply on file when the state turns.
+                        if std::mem::take(&mut t.reply_due) {
+                            if let Some(text) = t.last_message.clone() {
+                                effects.push(Effect::Reply {
+                                    thread: thread.clone(),
+                                    text,
+                                });
+                            }
+                        }
+                        effects.push(Effect::Update {
                             thread,
                             state: Some(if had_turn {
                                 AgentState::Ready
@@ -548,7 +654,8 @@ impl Model {
                                 AgentState::Idle
                             }),
                             title: None,
-                        }]
+                        });
+                        effects
                     }
                     Some("notLoaded") => self.release(&thread),
                     Some("systemError") => vec![Effect::Update {
@@ -565,6 +672,7 @@ impl Model {
                 };
                 let id = params["turn"]["id"].as_str().unwrap_or_default();
                 t.active_turn = (!id.is_empty()).then(|| id.to_string());
+                t.reply_due = false;
                 vec![Effect::Update {
                     thread,
                     state: Some(AgentState::Working),
@@ -592,6 +700,9 @@ impl Model {
                         });
                     }
                 }
+                // Only a completed turn has an answer to store; whatever a
+                // failed or interrupted one said is in the chat history.
+                let reply_due = std::mem::take(&mut t.reply_due);
                 match status {
                     "failed" => effects.push(Effect::Update {
                         thread,
@@ -604,7 +715,9 @@ impl Model {
                         title: None,
                     }),
                     _ => {
-                        if let Some(text) = t.last_message.clone() {
+                        // The reply, then `ready`: the ready line is spoken
+                        // from the reply on file when the state turns.
+                        if let Some(text) = t.last_message.clone().filter(|_| reply_due) {
                             effects.push(Effect::Reply {
                                 thread: thread.clone(),
                                 text,
@@ -652,6 +765,7 @@ impl Model {
                     "agentMessage" | "agent_message" if method == "item/completed" => {
                         if let Some(text) = item["text"].as_str().filter(|s| !s.trim().is_empty()) {
                             t.last_message = Some(text.to_string());
+                            t.reply_due = true;
                         }
                         Vec::new()
                     }
@@ -1263,8 +1377,12 @@ enum Mail {
         answer: Answer,
     },
     Order {
+        agent: AgentId,
         thread: String,
         text: String,
+        /// The id to report a failure under (`agent.order.result`); `None`
+        /// for a chosen Ready step, which fails with its card.
+        order: Option<String>,
     },
 }
 
@@ -1383,23 +1501,41 @@ async fn connect(
 
 /// The client, until `stop`. Reconnects forever; a daemon that is not
 /// running costs one connect attempt every [`NOT_RUNNING_RETRY`].
+///
+/// While the service is quiet (`crate::dormancy`) it holds no connection
+/// and makes no attempt: the roster, the catalog and the usage reads all
+/// stop with it. It connects again the moment a deck links.
 pub async fn run(api: Arc<Api>, mut stop: watch::Receiver<bool>) {
+    let mut gate = api.core.adapters().watch_gate();
     let mut backoff = BACKOFF_MIN;
     loop {
         if *stop.borrow() {
             return;
         }
+        if !gate.borrow_and_update().collect {
+            tokio::select! {
+                _ = stop.changed() => return,
+                () = crate::dormancy::until_collect(&mut gate, true) => {}
+            }
+            // A deck linked: whatever went wrong before the quiet is old news.
+            backoff = BACKOFF_MIN;
+            continue;
+        }
         let cfg = api.config.load().codex.clone();
+        // Every wait between attempts below also ends when the service goes
+        // quiet, so the quiet starts at once and not after a 30 s backoff.
         if !cfg.daemon {
             tokio::select! {
                 _ = stop.changed() => return,
                 _ = tokio::time::sleep(NOT_RUNNING_RETRY) => continue,
+                () = crate::dormancy::until_collect(&mut gate, false) => continue,
             }
         }
         let Some(path) = socket_path(cfg.daemon_socket.as_deref()) else {
             tokio::select! {
                 _ = stop.changed() => return,
                 _ = tokio::time::sleep(NOT_RUNNING_RETRY) => continue,
+                () = crate::dormancy::until_collect(&mut gate, false) => continue,
             }
         };
         if !path.exists() {
@@ -1407,17 +1543,21 @@ pub async fn run(api: Arc<Api>, mut stop: watch::Receiver<bool>) {
             tokio::select! {
                 _ = stop.changed() => return,
                 _ = tokio::time::sleep(NOT_RUNNING_RETRY) => continue,
+                () = crate::dormancy::until_collect(&mut gate, false) => continue,
             }
         }
         match connect(&path).await {
             Ok(ws) => {
                 tracing::info!(socket = %path.display(), "codexd: connected to the codex app-server daemon");
                 let started = std::time::Instant::now();
-                let outcome = session(&api, ws, &mut stop).await;
+                let outcome = session(&api, ws, &mut stop, &mut gate).await;
                 if *stop.borrow() {
                     return;
                 }
                 tracing::info!(why = outcome.reason(), "codexd: connection ended");
+                if matches!(outcome, End::Dormant) {
+                    continue;
+                }
                 // A connection that lived a while resets the backoff.
                 backoff = if started.elapsed() > Duration::from_secs(60) {
                     BACKOFF_MIN
@@ -1433,6 +1573,7 @@ pub async fn run(api: Arc<Api>, mut stop: watch::Receiver<bool>) {
         tokio::select! {
             _ = stop.changed() => return,
             _ = tokio::time::sleep(backoff) => {}
+            () = crate::dormancy::until_collect(&mut gate, false) => {}
         }
     }
 }
@@ -1445,6 +1586,8 @@ enum End {
     /// `[codex] daemon` was switched off (the Integrations page's Codex
     /// switch): the connection ends now, not at the next reconnect.
     Disabled,
+    /// No deck linked for ten minutes (`crate::dormancy`).
+    Dormant,
     Error(String),
 }
 
@@ -1454,6 +1597,7 @@ impl End {
             End::Closed => "the daemon closed the connection".into(),
             End::Stopped => "deckd is stopping".into(),
             End::Disabled => "[codex] daemon was switched off".into(),
+            End::Dormant => "no deck linked for ten minutes".into(),
             End::Error(why) => why.clone(),
         }
     }
@@ -1464,6 +1608,7 @@ async fn session(
     api: &Arc<Api>,
     ws: tokio_tungstenite::WebSocketStream<tokio::net::UnixStream>,
     stop: &mut watch::Receiver<bool>,
+    gate: &mut watch::Receiver<crate::dormancy::Gate>,
 ) -> End {
     let (mut sink, mut source) = ws.split();
     let (out_tx, mut out_rx) = mpsc::unbounded_channel::<String>();
@@ -1496,11 +1641,12 @@ async fn session(
     };
     let principal = Principal::Adapter(AdapterKind::Codex);
     let mut model = Model::default();
+    // Only the threads the deck reads have their chat recorded
+    // (`crate::reader`), from the first notification on.
+    let mut deck_reader = adapters.watch_reader();
+    model.set_reader(deck_reader.borrow_and_update().clone());
     let (mail_tx, mut mail_rx) = mpsc::unbounded_channel::<Mail>();
     let mut waiters: HashMap<String, tokio::task::JoinHandle<()>> = HashMap::new();
-    // Orders in flight as `turn/steer`, by thread, so a rejection can fall
-    // back to `turn/start` with the same text.
-    let mut steering: HashMap<String, String> = HashMap::new();
     // History must never block live questions, answers, or connection upkeep.
     // Dropping the set cancels outstanding hydration on disconnect.
     let mut histories = tokio::task::JoinSet::new();
@@ -1564,9 +1710,17 @@ async fn session(
         model.catalog = read_models(&rpc).await.unwrap_or_default();
 
         // The account's rate limits: read once here, again on the deck's
-        // ENTER, and pushed by the server after every turn.
+        // ENTER, and pushed by the server after every turn. Read only while
+        // the Usage face is on the deck's strip (`crate::dormancy`), and at
+        // once when it is put back.
         let mut usage_events = api.bus.subscribe();
         let mut usage_read: Option<std::time::Instant> = None;
+        let now = *gate.borrow_and_update();
+        if !now.collect {
+            // It went quiet during the handshake.
+            break 'run End::Dormant;
+        }
+        let mut usage_on = now.usage;
         read_rate_limits(api, &rpc, &mut usage_read, &mut model).await;
 
         let mut catalog_read = std::time::Instant::now();
@@ -1578,9 +1732,32 @@ async fn session(
             tokio::select! {
                 _ = chat_tick.tick() => {
                     let effects = model.flush_messages();
-                    apply(api, &rpc, &principal, session_id, &mut model, &mail_tx, &mut waiters, &mut steering, effects).await;
+                    apply(api, &rpc, &principal, session_id, &mut model, &mail_tx, &mut waiters, effects).await;
                 }
                 _ = stop.changed() => break 'run End::Stopped,
+                () = crate::dormancy::changed(gate) => {
+                    let now = *gate.borrow_and_update();
+                    if !now.collect {
+                        break 'run End::Dormant;
+                    }
+                    if now.usage && !usage_on {
+                        read_rate_limits(api, &rpc, &mut usage_read, &mut model).await;
+                    }
+                    usage_on = now.usage;
+                }
+                () = crate::reader::changed(&mut deck_reader) => {
+                    // A thread the deck started to read has its latest items
+                    // read again, to replace what the store kept; one it
+                    // stopped reading records nothing more.
+                    let now = deck_reader.borrow_and_update().clone();
+                    for id in model.set_reader(now) {
+                        let rpc = rpc.clone();
+                        histories.spawn(async move {
+                            let history = history::tail(&rpc, &id).await;
+                            (id, history)
+                        });
+                    }
+                }
                 published = usage_events.recv() => match published {
                     // The Codex switch went off (`config.set codex.daemon`,
                     // an edit of the file): the watcher stored the new
@@ -1605,7 +1782,7 @@ async fn session(
                                     Effect::Controls { thread: thread.clone(), settled: true, controls }
                                 }).into_iter().collect()
                         };
-                        apply(api, &rpc, &principal, session_id, &mut model, &mail_tx, &mut waiters, &mut steering, effects).await;
+                        apply(api, &rpc, &principal, session_id, &mut model, &mail_tx, &mut waiters, effects).await;
                     }
                     Ok(_) => {}
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
@@ -1643,7 +1820,7 @@ async fn session(
                                 }
                             }
                             let effects = model.loaded(&listed.threads);
-                            apply(api, &rpc, &principal, session_id, &mut model, &mail_tx, &mut waiters, &mut steering, effects).await;
+                            apply(api, &rpc, &principal, session_id, &mut model, &mail_tx, &mut waiters, effects).await;
                         }
                         Err(why) => {
                             tracing::debug!(why, "codexd: thread/loaded/list failed");
@@ -1654,7 +1831,7 @@ async fn session(
                 history = histories.join_next(), if !histories.is_empty() => {
                     if let Some(Ok((thread, history))) = history {
                         let effects = model.hydrated(&thread, history);
-                        apply(api, &rpc, &principal, session_id, &mut model, &mail_tx, &mut waiters, &mut steering, effects).await;
+                        apply(api, &rpc, &principal, session_id, &mut model, &mail_tx, &mut waiters, effects).await;
                     }
                 }
                 mail = mail_rx.recv() => {
@@ -1665,16 +1842,18 @@ async fn session(
                             tracing::debug!(card = card.0, effects = effects.len(), "codexd: answer handled");
                             effects
                         }
-                        Mail::Order { thread, text } => {
-                            let id = message_id();
-                            let effect = model.order(&thread, &text, &id);
-                            if matches!(effect, Some(Effect::Request { method: "turn/steer", .. })) {
-                                steering.insert(thread.clone(), text.clone());
+                        Mail::Order { agent, thread, text, order } => {
+                            // Delivered here, so a refusal can be reported
+                            // against the order it refused.
+                            let sent = send_to_thread(&rpc, &mut model, &thread, &text, &message_id()).await;
+                            if let (Err(why), Some(order)) = (sent, order) {
+                                tracing::debug!(why, "codexd: an order did not reach its thread");
+                                report_undelivered(api, &principal, session_id, agent, order, why).await;
                             }
-                            effect.into_iter().collect()
+                            Vec::new()
                         }
                     };
-                    apply(api, &rpc, &principal, session_id, &mut model, &mail_tx, &mut waiters, &mut steering, effects).await;
+                    apply(api, &rpc, &principal, session_id, &mut model, &mail_tx, &mut waiters, effects).await;
                 }
                 inbound = inbound_rx.recv() => {
                     let value = match inbound {
@@ -1692,7 +1871,7 @@ async fn session(
                     let effects = if !method.ends_with("/delta") && !method.ends_with("/outputDelta") {
                         let mut messages = model.flush_messages(); messages.extend(effects); messages
                     } else { effects };
-                    apply(api, &rpc, &principal, session_id, &mut model, &mail_tx, &mut waiters, &mut steering, effects).await;
+                    apply(api, &rpc, &principal, session_id, &mut model, &mail_tx, &mut waiters, effects).await;
                 }
             }
         }
@@ -1700,7 +1879,7 @@ async fn session(
     reader.abort();
     adapters.set_codex_connected(false);
     // Whatever ended it, the roster must not keep agents nobody is driving.
-    let effects = model.disconnected();
+    let effects = ending(&mut model, &end);
     apply(
         api,
         &rpc,
@@ -1709,7 +1888,6 @@ async fn session(
         &mut model,
         &mail_tx,
         &mut waiters,
-        &mut steering,
         effects,
     )
     .await;
@@ -1718,6 +1896,31 @@ async fn session(
     }
     writer.abort();
     end
+}
+
+/// What ending a connection sends the core: each thread's cards cleared and
+/// its agent released, so the roster keeps no agent nobody drives. Except at
+/// dormancy: the core released those agents itself (`reason:"dormant"`) and
+/// their cards went with them, and the same act sent again through the API
+/// would be counted as Codex's own activity (`sources.list`'s
+/// `last_event_at`). The threads are forgotten either way, and each one's
+/// waiter and routes go ([`Effect::Release`] with no agent).
+fn ending(model: &mut Model, end: &End) -> Vec<Effect> {
+    let effects = model.disconnected();
+    if !matches!(end, End::Dormant) {
+        return effects;
+    }
+    effects
+        .into_iter()
+        .filter_map(|effect| match effect {
+            Effect::Clear { .. } => None,
+            Effect::Release { thread, .. } => Some(Effect::Release {
+                thread,
+                agent: None,
+            }),
+            other => Some(other),
+        })
+        .collect()
 }
 
 fn model_options(value: &Value) -> Vec<ModelOption> {
@@ -1863,10 +2066,14 @@ async fn loaded_threads(rpc: &Rpc) -> Result<LoadedRoster, String> {
 const USAGE_READ_GAP: Duration = Duration::from_secs(10);
 
 /// `account/rateLimits/read` → the core's Usage face, when `[usage]
-/// providers` names Codex. A daemon signed in with an API key has no
-/// windows to report, and that is a debug line.
+/// providers` names Codex and the Usage face is on the deck's strip
+/// (`crate::dormancy`). A daemon signed in with an API key has no windows
+/// to report, and that is a debug line. What the server pushes on its own
+/// (`account/rateLimits/updated`) is not asked for, and is taken as it is.
 async fn read_rate_limits(api: &Arc<Api>, rpc: &Arc<Rpc>, last: &mut Option<std::time::Instant>, model: &mut Model) {
-    if !crate::usage::Provider::Codex.enabled(&api.config.load().usage) {
+    if !crate::usage::Provider::Codex.enabled(&api.config.load().usage)
+        || !api.core.adapters().gate().usage
+    {
         return;
     }
     if last.is_some_and(|at| at.elapsed() < USAGE_READ_GAP) {
@@ -1911,6 +2118,61 @@ async fn feed_usage(api: &Arc<Api>, windows: Vec<crate::usage::Window>, account:
     }
 }
 
+/// Send `text` to `thread` as its user: steer the turn that is running,
+/// else start one. A steer the server rejects (the turn ended under it)
+/// opens the next turn with the same text instead (zeron's rule). `Err` is
+/// why nothing was sent, as the reason word `order.failed` carries:
+/// `thread_unavailable` for a thread this client does not know,
+/// `turn_refused` for text the server would not take.
+async fn send_to_thread(
+    rpc: &Rpc,
+    model: &mut Model,
+    thread: &str,
+    text: &str,
+    client_message_id: &str,
+) -> Result<(), &'static str> {
+    let Some(Effect::Request { method, params }) = model.order(thread, text, client_message_id)
+    else {
+        return Err("thread_unavailable");
+    };
+    match rpc.request(method, params).await {
+        Ok(_) => return Ok(()),
+        Err(why) => tracing::debug!(method, why, "codexd: request refused"),
+    }
+    if method == "turn/steer" {
+        if let Some(Effect::Request { method, params }) = model.steer_rejected(thread, text) {
+            match rpc.request(method, params).await {
+                Ok(_) => return Ok(()),
+                Err(why) => {
+                    tracing::debug!(why, "codexd: turn/start after a rejected steer failed");
+                }
+            }
+        }
+    }
+    Err("turn_refused")
+}
+
+/// An order this client was handed did not reach its thread: it says so
+/// with `agent.order.result`, as any owner does, and the deck shows it.
+async fn report_undelivered(
+    api: &Arc<Api>,
+    principal: &Principal,
+    session: SessionId,
+    agent: AgentId,
+    order: String,
+    why: &str,
+) {
+    let report = Request::OrderOutcome(OrderOutcome {
+        agent,
+        order,
+        ok: false,
+        reason: Some(why.to_string()),
+    });
+    if let Err(e) = api.core.api(principal.clone(), session, false, report).await {
+        tracing::debug!(code = e.code, "codexd: agent.order.result refused");
+    }
+}
+
 /// Carry the model's effects to the core and the socket.
 #[allow(clippy::too_many_arguments)]
 async fn apply(
@@ -1921,7 +2183,6 @@ async fn apply(
     model: &mut Model,
     mail: &mpsc::UnboundedSender<Mail>,
     waiters: &mut HashMap<String, tokio::task::JoinHandle<()>>,
-    steering: &mut HashMap<String, String>,
     effects: Vec<Effect>,
 ) {
     let adapters = api.core.adapters();
@@ -2001,12 +2262,15 @@ async fn apply(
                                         crate::core::handle::WaitResult::Order {
                                             text,
                                             card,
+                                            order,
                                             delivery,
                                             ..
                                         } => {
                                             let _ = mail.send(Mail::Order {
+                                                agent: agent.clone(),
                                                 thread: thread_id.clone(),
                                                 text,
+                                                order,
                                             });
                                             if let (Some(card), Some(_)) = (card, delivery) {
                                                 core.delivered(agent.clone(), card, true).await;
@@ -2065,6 +2329,12 @@ async fn apply(
                 let _ = api.core.api(principal.clone(), session, false, Request::Reply(ReplySet {
                     agent, text, message: Some(message), speak: false, announce: None, lane: None,
                 })).await;
+            }
+            Effect::Replace { thread, messages } => {
+                let Some(agent) = model.agent(&thread).cloned() else { continue; };
+                if let Err(e) = api.core.chat_replace(session, agent, messages).await {
+                    tracing::debug!(code = e.code, "codexd: the history read again was refused");
+                }
             }
             Effect::Reply { thread, text } => {
                 let Some(agent) = model.agent(&thread).cloned() else {
@@ -2180,42 +2450,15 @@ async fn apply(
             }
             Effect::Respond { id, result } => rpc.respond(&id, result),
             Effect::AsyncReply { thread, key, text } => {
-                let mut result = Err("thread unavailable".to_string());
-                if let Some(Effect::Request { method, params }) = model.order(&thread, &text, &key) {
-                    result = rpc.request(method, params).await;
-                    // As with a spoken order, the active turn may have
-                    // completed between tapping the choice and delivery.
-                    if result.is_err() && method == "turn/steer" {
-                        if let Some(Effect::Request { method, params }) = model.steer_rejected(&thread, &text) {
-                            result = rpc.request(method, params).await;
-                        }
-                    }
-                }
-                if let Err(why) = &result { tracing::debug!(why, "codexd: async question reply refused; keeping card"); }
-                effects.extend(model.async_reply_finished(&thread, &key, result.is_ok()));
+                // As with a spoken order, the active turn may have completed
+                // between tapping the choice and delivery.
+                let sent = send_to_thread(rpc, model, &thread, &text, &key).await;
+                if let Err(why) = sent { tracing::debug!(why, "codexd: async question reply refused; keeping card"); }
+                effects.extend(model.async_reply_finished(&thread, &key, sent.is_ok()));
             }
             Effect::Request { method, params } => {
-                let thread = params["threadId"].as_str().unwrap_or_default().to_string();
                 if let Err(why) = rpc.request(method, params).await {
                     tracing::debug!(method, why, "codexd: request refused");
-                    if method == "turn/steer" {
-                        // The turn ended under the steer: the same text
-                        // opens the next turn instead (zeron's rule).
-                        if let Some(text) = steering.remove(&thread) {
-                            if let Some(Effect::Request { method, params }) =
-                                model.steer_rejected(&thread, &text)
-                            {
-                                if let Err(why) = rpc.request(method, params).await {
-                                    tracing::debug!(
-                                        why,
-                                        "codexd: turn/start after a rejected steer failed"
-                                    );
-                                }
-                            }
-                        }
-                    }
-                } else if method == "turn/steer" {
-                    steering.remove(&thread);
                 }
             }
             Effect::Usage(windows) => {
@@ -2346,6 +2589,54 @@ mod tests {
 
     fn card_spec(effects: &[Effect]) -> CardSpec {
         effects.iter().find_map(|e| match e { Effect::Card { spec, .. } => Some(spec.clone()), _ => None }).expect("question card")
+    }
+
+    /// When the service goes quiet the core has already released every
+    /// Codex agent (`reason:"dormant"`) and dropped its cards, so ending the
+    /// connection then forgets the threads without telling the core again:
+    /// a call through the API would count as Codex activity on the
+    /// Integrations page (`sources.list`'s `last_event_at`). Any other end
+    /// still clears the cards and releases the agents.
+    #[test]
+    fn a_dormant_end_tells_the_core_nothing_it_already_did() {
+        let agent = deck_model::AgentId("ag_1".into());
+        let with_a_card = || {
+            let mut model = Model::default();
+            model.loaded(&[loaded("t1", None, false)]);
+            model.registered("t1", deck_model::AgentId("ag_1".into()));
+            let params = json!({"threadId": "t1", "item": async_item()});
+            let spec = card_spec(&model.notification("item/started", &params));
+            model.carded("t1", &spec.request, CardId(1));
+            model
+        };
+        let closed = ending(&mut with_a_card(), &End::Closed);
+        assert!(
+            closed.iter().any(|e| matches!(
+                e,
+                Effect::Clear {
+                    card: CardId(1),
+                    ..
+                }
+            )),
+            "{closed:?}"
+        );
+        assert!(closed.contains(&Effect::Release {
+            thread: "t1".into(),
+            agent: Some(agent.clone()),
+        }));
+        let mut quiet = with_a_card();
+        assert_eq!(
+            ending(&mut quiet, &End::Dormant),
+            vec![Effect::Release {
+                thread: "t1".into(),
+                agent: None,
+            }],
+            "the waiter and the thread's routes still go; the core hears nothing"
+        );
+        assert!(
+            quiet.threads().is_empty(),
+            "the threads are forgotten all the same"
+        );
     }
 
     #[test]
@@ -2606,6 +2897,68 @@ mod tests {
                 state: Some(AgentState::Error),
                 title: None,
             }]
+        );
+    }
+
+    /// A turn ends twice over, as `turn/completed` and as the thread going
+    /// idle, in either order. Whichever comes first stores the turn's last
+    /// agent message as the reply before it says `ready` (the ready line is
+    /// spoken from the reply on file when the state turns), and the other
+    /// stores nothing again. A turn with no message of its own stores none:
+    /// the last turn's answer is not this one's.
+    #[test]
+    fn a_turn_stores_its_reply_once_and_before_ready_whichever_end_comes_first() {
+        let mut model = Model::default();
+        model.loaded(&[loaded("t1", None, false)]);
+        model.registered("t1", AgentId("ag_1".into()));
+        let reply = |text: &str| Effect::Reply {
+            thread: "t1".into(),
+            text: text.into(),
+        };
+        let ready = || Effect::Update {
+            thread: "t1".into(),
+            state: Some(AgentState::Ready),
+            title: None,
+        };
+        let idle = json!({"threadId": "t1", "status": {"type": "idle"}});
+        let start = |turn: &str| json!({"threadId": "t1", "turn": {"id": turn}});
+        let said = |id: &str, text: &str| json!({"threadId": "t1", "item": {"id": id, "type": "agentMessage", "text": text}});
+        let completed =
+            |turn: &str| json!({"threadId": "t1", "turn": {"id": turn, "status": "completed"}});
+
+        model.notification("turn/started", &start("turn-1"));
+        model.notification("item/completed", &said("a1", "The first answer."));
+        assert_eq!(
+            model.notification("thread/status/changed", &idle),
+            vec![reply("The first answer."), ready()],
+            "idle first"
+        );
+        assert_eq!(
+            model.notification("turn/completed", &completed("turn-1")),
+            vec![ready()]
+        );
+
+        model.notification("turn/started", &start("turn-2"));
+        model.notification("item/completed", &said("a2", "The second answer."));
+        assert_eq!(
+            model.notification("turn/completed", &completed("turn-2")),
+            vec![reply("The second answer."), ready()],
+            "completed first"
+        );
+        assert_eq!(
+            model.notification("thread/status/changed", &idle),
+            vec![ready()]
+        );
+
+        model.notification("turn/started", &start("turn-3"));
+        assert_eq!(
+            model.notification("turn/completed", &completed("turn-3")),
+            vec![ready()],
+            "no message of its own, no reply"
+        );
+        assert_eq!(
+            model.notification("thread/status/changed", &idle),
+            vec![ready()]
         );
     }
 
@@ -2908,6 +3261,53 @@ mod tests {
         assert!(model.flush_messages().is_empty());
         model.notification("item/completed", &json!({"threadId":"t","item":{"type":"agentMessage","id":"a","text":"Hello **world**!"}}));
         assert!(matches!(&model.flush_messages()[..], [Effect::Message { message, text, .. }] if message.id == "a" && !message.streaming && text.ends_with('!')));
+    }
+
+    /// R6, the lazy reader feed: a thread the deck does not read records no
+    /// chat, yet its turn still ends with its reply before `ready`; one the
+    /// deck reads records as before. A thread the deck starts to read comes
+    /// back marked for a refill, and one it stops reading forgets its chat.
+    #[test]
+    fn an_unread_threads_chat_is_not_recorded_but_its_turn_still_ends_with_its_reply() {
+        use crate::reader::Reader;
+        let (one, two) = (AgentId("ag_1".into()), AgentId("ag_2".into()));
+        let mut model = Model::default();
+        model.loaded(&[loaded("t1", None, false), loaded("t2", None, false)]);
+        model.registered("t1", one.clone());
+        model.registered("t2", two.clone());
+        assert!(
+            model.set_reader(Reader::only([two.clone()].into())).is_empty(),
+            "every thread was read until now"
+        );
+        model.notification("turn/started", &json!({"threadId": "t1", "turn": {"id": "turn-1"}}));
+        model.notification("item/agentMessage/delta", &json!({"threadId": "t1", "itemId": "a1", "delta": "Work"}));
+        model.notification(
+            "item/completed",
+            &json!({"threadId": "t1", "item": {"id": "a1", "type": "agentMessage", "text": "Done."}}),
+        );
+        assert!(model.flush_messages().is_empty(), "no chat of an unread thread");
+        let done = model.notification(
+            "turn/completed",
+            &json!({"threadId": "t1", "turn": {"id": "turn-1", "status": "completed"}}),
+        );
+        assert_eq!(
+            done,
+            vec![
+                Effect::Reply { thread: "t1".into(), text: "Done.".into() },
+                Effect::Update { thread: "t1".into(), state: Some(AgentState::Ready), title: None },
+            ]
+        );
+        model.notification(
+            "item/completed",
+            &json!({"threadId": "t2", "item": {"id": "b1", "type": "agentMessage", "text": "Hi."}}),
+        );
+        assert!(matches!(&model.flush_messages()[..], [Effect::Message { thread, .. }] if thread == "t2"));
+        // The deck opens t1 and leaves t2.
+        assert_eq!(model.set_reader(Reader::only([one].into())), ["t1"]);
+        assert!(model.threads["t1"].refill);
+        assert!(model.threads["t2"].messages.is_empty() && !model.threads["t2"].refill);
+        // No lazy feed: every thread is read, t2 again.
+        assert_eq!(model.set_reader(Reader::all()), ["t2"]);
     }
 
     #[test]

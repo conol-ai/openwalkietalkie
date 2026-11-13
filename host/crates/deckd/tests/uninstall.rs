@@ -16,6 +16,7 @@
 use deckd::config::Paths;
 use deckd::integrations::testdir::TestDir;
 use deckd::integrations::{self, Env, Launchctl, Status, Target, Verb};
+use deckd::secrets::KeyHome;
 use deckd::uninstall::{self, Options};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -102,7 +103,7 @@ fn uninstall_leaves_the_clis_own_files_byte_for_byte_as_they_were() {
         "config.toml is never written"
     );
 
-    let outcome = uninstall::run(&env, &paths, Options { purge: false });
+    let outcome = uninstall::run(&env, &paths, Options { purge: false }, &KeyHome::File);
     assert!(outcome.problems.is_empty(), "{:?}", outcome.problems);
 
     for (path, before) in &files {
@@ -155,7 +156,7 @@ fn purge_still_puts_the_clis_files_back_before_it_deletes_the_backups() {
         "the backups are inside the data dir; that is what makes the order load-bearing"
     );
 
-    let outcome = uninstall::run(&env, &paths, Options { purge: true });
+    let outcome = uninstall::run(&env, &paths, Options { purge: true }, &KeyHome::File);
     assert!(outcome.problems.is_empty(), "{:?}", outcome.problems);
     for (path, before) in &files {
         assert_eq!(
@@ -185,7 +186,7 @@ fn a_file_deckd_created_is_removed_again_rather_than_left_empty() {
         "the plugin invents no settings.json"
     );
 
-    let outcome = uninstall::run(&env, &paths, Options { purge: false });
+    let outcome = uninstall::run(&env, &paths, Options { purge: false }, &KeyHome::File);
     assert!(outcome.problems.is_empty(), "{:?}", outcome.problems);
     assert!(
         !integrations::claude::hooks_json_path(&env).exists(),
@@ -203,9 +204,9 @@ fn uninstalling_twice_is_a_no_op_and_not_a_failure() {
     let paths = paths_for(&env, &dir);
     std::fs::write(integrations::claude::settings_path(&env), b"{}\n").unwrap();
     integrations::run(&env, Target::Claude, INSTALL).unwrap();
-    let first = uninstall::run(&env, &paths, Options { purge: false });
+    let first = uninstall::run(&env, &paths, Options { purge: false }, &KeyHome::File);
     assert!(first.problems.is_empty(), "{:?}", first.problems);
-    let second = uninstall::run(&env, &paths, Options { purge: false });
+    let second = uninstall::run(&env, &paths, Options { purge: false }, &KeyHome::File);
     assert!(second.problems.is_empty(), "{:?}", second.problems);
     assert!(
         second.steps.iter().any(|s| s.contains("nothing installed")),
@@ -223,7 +224,7 @@ fn full_uninstall_removes_the_desktop_launcher_before_purging_its_receipt() {
     integrations::run(&env, Target::CodexDesktop, INSTALL).unwrap();
     let app = integrations::codex_desktop::launcher(&env);
     assert!(app.exists());
-    let outcome = uninstall::run(&env, &paths, Options { purge: true });
+    let outcome = uninstall::run(&env, &paths, Options { purge: true }, &KeyHome::File);
     assert!(outcome.problems.is_empty(), "{:?}", outcome.problems);
     assert!(!app.exists());
     assert!(!paths.data.exists());
@@ -238,7 +239,7 @@ fn no_test_environment_may_reach_launchctl() {
     let env = integrations::test_env(&dir);
     assert_eq!(env.launchctl, Launchctl::Disabled);
     let paths = paths_for(&env, &dir);
-    let outcome = uninstall::run(&env, &paths, Options { purge: false });
+    let outcome = uninstall::run(&env, &paths, Options { purge: false }, &KeyHome::File);
     assert!(
         outcome.steps.iter().any(|s| s.contains("was not loaded")),
         "{:?}",
@@ -274,7 +275,7 @@ fn the_agent_under_the_old_project_name_is_removed_too() {
     for plist in &plists {
         std::fs::write(plist, b"<plist/>").unwrap();
     }
-    let outcome = uninstall::run(&env, &paths, Options { purge: false });
+    let outcome = uninstall::run(&env, &paths, Options { purge: false }, &KeyHome::File);
     assert!(outcome.problems.is_empty(), "{:?}", outcome.problems);
     for plist in &plists {
         assert!(!plist.exists(), "{} survived", plist.display());

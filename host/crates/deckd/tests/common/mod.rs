@@ -54,6 +54,10 @@ pub struct Options {
     /// dial. The daemon under test never spawns the client itself; a test
     /// that wants one runs `deckd::codexd::run` against `api`.
     pub codex_socket: Option<PathBuf>,
+    /// The lazy reader feed (`deckd::reader`): dormancy on and a deck linked
+    /// from the start, so only the sessions the deck reads are fed in full.
+    /// Off, every session is, as under `--no-device`.
+    pub lazy: bool,
 }
 
 impl Default for Options {
@@ -65,6 +69,7 @@ impl Default for Options {
             uds_max_scope: "admin".into(),
             uds_default_scope: "observe".into(),
             codex_socket: None,
+            lazy: false,
         }
     }
 }
@@ -122,7 +127,22 @@ impl Daemon {
         core.stt_install = deckd::download::Installer::offline();
         core.tts_install = deckd::download::Installer::offline();
         core.no_device = true;
+        let lazy = options.lazy;
+        if lazy {
+            // Quiet until the deck below links, as a service whose deck was
+            // never linked starts.
+            let now = Instant::now();
+            core.set_dormancy(
+                deckd::dormancy::Dormancy::start(deckd::dormancy::WINDOW, None, WALL, now),
+                now,
+            );
+        }
         let (handle, join) = core.spawn();
+        if lazy {
+            lines
+                .send(FromHid::Link(deck_model::LinkEvent::Live { sid: 7 }))
+                .unwrap();
+        }
         let config = Arc::new(arc_swap::ArcSwap::from(config));
         let api = Arc::new(Api {
             core: handle.clone(),
@@ -156,7 +176,7 @@ impl Daemon {
     /// The daemon runs with detached hid channels (`--no-device`), but the
     /// core still encodes each line and sends it: these are exactly the
     /// bytes a connected deck would have been given, which is where §5.6's
-    /// `⌨ ` prefix and the `Focus terminal` row are actually applied.
+    /// `⌨ ` prefix and the `Open app` row are actually applied.
     pub fn device_input(&self, line: deck_model::DeviceLine) {
         self._lines.send(FromHid::Line(line)).unwrap();
     }

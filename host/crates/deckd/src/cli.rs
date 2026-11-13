@@ -1,10 +1,13 @@
 //! The `deckd` command line (design §3, contract §3.8): `run`, `status`,
 //! `ctl`, `events`, `token`, `device`, `doctor`, `probe` (is a deck there,
 //! for the first run, which has no daemon yet), `ble` (the voice link's
-//! bench tools, which talk to the deck directly and need no daemon). Every
-//! command that talks to the running daemon (`ctl`, `events`, `status --live`, `device
-//! flood|sync|metrics`, the `doctor` socket probe) goes through
-//! `deck-client` over the UDS door; `token` edits `tokens.toml` directly.
+//! bench tools, which talk to the deck directly and need no daemon), and a
+//! verb for every care function the companion app has (`care`, `firmware`,
+//! `config`, `service`, `device get|set|faces|set-faces|set-macro`; they
+//! live in `crate::verbs`). Every command that talks to the running daemon
+//! (`ctl`, `events`, `status --live`, the device commands, the care verbs,
+//! the `doctor` socket probe) goes through `deck-client` over the UDS door;
+//! `token` edits `tokens.toml` directly.
 use crate::config::{Config, Paths};
 use crate::metrics::Status as LiveStatus;
 use clap::{Parser, Subcommand};
@@ -116,8 +119,9 @@ fn one_call(
     }
 }
 
-/// One call on a fresh session (`deckd device …`, `status --live`).
-fn uds_call(
+/// One call on a fresh session (`deckd device …`, `status --live`, the care
+/// verbs).
+pub(crate) fn uds_call(
     socket: &Path,
     scopes: &[&str],
     method: &str,
@@ -180,20 +184,34 @@ pub fn info_is_ours(info: &serde_json::Value, socket: &Path) -> bool {
 
 /// Report a failure the way `ctl` does (contract §3.8) and give the exit code.
 fn ctl_failure(failure: CtlFailure) -> i32 {
+    report(failure, &mut std::io::stderr().lock())
+}
+
+/// [`ctl_failure`] onto `err`, which every care verb reports through too:
+/// "deckd: …" for a service that did not answer (exit 2); the JSON-RPC
+/// error as it came for one that refused, with a line saying why when the
+/// refusal is one a person can act on — a guarded operation that wants a
+/// trusted principal (exit 3), or a terminal that Claude Code or Codex
+/// started, which the service gives no `admin` or `device` scope (exit 1).
+pub(crate) fn report(failure: CtlFailure, err: &mut dyn std::io::Write) -> i32 {
     match failure {
         CtlFailure::Unreachable(why) => {
-            eprintln!("deckd: {why}");
+            let _ = writeln!(err, "deckd: {why}");
             EXIT_UNREACHABLE
         }
         CtlFailure::Rpc(error) => {
-            eprintln!(
+            let _ = writeln!(
+                err,
                 "{}",
                 serde_json::to_string(&error).unwrap_or_else(|_| error.to_string())
             );
             if error.code == ApiError::FORBIDDEN && error.data["need"] == "trusted" {
-                eprintln!("deckd: {NEEDS_TRUST_HINT}");
+                let _ = writeln!(err, "deckd: {NEEDS_TRUST_HINT}");
                 EXIT_NEEDS_TRUST
             } else {
+                if error.code == ApiError::FORBIDDEN && error.data["reason"] == "agent_ancestry" {
+                    let _ = writeln!(err, "deckd: {ANCESTRY_HINT}");
+                }
                 EXIT_RPC_ERROR
             }
         }
@@ -214,6 +232,13 @@ pub const EXIT_NEEDS_TRUST: i32 = 3;
 /// What `ctl` says next to a `-32002 {need:"trusted"}`.
 pub const NEEDS_TRUST_HINT: &str =
     "needs a trusted principal: answer from the deck or the OpenWalkieTalkie app";
+/// What `ctl` and the care verbs say next to a `-32002
+/// {reason:"agent_ancestry"}`: the macOS service gives a process that
+/// Claude Code or Codex started only `observe`, `agent`, `voice` and
+/// `hooks:ingest` (§4.2).
+pub const ANCESTRY_HINT: &str =
+    "refused because this terminal runs inside Claude Code or Codex; run it from a terminal of its \
+     own";
 
 #[derive(Parser, Debug)]
 #[command(name = "deckd", version, about = "OpenWalkieTalkie host service")]
@@ -312,10 +337,35 @@ pub enum Cmd {
         #[command(subcommand)]
         cmd: SttCmd,
     },
-    /// Device debugging.
+    /// The deck: its settings, its strip, and debugging.
     Device {
         #[command(subcommand)]
         cmd: DeviceCmd,
+    },
+    /// What the companion app does for the deck, from the command line: the
+    /// setup checks, the footprint, the sources and their pause, the Usage
+    /// face's sources, the tests, the permissions and the decks this Mac
+    /// keeps a setup for. `--json` prints the service's reply as it came.
+    Care {
+        #[command(subcommand)]
+        cmd: crate::verbs::care::CareCmd,
+    },
+    /// The deck's firmware: what the service knows, a check for a release,
+    /// and an install by cable.
+    Firmware {
+        #[command(subcommand)]
+        cmd: crate::verbs::firmware::FirmwareCmd,
+    },
+    /// The settings the running service manages (`config.get`, `config.set`,
+    /// `config.reload`).
+    Config {
+        #[command(subcommand)]
+        cmd: crate::verbs::config::ConfigCmd,
+    },
+    /// Restart or stop the running service.
+    Service {
+        #[command(subcommand)]
+        cmd: crate::verbs::service::ServiceCmd,
     },
     /// The deck's BLE audio service, on the bench (`docs/deck-protocol.md`,
     /// "Voice"). Talks to the deck directly through CoreBluetooth; needs no
@@ -345,7 +395,9 @@ pub enum Cmd {
     /// JSON says the same either way.
     Probe {
         /// Print `{"present": bool, "instances": [{"bus": "usb" |
-        /// "bluetooth" | "unknown"}]}`.
+        /// "bluetooth" | "unknown", "id": label | null}]}`: `id` is the
+        /// deck's label (the one `device.deck` names it by) when HID lists a
+        /// serial number for that instance.
         #[arg(long)]
         json: bool,
     },
@@ -390,9 +442,9 @@ pub enum Cmd {
 
 #[derive(Subcommand, Debug)]
 pub enum TtsCmd {
-    /// The cloud provider's API key in `[voice.tts]`: with one, the
-    /// announcements are spoken by the provider's model; without, by
-    /// Apple's synthesiser on this Mac.
+    /// The cloud provider's API key, kept in the Keychain on a Mac and in
+    /// `[voice.tts]` elsewhere: with one, the announcements are spoken by
+    /// the provider's model; without, by Apple's synthesiser on this Mac.
     Key {
         #[command(subcommand)]
         cmd: KeyCmd,
@@ -450,9 +502,11 @@ pub enum SttCmd {
 
 #[derive(Subcommand, Debug)]
 pub enum KeyCmd {
-    /// Store the key in config.toml (`[voice.tts] api_key`). It is read
-    /// from the terminal without echo, or from stdin when piped; the
-    /// running daemon applies it within a second, no restart.
+    /// Store the key where the service keeps it: the Keychain on a Mac
+    /// (`ai.cohdl.openwalkietalkie`), config.toml elsewhere (`[voice.tts]
+    /// api_key`), through the running service when there is one. It is read
+    /// from the terminal without echo, or from stdin when piped; the running
+    /// service applies it at once, no restart.
     Set {
         /// `openai` or `elevenlabs`; written to `[voice.tts] provider`.
         #[arg(long)]
@@ -612,34 +666,41 @@ fn ble_cmd(cmd: BleCmd) -> i32 {
 /// answers). A HID that cannot start lists nothing, with the reason on
 /// stderr.
 pub fn probe_cmd(
-    found: Result<Vec<hidapi::BusType>, crate::hid::HidError>,
+    found: Result<Vec<(hidapi::BusType, Option<String>)>, crate::hid::HidError>,
     json: bool,
     out: &mut impl std::io::Write,
 ) -> Result<i32, String> {
-    let buses = found.unwrap_or_else(|e| {
+    let found = found.unwrap_or_else(|e| {
         eprintln!("deckd: {e}");
         Vec::new()
     });
     let written = if json {
-        writeln!(out, "{}", probe_json(&buses))
-    } else if buses.is_empty() {
+        writeln!(out, "{}", probe_json(&found))
+    } else if found.is_empty() {
         writeln!(out, "no OpenWalkieTalkie found")
     } else {
-        let names: Vec<&str> = buses.iter().map(|bus| bus_name(*bus)).collect();
+        let names: Vec<&str> = found.iter().map(|(bus, _)| bus_name(*bus)).collect();
         writeln!(out, "OpenWalkieTalkie present: {}", names.join(", "))
     };
     written.map_err(|e| e.to_string())?;
-    Ok(i32::from(buses.is_empty()))
+    Ok(i32::from(found.is_empty()))
 }
 
-/// `deckd probe --json`: `{"present": bool, "instances": [{"bus": …}]}`,
-/// one instance per entry HID lists of the deck's vendor collection.
-pub fn probe_json(buses: &[hidapi::BusType]) -> serde_json::Value {
-    let instances: Vec<serde_json::Value> = buses
+/// `deckd probe --json`: `{"present": bool, "instances": [{"bus": …,
+/// "id": …}]}`, one instance per entry HID lists of the deck's vendor
+/// collection. `id` is the label of the deck its serial number names
+/// (`device::identity`), never the number; null when HID lists none, which
+/// is how a deck linked over Bluetooth only shows whether this Mac can tell
+/// it from another one there.
+pub fn probe_json(found: &[(hidapi::BusType, Option<String>)]) -> serde_json::Value {
+    let instances: Vec<serde_json::Value> = found
         .iter()
-        .map(|bus| serde_json::json!({"bus": bus_name(*bus)}))
+        .map(|(bus, serial)| {
+            let id = serial.as_deref().and_then(crate::device::identity::label_of);
+            serde_json::json!({"bus": bus_name(*bus), "id": id})
+        })
         .collect();
-    serde_json::json!({"present": !buses.is_empty(), "instances": instances})
+    serde_json::json!({"present": !found.is_empty(), "instances": instances})
 }
 
 /// A bus as `deckd probe` names it: `usb`, `bluetooth`, or `unknown` for
@@ -675,10 +736,28 @@ pub enum DeviceCmd {
         #[arg(long)]
         hm: Option<String>,
     },
+    // The deck's settings, strip and Macropad keys (`crate::verbs::device`):
+    // `get`, `set`, `faces`, `set-faces`, `set-macro`.
+    #[command(flatten)]
+    Deck(crate::verbs::device::DeckCmd),
 }
 
 pub fn main() -> i32 {
-    let cli = Cli::parse();
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(e) => {
+            // Help and the version are answers (exit 0, on stdout). Any
+            // other command line clap could not take is refused, exit 1:
+            // clap's own code for it, 2, is the one §10.7 gives a service
+            // that did not answer, which a script would retry.
+            let _ = e.print();
+            return if e.exit_code() == 0 {
+                0
+            } else {
+                EXIT_RPC_ERROR
+            };
+        }
+    };
     match run(cli) {
         Ok(code) => code,
         Err(e) => {
@@ -823,7 +902,8 @@ fn run(cli: Cli) -> Result<i32, String> {
         }
         Cmd::Tts { cmd } => {
             let mut out = std::io::stdout().lock();
-            tts_cmd(&paths, cmd, &mut out)
+            let keys = crate::secrets::home_for(&paths, false);
+            tts_cmd(&paths, cmd, &keys, &mut out)
         }
         Cmd::Stt { cmd } => {
             let mut out = std::io::stdout().lock();
@@ -890,7 +970,12 @@ fn run(cli: Cli) -> Result<i32, String> {
                 )?;
                 Ok(0)
             }
+            DeviceCmd::Deck(cmd) => verb(&paths, cmd, crate::verbs::device::run),
         },
+        Cmd::Care { cmd } => verb(&paths, cmd, crate::verbs::care::run),
+        Cmd::Firmware { cmd } => verb(&paths, cmd, crate::verbs::firmware::run),
+        Cmd::Config { cmd } => verb(&paths, cmd, crate::verbs::config::run),
+        Cmd::Service { cmd } => verb(&paths, cmd, crate::verbs::service::run),
         Cmd::Doctor { json } => {
             let report = doctor(&paths);
             if json {
@@ -947,15 +1032,17 @@ fn run(cli: Cli) -> Result<i32, String> {
         } => {
             let config = Config::load(&paths.config).unwrap_or_default();
             let env = crate::integrations::Env::detect(&paths, &config)?;
+            let keys = crate::secrets::home_for(&paths, false);
             if dry_run {
-                println!("{}", uninstall_preview(&env, &paths, purge));
+                println!("{}", uninstall_preview(&env, &paths, purge, &keys));
                 return Ok(0);
             }
             if purge && !yes && !confirm_purge(&paths)? {
                 println!("nothing was changed");
                 return Ok(0);
             }
-            let outcome = crate::uninstall::run(&env, &paths, crate::uninstall::Options { purge });
+            let outcome =
+                crate::uninstall::run(&env, &paths, crate::uninstall::Options { purge }, &keys);
             print!("{}", outcome.text());
             Ok(i32::from(!outcome.problems.is_empty()))
         }
@@ -970,9 +1057,27 @@ fn run(cli: Cli) -> Result<i32, String> {
     }
 }
 
+/// One of the care verbs (`crate::verbs`), against the service at this data
+/// directory's socket, on this process's stdout and stderr.
+fn verb<C>(paths: &Paths, cmd: C, run: crate::verbs::Run<C>) -> Result<i32, String> {
+    let (mut out, mut err) = (std::io::stdout().lock(), std::io::stderr().lock());
+    run(
+        &crate::verbs::Socket::new(&paths.socket),
+        cmd,
+        &mut out,
+        &mut err,
+    )
+}
+
 /// "What this removes", before anything is removed — the same sentence the
-/// installer's `--dry-run` gives, for the command that cannot be undone.
-pub fn uninstall_preview(env: &crate::integrations::Env, paths: &Paths, purge: bool) -> String {
+/// installer's `--dry-run` gives, for the command that cannot be undone. The
+/// Keychain is not asked whether it holds the cloud voice's key.
+pub fn uninstall_preview(
+    env: &crate::integrations::Env,
+    paths: &Paths,
+    purge: bool,
+    keys: &crate::secrets::KeyHome,
+) -> String {
     let mut out = String::from("deckd uninstall would:\n");
     for target in crate::uninstall::CLI_TARGETS {
         let reports = crate::integrations::status(env, Some(target));
@@ -993,6 +1098,12 @@ pub fn uninstall_preview(env: &crate::integrations::Env, paths: &Paths, purge: b
             paths.data.display(),
             paths.caches.display()
         ));
+        if keys.store().is_some() {
+            out.push_str(&format!(
+                "  - PURGE the cloud voice key from the Keychain ({}), if one is there\n",
+                crate::secrets::SERVICE
+            ));
+        }
     } else {
         out.push_str(&format!("  - keep {}\n", paths.data.display()));
     }
@@ -1331,8 +1442,284 @@ fn write_tts_keys(paths: &Paths, patch: &[(&str, serde_json::Value)]) -> Result<
     Ok(next)
 }
 
-/// `deckd tts key …` / `deckd tts install` / `deckd tts status`.
-pub fn tts_cmd(paths: &Paths, cmd: TtsCmd, out: &mut dyn std::io::Write) -> Result<i32, String> {
+/// Why `deckd tts key` wrote nothing for a process an agent started: the
+/// service refuses such a process its admin scope (the ancestry cap).
+pub const KEY_ANCESTRY_HINT: &str =
+    "a terminal that Claude Code or Codex started may not change the cloud voice key; nothing \
+     was written. Run `deckd tts key` in a terminal of your own, or use the app's Voice page.";
+
+/// The service refused a session the admin scope because an agent started
+/// the process that asked.
+fn ancestry_refused(failure: &CtlFailure) -> bool {
+    matches!(failure, CtlFailure::Rpc(error)
+        if error.code == ApiError::FORBIDDEN && error.data["reason"] == "agent_ancestry")
+}
+
+/// `config.get` from the running service, if it answers.
+fn published_config(paths: &Paths) -> Option<serde_json::Value> {
+    uds_call(&paths.socket, &["admin"], "config.get", serde_json::json!({})).ok()
+}
+
+/// Where `deckd tts key` says the running service keeps the key, from its
+/// `config.get`.
+fn key_place(paths: &Paths, published: &serde_json::Value) -> String {
+    if published["voice"]["tts.key_store"] == "keychain" {
+        "the Keychain".into()
+    } else {
+        paths.config.display().to_string()
+    }
+}
+
+/// What `deckd tts key set` says after the key's line: whether the key is
+/// used, and with what.
+fn key_notes(
+    out: &mut dyn std::io::Write,
+    engine: &str,
+    model: &str,
+    provider: crate::audio::cloud::Provider,
+) {
+    if engine != crate::audio::cloud::NAME {
+        let _ = writeln!(
+            out,
+            "tts: [voice.tts] engine is {engine:?}: the key is not used until it is \"cloud\" (the default)"
+        );
+    } else {
+        let _ = writeln!(
+            out,
+            "tts: the daemon speaks with {} ({}) from the next announcement; `deckd tts status` to check",
+            provider.name(),
+            if model.is_empty() { provider.default_model() } else { model }
+        );
+    }
+}
+
+/// `deckd tts key set`: the key written where this install keeps it. The
+/// running service writes it when there is one (`config.set`), so it is in
+/// force at once and kept where the service keeps it. With no service it
+/// goes straight into `keys`' store (the Keychain on a Mac's own install),
+/// with the provider and no copy of a key left in config.toml, or into
+/// config.toml. A process that Claude Code or Codex started is refused the
+/// service's admin scope, and then nothing is written.
+/// Whether something accepts a connection at `socket`: after a call there
+/// failed short of an answer, whether a service is there at all. `deckd tts
+/// key` writes the key itself only when none is: a service that took the
+/// call and gave no answer (a Keychain dialog it waits on, a broken
+/// connection, a timeout) holds a key of its own, and a key written around
+/// it would leave the two apart until it restarts.
+fn service_listening(socket: &Path) -> bool {
+    std::os::unix::net::UnixStream::connect(socket).is_ok()
+}
+
+/// A service is at the socket and did not answer (`why`): nothing is
+/// written, and the command exits as for a service that did not answer.
+fn not_written(why: String) -> i32 {
+    ctl_failure(CtlFailure::Unreachable(format!(
+        "{why}; the service is running and did not answer, so nothing was written: run the \
+         command again once it answers (`deckd status`)"
+    )))
+}
+
+fn tts_key_set(
+    paths: &Paths,
+    provider: Option<crate::audio::cloud::Provider>,
+    effective: crate::audio::cloud::Provider,
+    key: &str,
+    keys: &crate::secrets::KeyHome,
+    out: &mut dyn std::io::Write,
+) -> Result<i32, String> {
+    let mut patch = serde_json::Map::new();
+    patch.insert("voice.tts.api_key".into(), key.into());
+    if let Some(provider) = provider {
+        patch.insert("voice.tts.provider".into(), provider.name().into());
+    }
+    let asked = uds_call(
+        &paths.socket,
+        &["admin"],
+        "config.set",
+        serde_json::json!({ "patch": patch }),
+    );
+    match asked {
+        Ok(_) => {
+            let published = published_config(paths).unwrap_or_default();
+            let voice = &published["voice"];
+            let _ = writeln!(
+                out,
+                "tts: key {} stored in {} for {}",
+                voice["tts.api_key"].as_str().unwrap_or_default(),
+                key_place(paths, &published),
+                effective.name()
+            );
+            key_notes(
+                out,
+                voice["tts.engine"].as_str().unwrap_or(crate::audio::cloud::NAME),
+                voice["tts.model"].as_str().unwrap_or_default(),
+                effective,
+            );
+            Ok(0)
+        }
+        Err(CtlFailure::Unreachable(why)) if service_listening(&paths.socket) => {
+            Ok(not_written(why))
+        }
+        Err(CtlFailure::Unreachable(_)) => {
+            let mut file = Vec::new();
+            if let Some(provider) = provider {
+                file.push((
+                    "voice.tts.provider",
+                    serde_json::Value::String(provider.name().into()),
+                ));
+            }
+            let (next, place) = match keys.store() {
+                Some(store) => {
+                    store
+                        .set(key)
+                        .map_err(|why| format!("the Keychain did not take the key: {why}"))?;
+                    let config = Config::load(&paths.config).unwrap_or_default();
+                    if config.voice.tts.has_key() {
+                        file.push(("voice.tts.api_key", serde_json::Value::Null));
+                    }
+                    let next = if file.is_empty() { config } else { write_tts_keys(paths, &file)? };
+                    (next, "the Keychain".to_string())
+                }
+                None => {
+                    file.push(("voice.tts.api_key", serde_json::Value::String(key.into())));
+                    (write_tts_keys(paths, &file)?, paths.config.display().to_string())
+                }
+            };
+            let _ = writeln!(
+                out,
+                "tts: key {} stored in {place} for {}{}",
+                crate::secrets::hint(key),
+                effective.name(),
+                if keys.store().is_some() { "; the service reads it when it starts" } else { "" }
+            );
+            key_notes(out, &next.voice.tts.engine, &next.voice.tts.model, effective);
+            Ok(0)
+        }
+        Err(failure) if ancestry_refused(&failure) => Err(KEY_ANCESTRY_HINT.into()),
+        Err(failure) => Ok(ctl_failure(failure)),
+    }
+}
+
+/// `deckd tts key clear`: the key removed from where this install keeps it,
+/// the three ways [`tts_key_set`] writes one.
+fn tts_key_clear(
+    paths: &Paths,
+    keys: &crate::secrets::KeyHome,
+    out: &mut dyn std::io::Write,
+) -> Result<i32, String> {
+    let asked = uds_call(
+        &paths.socket,
+        &["admin"],
+        "config.set",
+        serde_json::json!({ "patch": { "voice.tts.api_key": null } }),
+    );
+    match asked {
+        Ok(_) => {
+            let published = published_config(paths).unwrap_or_default();
+            let voice = &published["voice"];
+            let tts = crate::config::Tts {
+                engine: voice["tts.engine"].as_str().unwrap_or_default().into(),
+                provider: voice["tts.provider"].as_str().unwrap_or_default().into(),
+                ..Default::default()
+            };
+            let _ = writeln!(
+                out,
+                "tts: key removed from {}; {} speaks",
+                key_place(paths, &published),
+                tts.effective_engine()
+            );
+            Ok(0)
+        }
+        Err(CtlFailure::Unreachable(why)) if service_listening(&paths.socket) => {
+            Ok(not_written(why))
+        }
+        Err(CtlFailure::Unreachable(_)) => {
+            let clear = [("voice.tts.api_key", serde_json::Value::Null)];
+            let (next, place) = match keys.store() {
+                Some(store) => {
+                    store
+                        .delete()
+                        .map_err(|why| format!("the Keychain did not remove the key: {why}"))?;
+                    let config = Config::load(&paths.config).unwrap_or_default();
+                    let next =
+                        if config.voice.tts.has_key() { write_tts_keys(paths, &clear)? } else { config };
+                    (next, "the Keychain".to_string())
+                }
+                None => (write_tts_keys(paths, &clear)?, paths.config.display().to_string()),
+            };
+            let _ = writeln!(
+                out,
+                "tts: key removed from {place}; {} speaks",
+                next.voice.tts.effective_engine()
+            );
+            Ok(0)
+        }
+        Err(failure) if ancestry_refused(&failure) => Err(KEY_ANCESTRY_HINT.into()),
+        Err(failure) => Ok(ctl_failure(failure)),
+    }
+}
+
+/// The key as `deckd tts status` reports it: whether there is one, and its
+/// line.
+struct KeyLine {
+    present: bool,
+    line: String,
+}
+
+/// The key as `deckd tts status` finds it: the running service's
+/// `config.get` when it answers (the hint of the key in force, and where it
+/// is kept); else a key in config.toml; else whether the store holds one,
+/// read from its attributes, never the secret.
+fn key_line(paths: &Paths, config: &Config, keys: &crate::secrets::KeyHome) -> KeyLine {
+    let none = || KeyLine {
+        present: false,
+        line: "(none) — `deckd tts key set --provider openai|elevenlabs`".into(),
+    };
+    if let Some(published) = published_config(paths) {
+        let voice = &published["voice"];
+        let hint = voice["tts.api_key"].as_str().unwrap_or_default();
+        if hint.is_empty() {
+            return none();
+        }
+        let line = if voice["tts.key_store"] == "keychain" {
+            format!("{hint}, in the Keychain")
+        } else {
+            hint.to_string()
+        };
+        return KeyLine {
+            present: true,
+            line,
+        };
+    }
+    let tts = &config.voice.tts;
+    if tts.has_key() {
+        return KeyLine {
+            present: true,
+            line: tts.api_key_hint(),
+        };
+    }
+    match keys.store().map(|store| store.exists()) {
+        Some(Ok(true)) => KeyLine {
+            present: true,
+            line: "in the Keychain (start the service to see its last four characters)".into(),
+        },
+        Some(Err(why)) => KeyLine {
+            present: false,
+            line: format!("the Keychain did not answer: {why}"),
+        },
+        Some(Ok(false)) | None => none(),
+    }
+}
+
+/// `deckd tts key …` / `deckd tts install` / `deckd tts status`. `keys` is
+/// where this install keeps the cloud voice's key
+/// (`crate::secrets::home_for`).
+pub fn tts_cmd(
+    paths: &Paths,
+    cmd: TtsCmd,
+    keys: &crate::secrets::KeyHome,
+    out: &mut dyn std::io::Write,
+) -> Result<i32, String> {
     use crate::audio::{cloud, sidecar};
     let config = Config::load(&paths.config).unwrap_or_default();
     let cfg = crate::audio::sidecar_config(&config, paths);
@@ -1354,48 +1741,9 @@ pub fn tts_cmd(paths: &Paths, cmd: TtsCmd, out: &mut dyn std::io::Write) -> Resu
                     )
                 })?;
             let key = read_key(&format!("{} API key: ", effective.name()))?;
-            let mut patch = vec![("voice.tts.api_key", serde_json::Value::String(key))];
-            if let Some(provider) = provider {
-                patch.push(("voice.tts.provider", serde_json::Value::String(provider.name().into())));
-            }
-            let next = write_tts_keys(paths, &patch)?;
-            let _ = writeln!(
-                out,
-                "tts: key {} stored in {} for {}",
-                next.voice.tts.api_key_hint(),
-                paths.config.display(),
-                effective.name()
-            );
-            if next.voice.tts.engine != cloud::NAME {
-                let _ = writeln!(
-                    out,
-                    "tts: [voice.tts] engine is {:?}: the key is not used until it is \"cloud\" (the default)",
-                    next.voice.tts.engine
-                );
-            } else {
-                let _ = writeln!(
-                    out,
-                    "tts: the daemon speaks with {} ({}) from the next announcement; `deckd tts status` to check",
-                    effective.name(),
-                    if next.voice.tts.model.is_empty() {
-                        effective.default_model()
-                    } else {
-                        &next.voice.tts.model
-                    }
-                );
-            }
-            Ok(0)
+            tts_key_set(paths, provider, effective, &key, keys, out)
         }
-        TtsCmd::Key { cmd: KeyCmd::Clear } => {
-            let next = write_tts_keys(paths, &[("voice.tts.api_key", serde_json::Value::Null)])?;
-            let _ = writeln!(
-                out,
-                "tts: key removed from {}; {} speaks",
-                paths.config.display(),
-                next.voice.tts.effective_engine()
-            );
-            Ok(0)
-        }
+        TtsCmd::Key { cmd: KeyCmd::Clear } => tts_key_clear(paths, keys, out),
         TtsCmd::Install {
             model,
             force,
@@ -1507,11 +1855,14 @@ pub fn tts_cmd(paths: &Paths, cmd: TtsCmd, out: &mut dyn std::io::Write) -> Resu
         TtsCmd::Status => {
             let tts = &config.voice.tts;
             let kokoro_present = crate::kokoro::present(&paths.kokoro, &tts.model);
+            // Only the cloud voice uses the key, and on a Mac it is not in
+            // the file: where it is decides what speaks.
+            let key = (tts.engine == cloud::NAME).then(|| key_line(paths, &config, keys));
             let _ = writeln!(
                 out,
                 "engine:  [voice.tts] engine = {:?} → {}",
                 tts.engine,
-                match tts.effective_engine() {
+                match tts.engine_with_key(key.as_ref().is_some_and(|key| key.present)) {
                     "apple" => "Apple's synthesiser speaks, on this Mac".to_string(),
                     sidecar::NAME => "the local model in its sidecar speaks".to_string(),
                     crate::kokoro::ENGINE if kokoro_present => "the Kokoro voice speaks, on this Mac".to_string(),
@@ -1557,7 +1908,7 @@ pub fn tts_cmd(paths: &Paths, cmd: TtsCmd, out: &mut dyn std::io::Write) -> Resu
                 }
                 return Ok(0);
             }
-            if tts.engine == cloud::NAME {
+            if let Some(key) = key {
                 let provider = cloud::Provider::parse(&tts.provider);
                 let _ = writeln!(
                     out,
@@ -1572,12 +1923,7 @@ pub fn tts_cmd(paths: &Paths, cmd: TtsCmd, out: &mut dyn std::io::Write) -> Resu
                         )
                     )
                 );
-                let _ = writeln!(
-                    out,
-                    "key:     {}{}",
-                    tts.api_key_hint(),
-                    if tts.has_key() { "" } else { " — `deckd tts key set --provider openai|elevenlabs`" }
-                );
+                let _ = writeln!(out, "key:     {}", key.line);
             }
             if tts.engine != sidecar::NAME {
                 return status_daemon(paths, out);
@@ -2065,10 +2411,57 @@ fn status_text(s: &Status) -> String {
                 m.status_timeouts,
                 m.status_errors,
             ));
+            if let Some(brief) = &l.deliveries {
+                out.push('\n');
+                out.push_str(&deliveries_text(brief));
+            }
+            if let Some(line) = collectors_text(l) {
+                out.push('\n');
+                out.push_str(&line);
+            }
         }
         None => out.push_str("\nstatus.json: absent (the daemon has not run here)"),
     }
     out
+}
+
+/// The `cards since …` line of `deckd status`: the delivery record in brief
+/// (`crate::deliveries`), counts only. `deckd ctl --scopes admin
+/// metrics.get` has the whole record.
+fn deliveries_text(b: &crate::deliveries::Brief) -> String {
+    let r = &b.reader;
+    format!(
+        "cards since {}: {} from the sources, answered {} (on the deck {}), failure cards {}; \
+         reader: channels {} (by PTT {}), history {}, plans {}, tool rows {}, images {}, \
+         pickers {}",
+        b.since.map_or("-".to_string(), |since| since.to_string()),
+        b.cards,
+        b.answered,
+        b.answers_on_deck,
+        b.failure_cards,
+        r.channels,
+        r.channels_by_ptt,
+        r.history,
+        r.plans,
+        r.tool_rows,
+        r.images,
+        r.pickers,
+    )
+}
+
+/// The `collectors:` line of `deckd status` (`crate::dormancy`): whether the
+/// daemon collects from agent sessions, and since when it stopped, on this
+/// Mac's clock. `None` for a daemon with no dormancy (`--no-device`).
+fn collectors_text(l: &LiveStatus) -> Option<String> {
+    Some(match (l.collecting?, l.dormant_since) {
+        (true, _) => "collectors: on".to_string(),
+        (false, Some(since)) => {
+            let at = std::time::UNIX_EPOCH + std::time::Duration::from_millis(since.millis());
+            let hm = crate::device::session::local_hm(at).unwrap_or_else(|| since.to_string());
+            format!("collectors: off since {hm} (no deck linked for ten minutes)")
+        }
+        (false, None) => "collectors: off (no deck has been linked)".to_string(),
+    })
 }
 
 /// The `deck:` line of `deckd status`: what the linked deck says about
@@ -3078,31 +3471,34 @@ mod tests {
     fn the_probe_prints_each_instance_and_exits_by_whether_there_is_one() {
         use hidapi::BusType;
         use serde_json::{json, Value};
+        let usb = (BusType::Usb, None);
+        let bluetooth = (BusType::Bluetooth, None);
         assert_eq!(probe_json(&[]), json!({"present": false, "instances": []}));
         assert_eq!(
-            probe_json(&[BusType::Usb]),
-            json!({"present": true, "instances": [{"bus": "usb"}]})
+            probe_json(std::slice::from_ref(&usb)),
+            json!({"present": true, "instances": [{"bus": "usb", "id": null}]})
         );
         assert_eq!(
-            probe_json(&[BusType::Bluetooth, BusType::Usb]),
-            json!({"present": true, "instances": [{"bus": "bluetooth"}, {"bus": "usb"}]})
+            probe_json(&[bluetooth.clone(), usb.clone()]),
+            json!({"present": true, "instances": [
+                {"bus": "bluetooth", "id": null}, {"bus": "usb", "id": null}]})
         );
-        assert_eq!(probe_json(&[BusType::Spi])["instances"][0]["bus"], "unknown");
+        assert_eq!(probe_json(&[(BusType::Spi, None)])["instances"][0]["bus"], "unknown");
         let run = |found, json| {
             let mut out = Vec::new();
             let code = probe_cmd(found, json, &mut out).unwrap();
             (code, String::from_utf8(out).unwrap())
         };
         let read = |out: &str| serde_json::from_str::<Value>(out).unwrap();
-        let (code, out) = run(Ok(vec![BusType::Usb, BusType::Bluetooth]), true);
+        let (code, out) = run(Ok(vec![usb.clone(), bluetooth.clone()]), true);
         assert_eq!(code, 0);
-        assert_eq!(read(&out), probe_json(&[BusType::Usb, BusType::Bluetooth]));
+        assert_eq!(read(&out), probe_json(&[usb, bluetooth.clone()]));
         let (code, out) = run(Ok(Vec::new()), true);
         assert_eq!((code, read(&out)), (1, probe_json(&[])));
         let (code, out) = run(Err(crate::hid::HidError::Init), true);
         assert_eq!((code, read(&out)), (1, probe_json(&[])));
         assert_eq!(
-            run(Ok(vec![BusType::Bluetooth]), false),
+            run(Ok(vec![bluetooth]), false),
             (0, "OpenWalkieTalkie present: bluetooth\n".to_string())
         );
         assert_eq!(
@@ -3117,6 +3513,36 @@ mod tests {
             Cli::try_parse_from(["deckd", "probe"]).unwrap().cmd,
             Cmd::Probe { json: false }
         ));
+    }
+
+    /// The probe's `id` is how the owner sees whether this Mac can tell a
+    /// deck linked over Bluetooth only from another one: the same label as
+    /// over the cable when HID lists its address there, in either spelling,
+    /// and null when it lists none. The serial number itself is never
+    /// printed.
+    #[test]
+    fn the_probe_names_each_instance_by_its_decks_label_and_never_its_serial() {
+        use hidapi::BusType;
+        let label = crate::device::identity::label("A1B2C3D4E5F6");
+        let found = [
+            (BusType::Usb, Some("A1B2C3D4E5F6".to_string())),
+            (BusType::Bluetooth, Some("f6:e5:d4:c3:b2:a1".to_string())),
+            (BusType::Bluetooth, Some(String::new())),
+            (BusType::Bluetooth, Some("000000000000".to_string())),
+            (BusType::Bluetooth, None),
+        ];
+        let json = probe_json(&found);
+        let ids: Vec<&serde_json::Value> = json["instances"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|instance| &instance["id"])
+            .collect();
+        assert_eq!(ids[0], &serde_json::json!(label));
+        assert_eq!(ids[1], &serde_json::json!(label), "the same deck over Bluetooth");
+        assert!(ids[2..].iter().all(|id| id.is_null()), "{ids:?}");
+        let text = json.to_string().to_ascii_lowercase();
+        assert!(!text.contains("a1b2c3d4e5f6") && !text.contains("f6:e5"), "{text}");
     }
 
     #[test]
@@ -3308,6 +3734,99 @@ mod tests {
         assert!(text.contains(deck), "{text}");
     }
 
+    /// `deckd status` sums the delivery record up in one line from
+    /// `status.json`, and a file from a daemon that kept none has no line.
+    #[test]
+    fn the_status_text_sums_up_the_delivery_record() {
+        let status = |live: LiveStatus| Status {
+            running: true,
+            data_dir: PathBuf::from("/nonexistent/deckd"),
+            state_present: false,
+            faces: 0,
+            card_ids: 0,
+            port: None,
+            live: Some(live),
+            live_age_s: Some(0),
+        };
+        let brief = crate::deliveries::Brief {
+            since: Some(deck_model::Ts(1_789_760_523_000)),
+            cards: 14,
+            answered: 9,
+            answers_on_deck: 6,
+            failure_cards: 1,
+            reader: crate::deliveries::Reader {
+                channels: 5,
+                channels_by_ptt: 2,
+                history: 3,
+                plans: 1,
+                tool_rows: 4,
+                images: 2,
+                pickers: 1,
+                ..Default::default()
+            },
+        };
+        let text = status_text(&status(LiveStatus {
+            deliveries: Some(brief.clone()),
+            ..LiveStatus::default()
+        }));
+        let line = "\ncards since 2026-09-18T19:42:03.000Z: 14 from the sources, answered 9 (on \
+                    the deck 6), failure cards 1; reader: channels 5 (by PTT 2), history 3, \
+                    plans 1, tool rows 4, images 2, pickers 1";
+        assert!(text.ends_with(line), "{text}");
+        // With the collectors' line (`crate::dormancy`) as well, the record
+        // comes first and the collectors' line ends the text.
+        let text = status_text(&status(LiveStatus {
+            deliveries: Some(brief),
+            collecting: Some(true),
+            ..LiveStatus::default()
+        }));
+        assert!(text.ends_with(&format!("{line}\ncollectors: on")), "{text}");
+        let text = status_text(&status(LiveStatus::default()));
+        assert!(!text.contains("cards since"), "{text}");
+    }
+
+    /// `deckd status` says whether the daemon collects from agent sessions
+    /// (`crate::dormancy`), and since when it stopped on this Mac's clock;
+    /// a daemon with no dormancy (`--no-device`) gets no line at all.
+    #[test]
+    fn the_status_text_says_whether_the_collectors_run() {
+        let status = |live: LiveStatus| Status {
+            running: true,
+            data_dir: PathBuf::from("/nonexistent/deckd"),
+            state_present: false,
+            faces: 0,
+            card_ids: 0,
+            port: None,
+            live: Some(live),
+            live_age_s: Some(0),
+        };
+        let text = status_text(&status(LiveStatus::default()));
+        assert!(!text.contains("collectors"), "{text}");
+        let on = LiveStatus {
+            collecting: Some(true),
+            ..LiveStatus::default()
+        };
+        assert!(status_text(&status(on)).ends_with("\ncollectors: on"));
+        let since = deck_model::Ts(1_789_760_523_000);
+        let at = std::time::UNIX_EPOCH + std::time::Duration::from_millis(since.millis());
+        let hm = crate::device::session::local_hm(at).unwrap();
+        let off = LiveStatus {
+            collecting: Some(false),
+            dormant_since: Some(since),
+            ..LiveStatus::default()
+        };
+        assert!(status_text(&status(off)).ends_with(&format!(
+            "\ncollectors: off since {hm} (no deck linked for ten minutes)"
+        )));
+        let never = LiveStatus {
+            collecting: Some(false),
+            ..LiveStatus::default()
+        };
+        assert!(
+            status_text(&status(never)).ends_with("\ncollectors: off (no deck has been linked)")
+        );
+    }
+
     #[test]
     fn ctl_and_the_device_commands_speak_json_rpc_over_the_socket() {
         use crate::api::testkit::test_api;
@@ -3437,6 +3956,35 @@ mod tests {
         drop(rt);
         drop(daemon);
         feeder.join().unwrap();
+    }
+
+    /// What `deckd ctl` and every care verb say on stderr when a call fails:
+    /// a line for a service that did not answer (exit 2); the JSON-RPC
+    /// error as it came, with a line a person can act on for a trust
+    /// refusal (exit 3) and for a terminal an agent started (exit 1, the
+    /// code it always had); and the error alone for any other refusal.
+    #[test]
+    fn a_failed_call_says_why_when_a_person_can_act_on_it() {
+        let said = |failure| {
+            let mut err = Vec::new();
+            let code = report(failure, &mut err);
+            (code, String::from_utf8(err).unwrap())
+        };
+        assert_eq!(
+            said(CtlFailure::Unreachable("gone".into())),
+            (EXIT_UNREACHABLE, "deckd: gone\n".to_string())
+        );
+        let (code, text) = said(CtlFailure::Rpc(ApiError::forbidden_trusted()));
+        assert_eq!(code, EXIT_NEEDS_TRUST);
+        assert!(text.ends_with(&format!("\ndeckd: {NEEDS_TRUST_HINT}\n")), "{text}");
+        let (code, text) = said(CtlFailure::Rpc(ApiError::forbidden_ancestry("admin")));
+        assert_eq!(code, EXIT_RPC_ERROR);
+        let lines: Vec<&str> = text.lines().collect();
+        let error: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+        assert_eq!(error["data"]["reason"], "agent_ancestry");
+        assert_eq!(lines[1..], [format!("deckd: {ANCESTRY_HINT}")]);
+        let (code, text) = said(CtlFailure::Rpc(ApiError::forbidden("admin")));
+        assert_eq!((code, text.lines().count()), (EXIT_RPC_ERROR, 1), "{text}");
     }
 
     #[test]
@@ -3625,5 +4173,283 @@ mod tests {
                 paths.tokens.display()
             )
         );
+    }
+
+    // ---- `deckd tts key` and the Keychain (`crate::secrets`) ----------------
+    //
+    // Every store here is a `MemoryKeyStore`: no test touches the Keychain.
+
+    use crate::audio::cloud::Provider;
+    use crate::secrets::{KeyHome, KeyStore, MemoryKeyStore};
+    use std::sync::Arc;
+
+    const KEY: &str = "sk-test-0123456789abcd";
+
+    /// A data directory with no service behind its socket.
+    fn no_service(dir: &crate::integrations::testdir::TestDir) -> Paths {
+        let data = dir.sub("data");
+        Paths::from_data_dir(data.clone(), data.join("logs"), data.join("caches"))
+    }
+
+    fn text(out: Vec<u8>) -> String {
+        String::from_utf8(out).unwrap()
+    }
+
+    /// The in-process daemon's doors, served on a runtime of their own; the
+    /// CLI under test calls them from this thread.
+    fn serve(
+        daemon: &crate::api::testkit::TestDaemon,
+    ) -> (tokio::runtime::Runtime, crate::api::Served) {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .unwrap();
+        let served = rt.block_on(crate::api::serve(daemon.api.clone()));
+        (rt, served)
+    }
+
+    /// With no service to ask, a Mac's own install puts the key straight
+    /// into the store: config.toml gets the provider and loses a key it
+    /// still held, every other byte kept, and the line says the service
+    /// reads the key when it starts. Clearing empties the store. A store
+    /// that refuses writes nothing.
+    #[test]
+    fn with_no_service_the_key_goes_straight_into_the_store() {
+        let dir = crate::integrations::testdir::TestDir::new("cli-key-store");
+        let paths = no_service(&dir);
+        std::fs::write(&paths.config, "# mine\n[voice.tts]\napi_key = \"sk-old\"\n").unwrap();
+        let store = Arc::new(MemoryKeyStore::default());
+        let home = KeyHome::Store(store.clone());
+        let mut out = Vec::new();
+        let code = tts_key_set(
+            &paths,
+            Some(Provider::ElevenLabs),
+            Provider::ElevenLabs,
+            KEY,
+            &home,
+            &mut out,
+        )
+        .unwrap();
+        assert_eq!(code, 0);
+        assert_eq!(store.current().as_deref(), Some(KEY));
+        assert_eq!(
+            std::fs::read_to_string(&paths.config).unwrap(),
+            "# mine\n[voice.tts]\nprovider = \"elevenlabs\"\n"
+        );
+        assert_eq!(
+            text(out),
+            "tts: key \u{2026}abcd (22 chars) stored in the Keychain for elevenlabs; the service \
+             reads it when it starts\ntts: the daemon speaks with elevenlabs (eleven_flash_v2_5) \
+             from the next announcement; `deckd tts status` to check\n"
+        );
+        let mut out = Vec::new();
+        assert_eq!(tts_key_clear(&paths, &home, &mut out).unwrap(), 0);
+        assert_eq!(store.current(), None);
+        assert_eq!(text(out), "tts: key removed from the Keychain; apple speaks\n");
+        // A store that refuses: an error, and nothing written anywhere.
+        store.refuse(Some("locked"));
+        let before = std::fs::read_to_string(&paths.config).unwrap();
+        let err = tts_key_set(&paths, Some(Provider::OpenAi), Provider::OpenAi, KEY, &home, &mut Vec::new())
+            .unwrap_err();
+        assert_eq!(err, "the Keychain did not take the key: locked");
+        assert_eq!(std::fs::read_to_string(&paths.config).unwrap(), before);
+    }
+
+    /// A service that took the call and gave no answer (it waits on a
+    /// Keychain dialog, it timed out, the connection broke) still holds a
+    /// key of its own: the command writes nothing around it, and exits as a
+    /// service that did not answer. Only a socket nothing accepts on means
+    /// no service.
+    #[test]
+    fn a_service_that_does_not_answer_is_never_written_around() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        // `sun_path` holds 103 bytes: a short directory of its own.
+        let dir = std::env::temp_dir().join(format!("dkk{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let paths = Paths::from_data_dir(dir.clone(), dir.join("logs"), dir.join("caches"));
+        let listener = std::os::unix::net::UnixListener::bind(&paths.socket).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let stop = Arc::new(AtomicBool::new(false));
+        let mute = {
+            let stop = stop.clone();
+            std::thread::spawn(move || {
+                // Every connection is taken and dropped unanswered.
+                while !stop.load(Ordering::Relaxed) {
+                    match listener.accept() {
+                        Ok((stream, _)) => drop(stream),
+                        Err(_) => std::thread::sleep(std::time::Duration::from_millis(5)),
+                    }
+                }
+            })
+        };
+        let kept = Arc::new(MemoryKeyStore::with("sk-kept"));
+        let home = KeyHome::Store(kept.clone());
+        let mut out = Vec::new();
+        let cleared = tts_key_clear(&paths, &home, &mut out);
+        let set = tts_key_set(&paths, None, Provider::OpenAi, KEY, &home, &mut out);
+        stop.store(true, Ordering::Relaxed);
+        mute.join().unwrap();
+        let config_written = paths.config.exists();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(cleared, Ok(EXIT_UNREACHABLE));
+        assert_eq!(set, Ok(EXIT_UNREACHABLE));
+        assert_eq!(
+            kept.current().as_deref(),
+            Some("sk-kept"),
+            "nothing deleted"
+        );
+        assert_eq!(kept.writes(), 0, "nothing written");
+        assert!(!config_written, "config.toml was not written");
+        assert!(out.is_empty(), "{}", text(out));
+    }
+
+    /// Off a Mac's own install (Linux, a data directory of its own) the key
+    /// is written to config.toml as it always was.
+    #[test]
+    fn with_no_service_and_no_store_the_key_goes_to_config_toml() {
+        let dir = crate::integrations::testdir::TestDir::new("cli-key-file");
+        let paths = no_service(&dir);
+        let mut out = Vec::new();
+        tts_key_set(&paths, None, Provider::OpenAi, KEY, &KeyHome::File, &mut out).unwrap();
+        let file = Config::load(&paths.config).unwrap();
+        assert_eq!(file.voice.tts.api_key, KEY);
+        assert!(
+            text(out).starts_with(&format!(
+                "tts: key \u{2026}abcd (22 chars) stored in {} for openai\n",
+                paths.config.display()
+            )),
+        );
+        let mut out = Vec::new();
+        tts_key_clear(&paths, &KeyHome::File, &mut out).unwrap();
+        assert!(!Config::load(&paths.config).unwrap().voice.tts.has_key());
+        assert_eq!(
+            text(out),
+            format!("tts: key removed from {}; apple speaks\n", paths.config.display())
+        );
+    }
+
+    /// With a service to ask, the key goes through `config.set`: it lands in
+    /// the service's store (never in config.toml, and never in the store
+    /// this process would have used), and the line says where it is.
+    #[test]
+    fn with_a_service_the_key_goes_through_config_set_into_its_store() {
+        use crate::trust::FakeVerifier;
+        let kept = Arc::new(MemoryKeyStore::default());
+        let daemon =
+            crate::api::testkit::test_api_keyed("cli-key", FakeVerifier::default(), kept.clone());
+        let (rt, served) = serve(&daemon);
+        let paths = daemon.api.paths.clone();
+        let mine = Arc::new(MemoryKeyStore::default());
+        let mut out = Vec::new();
+        let code =
+            tts_key_set(&paths, None, Provider::OpenAi, KEY, &KeyHome::Store(mine.clone()), &mut out)
+                .unwrap();
+        assert_eq!(code, 0);
+        assert_eq!(kept.current().as_deref(), Some(KEY));
+        assert_eq!(mine.writes(), 0, "the service wrote it, not this process");
+        assert!(!Config::load(&paths.config).unwrap().voice.tts.has_key());
+        assert_eq!(
+            text(out),
+            "tts: key \u{2026}abcd (22 chars) stored in the Keychain for openai\ntts: the daemon \
+             speaks with openai (gpt-4o-mini-tts) from the next announcement; `deckd tts status` \
+             to check\n"
+        );
+        // `deckd tts status` reads it back from the service.
+        let mut out = Vec::new();
+        tts_cmd(&paths, TtsCmd::Status, &KeyHome::Store(mine.clone()), &mut out).unwrap();
+        let status = text(out);
+        assert!(
+            status.contains("engine:  [voice.tts] engine = \"cloud\" → openai's model speaks (your key)"),
+            "{status}"
+        );
+        assert!(status.contains("key:     \u{2026}abcd (22 chars), in the Keychain\n"), "{status}");
+        assert_eq!(mine.reads(), 0, "the service answered; this process asked no store");
+        let mut out = Vec::new();
+        tts_key_clear(&paths, &KeyHome::Store(mine.clone()), &mut out).unwrap();
+        assert_eq!(kept.current(), None);
+        assert_eq!(text(out), "tts: key removed from the Keychain; apple speaks\n");
+        rt.block_on(served.shutdown());
+        drop(rt);
+        drop(daemon);
+    }
+
+    /// A process that Claude Code or Codex started gets no admin session, so
+    /// the key is not changed through the service, and it is not written
+    /// around it either.
+    #[test]
+    fn an_agents_terminal_is_refused_and_nothing_is_written() {
+        use crate::trust::FakeVerifier;
+        let kept = Arc::new(MemoryKeyStore::with("sk-kept"));
+        let capped = FakeVerifier {
+            capped: true,
+            ..FakeVerifier::default()
+        };
+        let daemon = crate::api::testkit::test_api_keyed("cli-key-capped", capped, kept.clone());
+        let (rt, served) = serve(&daemon);
+        let paths = daemon.api.paths.clone();
+        let mine = Arc::new(MemoryKeyStore::default());
+        let home = KeyHome::Store(mine.clone());
+        let err = tts_key_set(&paths, None, Provider::OpenAi, KEY, &home, &mut Vec::new())
+            .unwrap_err();
+        assert_eq!(err, KEY_ANCESTRY_HINT);
+        let err = tts_key_clear(&paths, &home, &mut Vec::new()).unwrap_err();
+        assert_eq!(err, KEY_ANCESTRY_HINT);
+        assert_eq!(kept.current().as_deref(), Some("sk-kept"));
+        assert_eq!(mine.writes(), 0);
+        assert!(!paths.config.exists(), "config.toml was not written");
+        rt.block_on(served.shutdown());
+        drop(rt);
+        drop(daemon);
+    }
+
+    /// With no service to ask, `deckd tts status` says whether the store
+    /// holds a key without reading it, and what speaks accordingly.
+    #[test]
+    fn with_no_service_the_status_reads_the_store_without_its_secret() {
+        let dir = crate::integrations::testdir::TestDir::new("cli-key-status");
+        let paths = no_service(&dir);
+        let status = |home: &KeyHome| {
+            let mut out = Vec::new();
+            tts_cmd(&paths, TtsCmd::Status, home, &mut out).unwrap();
+            text(out)
+        };
+        let store = Arc::new(MemoryKeyStore::with(KEY));
+        let held = status(&KeyHome::Store(store.clone()));
+        assert!(held.contains("→ openai's model speaks (your key)"), "{held}");
+        assert!(
+            held.contains(
+                "key:     in the Keychain (start the service to see its last four characters)\n"
+            ),
+            "{held}"
+        );
+        assert!(!held.contains("abcd"), "{held}");
+        store.set("").unwrap();
+        let none = status(&KeyHome::Store(store.clone()));
+        assert!(none.contains("→ Apple's synthesiser speaks, on this Mac"), "{none}");
+        assert!(
+            none.contains("key:     (none) — `deckd tts key set --provider openai|elevenlabs`\n"),
+            "{none}"
+        );
+        // A key still in config.toml is the one shown, store or not.
+        std::fs::write(&paths.config, format!("[voice.tts]\napi_key = \"{KEY}\"\n")).unwrap();
+        let file = status(&KeyHome::File);
+        assert!(file.contains("key:     \u{2026}abcd (22 chars)\n"), "{file}");
+    }
+
+    /// `deckd uninstall --dry-run` names the Keychain item only where a
+    /// purge would delete it: a store home, with `--purge`.
+    #[test]
+    fn the_uninstall_preview_names_the_keychain_item_only_for_a_purge_of_a_store() {
+        let dir = crate::integrations::testdir::TestDir::new("cli-uninstall-preview");
+        let env = crate::integrations::test_env(&dir);
+        let paths = Paths::from_data_dir(env.data.clone(), dir.sub("logs"), dir.sub("caches"));
+        let line =
+            "  - PURGE the cloud voice key from the Keychain (ai.cohdl.openwalkietalkie), if one is there\n";
+        let store = KeyHome::Store(Arc::new(MemoryKeyStore::with(KEY)));
+        assert!(uninstall_preview(&env, &paths, true, &store).contains(line));
+        assert!(!uninstall_preview(&env, &paths, false, &store).contains("Keychain"));
+        assert!(!uninstall_preview(&env, &paths, true, &KeyHome::File).contains("Keychain"));
     }
 }

@@ -17,7 +17,8 @@ use super::{ble, engine, lanes, tts, AudioCmd, AudioConfig, AudioHandle, FromAud
 use crossbeam_channel::{bounded, unbounded};
 use std::sync::Arc;
 
-/// The deck is the only microphone: nothing to fall back to.
+/// The deck is the only microphone: `voice.listen{input:"mac"}` has
+/// nothing to open on Linux.
 pub struct NoCapture;
 
 impl CaptureSource for NoCapture {
@@ -92,7 +93,6 @@ pub fn spawn(cfg: &AudioConfig) -> AudioHandle {
         AudioCmd::Devices {
             device_uid: cfg.device_uid.clone(),
             fallback_output: cfg.fallback_output.clone(),
-            fallback_input: cfg.fallback_input.clone(),
         },
         std::time::Instant::now(),
     );

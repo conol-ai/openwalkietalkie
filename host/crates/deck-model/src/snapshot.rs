@@ -85,7 +85,9 @@ impl Default for Settings {
             autojump: 0,
             brightness: 5,
             idlehome: 120,
-            demo: 1,
+            // Off, as the firmware powers on: without a host the deck shows
+            // itself offline, not made-up agents.
+            demo: 0,
             textsize: 1,
             arcadesound: 0,
         }
@@ -186,7 +188,9 @@ pub struct DeviceState {
     pub language_supported: bool,
     pub link: Link,
     pub session: SessionState,
-    /// This daemon's session id (0 until `Store::new` is told one).
+    /// The session id the link uses: this daemon's, chosen at start (0 until
+    /// `Store::new` is told one), and a fresh one whenever another deck than
+    /// the last link's is in the hand.
     pub sid: u32,
     pub fw: Option<String>,
     pub boot: Option<bool>,
@@ -228,6 +232,13 @@ pub struct DeviceState {
     /// hour older than the newest. Not kept across a restart.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub drops: Vec<LinkDrop>,
+    /// The deck whose strip, settings and Macropad keys the snapshot holds
+    /// (the linked one, else the last one identified), as an opaque label:
+    /// eight hex digits, the same for one deck every time and never its
+    /// address. Each deck has its own; `device.profile` says when another
+    /// one's are taken. Absent until a deck has been identified.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deck: Option<String>,
 }
 
 impl DeviceState {
@@ -442,6 +453,22 @@ pub struct Listener {
     pub command: Option<String>,
 }
 
+/// The service's dormancy (`service.dormancy`): with no deck linked for
+/// `window_s` seconds it stops collecting from agent sessions (no session
+/// polling, no transcript watchers, no usage reads) and starts again the
+/// moment a deck links.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct DormancyState {
+    /// How long the collectors keep running after the deck was last linked,
+    /// in seconds.
+    pub window_s: u32,
+    /// Whether they run now.
+    pub collecting: bool,
+    /// When they stopped: the deck's last link plus the window. `null` while
+    /// they run, and when no deck was ever linked to this service.
+    pub dormant_since: Option<Ts>,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ServiceState {
     pub version: String,
@@ -452,6 +479,10 @@ pub struct ServiceState {
     /// `service.info` (§4.1, §4.12).
     #[serde(default)]
     pub listener: Option<Listener>,
+    /// The collectors' dormancy; `null` in a service that has none (one
+    /// started with `--no-device`, or one that predates it).
+    #[serde(default)]
+    pub dormancy: Option<DormancyState>,
 }
 
 /// A Macropad face's keys as the host holds them, set by `device.macro.set`
@@ -509,6 +540,30 @@ impl Snapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The settings a deck has at power-on, as the firmware sets them
+    /// (`src/deck/model.rs` `Settings::new`): what a new deck starts from and
+    /// what a barrier sends for a key the host never set. Demo data is off
+    /// there ("without a host the deck shows itself offline").
+    #[test]
+    fn the_default_settings_are_the_firmwares_power_on_settings() {
+        let s = Settings::default();
+        assert_eq!(
+            (
+                s.speaker,
+                s.mic,
+                s.announce,
+                s.chime,
+                s.autojump,
+                s.brightness,
+                s.idlehome,
+                s.demo,
+                s.textsize,
+                s.arcadesound
+            ),
+            (6, 6, 1, 1, 0, 5, 120, 0, 1, 0)
+        );
+    }
 
     #[test]
     fn old_settings_default_arcade_sound_off_and_new_choice_round_trips() {
@@ -636,5 +691,30 @@ mod tests {
             ]}})
         );
         assert_eq!(serde_json::from_value::<Snapshot>(json).unwrap(), snapshot);
+    }
+
+    /// A service that predates dormancy sends no `dormancy` and is read as
+    /// one with none; a new one says whether its collectors run and since
+    /// when they stopped.
+    #[test]
+    fn the_services_dormancy_is_optional_and_round_trips() {
+        let old: ServiceState =
+            serde_json::from_str(r#"{"version":"0.13.0","degraded":null,"port":47201}"#).unwrap();
+        assert_eq!(old.dormancy, None);
+        let quiet = ServiceState {
+            dormancy: Some(DormancyState {
+                window_s: 600,
+                collecting: false,
+                dormant_since: Some(Ts(1_789_760_523_000)),
+            }),
+            ..ServiceState::default()
+        };
+        let json = serde_json::to_value(&quiet).unwrap();
+        assert_eq!(
+            json["dormancy"],
+            serde_json::json!({"window_s": 600, "collecting": false,
+                "dormant_since": "2026-09-18T19:42:03.000Z"})
+        );
+        assert_eq!(serde_json::from_value::<ServiceState>(json).unwrap(), quiet);
     }
 }

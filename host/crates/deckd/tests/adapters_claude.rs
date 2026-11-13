@@ -550,7 +550,7 @@ async fn askuserquestion_permission_requests_are_answered_empty() {
 /// budget runs out, or the handler goes away (`HoldGone`). All three answer
 /// `{}` — the CLI's own dialog is on screen and a decision written now would
 /// be one nobody asked for — and all three leave the **same card id** on the
-/// deck as `⌨ Focus terminal`: `deliver: focus`, no new chime.
+/// deck as `⌨ … Open app`: `deliver: focus`, no new chime.
 #[tokio::test]
 async fn a_released_hold_degrades_to_focus_terminal_under_the_same_id() {
     let daemon = Daemon::start().await;
@@ -896,36 +896,17 @@ async fn report_only_events_answer_empty_before_the_core_sees_them() {
 // ---------------------------------------------------------------------------
 // §6 row 6
 
-/// C25: the stamp is a one-shot beacon on `SessionStart` and a **complete**
-/// OSC 2 sequence. Claude's allowlist takes OSC 0/1/2/9/99/777 terminated by
-/// BEL or ST and silently drops the whole field for anything else, so a
-/// missing terminator is a stamp that never reaches the terminal and a
-/// resolver (C26) that never finds the tab.
+/// `SessionStart` answers `{}`: the one-shot OSC 2 `terminalSequence` (C25)
+/// existed only so the Ghostty resolver could find the session's tab, and
+/// the hand-off now raises the session's own app instead. Nothing is
+/// written into the session's title, the register still leads the plan,
+/// and the roster carries no title stamp.
 #[tokio::test]
-async fn the_terminal_sequence_is_a_complete_osc2_stamp() {
+async fn session_start_answers_empty_and_writes_no_title() {
     let daemon = Daemon::start().await;
     let auth = daemon.bearer("hooks", &[Scope::HooksIngest]);
     let (status, body) = hook(&daemon, &auth, &fixture("session_start")).await;
-    assert_eq!(status, 200);
-
-    let stamp = claude::stamp(SESSION);
-    assert_eq!(
-        body,
-        json!({
-            "hookSpecificOutput": {"hookEventName": "SessionStart"},
-            "terminalSequence": format!("\u{1b}]2;{stamp}\u{7}"),
-        }),
-        "ESC ] 2 ; deck:<4 hex> BEL, and the event that fired (C2)"
-    );
-    let sequence = body["terminalSequence"].as_str().expect("the sequence");
-    assert_eq!(sequence.as_bytes()[0], 0x1b, "ESC");
-    assert_eq!(&sequence[1..4], "]2;", "OSC 2 is the window title");
-    assert_eq!(*sequence.as_bytes().last().unwrap(), 0x07, "BEL terminates");
-    assert_eq!(stamp.len(), 9, "`deck:` plus four hex");
-    assert!(stamp.starts_with("deck:"));
-
-    // The register carries the same stamp: that is what the resolver looks
-    // for in a Ghostty title before it pins the tab (C26).
+    assert_eq!((status, body), (200, json!({})), "no terminalSequence");
     daemon
         .until("the session joins the roster", |s| {
             s.agents.values().any(|a| a.kind == Kind::Claude)
@@ -943,17 +924,61 @@ async fn the_terminal_sequence_is_a_complete_osc2_stamp() {
             .terminal
             .as_ref()
             .and_then(|t| t.title_stamp.clone()),
-        Some(stamp),
-        "the stamp the beacon wrote is the stamp the roster carries"
+        None,
+        "no stamp is written"
     );
-
-    // One shot: no later event re-emits it (§5.1's plan of re-stamping on
-    // every turn is dropped — a Ghostty tab's name is wiped by the next
-    // OSC 2 anyway, so deckd pins the tab instead).
     for name in ["user_prompt_submit", "stop", "post_tool_use"] {
         let (status, body) = hook(&daemon, &auth, &fixture(name)).await;
-        assert_eq!((status, body), (200, json!({})), "{name} re-stamped");
+        assert_eq!((status, body), (200, json!({})), "{name}");
     }
+    daemon.shutdown().await;
+}
+
+/// The hand-off's input on Claude's door: the app the helper found rides
+/// on the session's terminal, and a value that is not a plausible bundle
+/// identifier is dropped while the event still lands. A non-string `app`
+/// makes the call unreadable, which is answered `{}` like every unusable
+/// call.
+#[tokio::test]
+async fn an_invalid_app_is_dropped_and_the_event_still_lands() {
+    let daemon = Daemon::start().await;
+    let auth = daemon.bearer("hooks", &[Scope::HooksIngest]);
+    let body = |session: &str, app: serde_json::Value| {
+        let mut payload = fixture("user_prompt_submit");
+        payload["session_id"] = session.into();
+        json!({
+            "jsonrpc": "2.0", "id": 1, "method": "hooks.claude",
+            "params": {"payload": payload, "app": app},
+        })
+        .to_string()
+    };
+    for (session, app) in [("s-dash", json!("-b")), ("s-space", json!("x y"))] {
+        let out = daemon.rpc(&auth, &body(session, app)).await;
+        assert_eq!(out["result"], json!({}), "{out}");
+    }
+    let out = daemon.rpc(&auth, &body("s-zed", json!("dev.zed.Zed"))).await;
+    assert_eq!(out["result"], json!({}), "{out}");
+    let app_of = |s: &deck_model::Snapshot, session: &str| {
+        let key = format!("claude:{session}");
+        s.agents
+            .values()
+            .find(|a| a.session.key.as_deref() == Some(key.as_str()))
+            .map(|a| a.session.terminal.as_ref().and_then(|t| t.app.clone()))
+    };
+    daemon
+        .until("all three sessions land", |s| {
+            ["s-dash", "s-space", "s-zed"]
+                .iter()
+                .all(|session| app_of(s, session).is_some())
+        })
+        .await;
+    let snapshot = daemon.api.bus.snapshot();
+    assert_eq!(app_of(&snapshot, "s-dash"), Some(None));
+    assert_eq!(app_of(&snapshot, "s-space"), Some(None));
+    assert_eq!(app_of(&snapshot, "s-zed"), Some(Some("dev.zed.Zed".into())));
+    // Not a string at all: the call is unreadable, answered `{}`.
+    let out = daemon.rpc(&auth, &body("s-seven", json!(7))).await;
+    assert_eq!(out["result"], json!({}), "{out}");
     daemon.shutdown().await;
 }
 
@@ -1240,7 +1265,6 @@ fn every_fixture_is_scrubbed() {
 #[derive(Debug, PartialEq, Eq)]
 enum Shape {
     Report,
-    Beacon,
     Held,
     Nothing,
 }
@@ -1248,7 +1272,6 @@ enum Shape {
 fn shape(ingest: &Ingest) -> Shape {
     match ingest {
         Ingest::Report(_) => Shape::Report,
-        Ingest::Beacon(..) => Shape::Beacon,
         Ingest::Held { .. } => Shape::Held,
         Ingest::Nothing => Shape::Nothing,
     }
@@ -1280,7 +1303,8 @@ fn every_fixture_replays_to_its_golden_ingest() {
         ("pre_tool_use_bash", Shape::Nothing),
         // A session this adapter never saw has no agent to release.
         ("session_end", Shape::Nothing),
-        ("session_start", Shape::Beacon),
+        // Report-only, answered `{}`: no title stamp any more.
+        ("session_start", Shape::Report),
         ("stop", Shape::Report),
         ("stop_failure", Shape::Report),
         ("user_prompt_submit", Shape::Report),
@@ -1375,25 +1399,41 @@ fn every_fixture_replays_to_its_golden_ingest() {
                 }
                 assert_eq!(note["event"], "PreToolUse");
             }
-            ("session_start", Ingest::Beacon(out, plan)) => {
-                assert_eq!(
-                    out.json(),
-                    json!({
-                        "hookSpecificOutput": {"hookEventName": "SessionStart"},
-                        "terminalSequence": claude::terminal_sequence(SESSION),
-                    })
-                );
+            ("session_start", Ingest::Report(plan)) => {
                 assert!(
                     matches!(plan.first(), Some(deck_model::Request::AgentRegister(_))),
                     "every plan leads with the register"
                 );
             }
             ("stop", Ingest::Report(plan)) => {
-                assert!(
-                    plan.iter()
-                        .any(|r| matches!(r, deck_model::Request::Reply(_))),
-                    "`last_assistant_message` is the reply, not the transcript"
-                );
+                let at = |found: fn(&deck_model::Request) -> bool| plan.iter().position(found);
+                let reply = at(|r| matches!(r, deck_model::Request::Reply(_)))
+                    .expect("`last_assistant_message` is the reply, not the transcript");
+                let ready = at(|r| {
+                    matches!(r, deck_model::Request::AgentUpdate(u)
+                        if u.state == Some(deck_model::AgentState::Ready))
+                })
+                .expect("the turn ended");
+                let card = at(|r| {
+                    matches!(r, deck_model::Request::CardSet(c) if c.kind == deck_model::CardKind::R)
+                })
+                .expect("a Ready card");
+                // The ready line is spoken from the reply on file when the
+                // state turns, and a state change expires a Ready card.
+                assert!(reply < ready && ready < card, "{reply} {ready} {card}");
+            }
+            ("stop_failure", Ingest::Report(plan)) => {
+                let at = |found: fn(&deck_model::Request) -> bool| plan.iter().position(found);
+                let reply = at(|r| {
+                    matches!(r, deck_model::Request::Reply(set) if set.text == "429 Too Many Requests")
+                })
+                .expect("`error_details` is the reply");
+                let error = at(|r| {
+                    matches!(r, deck_model::Request::AgentUpdate(u)
+                        if u.state == Some(deck_model::AgentState::Error))
+                })
+                .expect("the turn failed");
+                assert!(reply < error, "in `Stop`'s order: {reply} {error}");
             }
             _ => {}
         }

@@ -309,3 +309,70 @@ fn the_device_status_fixture_is_exactly_what_the_store_emits() {
             .expect("the fixture is json");
     assert_eq!(day.last_status(), &fixture);
 }
+
+/// Two decks in one morning, through the real store: the second one's
+/// profile (none of the first one's strip or keys, the firmware's
+/// defaults) and then the first one's again reach the mirror whole, the
+/// settings included, while the Mac's language stays where the app put it.
+#[test]
+fn the_mirror_follows_the_store_from_one_deck_to_another_and_back() {
+    use deck_model::{DeckProfile, SetKey, Settings};
+    let mut day = Morning::new();
+    day.link_up(Transport::Usb);
+    day.send(&UiAction::DeviceSet {
+        key: SetKey::Language,
+        value: 3,
+    });
+    day.send(&UiAction::DeviceSet {
+        key: SetKey::Speaker,
+        value: 3,
+    });
+    day.send(&UiAction::DeviceMacroSet {
+        f: 3,
+        layout: "app".into(),
+        src: None,
+        keys: vec![MacroKey {
+            label: "build".into(),
+            binding: Some(Binding::Left),
+            keys: Some("cmd+b".into()),
+        }],
+    });
+    let first = DeckProfile {
+        faces: day.store.snapshot().faces.clone(),
+        settings: day.store.snapshot().settings,
+        macros: day.store.snapshot().macros.clone(),
+    };
+    day.lose("removed");
+    day.at(5);
+    day.apply(Command::Link(LinkEvent::Linked));
+    day.apply(Command::DeckProfile {
+        deck: Some("7a1f0c22".into()),
+        profile: DeckProfile::default(),
+    });
+    let check = |day: &Morning, label: &str, speaker: u16| {
+        let (store, mirror) = (day.store.snapshot(), day.state.mirror());
+        assert_eq!(mirror.settings, store.settings);
+        assert_eq!(mirror.device.settings, store.device.settings);
+        assert_eq!(mirror.device.deck.as_deref(), Some(label));
+        assert_eq!(mirror.settings.speaker, speaker);
+        assert_eq!(mirror.settings.language, 3, "the Mac's language stays");
+    };
+    check(&day, "7a1f0c22", Settings::default().speaker);
+    assert!(day.state.mirror().faces.is_empty() && day.state.mirror().macros.is_empty());
+    day.lose("removed");
+    day.at(9);
+    day.apply(Command::Link(LinkEvent::Linked));
+    day.apply(Command::DeckProfile {
+        deck: Some("5d41402a".into()),
+        profile: first,
+    });
+    check(&day, "5d41402a", 3);
+    assert_eq!(day.state.mirror().faces, strip());
+    assert_eq!(day.state.mirror().macros[&3].keys[0].label, "build");
+    let profiles = day
+        .events
+        .iter()
+        .filter(|e| e.kind == EventKind::DeviceProfile)
+        .count();
+    assert_eq!(profiles, 2);
+}

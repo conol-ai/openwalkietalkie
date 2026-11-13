@@ -535,17 +535,18 @@ struct Reader {
 /// the gain is applied there and only there.
 ///
 /// When the deck's microphone is not available at open time (the link is
-/// not ready, or the deck has none), the open falls back exactly as the
-/// CoreAudio capture does without the deck: `fallback_input =
-/// "system_default"` opens the Mac's default input through `fallback`,
-/// `"none"` is [`AudioError::NoDevice`]. `voice.listen{input:"mac"}` always
-/// goes to `fallback`.
+/// not ready, or the deck has none), the open is [`AudioError::NoDevice`]:
+/// the press gets silence and a code, never the Mac's microphone, because a
+/// press that records the room instead of the deck is not what anyone
+/// pressed for (decision 11). Only `voice.listen{input:"mac"}` opens `mac`.
 pub struct BleCapture {
     ble: BleAudio,
     shared: Arc<Mutex<Tap>>,
     reader: Option<Reader>,
-    fallback: Box<dyn CaptureSource>,
-    on_fallback: bool,
+    /// The Mac's default input (cpal; nothing on Linux), for
+    /// `voice.listen{input:"mac"}` and nothing else.
+    mac: Box<dyn CaptureSource>,
+    on_mac: bool,
     /// The open asked the deck for its microphone (MIC on), so the close
     /// owes it a MIC off.
     asked: bool,
@@ -555,16 +556,17 @@ impl std::fmt::Debug for BleCapture {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("BleCapture")
             .field("link", &self.ble.state())
-            .field("on_fallback", &self.on_fallback)
+            .field("on_mac", &self.on_mac)
             .finish_non_exhaustive()
     }
 }
 
 impl BleCapture {
-    /// The capture on `ble`, reading its microphone from now on.
+    /// The capture on `ble`, reading its microphone from now on; `mac` is
+    /// what `voice.listen{input:"mac"}` opens.
     #[must_use]
-    pub fn new(ble: BleAudio, fallback: Box<dyn CaptureSource>) -> BleCapture {
-        let mut capture = BleCapture::unread(ble, fallback);
+    pub fn new(ble: BleAudio, mac: Box<dyn CaptureSource>) -> BleCapture {
+        let mut capture = BleCapture::unread(ble, mac);
         let (stop, stopped) = crossbeam_channel::bounded::<()>(1);
         let mic = capture.ble.mic_events();
         let shared = capture.shared.clone();
@@ -586,13 +588,13 @@ impl BleCapture {
 
     /// Without the reader thread: the tests' version, driven by a
     /// `pumper`.
-    fn unread(ble: BleAudio, fallback: Box<dyn CaptureSource>) -> BleCapture {
+    fn unread(ble: BleAudio, mac: Box<dyn CaptureSource>) -> BleCapture {
         BleCapture {
             ble,
             shared: Arc::new(Mutex::new(Tap::default())),
             reader: None,
-            fallback,
-            on_fallback: false,
+            mac,
+            on_mac: false,
             asked: false,
         }
     }
@@ -620,13 +622,13 @@ impl BleCapture {
         }
     }
 
-    fn open_fallback(
+    fn open_mac(
         &mut self,
         req: &CaptureOpen,
         sink: CaptureSink,
     ) -> Result<CaptureOpened, AudioError> {
-        let opened = self.fallback.open(req, sink)?;
-        self.on_fallback = true;
+        let opened = self.mac.open(req, sink)?;
+        self.on_mac = true;
         Ok(opened)
     }
 }
@@ -639,7 +641,7 @@ impl CaptureSource for BleCapture {
     ) -> Result<CaptureOpened, AudioError> {
         self.close();
         if req.input == VoiceInput::Mac {
-            return self.open_fallback(req, sink);
+            return self.open_mac(req, sink);
         }
         let (mic, _) = sides(&self.ble.state());
         if !mic {
@@ -647,13 +649,9 @@ impl CaptureSource for BleCapture {
                 .ble
                 .problem()
                 .unwrap_or_else(|| "the deck's audio link is not ready".into());
-            if req.fallback != "system_default" {
-                return Err(AudioError::NoDevice(format!(
-                    "the deck's microphone (over Bluetooth LE or its cable): {why}"
-                )));
-            }
-            tracing::info!(%why, "no deck microphone over Bluetooth or USB: capturing from the Mac's default input");
-            return self.open_fallback(req, sink);
+            return Err(AudioError::NoDevice(format!(
+                "the deck's microphone (over Bluetooth LE or its cable): {why}"
+            )));
         }
         let opened = {
             let mut guard = lock(&self.shared);
@@ -680,9 +678,9 @@ impl CaptureSource for BleCapture {
     }
 
     fn close(&mut self) {
-        if self.on_fallback {
-            self.fallback.close();
-            self.on_fallback = false;
+        if self.on_mac {
+            self.mac.close();
+            self.on_mac = false;
         }
         // What we asked for, we let go of. The deck ignores this if a press
         // has since taken the stream over, so it never cuts an operator off.
@@ -697,12 +695,12 @@ impl CaptureSource for BleCapture {
     }
 
     fn is_open(&self) -> bool {
-        (self.on_fallback && self.fallback.is_open()) || lock(&self.shared).feed.is_open()
+        (self.on_mac && self.mac.is_open()) || lock(&self.shared).feed.is_open()
     }
 
     fn ended(&self) -> bool {
-        if self.on_fallback {
-            return self.fallback.ended();
+        if self.on_mac {
+            return self.mac.ended();
         }
         lock(&self.shared).feed.ended()
     }
@@ -1728,11 +1726,10 @@ mod tests {
         })
     }
 
-    fn req(input: VoiceInput, fallback: &str) -> CaptureOpen {
+    fn req(input: VoiceInput) -> CaptureOpen {
         CaptureOpen {
             input,
             device_uid: None,
-            fallback: fallback.into(),
             ask_deck: None,
         }
     }
@@ -1750,7 +1747,7 @@ mod tests {
 
         let api = CaptureOpen {
             ask_deck: Some(30),
-            ..req(VoiceInput::Deck, "none")
+            ..req(VoiceInput::Deck)
         };
         capture.open(&api, sink(&heard)).unwrap();
         assert_eq!(deck.written(8), [vec![codec::KIND_MIC, codec::MIC_ON, 30]]);
@@ -1761,16 +1758,14 @@ mod tests {
         assert!(deck.written(8).is_empty());
 
         // A press: nothing asked, nothing to let go of.
-        capture
-            .open(&req(VoiceInput::Deck, "none"), sink(&heard))
-            .unwrap();
+        capture.open(&req(VoiceInput::Deck), sink(&heard)).unwrap();
         capture.close();
         assert!(deck.written(8).is_empty());
 
         // The Mac's input never involves the deck.
         let mac_input = CaptureOpen {
             ask_deck: Some(30),
-            ..req(VoiceInput::Mac, "system_default")
+            ..req(VoiceInput::Mac)
         };
         capture.open(&mac_input, sink(&heard)).unwrap();
         capture.close();
@@ -1778,37 +1773,33 @@ mod tests {
     }
 
     /// The deck's microphone at 16 kHz mono f32 (`i16 / 32768`, exactly
-    /// what the decoder made), its pre-roll first; and without a ready link
-    /// the open falls back exactly as the CoreAudio capture does without
-    /// the deck.
+    /// what the decoder made), its pre-roll first. Without a ready link, or
+    /// on a deck with no microphone, a press is `no_device` and the Mac's
+    /// microphone is never opened (decision 11); only
+    /// `voice.listen{input:"mac"}` opens it.
     #[test]
-    fn the_capture_delivers_the_deck_at_16_khz_and_falls_back_like_coreaudio() {
+    fn the_capture_delivers_the_deck_at_16_khz_and_never_falls_back_to_the_mac() {
         let (ble, deck) = BleAudio::with_fake();
         let (mac, mac_handle) = FakeCapture::new();
         let mut capture = BleCapture::unread(ble.clone(), Box::new(mac));
         let pump = capture.pumper();
         let heard: Heard = Arc::default();
 
-        // No link, `fallback_input = "none"`: silence and a code.
+        // No link: silence and a code, and the Mac's microphone stays shut.
         let err = capture
-            .open(&req(VoiceInput::Deck, "none"), sink(&heard))
+            .open(&req(VoiceInput::Deck), sink(&heard))
+            .unwrap_err();
+        assert_eq!(err.code(), "no_device");
+        assert!(err.to_string().contains("the deck's microphone"), "{err}");
+        assert!(mac_handle.opens().is_empty() && !capture.is_open());
+
+        // A deck with no microphone is no microphone, and not the Mac's.
+        deck.attach(244, Some(SPEAKER_ONLY));
+        let err = capture
+            .open(&req(VoiceInput::Deck), sink(&heard))
             .unwrap_err();
         assert_eq!(err.code(), "no_device");
         assert!(mac_handle.opens().is_empty() && !capture.is_open());
-        // `"system_default"`: the Mac's own input.
-        capture
-            .open(&req(VoiceInput::Deck, "system_default"), sink(&heard))
-            .unwrap();
-        assert_eq!(mac_handle.opens().len(), 1);
-        assert!(capture.is_open());
-        capture.close();
-        assert!(!mac_handle.is_open() && !capture.is_open());
-
-        // A deck with no microphone is no microphone.
-        deck.attach(244, Some(SPEAKER_ONLY));
-        assert!(capture
-            .open(&req(VoiceInput::Deck, "none"), sink(&heard))
-            .is_err());
 
         // The deck, with a press already under way when the line arrives.
         deck.detach("reconnecting");
@@ -1818,9 +1809,7 @@ mod tests {
             deck.notify(value);
         }
         pump(Instant::now());
-        let opened = capture
-            .open(&req(VoiceInput::Deck, "none"), sink(&heard))
-            .unwrap();
+        let opened = capture.open(&req(VoiceInput::Deck), sink(&heard)).unwrap();
         assert_eq!(
             opened,
             CaptureOpened {
@@ -1829,7 +1818,7 @@ mod tests {
                 uid: Some("ble:FAKE".into())
             }
         );
-        assert_eq!(mac_handle.opens().len(), 1, "not the Mac this time");
+        assert!(mac_handle.opens().is_empty(), "a press never opens the Mac's");
         deck.notify(&values[4]);
         pump(Instant::now());
         let got = heard.lock().unwrap().clone();
@@ -1845,11 +1834,11 @@ mod tests {
         );
 
         // `voice.listen{input:"mac"}` is the Mac's input, deck or no deck.
-        capture
-            .open(&req(VoiceInput::Mac, "none"), sink(&heard))
-            .unwrap();
-        assert_eq!(mac_handle.opens().len(), 2);
+        capture.open(&req(VoiceInput::Mac), sink(&heard)).unwrap();
+        assert_eq!(mac_handle.opens().len(), 1);
+        assert!(capture.is_open());
         capture.close();
+        assert!(!mac_handle.is_open() && !capture.is_open());
         capture.close();
     }
 
@@ -1862,9 +1851,7 @@ mod tests {
         let mut capture = BleCapture::new(ble, Box::new(mac));
         deck.attach(244, Some(INFO));
         let heard: Heard = Arc::default();
-        capture
-            .open(&req(VoiceInput::Deck, "none"), sink(&heard))
-            .unwrap();
+        capture.open(&req(VoiceInput::Deck), sink(&heard)).unwrap();
         let (values, decoded) = press(1, 3);
         for value in &values {
             deck.notify(value);

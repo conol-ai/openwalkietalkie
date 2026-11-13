@@ -83,6 +83,17 @@ pub fn refusal(error: &ClientError) -> Refusal {
     }
 }
 
+/// What a write the page made says when the service refused it: what was
+/// written, and why in the service's own words when it gave them
+/// (`data.why`: a Keychain that would not take the key, a value out of
+/// range), else the error itself.
+pub fn write_failure(what: &str, error: &ClientError, language: Language) -> String {
+    language.format(
+        "Could not write {0}: {1}",
+        &[what, &crate::updates::failure_text(error)],
+    )
+}
+
 /// What **Play a Chime** says, when it says anything: that the chime was not
 /// queued. A chime that was queued says it on the deck, and `played` means
 /// queued and never heard, so the page claims no more than the deck does.
@@ -671,12 +682,8 @@ impl Shell {
                     this.refresh_voice(true, window, cx);
                 }
                 Err(e) => {
-                    if let Some(why) = this.missing_or(&e, window, cx) {
-                        this.toast(
-                            this.fmt("Could not write {0}: {1}", &[what, &why]),
-                            window,
-                            cx,
-                        );
+                    if this.missing_or(&e, window, cx).is_some() {
+                        this.toast(write_failure(what, &e, this.language()), window, cx);
                     }
                 }
             }
@@ -842,6 +849,6 @@ impl Shell {
             );
             return None;
         }
-        Some(error.to_string())
+        Some(crate::updates::failure_text(error))
     }
 }

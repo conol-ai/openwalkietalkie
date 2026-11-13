@@ -35,8 +35,9 @@ pub const TESTS: [&str; 4] = ["speaker", "mic", "stt", "tts"];
 pub const PERMISSIONS: [&str; 2] = ["microphone", "speech"];
 
 /// Permissions shown for the current deck. Bluetooth carries the custom
-/// BLE audio protocol; Microphone applies only if capture falls back to the
-/// Mac's input. Keep that permission visible without presenting it as a
+/// BLE audio protocol; Microphone applies only to the Mac's own input,
+/// which only `voice.listen{input:"mac"}` opens (a press never falls back
+/// to it). Keep that permission visible without presenting it as a
 /// requirement for the deck's microphone.
 pub const BLE_PERMISSIONS: [&str; 3] = ["bluetooth", "speech", "microphone"];
 
@@ -397,7 +398,8 @@ pub const PROVIDERS: [(&str, &str, &str); 2] = [
 /// `tts.api_key` as a **hint** — its length and last four characters,
 /// `""` for none — which is all a screen needs to say "a key is set" and
 /// to tell two keys apart; a key is written with `config.set` and read back
-/// only as that hint.
+/// only as that hint. `tts.key_store` beside it says where the service keeps
+/// the key: the Keychain on a Mac's own install.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TtsConfig {
     /// `"cloud"` (the provider with a key, Apple's without), `"mlx"` (a local
@@ -406,6 +408,10 @@ pub struct TtsConfig {
     pub provider: String,
     /// `""` when no key is set.
     pub key_hint: String,
+    /// Where the service keeps the key: `"keychain"` or `"config"`
+    /// (config.toml); `""` from a service older than the Keychain, which
+    /// keeps it in config.toml.
+    pub key_store: String,
     /// `""` is the provider's default model.
     pub model: String,
     pub voices: Vec<String>,
@@ -418,6 +424,7 @@ impl TtsConfig {
             engine: text(voice.get("tts.engine")).unwrap_or_default(),
             provider: text(voice.get("tts.provider")).unwrap_or_default(),
             key_hint: text(voice.get("tts.api_key")).unwrap_or_default(),
+            key_store: text(voice.get("tts.key_store")).unwrap_or_default(),
             model: text(voice.get("tts.model")).unwrap_or_default(),
             voices: strings(voice.get("tts.voices")),
         }
@@ -425,6 +432,11 @@ impl TtsConfig {
 
     pub fn has_key(&self) -> bool {
         !self.key_hint.is_empty()
+    }
+
+    /// Whether the service keeps the key in the Keychain.
+    pub fn in_keychain(&self) -> bool {
+        self.key_store == "keychain"
     }
 
     /// Whether the control applies at all: with `engine = "mlx"` or
@@ -704,6 +716,22 @@ mod tests {
     }
 
     #[test]
+    fn the_tts_half_of_config_get_says_where_the_key_is_kept() {
+        let kept = |store: Value| {
+            TtsConfig::parse(&json!({"voice": {"tts.api_key": "\u{2026}abcd (22 chars)", "tts.key_store": store}}))
+        };
+        let keychain = kept(json!("keychain"));
+        assert!(keychain.in_keychain());
+        assert_eq!(keychain.key_store, "keychain");
+        assert!(!kept(json!("config")).in_keychain());
+        // A service from before the Keychain says nothing: config.toml.
+        let older = TtsConfig::parse(&json!({"voice": {"tts.api_key": ""}}));
+        assert_eq!(older.key_store, "");
+        assert!(!older.in_keychain());
+        assert!(!kept(json!(7)).in_keychain());
+    }
+
+    #[test]
     fn the_engines_reply_carries_locales_and_never_a_voice_list() {
         let engines = Engines::parse(&engines_reply());
         assert_eq!(engines.stt().map(|e| e.id.as_str()), Some("apple"));
@@ -838,7 +866,7 @@ mod tests {
     }
 
     #[test]
-    fn the_default_deck_permissions_include_bluetooth_and_the_mac_fallback() {
+    fn the_default_deck_permissions_include_bluetooth_and_the_macs_own_input() {
         assert_eq!(displayed_permissions(None), &BLE_PERMISSIONS);
         assert_eq!(
             displayed_permissions(Some(VoiceTransport::Ble)),

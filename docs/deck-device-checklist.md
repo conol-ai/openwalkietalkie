@@ -381,12 +381,12 @@ Set `CODEX_HOME` per command, never for `deckd run` itself.
       agent.list` has the session, and the log carries `Hooks: HTTP hook POST
       to http://127.0.0.1:47201/v1/hooks/claude` and `Hook SessionStart:startup
       (SessionStart) success:`.
-- [ ] **The title beacon.** Straight after that session starts, before the
-      next shell prompt:
+- **The title beacon — retired 2026-11-13** with the Ghostty tab path (the
+      hand-off rows below replaced it): `SessionStart` is answered `{}` and
+      writes no title, so there is nothing to look for. The row was: straight
+      after that session starts, before the next shell prompt,
       `osascript -e 'tell application "Ghostty" to get name of every terminal'`
-      shows `deck:<id4>` for its tab. It is a one-shot beacon — the next OSC 2
-      wipes it — so a later look proves nothing; the pin that makes it stick is
-      week 5.
+      shows `deck:<id4>` for its tab.
 - [ ] **A real permission prompt becomes a card.** Rows below need a model
       turn, which the dummy key cannot give: log in *inside the throwaway
       config* (`CLAUDE_CONFIG_DIR="$CC" claude`, then `/login`) and never copy
@@ -408,8 +408,9 @@ Set `CODEX_HOME` per command, never for `deckd run` itself.
 - [ ] **Snooze degrades under the same id.** With a permission card up, press
       CANCEL on the deck (or `deckd ctl --scopes operate op.snooze
       '{"agent":"<id>","card":<n>}'`): the terminal dialog appears at once, the
-      drawer entry becomes `⌨ Focus terminal` under the **same** card id, and
-      the deck does **not** chime again. ENTER on it clears honestly.
+      drawer entry becomes `⌨ …` with the one choice **Open app** under the
+      **same** card id, and the deck does **not** chime again. ENTER on it
+      brings the session's app forward and clears honestly.
 - [ ] **Codex, including its trust gate.** `CODEX_HOME="$CX" codex` in a
       directory Codex has not seen: answer the directory-trust prompt first,
       then the hooks-review modal ("Trust all and continue", or `/hooks` → `t`
@@ -474,12 +475,15 @@ Two defects only a live session could find, both fixed here:
 `~/.local/bin/claude` is a symlink to `…/claude/versions/2.1.278`, so the
 process calls itself `2.1.278` and the basename match missed it — every
 natively installed CLI was `pid_kind: unknown` (never liveness-polled) and
-escaped the §4.2 ancestry cap; and the installer wrote `[api] port` rather
+escaped the §4.2 ancestry cap (the cap's own walk still read names only
+until 2026-11-13, when it started reading each hop's executable path too);
+and the installer wrote `[api] port` rather
 than the port the daemon bound, so an ephemeral `port = 0` baked
 `http://127.0.0.1:0/v1/hooks/…` into the user's settings.
 
-Still needing a hand on the deck: the title beacon, a real permission card,
-the 3-question group, the snooze degrade, and Codex's `/hooks` trust review.
+Still needing a hand on the deck: a real permission card, the 3-question
+group, the snooze degrade, and Codex's `/hooks` trust review (the title
+beacon is retired 2026-11-13, above).
 
 - [ ] **Teardown.** `rm -rf "$CC" "$CX"`; the `shasum` of the user's own
       `~/.claude/settings.json` and `~/.codex/{hooks.json,config.toml}` is
@@ -573,7 +577,57 @@ Mac first.
 - [ ] **PTT to text and back.** A PTT press streams to deckd, STT hears the
       words, and the reply's TTS plays on the deck's speaker.
 
-### Week 5 rows (the desktop: Ghostty, focus and injection)
+### Hand-off rows (2026-11-13: the session's own app, on a press)
+
+The owner's check on the **installed** build: no automated test may raise an
+app, and whether macOS lets the daemon's launch agent bring one forward is
+exactly what is not known. Open background Claude Code sessions in Zed,
+Ghostty, Terminal, iTerm2 and Claude Desktop, then:
+
+- [ ] **ENTER on an `Open app` card brings that session's app forward.** Get
+      one by letting a held permission pass `hold_s`, or by pressing CANCEL on
+      it; Claude's own `Notification` cards are the other kind. `deckd.log`
+      says `desktop: hand-off … outcome=raised`.
+- [ ] **A channel change and a PTT press raise nothing.** Turn between
+      sessions and dictate to one in the background: no app comes forward.
+- [ ] **An app that has quit is not launched.** Quit the app a session ran
+      in (leave the CLI running under `tmux`), press its card: nothing is
+      launched, and the deck shows "Not opened: its app is not running." in
+      its language.
+- [ ] **If nothing comes forward** while the log says `raised`, macOS ignored
+      `open -b` from the launch agent: swap the order in
+      `deckd::desktop::raise::MacRaiser::raise` (`activateWithOptions`
+      first) and repeat.
+
+### Delivery record rows (2026-11-13: are the proxies honest?)
+
+The record (`docs/host-service.md` §10.6) reads "reached", "deck used" and
+the reader's opens off the lines firmware 0.13.0 sends; only a session on a
+real deck says how close those come. Read it before and after each row with
+`deckd ctl --scopes admin metrics.get` (the `deliveries` object) and compare
+the counters, and the last entry of `recent`, with what you did:
+
+- [ ] **A card answered on the deck.** Answer a permission card with ENTER:
+      the newest record says `reached`, `deck_used`, `answered:"deck"`,
+      `outcome:"answered"`. Answer the next one by voice: `"ptt"`.
+- [ ] **A card you only looked at.** Let a card come and go (answer it in the
+      terminal) while you watch the deck and press nothing: `reached`,
+      **not** `deck_used`, `outcome:"elsewhere"` — the known limit of the
+      proxy. Note how often this is what really happened.
+- [ ] **The reader.** Open a session with ENTER (`channels` +1), dictate to
+      another one (`channels_by_ptt` +1, not `channels`), scroll a long reply
+      past its first window (`history` +1 however long you scroll), open a
+      tool row (`tool_rows` +1) and an image (`images` +1, even when the
+      first chunk is retried), open the model picker (`pickers` +1).
+- [ ] **Nothing it should not have.** `grep` the support file and
+      `state.json` for a word from a card, a reply and an order you sent
+      today: none is in the delivery record.
+
+### Week 5 rows (the desktop: Ghostty, focus and injection) — retired
+
+**Retired 2026-11-13** with the Ghostty tab path (the hand-off above
+replaced it); the rows are kept as the record of what was measured, and
+`tools/host-test.sh` no longer runs a `desktop hardware` step.
 
 Run by `tools/host-test.sh --hardware` (the `desktop hardware` step). Ghostty
 1.3.1, Automation TCC already granted to the responsible process, 2026-09-22.

@@ -2,13 +2,23 @@
 //! signed release, and the deck's firmware, which the service looks for,
 //! downloads and installs by cable while this window asks and shows.
 //!
-//! **The firmware is the service's.** It opens the deck over USB and reads
-//! the release manifest, so the page reads `firmware.status`, asks for a
-//! `firmware.check` on **Check** and every six hours, shows what came back,
-//! and sends the one `firmware.install` the owner confirmed in the review
-//! dialog. A build, a harness walk or a window on a test service never has
-//! the service look: the shell sends their check as the `firmware.status`
-//! read it would have ended in ([`crate::app::Launch::outgoing`]).
+//! **The looking is the service's.** It looks for a release by itself every
+//! six hours while a deck is around, with this window closed or the app not
+//! running, and a look opens the deck over USB and reads the release
+//! manifest. So the page only reads `firmware.status`, asks for a
+//! `firmware.check` when the owner does (**Check**, **Check for Updates…**:
+//! [`firmware_request`]), shows what came back, and sends the one
+//! `firmware.install` the owner confirmed in the review dialog. A build, a
+//! harness walk or a window on a test service never has the service look:
+//! the shell sends their check as the `firmware.status` read it would have
+//! ended in ([`crate::app::Launch::outgoing`]).
+//!
+//! **What the service found.** The release manifest names the app's version
+//! too, so the app's row says when a newer one is out, in every build
+//! ([`app_update_line`]); Sparkle still installs it. And the service
+//! compares the release with the firmware the deck named in its hello, so a
+//! deck on Bluetooth alone, which a look cannot open, hears of a newer
+//! firmware too ([`newer_firmware`]).
 //!
 //! **The deck has the last word.** On a linked deck the service does not
 //! start the install it is sent: it asks on the deck first, and answers
@@ -38,15 +48,11 @@ use deck_gui_core::UiAction;
 use gpui::{div, prelude::*, px, AnyElement, Context, Window};
 use gpui_component::{h_flex, v_flex};
 use serde_json::Value;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// The review dialog's id, and how wide it is drawn.
 pub(crate) const FIRMWARE_DIALOG: &str = "firmware";
 const FIRMWARE_WIDTH: f32 = 460.;
-
-/// How long the service's last look for a release stands before the page
-/// has it look again.
-pub const CHECK_EVERY: Duration = Duration::from_secs(6 * 60 * 60);
 
 /// How often the status is read again: every second while the service is
 /// working on the deck, every half minute otherwise.
@@ -67,8 +73,6 @@ pub struct FirmwarePane {
     pending: bool,
     /// The next read is waiting for its moment.
     polling: bool,
-    /// When the service was last asked to look for a release.
-    checked: Option<Instant>,
     /// The board the owner picked for a deck that cannot name its own.
     pub(crate) board: Option<String>,
     /// The service an app update replaced was asked about, once a run.
@@ -102,6 +106,72 @@ pub fn available(status: &Value) -> Option<String> {
     let version = text(&status["release"]["firmware"], "version");
     (status["available"].as_bool() == Some(true) && !version.is_empty())
         .then(|| version.to_string())
+}
+
+/// The deck firmware to tell the owner about: the release a check found
+/// newer than the deck on the cable ([`available`]), else newer than the
+/// firmware the deck named in its hello, which the service compares
+/// (`linked`). The second is how a deck on Bluetooth alone hears of one;
+/// installing it still takes the cable.
+pub fn newer_firmware(status: &Value) -> Option<String> {
+    available(status).or_else(|| {
+        let version = text(&status["release"]["firmware"], "version");
+        (status["linked"]["available"].as_bool() == Some(true) && !version.is_empty())
+            .then(|| version.to_string())
+    })
+}
+
+/// What the page asks the service for: a look for a release only when the
+/// owner asks for one (`force`: **Check**, **Check for Updates…**), and
+/// otherwise the status as it is. The service looks by itself every six
+/// hours while a deck is around, whether this window is open or not.
+pub fn firmware_request(force: bool) -> UiAction {
+    if force {
+        UiAction::FirmwareCheck { force: true }
+    } else {
+        UiAction::FirmwareStatus
+    }
+}
+
+/// The app row's line once the service found a newer app in the release
+/// manifest (`firmware.status.app`): "OpenWalkieTalkie {0} is available.";
+/// `None` before it has, and for this version or an older one. The
+/// service's `available` compares the release with the service's own
+/// version, and a service older than this app runs on after an update
+/// until it restarts, so the release must be newer than this app too. It
+/// says so in every build: Sparkle installs it in a signed release
+/// (**Check**), and any other build says why it cannot.
+pub fn app_update_line(status: &Value, language: Language) -> Option<String> {
+    let app = &status["app"];
+    let version = text(app, "version");
+    (app["available"].as_bool() == Some(true) && newer_than(version, env!("CARGO_PKG_VERSION")))
+        .then(|| language.format("OpenWalkieTalkie {0} is available.", &[version]))
+}
+
+/// Whether `announced` is a newer version than `own`: `a.b.c` compared as
+/// numbers, a release newer than its own pre-release (`0.14.0` after
+/// `0.14.0-rc.1`), build metadata ignored. `false` when either is not such
+/// a version.
+pub fn newer_than(announced: &str, own: &str) -> bool {
+    fn parts(version: &str) -> Option<([u64; 3], bool)> {
+        let version = version.split('+').next()?;
+        let (core, pre) = match version.split_once('-') {
+            Some((core, _)) => (core, true),
+            None => (version, false),
+        };
+        let mut numbers = core.split('.');
+        let mut out = [0u64; 3];
+        for slot in &mut out {
+            *slot = numbers.next()?.parse().ok()?;
+        }
+        numbers.next().is_none().then_some((out, pre))
+    }
+    match (parts(announced), parts(own)) {
+        (Some((new, new_pre)), Some((current, current_pre))) => {
+            new > current || (new == current && current_pre && !new_pre)
+        }
+        _ => false,
+    }
 }
 
 /// A deck that stopped half way through an update: in its maintenance mode,
@@ -257,9 +327,9 @@ pub fn needs_restart(info: &Value, expected: &str, version: &str) -> bool {
 }
 
 impl Shell {
-    /// Read the firmware's status; `force` (and six hours since the last
-    /// look) has the service look for a release first. A release that turns
-    /// up is said once, whatever page is open.
+    /// Read the firmware's status; `force` has the service look for a
+    /// release first ([`firmware_request`]). A release that turns up is said
+    /// once, whatever page is open, whoever looked for it.
     pub(crate) fn refresh_firmware(
         &mut self,
         force: bool,
@@ -270,24 +340,13 @@ impl Shell {
         if firmware.pending || !self.state.connected() || self.service.staged() {
             return;
         }
-        let check = force
-            || firmware
-                .checked
-                .is_none_or(|at| at.elapsed() >= CHECK_EVERY);
         self.service.firmware.pending = true;
-        let action = if check {
-            UiAction::FirmwareCheck { force }
-        } else {
-            UiAction::FirmwareStatus
-        };
+        let action = firmware_request(force);
         self.ask(action, window, cx, move |this, result, window, cx| {
             this.service.firmware.pending = false;
             match result {
                 Ok(status) => {
                     let firmware = &mut this.service.firmware;
-                    if check {
-                        firmware.checked = Some(Instant::now());
-                    }
                     let found =
                         available(&status).is_some() && available(&firmware.status).is_none();
                     if confirmation_target(&status) != confirmation_target(&firmware.status) {
@@ -627,6 +686,118 @@ mod tests {
         changed = status.clone();
         changed["progress"] = 50.into();
         assert_eq!(confirmation_target(&status), confirmation_target(&changed));
+    }
+
+    /// R8: the service looks for a release by itself, so the window asks
+    /// for a look only when the owner does, and otherwise reads.
+    #[test]
+    fn the_window_only_asks_for_a_check_when_told() {
+        assert_eq!(firmware_request(false), UiAction::FirmwareStatus);
+        assert_eq!(firmware_request(false).request().0, "firmware.status");
+        assert_eq!(
+            firmware_request(true),
+            UiAction::FirmwareCheck { force: true }
+        );
+    }
+
+    #[test]
+    fn the_app_row_names_a_newer_app_once_the_service_found_one() {
+        crate::i18n::install();
+        let found = json!({"app": {
+            "version": "99.0.0",
+            "available": true,
+            "release_url": "https://github.com/conol-ai/openwalkietalkie/releases/tag/v99.0.0",
+        }});
+        let said = [
+            Language::English,
+            Language::SimplifiedChinese,
+            Language::TraditionalChinese,
+            Language::Japanese,
+        ]
+        .map(|language| app_update_line(&found, language));
+        assert_eq!(
+            said,
+            [
+                "OpenWalkieTalkie 99.0.0 is available.",
+                "OpenWalkieTalkie 99.0.0 现已可用。",
+                "OpenWalkieTalkie 99.0.0 現已可用。",
+                "OpenWalkieTalkie 99.0.0 が利用可能です。",
+            ]
+            .map(|line| Some(line.to_string()))
+        );
+        // Nothing found yet, this version or an older one, and a service
+        // that predates the field.
+        for status in [
+            json!({}),
+            json!({"app": null}),
+            json!({"app": {"version": "0.13.0", "available": false}}),
+            json!({"app": {"available": true}}),
+            // A service older than this app (it runs on after an update until
+            // it restarts) says its own version is behind the release: this
+            // app is that release, or newer still.
+            json!({"app": {"version": env!("CARGO_PKG_VERSION"), "available": true}}),
+            json!({"app": {"version": "0.1.0", "available": true}}),
+            json!({"app": {"version": "next", "available": true}}),
+        ] {
+            assert_eq!(
+                app_update_line(&status, Language::English),
+                None,
+                "{status}"
+            );
+        }
+    }
+
+    /// Versions compared as numbers, a release after its own pre-release,
+    /// and nothing that is not `a.b.c` newer than anything.
+    #[test]
+    fn a_version_is_newer_by_its_numbers() {
+        assert!(newer_than("0.14.0", "0.13.0"));
+        assert!(newer_than("0.10.0", "0.9.9"), "numbers, not text");
+        assert!(newer_than("1.0.0", "0.99.99"));
+        assert!(newer_than("0.14.0", "0.14.0-rc.1"));
+        assert!(newer_than("0.14.0+build.7", "0.13.0"));
+        for (announced, own) in [
+            ("0.13.0", "0.13.0"),
+            ("0.12.9", "0.13.0"),
+            ("0.14.0-rc.1", "0.14.0"),
+            ("0.14", "0.13.0"),
+            ("0.14.0.1", "0.13.0"),
+            ("", "0.13.0"),
+            ("0.14.0", "dev"),
+        ] {
+            assert!(!newer_than(announced, own), "{announced} vs {own}");
+        }
+    }
+
+    /// A deck on Bluetooth alone cannot be opened by a look, so the service
+    /// compares the release with the firmware the deck named in its hello;
+    /// the owner hears of it, and the row still asks for the cable.
+    #[test]
+    fn a_deck_on_bluetooth_alone_hears_of_a_newer_firmware_from_its_hello() {
+        let release = json!({"firmware": {"version": "0.14.0"}});
+        let cable = json!({"available": true, "release": release});
+        assert_eq!(newer_firmware(&cable).as_deref(), Some("0.14.0"));
+        let hello = json!({
+            "available": false,
+            "release": release,
+            "linked": {"fw": "0.13.0-openwalkietalkie", "available": true},
+        });
+        assert_eq!(newer_firmware(&hello).as_deref(), Some("0.14.0"));
+        assert_eq!(
+            available(&hello),
+            None,
+            "nothing to install without the cable"
+        );
+        assert_eq!(firmware_step(&hello), FirmwareStep::Check);
+        // Up to date, nothing found yet, and a service that predates the
+        // field.
+        for status in [
+            json!({"release": release, "linked": {"fw": "0.14.0", "available": false}}),
+            json!({"linked": {"fw": "0.13.0", "available": true}}),
+            json!({"release": release}),
+        ] {
+            assert_eq!(newer_firmware(&status), None, "{status}");
+        }
     }
 
     #[test]

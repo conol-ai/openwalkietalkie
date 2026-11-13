@@ -53,6 +53,7 @@ answers out of band. `params` links the type the request carries.
 | `agent.card.clear` | `agent` | store | [`CardClear`](#cardclear) |
 | `agent.reply` | `agent` | store | [`ReplySet`](#replyset) |
 | `agent.wait` | `agent` | core | — (not in the `Request` enum) |
+| `agent.order.result` | `agent` | store | [`OrderOutcome`](#orderoutcome) |
 | `agent.transcribe.audio` | `agent` | core | — (not in the `Request` enum) |
 | `agent.transcribe.result` | `agent` | core | — (not in the `Request` enum) |
 | `op.answer` | `operate` | store | [`OpAnswer`](#opanswer) |
@@ -104,6 +105,8 @@ answers out of band. `params` links the type the request carries.
 | `care.test.voice` | `admin` | core | — (not in the `Request` enum) |
 | `care.test.say` | `admin` | core | — (not in the `Request` enum) |
 | `care.test.status` | `admin` | core | — (not in the `Request` enum) |
+| `care.decks` | `admin` | core | — (not in the `Request` enum) |
+| `care.decks.forget` | `admin` | core | — (not in the `Request` enum) |
 | `log.tail` | `admin` | core | — (not in the `Request` enum) |
 | `device.flood` | `admin` | core | — (not in the `Request` enum) |
 | `device.sync` | `admin` | core | — (not in the `Request` enum) |
@@ -173,7 +176,7 @@ From the hid thread (§6.2, §6.3): what happened to the link.
 
 ## Types
 
-The 90 named types the schemas above refer to.
+The 92 named types the schemas above refer to.
 
 ### `ActivityStatus`
 
@@ -400,7 +403,7 @@ One of: `session`, `launcher`.
 
 - string
 - string — Adapter-only: a parked hook response.
-- string — ENTER focuses the terminal; degraded holds and informational cards.
+- string — ENTER raises the session's own app (hand-off); degraded holds and informational cards.
 
 
 ### `DeviceSet`
@@ -420,6 +423,7 @@ One of: `session`, `launcher`.
 | `board` | string? | no |  | The board as the deck names it (`Rev A`, `Rev B`, `LilyGo`). |
 | `boot` | boolean? | no |  |  |
 | `charging` | boolean? | no |  | Whether the cell is taking current, as the deck last reported it. |
+| `deck` | string? | no |  | The deck whose strip, settings and Macropad keys the snapshot holds (the linked one, else the last one identified), as an opaque label: eight hex digits, the same for one deck every time and never its address. Each deck has its own; `device.profile` says when another one's are taken. Absent until a deck has been identified. |
 | `drops` | [`LinkDrop`](#linkdrop)[] | no |  | The link's recent drops, oldest first: at most 60, none more than an hour older than the newest. Not kept across a restart. |
 | `err_counts` | [`ErrCounts`](#errcounts) | yes |  |  |
 | `face` | uint8? | no |  | Unknown until the first `face` event. |
@@ -434,8 +438,18 @@ One of: `session`, `launcher`.
 | `session` | [`SessionState`](#sessionstate) | yes |  |  |
 | `sessions` | uint8? | no |  | The sessions the deck holds (its `hello`'s `agents`); `None` until a deck has said, and a deck that predates the field holds 8. |
 | `settings` | [`Settings`](#settings) | yes |  | The device's settings as last reported/pushed. |
-| `sid` | uint32 | yes |  | This daemon's session id (0 until `Store::new` is told one). |
+| `sid` | uint32 | yes |  | The session id the link uses: this daemon's, chosen at start (0 until `Store::new` is told one), and a fresh one whenever another deck than the last link's is in the hand. |
 | `transport` | [`Transport`](#transport)? | no |  | The bus the linked deck is on; `None` while unlinked. |
+
+### `DormancyState`
+
+The service's dormancy (`service.dormancy`): with no deck linked for `window_s` seconds it stops collecting from agent sessions (no session polling, no transcript watchers, no usage reads) and starts again the moment a deck links.
+
+| field | type | required | default | description |
+|---|---|---|---|---|
+| `collecting` | boolean | yes |  | Whether they run now. |
+| `dormant_since` | [`Ts`](#ts)? | no |  | When they stopped: the deck's last link plus the window. `null` while they run, and when no deck was ever linked to this service. |
+| `window_s` | uint32 | yes |  | How long the collectors keep running after the deck was last linked, in seconds. |
 
 ### `ErrCounts`
 
@@ -454,6 +468,8 @@ Event types of §4.12, serialized as their dotted names.
 - string — The deck's transport, battery, charging, board, last link or drops changed (`device.status`). Every event carries all six keys: null when unknown, `[]` for no drops.
 - string — The deck's own key editor changed a slot (`device.macro.edit`).
 - string — A Macropad face's keys changed, by `device.macro.set` or the deck's own editor (`device.macros`): `{f, src, keys}`, the whole layout as `snapshot.macros[f]` now holds it.
+- string — Another deck linked, and the strip, settings and Macropad keys the service keeps for it are now the snapshot's (`device.profile`): `{deck, faces, settings, macros}`, each whole, as `device.deck`, `faces`, `settings` and `macros` now hold them. The language is the Mac's, shared by every deck, and does not change with it.
+- string — The collectors stopped, with no deck linked for ten minutes, or started again (`service.dormancy`): `{window_s, collecting, dormant_since}`, or `null` for a service with no dormancy.
 
 
 ### `FaceEntry`
@@ -595,6 +611,17 @@ A Macropad face's keys as the host holds them, set by `device.macro.set` or by t
 - string
 - string — Adapter-only.
 
+
+### `OrderOutcome`
+
+What became of an order the daemon handed to its agent's owner.  Every order `op.order` sends, dictated or typed, reaches the owner with its `order` id: in the `agent.order` notification, and in a `{kind:"order"}` result of `agent.wait`. A step chosen on a Ready card (`ctx:"step"`) carries none: the deck reverts it by itself. An owner that could not deliver an order to its conversation reports it once, with `ok: false` and a `reason`, and the deck shows that the order was not delivered. `ok: true` is accepted and changes nothing. Only the agent's owning session may report (another is refused `-32004`), only on an order of the last ten minutes that was not reported already (`-32003` otherwise), and only with a `reason` that is such a word (`-32009` otherwise). The result is `{rev, shown}`: `card`, `toast` or `none`, what the deck was given.
+
+| field | type | required | default | description |
+|---|---|---|---|---|
+| `agent` | [`AgentId`](#agentid) | yes |  | The agent the order was for. |
+| `ok` | boolean | yes |  | Whether the order reached the conversation. |
+| `order` | string | yes |  | The `order` id the order carried. |
+| `reason` | string? | no | `null` | Why it did not: one word of lowercase letters, digits and underscores, at most 32 bytes (`backend_refused`). `undeliverable` when absent. |
 
 ### `OrderSource`
 
@@ -742,6 +769,7 @@ A provider-reported background run. Counts are workers, not guessed plan steps.
 | field | type | required | default | description |
 |---|---|---|---|---|
 | `degraded` | string? | no |  |  |
+| `dormancy` | [`DormancyState`](#dormancystate)? | no | `null` | The collectors' dormancy; `null` in a service that has none (one started with `--no-device`, or one that predates it). |
 | `listener` | [`Listener`](#listener)? | no | `null` | Set while `degraded` is `port_in_use`/`hooks_hijack_risk`: the process the port belongs to, for `service.degraded` and `service.info` (§4.1, §4.12). |
 | `port` | uint16 | yes |  |  |
 | `version` | string | yes |  |  |
@@ -808,7 +836,7 @@ The `set` keys the host persists and restores on `boot:1`.
 | `autojump` | uint16 | no | `0` |  |
 | `brightness` | uint16 | no | `5` |  |
 | `chime` | uint16 | no | `1` |  |
-| `demo` | uint16 | no | `1` |  |
+| `demo` | uint16 | no | `0` |  |
 | `idlehome` | uint16 | no | `120` |  |
 | `language` | uint16 | no | `0` | UI language shared with capable decks: en, zh-Hans, zh-Hant, ja. |
 | `language_revision` | uint32 | no | `0` |  |
@@ -858,11 +886,12 @@ One of: `agents`, `omarchy`, `macropad`, `usage`, `settings`, `arcade`, `system`
 
 | field | type | required | default | description |
 |---|---|---|---|---|
+| `app` | string? | no |  | The macOS bundle identifier of the app the session runs in (`dev.zed.Zed`, `com.mitchellh.ghostty`, `com.anthropic.claudefordesktop`), as the hook helper found it. A press on the session's `Open app` card brings that app forward. Informational on an agent a connected app registered: the daemon raises only a hook-registered session's app. |
 | `inbox` | string? | no |  | The session's own message inbox: the Unix socket Claude Code binds for cross-session messaging (`CLAUDE_CODE_MESSAGING_SOCKET`), captured from the hook helper's environment. An agent with one is ordered by posting to it rather than by typing into its terminal (§5.5), which needs no focus, no AppleScript and no TCC grant. The per-session token that rides beside it is **not** here: it stays inside the daemon (`adapters::rt::Adapters`), never in a snapshot. |
 | `iterm_session` | string? | no |  |  |
 | `program` | string? | no |  |  |
 | `term_session` | string? | no |  |  |
-| `title_stamp` | string? | no |  |  |
+| `title_stamp` | string? | no |  | No longer written since the Ghostty tab path was removed; kept so a client that sends it still parses. |
 | `tmux_pane` | string? | no |  |  |
 | `tty` | string? | no |  |  |
 
@@ -927,10 +956,10 @@ Type: string.
 
 ### `VoiceInput`
 
-Which microphone a PTT session opens (§4.9 `voice.listen{input}`, §7.1's `fallback_input`).
+Which microphone a PTT session opens (§4.9 `voice.listen{input}`).
 
 - string — The deck's own input UID — the only one a deck `ptt` edge ever means.
-- string — The Mac's default input device.
+- string — The Mac's default input device: only `voice.listen{input:"mac"}` asks for it, and a press never falls back to it.
 
 
 ### `VoiceListen`

@@ -410,3 +410,126 @@ fn background_workflow_runs_survive_new_turns_update_the_device_and_are_redacted
     assert!(filtered.data["message"]["runs"].is_null());
     assert!(!serde_json::to_string(&filtered).unwrap().contains("Parallel design"));
 }
+
+fn history_message(id: &str, role: ChatRole) -> MessageMeta {
+    MessageMeta { summary: None, images: Vec::new(), activity: None, runs: None, plan: None,
+        id: id.into(), role, streaming: false }
+}
+
+/// R6, the lazy reader feed: a session's history read again replaces the
+/// one kept, in order, as one new document. The stale messages and the
+/// stored reply's copy go; the reply on file stays, since the adapters
+/// store each turn's own; the bus hears one `reply.set` per message, as
+/// an eager feed would have said them; the deck gets one reply document and
+/// hears nothing spoken. The same history again changes nothing at all.
+#[test]
+fn a_history_read_again_replaces_the_kept_one_in_order_as_one_document() {
+    let mut sim = Sim::new();
+    let agent = sim.register(UID, SessionId(1), "claude", None);
+    let slot = sim.slot_of(&agent).unwrap();
+    send(&mut sim, &agent, "A", ChatRole::Assistant, false, "Stale A");
+    send(&mut sim, &agent, "B", ChatRole::User, false, "Stale B");
+    sim.api(UID, SessionId(1), Request::Reply(ReplySet {
+        agent: agent.clone(), text: "All green.".into(), message: None,
+        speak: false, announce: None, lane: None,
+    })).unwrap();
+    let before = sim.store.snapshot().agents[&agent].clone();
+    assert_eq!(before.messages.len(), 3);
+    let history = vec![
+        (history_message("U1", ChatRole::User), "Run the tests".to_string()),
+        (history_message("tool:T1", ChatRole::Tool), "**Bash · completed**\n\n12 passed".to_string()),
+        (history_message("A1", ChatRole::Assistant), "All green.".to_string()),
+    ];
+    sim.apply(Command::ChatReplace { agent: agent.clone(), messages: history.clone() });
+    let after = &sim.store.snapshot().agents[&agent];
+    let ids: Vec<&str> = after.messages.iter().map(|m| m.message.id.as_str()).collect();
+    assert_eq!(ids, ["U1", "tool:T1", "A1"]);
+    assert_ne!(after.chat_rev, before.chat_rev, "a new document");
+    assert_eq!((&after.reply, after.reply_rev), (&before.reply, before.reply_rev));
+    let published: Vec<&str> = sim.events.iter().filter(|e| e.kind == EventKind::ReplySet)
+        .map(|e| e.data["message"]["id"].as_str().unwrap()).collect();
+    assert_eq!(published, ["U1", "tool:T1", "A1"]);
+    assert_eq!(sim.puts().iter().filter(|k| **k == Key::Reply(slot)).count(), 1);
+    assert!(!sim.effects.iter().any(|e| matches!(e, Effect::Audio(AudioCmd::Say { .. }))));
+    // Read again with nothing new: no event, no line, no new revision.
+    let rev = after.chat_rev;
+    sim.apply(Command::ChatReplace { agent: agent.clone(), messages: history });
+    assert!(sim.events.is_empty() && sim.effects.is_empty(), "{:?}", sim.kinds());
+    assert_eq!(sim.store.snapshot().agents[&agent].chat_rev, rev);
+    // A message `agent.reply` would refuse is left out, not the whole read.
+    sim.apply(Command::ChatReplace { agent: agent.clone(), messages: vec![
+        (history_message("", ChatRole::Assistant), "No id".into()),
+        (history_message("U2", ChatRole::User), "  ".into()),
+        (history_message("A2", ChatRole::Assistant), "Done.".into()),
+    ] });
+    let ids: Vec<String> = sim.store.snapshot().agents[&agent].messages.iter().map(|m| m.message.id.clone()).collect();
+    assert_eq!(ids, ["A2"]);
+}
+
+/// R6: a history longer than the store keeps, read again unchanged, is the
+/// same document. Filing it trims to the newest 64, which bumps the
+/// revision as it goes; the deck's copy is still the right one, so the
+/// revision stays and nothing is sent. When the history does change, the
+/// messages the kept one had keep the time they first arrived.
+#[test]
+fn a_long_history_read_again_is_the_same_document_and_old_messages_keep_their_time() {
+    let mut sim = Sim::new();
+    let agent = sim.register(UID, SessionId(1), "claude", None);
+    let long: Vec<(MessageMeta, String)> = (0..70)
+        .map(|n| (history_message(&format!("m{n}"), ChatRole::Assistant), format!("Message {n}")))
+        .collect();
+    sim.apply(Command::ChatReplace { agent: agent.clone(), messages: long.clone() });
+    let first = sim.store.snapshot().agents[&agent].clone();
+    assert_eq!(first.messages.len(), 64);
+    assert_eq!(first.messages[0].message.id, "m6", "the newest 64");
+
+    sim.advance(std::time::Duration::from_secs(5));
+    sim.apply(Command::ChatReplace { agent: agent.clone(), messages: long.clone() });
+    assert!(sim.events.is_empty() && sim.effects.is_empty(), "{:?}", sim.kinds());
+    assert_eq!(sim.store.snapshot().agents[&agent], first, "the revision and every arrival time");
+
+    let mut longer = long;
+    longer.push((history_message("m70", ChatRole::Assistant), "Message 70".into()));
+    sim.apply(Command::ChatReplace { agent: agent.clone(), messages: longer });
+    let after = &sim.store.snapshot().agents[&agent];
+    assert_ne!(after.chat_rev, first.chat_rev, "a new document");
+    assert_eq!(after.messages[0].message.id, "m7");
+    assert_eq!(after.messages[0].at, first.messages[1].at, "m7 came with the first read");
+    assert!(after.messages[63].at > first.messages[63].at, "m70 came just now");
+}
+
+/// R6: a session's workflow runs come with the history the reader feed
+/// reads and count in the roster's `subs`; when the deck stops reading the
+/// session nothing follows them, so they go (and the count with them) while
+/// the history stays for the next read.
+#[test]
+fn the_workflow_runs_go_with_the_reader_and_the_history_stays() {
+    let mut sim = Sim::new();
+    let agent = sim.register(UID, SessionId(1), "claude", None);
+    let slot = sim.slot_of(&agent).unwrap();
+    let running = workflow::Run { id: "wf_1".into(), name: "Checks".into(),
+        status: workflow::ActivityStatus::Running, completed: 1, total: 3, elapsed_ms: 1_000, tokens: 10 };
+    let mut runs = history_message("workflow:runs", ChatRole::Tool);
+    runs.runs = Some(vec![running]);
+    sim.apply(Command::ChatReplace { agent: agent.clone(), messages: vec![
+        (history_message("U1", ChatRole::User), "Check everything".into()),
+        (runs, "Checks · running · 1/3".into()),
+    ] });
+    assert_eq!(sim.store.snapshot().agents[&agent].active_work(), 1);
+    let subs = |sim: &Sim| match sim.line(Key::AgentState(slot)) {
+        Some(HostLine::Agent { subs, .. }) => subs,
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(subs(&sim), Some(1), "the roster's count follows the runs");
+
+    sim.apply(Command::ReaderLeft { agent: agent.clone() });
+    let a = &sim.store.snapshot().agents[&agent];
+    assert!(a.workflow_runs.is_empty());
+    assert_eq!(a.messages.len(), 2, "the history stays");
+    assert_eq!(subs(&sim), Some(0));
+    assert_eq!(sim.kinds(), [EventKind::AgentChanged]);
+    assert_eq!(sim.events[0].data["fields"], serde_json::json!({"workflow_runs": []}));
+    // Nothing left to drop: nothing happens.
+    sim.apply(Command::ReaderLeft { agent: agent.clone() });
+    assert!(sim.events.is_empty() && sim.effects.is_empty());
+}

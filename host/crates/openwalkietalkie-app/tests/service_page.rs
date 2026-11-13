@@ -976,11 +976,10 @@ fn the_footprint_rows_are_the_services_in_the_boards_order() {
             "Firmware downloads",
             "Settings and backups",
             "Preferences",
+            "Keychain item",
             "Logs",
         ]
     );
-    // No Keychain row: nothing this app ships writes one.
-    assert!(!names.iter().any(|name| name.contains("Keychain")));
     let places: Vec<&Place> = rows.iter().map(|row| &row.place).collect();
     assert_eq!(
         places[0],
@@ -1000,6 +999,8 @@ fn the_footprint_rows_are_the_services_in_the_boards_order() {
         places[7],
         &Place::Path("~/Library/…/ai.cohdl.openwalkietalkie.plist".into())
     );
+    // The Keychain item has no path to print: its place says whose it is.
+    assert_eq!(places[8], &Place::Words("Your cloud voice key"));
     let sizes: Vec<Option<&str>> = rows.iter().map(|row| row.size.as_deref()).collect();
     assert_eq!(
         sizes,
@@ -1012,6 +1013,7 @@ fn the_footprint_rows_are_the_services_in_the_boards_order() {
             Some("9 MB"),
             Some("184 KB"),
             Some("4 KB"),
+            None,
             Some("81 MB"),
         ]
     );
@@ -1027,9 +1029,22 @@ fn the_footprint_rows_are_the_services_in_the_boards_order() {
             Action::Delete(Removal::Firmware),
             Action::WithUninstall,
             Action::WithUninstall,
+            Action::WithUninstall,
             Action::Kept,
         ]
     );
+    // In each language, in macOS's own word for the Keychain.
+    let keychain = |language| footprint::items(&footprint_here(), language)[8].clone();
+    assert_eq!(keychain(ZH).name, "钥匙串项目");
+    assert_eq!(keychain(ZH).place, Place::Words("你的云端语音密钥"));
+    assert_eq!(keychain(Language::TraditionalChinese).name, "鑰匙圈項目");
+    assert_eq!(keychain(Language::Japanese).name, "キーチェーン項目");
+    // Only while the service holds a key: an item it found absent has no row.
+    let mut value = fixture(CARE_FOOTPRINT);
+    value["items"][10]["present"] = json!(false);
+    assert!(!footprint::items(&Footprint::parse(&value), EN)
+        .iter()
+        .any(|row| row.id == "keychain"));
     // The count is singular for one.
     let one = Footprint::parse(&json!({"items": [
         {"id": "claude_plugin", "path": "/x", "bytes": 10, "count": 1, "present": true},
@@ -1050,10 +1065,10 @@ fn the_footprint_rows_are_the_services_in_the_boards_order() {
 fn what_is_not_on_this_mac_has_no_row_and_is_not_counted() {
     i18n::install();
     let full = footprint_here();
-    assert_eq!(footprint::total(&full), (9, 2_142_803_723));
+    assert_eq!(footprint::total(&full), (10, 2_142_803_723));
     assert_eq!(
         footprint::summary(&full, EN),
-        "9 items, 2.1 GB. Most can be removed one at a time."
+        "10 items, 2.1 GB. Most can be removed one at a time."
     );
     // The Codex setup the service did not find: no row, no count, no bytes.
     let mut value = fixture(CARE_FOOTPRINT);
@@ -1063,12 +1078,12 @@ fn what_is_not_on_this_mac_has_no_row_and_is_not_counted() {
     });
     let without = Footprint::parse(&value);
     let rows = footprint::items(&without, EN);
-    assert_eq!(rows.len(), 8);
+    assert_eq!(rows.len(), 9);
     assert!(!rows.iter().any(|row| row.id == "codex_hooks"));
-    assert_eq!(footprint::total(&without), (8, 2_142_801_675));
+    assert_eq!(footprint::total(&without), (9, 2_142_801_675));
     assert_eq!(
         footprint::summary(&without, ZH),
-        "共 8 项，2.1 GB。大多数可以逐项移除。"
+        "共 9 项，2.1 GB。大多数可以逐项移除。"
     );
     // A newer item this build has no words for is not drawn, and an empty
     // answer is no rows at all.
@@ -1380,8 +1395,10 @@ fn every_row_the_page_adds_is_the_only_row_of_its_key() {
     // logging on, and the fourteen sentences of the service's firmware
     // status. Then three more: the local API's question while Claude
     // Code's older hooks still use it, what a pressed install waits for,
-    // and why an install waits for the deck to link.
-    assert_eq!(i18n::service::STRINGS.len(), 98);
+    // and why an install waits for the deck to link. Then the Footprint's
+    // Keychain row: its name and its place. Then the app row's line once
+    // the service found a newer app.
+    assert_eq!(i18n::service::STRINGS.len(), 101);
 }
 
 #[test]
@@ -1396,8 +1413,10 @@ fn every_word_the_page_says_has_a_row() {
     // Pinned, so a lookup the scanner stopped seeing fails here rather than
     // passing as a page with less to translate. (185: the local API's
     // questions moved into `service::api_question` whole, and gained the
-    // sentence about Claude Code's older hooks and its Repair button.)
-    assert_eq!(i18n::literals(source).len(), 185);
+    // sentence about Claude Code's older hooks and its Repair button; 187
+    // with the Footprint's Keychain row; 188 with the app row's line for a
+    // newer app.)
+    assert_eq!(i18n::literals(source).len(), 188);
 }
 
 /// A fresh test service's own replies (`deck-gui-core`'s recorded fixtures,

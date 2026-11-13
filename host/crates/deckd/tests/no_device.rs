@@ -15,6 +15,13 @@
 //! `[api] port = 0`, `HOME`, `CLAUDE_CONFIG_DIR` and `CODEX_HOME` inside
 //! it, no usage probe, no liveness poller, no Codex client, and every proxy
 //! variable pointed at a closed local port, so a curl has nowhere to go.
+//! The care verbs that read those homes (`deckd care footprint`) are run
+//! here too, as the binary itself, against such a daemon.
+//!
+//! The daemon checks its peers with the real verifier, so where this test
+//! runs inside Claude Code or Codex (an agent running `cargo test`), §4.2's
+//! ancestry cap gives it no `admin` scope: each test then asserts that
+//! refusal instead of the answer, which CI and a terminal of its own check.
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
@@ -110,6 +117,52 @@ impl Drop for Daemon {
     }
 }
 
+/// Whether this test process runs inside Claude Code or Codex: the macOS
+/// service then refuses it `admin` (§4.2's ancestry cap, `reason:
+/// "agent_ancestry"`), and so it does every process this test starts.
+fn capped() -> bool {
+    deckd::trust::ancestry_capped(std::process::id())
+}
+
+/// Where [`capped`], assert that a session asking for `scopes` is refused
+/// by the cap, and say so: the caller then stops, its answers being CI's to
+/// check. Elsewhere, false.
+fn refused_by_the_cap(socket: &Path, scopes: &[&str]) -> bool {
+    if !capped() {
+        return false;
+    }
+    let hello = hello(socket, scopes);
+    assert_eq!(
+        hello["error"]["code"],
+        deck_model::ApiError::FORBIDDEN,
+        "{hello}"
+    );
+    assert_eq!(
+        hello["error"]["data"]["reason"], "agent_ancestry",
+        "{hello}"
+    );
+    true
+}
+
+/// The `session.hello` answer alone.
+fn hello(socket: &Path, scopes: &[&str]) -> serde_json::Value {
+    let stream = UnixStream::connect(socket).expect("the uds door");
+    stream
+        .set_read_timeout(Some(PATIENCE))
+        .expect("a read timeout");
+    let mut writer = stream.try_clone().expect("a write half");
+    let request = serde_json::json!({
+        "jsonrpc": "2.0", "id": 1, "method": "session.hello",
+        "params": {"client": {"name": "gate", "version": "1"}, "scopes": scopes},
+    });
+    writer
+        .write_all(format!("{request}\n").as_bytes())
+        .expect("the request is written");
+    let mut text = String::new();
+    BufReader::new(stream).read_line(&mut text).expect("a line");
+    serde_json::from_str(&text).unwrap_or_else(|_| panic!("not json: {text:?}"))
+}
+
 /// One `session.hello` + one call, over the socket, as `deckd ctl` does.
 /// Returns the call's whole JSON-RPC response.
 fn call(
@@ -155,6 +208,9 @@ fn call(
 #[test]
 fn a_no_device_daemon_answers_a_firmware_check_with_its_idle_status_and_fetches_nothing() {
     let daemon = Daemon::start("check");
+    if refused_by_the_cap(&daemon.socket(), &["admin"]) {
+        return;
+    }
     let check = call(
         &daemon.socket(),
         &["admin"],
@@ -199,6 +255,9 @@ fn a_no_device_daemon_answers_a_firmware_check_with_its_idle_status_and_fetches_
 #[test]
 fn a_no_device_daemon_refuses_a_firmware_install_and_says_why() {
     let daemon = Daemon::start("install");
+    if refused_by_the_cap(&daemon.socket(), &["admin"]) {
+        return;
+    }
     let install = call(
         &daemon.socket(),
         &["admin"],
@@ -229,6 +288,9 @@ fn a_no_device_daemon_refuses_a_firmware_install_and_says_why() {
 #[test]
 fn a_no_device_daemon_checks_its_setup_without_looking_for_the_deck() {
     let daemon = Daemon::start("checks");
+    if refused_by_the_cap(&daemon.socket(), &["admin"]) {
+        return;
+    }
     let reply = call(
         &daemon.socket(),
         &["admin"],
@@ -264,14 +326,18 @@ fn a_no_device_daemon_checks_its_setup_without_looking_for_the_deck() {
     }
 }
 
-/// `care.footprint` and `care.cache.clear` from the real process: the ten
-/// items in the service's order, the service being this very binary, the
-/// data its own `--data-dir` and the Codex Desktop launcher absent from its
-/// own `HOME`; then the firmware downloads go and the bootloader backups
-/// stay.
+/// `care.footprint` and `care.cache.clear` from the real process: the
+/// eleven items in the service's order, the service being this very binary,
+/// the data its own `--data-dir`, the Codex Desktop launcher absent from its
+/// own `HOME`, and no Keychain item, because a `--no-device` daemon keeps
+/// the cloud voice's key in its own config.toml; then the firmware downloads
+/// go and the bootloader backups stay.
 #[test]
 fn a_no_device_daemon_measures_and_clears_in_its_own_dirs() {
     let daemon = Daemon::start("footprint");
+    if refused_by_the_cap(&daemon.socket(), &["admin"]) {
+        return;
+    }
     let cache = daemon.firmware_cache();
     std::fs::create_dir_all(cache.join("bootloader-backups")).expect("the cache");
     std::fs::write(cache.join("release-manifest.json"), b"{\"a\":1}").expect("a download");
@@ -297,7 +363,8 @@ fn a_no_device_daemon_measures_and_clears_in_its_own_dirs() {
             "data",
             "prefs",
             "logs",
-            "codex_desktop"
+            "codex_desktop",
+            "keychain"
         ]
     );
     let item = |id: &str| items.iter().find(|i| i["id"] == id).unwrap();
@@ -311,6 +378,12 @@ fn a_no_device_daemon_measures_and_clears_in_its_own_dirs() {
     assert_eq!(item("firmware")["bytes"], 7, "the backup is not counted");
     assert_eq!(item("prefs")["present"], false, "this home has none");
     assert_eq!(item("codex_desktop")["present"], false, "{reply}");
+    assert_eq!(item("keychain")["present"], false, "{reply}");
+    let config = call(&daemon.socket(), &["admin"], "config.get", serde_json::json!({}));
+    assert_eq!(
+        config["result"]["voice"]["tts.key_store"], "config",
+        "a --no-device daemon never reaches the Keychain: {config}"
+    );
     assert_eq!(
         item("codex_desktop")["path"],
         daemon
@@ -328,5 +401,138 @@ fn a_no_device_daemon_measures_and_clears_in_its_own_dirs() {
     );
     assert_eq!(cleared["result"], serde_json::json!({"removed_bytes": 7}), "{cleared}");
     assert!(!cache.join("release-manifest.json").exists());
+    assert!(cache.join("bootloader-backups/F657.bin").exists());
+}
+
+/// `deckd <args> --data-dir <the daemon's>`, the binary itself, with the
+/// daemon's homes: its exit code, stdout and stderr.
+fn verb(daemon: &Daemon, args: &[&str]) -> (i32, String, String) {
+    let output = Command::new(deckd())
+        .arg("--data-dir")
+        .arg(&daemon.dir)
+        .args(args)
+        .env("HOME", daemon.dir.join("home"))
+        .env("CLAUDE_CONFIG_DIR", daemon.dir.join("home/claude"))
+        .env("CODEX_HOME", daemon.dir.join("home/codex"))
+        .stdin(Stdio::null())
+        .output()
+        .expect("the deckd binary runs");
+    (
+        output.status.code().expect("an exit code"),
+        String::from_utf8(output.stdout).expect("utf-8"),
+        String::from_utf8(output.stderr).expect("utf-8"),
+    )
+}
+
+/// The care verbs from the command line (decision 10), the binary against
+/// the real process: the footprint as the Footprint page lists it, from
+/// the service's own homes (no Keychain item for a `--no-device` service);
+/// the checks with the deck not looked for and the exit code their rows
+/// give; the firmware downloads cleared with the backups kept. With no
+/// service on the socket a verb exits 2, and the checks point to the
+/// doctor. Inside Claude Code or Codex the verbs that need `admin` are
+/// refused with the line that says why (exit 1); the reading verb and the
+/// doctor's pointer are as anywhere.
+#[test]
+fn the_care_verbs_read_a_no_device_daemon_from_the_command_line() {
+    let daemon = Daemon::start("verbs");
+    let cache = daemon.firmware_cache();
+    std::fs::create_dir_all(cache.join("bootloader-backups")).expect("the cache");
+    std::fs::write(cache.join("release-manifest.json"), [b'x'; 1500]).expect("a download");
+    std::fs::write(cache.join("bootloader-backups/F657.bin"), b"boot").expect("a backup");
+
+    if capped() {
+        // Inside Claude Code or Codex the three verbs that need `admin` are
+        // each refused, say why, and change nothing.
+        for args in [
+            &["care", "footprint"][..],
+            &["care", "checks"],
+            &["care", "clear", "firmware"],
+        ] {
+            let (code, out, err) = verb(&daemon, args);
+            assert_eq!((code, out.as_str()), (1, ""), "{args:?}: {err}");
+            assert!(
+                err.contains("\"reason\":\"agent_ancestry\"")
+                    && err.ends_with(&format!("deckd: {}\n", deckd::cli::ANCESTRY_HINT)),
+                "{args:?}: {err}"
+            );
+        }
+        assert!(
+            cache.join("release-manifest.json").exists(),
+            "a refused clear clears nothing"
+        );
+    } else {
+        admin_verbs(&daemon, &cache);
+    }
+
+    let (code, out, _) = verb(&daemon, &["care", "sources", "--json"]);
+    assert_eq!(code, 0);
+    let sources: serde_json::Value = serde_json::from_str(&out).expect("--json is JSON");
+    let ids: Vec<&str> = sources["sources"]
+        .as_array()
+        .expect("the sources")
+        .iter()
+        .filter_map(|row| row["id"].as_str())
+        .collect();
+    assert_eq!(ids, ["claude", "claude_channels", "codex"]);
+    drop(daemon);
+
+    let empty = std::env::temp_dir().join(format!("dkv{}", std::process::id()));
+    std::fs::create_dir_all(&empty).expect("an empty data dir");
+    let output = Command::new(deckd())
+        .arg("--data-dir")
+        .arg(&empty)
+        .args(["care", "checks"])
+        .output()
+        .expect("the deckd binary runs");
+    let _ = std::fs::remove_dir_all(&empty);
+    assert_eq!(output.status.code(), Some(2));
+    let err = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        err.ends_with(&format!("deckd: {}\n", deckd::verbs::care::DOCTOR_HINT)),
+        "{err}"
+    );
+}
+
+/// The care verbs that need `admin`, from the command line: the footprint
+/// as the Footprint page lists it, the checks and the exit code their rows
+/// give, and the firmware downloads cleared with the backups kept.
+fn admin_verbs(daemon: &Daemon, cache: &Path) {
+    let (code, out, err) = verb(daemon, &["care", "footprint"]);
+    assert_eq!(code, 0, "{err}");
+    assert!(
+        out.contains(&format!(
+            "Firmware downloads (2 KB): {}\n  delete: deckd care clear firmware (the bootloader \
+             backups are kept)\n",
+            cache.display()
+        )),
+        "{out}"
+    );
+    let data = out
+        .lines()
+        .find(|line| line.starts_with("Settings and backups ("))
+        .unwrap_or_else(|| panic!("no data row: {out}"));
+    assert!(
+        data.ends_with(&format!("): {}", daemon.dir.display())),
+        "{data}"
+    );
+    assert!(!out.contains("Keychain item"), "{out}");
+    assert!(!out.contains("Codex Desktop"), "{out}");
+    let last = out.lines().last().unwrap_or_default();
+    assert!(last.contains(" items, "), "{out}");
+
+    let (code, out, err) = verb(daemon, &["care", "checks"]);
+    assert!(
+        out.contains("--   device: not looked for: this service runs with --no-device\n"),
+        "{out}{err}"
+    );
+    assert_eq!(code, i32::from(out.lines().any(|line| line.starts_with("FAIL "))), "{out}");
+
+    let (code, out, err) = verb(daemon, &["care", "clear", "firmware"]);
+    assert_eq!(
+        (code, out.as_str()),
+        (0, "cleared the firmware downloads: 2 KB freed; the bootloader backups are kept\n"),
+        "{err}"
+    );
     assert!(cache.join("bootloader-backups/F657.bin").exists());
 }

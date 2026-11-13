@@ -200,11 +200,13 @@ impl Hub {
     }
 
     /// Returns false before taking the order when there is no verified channel.
-    /// Once taken, this owns both the outcome and any safe inbox fallback.
+    /// Once taken, this owns both the outcome and any safe inbox fallback;
+    /// the outcome names `order`, the id `order.dispatched` gave the words.
     pub fn post(
         &self,
         agent: &Agent,
         text: &str,
+        order: Option<String>,
         inbox: Option<Inbox>,
         dialog_open: bool,
         out: crossbeam_channel::Sender<FromDesktop>,
@@ -216,6 +218,7 @@ impl Hub {
         let text = text.to_owned();
         let failed_id = id.clone();
         let failed_text = text.clone();
+        let failed_order = order.clone();
         let failed_out = out.clone();
         if std::thread::Builder::new()
             .name("deckd-channel-order".into())
@@ -241,6 +244,7 @@ impl Hub {
                 let _ = out.send(FromDesktop::Order {
                     agent: id,
                     text,
+                    order,
                     result,
                 });
             })
@@ -249,6 +253,7 @@ impl Hub {
             let _ = failed_out.send(FromDesktop::Order {
                 agent: failed_id,
                 text: failed_text,
+                order: failed_order,
                 result: Err(DesktopError::Inbox("channel_worker_failed")),
             });
         }

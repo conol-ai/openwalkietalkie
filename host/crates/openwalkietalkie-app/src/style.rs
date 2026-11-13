@@ -4,7 +4,7 @@
 //!
 //! The values are the design's tokens (`DARK` and `LIGHT` of the companion
 //! app's design), one field each, so a part drawn from the design reads
-//! `t['text2']` as `p.text2`. Three rules carry the look and are worth
+//! `t['text2']` as `p.text2`. Four rules carry the look and are worth
 //! keeping when a value changes:
 //!
 //! * **Colour means state.** Nothing else in the window is coloured: the
@@ -16,17 +16,23 @@
 //!   they keep their contrast on white, and a word on a wash takes the
 //!   darker `*_text` step. The amber wash and rim stay on the bright amber
 //!   in both appearances.
+//! * **Increase Contrast strengthens lines, not colours.** With the Mac's
+//!   Increase contrast on ([`look`]), every rule and a tile's resting ring
+//!   take a control's edge, the sub-line and label steps take the text
+//!   colour, the attention rim is its amber, opaque, and a state pill, a
+//!   quiet button and a segmented control gain an edge. The grounds, the
+//!   state colours and the washes stay as they are ([`Palette::new`]).
 //!
 //! Everything a screen paints comes from [`Palette`]. gpui-component's own
 //! furniture (text fields, tooltips, notifications, menus) reads its `Theme`
 //! instead, so [`install`] writes the same values there: the two cannot
 //! drift, and a later `Theme::change` cannot quietly undo them because
-//! [`install`] is what runs on every appearance change.
+//! [`install`] is what runs on every change of look.
 use deck_gui_core::i18n::Language;
 use deck_model::Tone;
 use gpui::{
     px, rgb, rgba, App, Font, FontFallbacks, FontFeatures, FontStyle, FontWeight, Global, Hsla,
-    WindowAppearance,
+    Window, WindowAppearance,
 };
 use gpui_component::{Theme, ThemeMode};
 use std::borrow::Cow;
@@ -41,6 +47,11 @@ pub const MONO: &str = "Geist Mono";
 /// `OPENWALKIETALKIE_APPEARANCE=light|dark`. For screenshots and for checking
 /// one appearance without changing the Mac's.
 pub const APPEARANCE_ENV: &str = "OPENWALKIETALKIE_APPEARANCE";
+
+/// Pins the Mac's Increase contrast for this window instead of following
+/// it: `OPENWALKIETALKIE_CONTRAST=more|standard`. For screenshots and for
+/// checking the contrast palette without changing the Mac's setting.
+pub const CONTRAST_ENV: &str = "OPENWALKIETALKIE_CONTRAST";
 
 /// What Chinese and Japanese are drawn in. Geist has no CJK, so without a
 /// list CoreText would pick the fallback from the Mac's language order and
@@ -68,9 +79,11 @@ pub mod deck_colors {
 
 /// Every colour a screen paints, for one appearance. The names are the
 /// design's tokens.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Palette {
     pub dark: bool,
+    /// Drawn for the Mac's Increase contrast ([`Palette::new`]).
+    pub contrast: bool,
     // ---- surfaces
     /// The window, and the main column.
     pub win: Hsla,
@@ -143,6 +156,7 @@ impl Palette {
     pub fn dark() -> Palette {
         Palette {
             dark: true,
+            contrast: false,
             win: hex(0x0E0E10),
             side: hex(0x131316),
             surf: hex(0x17171A),
@@ -178,6 +192,7 @@ impl Palette {
     pub fn light() -> Palette {
         Palette {
             dark: false,
+            contrast: false,
             win: hex(0xF4F4F6),
             side: hex(0xEBEBEE),
             surf: hex(0xFFFFFF),
@@ -212,12 +227,51 @@ impl Palette {
         }
     }
 
-    /// The palette for `appearance`.
-    pub fn for_appearance(appearance: WindowAppearance) -> Palette {
-        if is_dark(appearance) {
+    /// The palette for an appearance, with Increase contrast or without.
+    pub fn new(dark: bool, contrast: bool) -> Palette {
+        let palette = if dark {
             Palette::dark()
         } else {
             Palette::light()
+        };
+        if contrast {
+            palette.with_contrast()
+        } else {
+            palette
+        }
+    }
+
+    /// Increase contrast: a line that reads as a line wherever it is drawn.
+    /// Every rule and a tile's resting ring take a control's edge, which in
+    /// light steps down to #84878C so that it holds 3:1 on the sidebar and
+    /// on a well as well as on the window and a card; the sub-line and label
+    /// steps are the text colour; and the attention rim is its amber, opaque.
+    /// Nothing else changes: the grounds, the primary, the selection, the
+    /// state colours with their words and washes, and the deck's colours.
+    fn with_contrast(self) -> Palette {
+        let edge = if self.dark { self.edge } else { hex(0x84878C) };
+        Palette {
+            contrast: true,
+            line: edge,
+            edge,
+            text2: self.text,
+            text3: self.text,
+            tile_rest: edge,
+            warn_line: self.warn,
+            ..self
+        }
+    }
+
+    /// The quiet text gpui-component draws itself (`theme.muted_foreground`):
+    /// an empty text field's placeholder, a dimmed menu item, a key binding.
+    /// The standard sub-line step, kept under Increase Contrast, where the
+    /// app's own sub-lines take the text colour: a placeholder in the text
+    /// colour reads as typed text, and macOS keeps the two apart there too.
+    pub fn placeholder(&self) -> Hsla {
+        if self.contrast {
+            Palette::new(self.dark, false).text2
+        } else {
+            self.text2
         }
     }
 
@@ -280,6 +334,71 @@ pub fn pinned_appearance() -> Option<bool> {
     }
 }
 
+/// What a [`CONTRAST_ENV`] value asks for: `more` is Increase contrast on,
+/// `standard` off, and anything else, or nothing, pins neither.
+pub fn contrast_pin(value: Option<&str>) -> Option<bool> {
+    match value?.trim() {
+        s if s.eq_ignore_ascii_case("more") => Some(true),
+        s if s.eq_ignore_ascii_case("standard") => Some(false),
+        _ => None,
+    }
+}
+
+/// What [`CONTRAST_ENV`] asks for, if anything.
+pub fn pinned_contrast() -> Option<bool> {
+    contrast_pin(std::env::var(CONTRAST_ENV).ok().as_deref())
+}
+
+/// The look to draw, as (dark, contrast), from what there is to go on.
+///
+/// Dark is AppKit's answer when it gives one (`effective_dark`: the app's
+/// appearance matched against Aqua and Dark Aqua), and gpui's otherwise.
+/// gpui 0.2.2 compares an appearance's name with the four it knows and calls
+/// any other one light, and the appearances of Increase contrast have names
+/// of their own, so on gpui's word a dark Mac with Increase contrast on
+/// would be drawn light.
+///
+/// Contrast is [`CONTRAST_ENV`]'s pin when there is one (`pinned`), and the
+/// Mac's setting (`system`) otherwise, except in a harness walk (`harness`):
+/// a capture is the standard look unless the pin asks for more, whatever
+/// this Mac is set to.
+pub fn look_of(
+    effective_dark: Option<bool>,
+    gpui_dark: bool,
+    pinned: Option<bool>,
+    system: bool,
+    harness: bool,
+) -> (bool, bool) {
+    (
+        effective_dark.unwrap_or(gpui_dark),
+        pinned.unwrap_or(!harness && system),
+    )
+}
+
+/// The palette `window` is to be drawn in now: its appearance, and the
+/// Mac's Increase contrast, or what [`APPEARANCE_ENV`] and [`CONTRAST_ENV`]
+/// pin (see [`look_of`]).
+pub fn look(window: &Window, cx: &App) -> Palette {
+    #[cfg(target_os = "macos")]
+    let (effective_dark, system) = (
+        crate::macos::effective_dark(),
+        crate::macos::increase_contrast(),
+    );
+    #[cfg(not(target_os = "macos"))]
+    let (effective_dark, system) = (None, false);
+    // gpui is asked only when AppKit has no answer: it prints a line for
+    // every name it does not know, and the window asks once a second.
+    let gpui_dark = effective_dark.is_none() && is_dark(window.appearance());
+    let (dark, contrast) = look_of(
+        effective_dark,
+        gpui_dark,
+        pinned_contrast(),
+        system,
+        cx.has_global::<crate::shots::Shots>(),
+    );
+    Palette::new(dark, contrast)
+}
+
 /// The CJK families in the order `language` wants them: its own first, so a
 /// character the three share (most of them) is drawn the way that language
 /// draws it.
@@ -334,8 +453,8 @@ pub fn register_fonts(cx: &mut App) {
 
 /// Make `palette` the window's: the global every screen reads, and the
 /// gpui-component `Theme` its own widgets read. Runs at boot and again on
-/// every appearance change, after `Theme::change` has reset the stock
-/// values for the new mode.
+/// every change of look (an appearance, Increase contrast), after
+/// `Theme::change` has reset the stock values for the new mode.
 pub fn install(palette: Palette, cx: &mut App) {
     let mode = if palette.dark {
         ThemeMode::Dark
@@ -361,7 +480,7 @@ pub fn install(palette: Palette, cx: &mut App) {
     c.background = p.win;
     c.foreground = p.text;
     c.muted = p.well;
-    c.muted_foreground = p.text2;
+    c.muted_foreground = p.placeholder();
     // Menus, tooltips and notifications are framed like the design's menu.
     c.border = p.edge;
     // A text field: its edge, and focus in the one blue.
@@ -442,9 +561,43 @@ mod tests {
         (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
     }
 
+    /// The four palettes the window can be drawn in: each appearance, with
+    /// Increase contrast and without.
+    fn all_four() -> [Palette; 4] {
+        [
+            Palette::dark(),
+            Palette::light(),
+            Palette::new(true, true),
+            Palette::new(false, true),
+        ]
+    }
+
+    /// Under Increase Contrast the app's own sub-lines take the text colour,
+    /// but an empty field's placeholder must still read as a placeholder,
+    /// not as typed text (macOS keeps the two apart too): the theme's quiet
+    /// text keeps the standard sub-line step, which holds 4.5:1 on every
+    /// ground of every palette.
+    #[test]
+    fn with_increase_contrast_a_placeholder_is_not_typed_text() {
+        for p in all_four() {
+            assert_ne!(p.placeholder(), p.text, "{p:?}");
+            for ground in [p.win, p.side, p.surf, p.well] {
+                assert!(contrast(p.placeholder(), ground) > 4.5, "{p:?}");
+            }
+        }
+        assert_eq!(
+            Palette::new(true, true).placeholder(),
+            Palette::dark().text2
+        );
+        assert_eq!(
+            Palette::new(false, true).placeholder(),
+            Palette::light().text2
+        );
+    }
+
     #[test]
     fn every_text_step_stays_well_clear_of_every_surface_it_sits_on() {
-        for p in [Palette::dark(), Palette::light()] {
+        for p in all_four() {
             for (name, ground) in [
                 ("win", p.win),
                 ("side", p.side),
@@ -468,7 +621,7 @@ mod tests {
         // The edge is the only thing that outlines a secondary button, a
         // switch that is off and a popup, so it carries 3:1 against what
         // those sit on: the window and a card.
-        for p in [Palette::dark(), Palette::light()] {
+        for p in all_four() {
             assert!(contrast(p.edge, p.win) >= 3.0, "edge on win: {p:?}");
             assert!(contrast(p.edge, p.surf) >= 3.0, "edge on surf: {p:?}");
         }
@@ -482,14 +635,21 @@ mod tests {
 
     #[test]
     fn colour_is_kept_for_state_and_selection_is_the_neutral_outline() {
-        for p in [Palette::dark(), Palette::light()] {
+        for p in all_four() {
             // Selection and the primary are greys: no hue at all.
             for (name, grey) in [("solid", p.solid), ("outline", p.outline), ("edge", p.edge)] {
                 assert!(grey.s < 0.12, "{name} has no hue: {grey:?}");
             }
             // A line is ink at an alpha, so it reads the same on every
-            // surface; the washes are their hue at an alpha.
-            assert!(p.line.a < 0.2);
+            // surface; with Increase contrast it is a control's edge, a grey
+            // with nothing showing through. The washes are their hue at an
+            // alpha.
+            if p.contrast {
+                assert_eq!(p.line.a, 1.0, "{p:?}");
+                assert!(p.line.s < 0.12, "{:?}", p.line);
+            } else {
+                assert!(p.line.a < 0.2);
+            }
             for wash in [p.warn_wash, p.bad_wash, p.info_wash] {
                 assert!(wash.a > 0.05 && wash.a < 0.25, "{wash:?}");
             }
@@ -509,7 +669,7 @@ mod tests {
 
     #[test]
     fn the_firmwares_five_tones_stay_five_different_colours() {
-        for p in [Palette::dark(), Palette::light()] {
+        for p in all_four() {
             let tones = [Tone::Blue, Tone::Amber, Tone::Green, Tone::Red, Tone::Gray];
             for (i, a) in tones.iter().enumerate() {
                 for b in &tones[i + 1..] {
@@ -529,6 +689,146 @@ mod tests {
                 let wash = p.tone_wash(tone).unwrap();
                 let ground = p.surf.blend(wash);
                 assert!(contrast(p.tone_text(tone), ground) > 4.5, "{tone:?}: {p:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn increase_contrast_changes_only_its_lines_quiet_text_and_rims() {
+        for dark in [true, false] {
+            let (standard, more) = (Palette::new(dark, false), Palette::new(dark, true));
+            let design = if dark {
+                Palette::dark()
+            } else {
+                Palette::light()
+            };
+            assert_eq!(standard, design, "without it, the design's palette");
+            assert_eq!((more.dark, more.contrast), (dark, true));
+            // A rule and a tile's resting ring are a control's edge, which
+            // steps down in light only.
+            let edge = if dark { standard.edge } else { hex(0x84878C) };
+            assert_eq!(more.edge, edge);
+            assert_eq!((more.line, more.tile_rest), (edge, edge));
+            // The quieter text steps are the text, the rim its amber.
+            assert_eq!((more.text2, more.text3), (standard.text, standard.text));
+            assert_eq!(more.warn_line, standard.warn);
+            // Put those back and the rest is the standard palette's: the
+            // grounds, the primary, the selection, the state colours with
+            // their words and washes, the deck's colours and the scrim.
+            assert_eq!(
+                Palette {
+                    contrast: false,
+                    line: standard.line,
+                    edge: standard.edge,
+                    text2: standard.text2,
+                    text3: standard.text3,
+                    tile_rest: standard.tile_rest,
+                    warn_line: standard.warn_line,
+                    ..more
+                },
+                standard,
+                "dark {dark}"
+            );
+        }
+        // The dark edge already holds 3:1 on every ground and stays.
+        assert_eq!(Palette::new(true, true).edge, hex(0x6A6D73));
+    }
+
+    #[test]
+    fn with_increase_contrast_every_rule_and_edge_holds_3_to_1_on_every_ground() {
+        for p in [Palette::new(true, true), Palette::new(false, true)] {
+            for (name, ground) in [
+                ("win", p.win),
+                ("side", p.side),
+                ("surf", p.surf),
+                ("well", p.well),
+            ] {
+                assert!(contrast(p.line, ground) >= 3.0, "line on {name}: {p:?}");
+                assert!(contrast(p.edge, ground) >= 3.0, "edge on {name}: {p:?}");
+                assert!(contrast(p.text2, ground) > 10.0, "text2 on {name}: {p:?}");
+                assert!(contrast(p.text3, ground) > 10.0, "text3 on {name}: {p:?}");
+            }
+            // A tile rests on the window or a card; the attention rim is
+            // drawn on the page, around its wash.
+            for (name, ground) in [("win", p.win), ("surf", p.surf)] {
+                assert!(
+                    contrast(p.tile_rest, ground) >= 3.0,
+                    "tile on {name}: {p:?}"
+                );
+                assert!(contrast(p.warn_line, ground) >= 3.0, "rim on {name}: {p:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_contrast_pin_reads_more_and_standard_and_nothing_else() {
+        assert_eq!(CONTRAST_ENV, "OPENWALKIETALKIE_CONTRAST");
+        assert_eq!(contrast_pin(Some("more")), Some(true));
+        assert_eq!(contrast_pin(Some(" MORE ")), Some(true));
+        assert_eq!(contrast_pin(Some("standard")), Some(false));
+        assert_eq!(contrast_pin(Some("Standard\n")), Some(false));
+        for other in ["on", "1", "high", "less", ""] {
+            assert_eq!(contrast_pin(Some(other)), None, "{other:?}");
+        }
+        assert_eq!(contrast_pin(None), None);
+    }
+
+    #[test]
+    fn dark_follows_appkits_best_match_not_gpuis_name_test() {
+        // A dark Mac with Increase contrast on: gpui reads an appearance
+        // name it does not know and says light; AppKit's best match among
+        // Aqua and Dark Aqua says dark.
+        assert_eq!(look_of(Some(true), false, None, true, false), (true, true));
+        assert_eq!(
+            look_of(Some(false), true, None, false, false),
+            (false, false)
+        );
+        // No answer from AppKit: gpui's stands.
+        assert_eq!(look_of(None, true, None, false, false), (true, false));
+        assert_eq!(look_of(None, false, None, true, false), (false, true));
+    }
+
+    #[test]
+    fn contrast_follows_its_pin_then_the_mac_and_a_harness_walk_only_its_pin() {
+        // The pin wins over the Mac's setting, either way.
+        assert_eq!(
+            look_of(Some(false), false, Some(true), false, false),
+            (false, true)
+        );
+        assert_eq!(
+            look_of(Some(true), true, Some(false), true, false),
+            (true, false)
+        );
+        // Unpinned, the Mac's setting.
+        assert_eq!(look_of(Some(true), true, None, true, false), (true, true));
+        assert_eq!(look_of(Some(true), true, None, false, false), (true, false));
+        // A harness walk is the standard look whatever this Mac is set to,
+        // unless the pin asks for more.
+        assert_eq!(look_of(Some(true), true, None, true, true), (true, false));
+        assert_eq!(
+            look_of(Some(false), false, Some(true), false, true),
+            (false, true)
+        );
+    }
+
+    #[test]
+    fn each_look_is_one_palette_and_no_two_looks_share_one() {
+        // The window re-installs its palette only when the look it asks
+        // for is not the palette it is drawn in, so a look has to be the
+        // same palette every time and a different look a different one.
+        let looks = [(true, false), (false, false), (true, true), (false, true)];
+        for (i, &(dark, contrast)) in looks.iter().enumerate() {
+            let p = Palette::new(dark, contrast);
+            assert_eq!((p.dark, p.contrast), (dark, contrast));
+            assert_eq!(p, Palette::new(dark, contrast));
+            for &(other_dark, other_contrast) in &looks[i + 1..] {
+                assert_ne!(
+                    p,
+                    Palette::new(other_dark, other_contrast),
+                    "{:?} and {:?}",
+                    (dark, contrast),
+                    (other_dark, other_contrast)
+                );
             }
         }
     }

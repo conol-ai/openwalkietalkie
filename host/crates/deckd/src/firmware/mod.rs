@@ -8,9 +8,21 @@
 //! it ([`Updater::confirmed`]) or for the card to go unanswered
 //! ([`Updater::not_confirmed`]). A deck in recovery cannot show a card and
 //! installs as it always has (`Core::install_after_press`).
+//!
+//! The service looks for a release by itself (R8, [`schedule`]): every six
+//! hours while a deck is around, with the window closed or the app not
+//! running. Such a look is quiet ([`Updater::check_scheduled`]): one that
+//! cannot reach the feed leaves the status as it was. The release feed's
+//! manifest names the app's version too, so `firmware.status` says when a
+//! newer app is out ([`Status::app`]), and when the release is newer than
+//! the firmware the deck said it runs in its hello ([`Status::linked`]),
+//! which is how a deck on Bluetooth alone hears of one.
 mod bulk;
 mod migration;
+pub mod schedule;
 mod transport;
+
+pub use schedule::Schedule;
 
 use crate::hid::Maintenance;
 use semver::Version;
@@ -18,7 +30,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::{atomic::Ordering, Arc, Mutex, MutexGuard};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 pub const REPOSITORY: &str = "conol-ai/openwalkietalkie";
@@ -70,9 +83,27 @@ pub struct Manifest {
     pub product: String,
     pub release_url: String,
     pub firmware: Firmware,
+    /// The app the release ships, as `tools/release.py` writes it (its
+    /// `version` and the Mac downloads), kept as it came: the service reads
+    /// only the version ([`Manifest::app_version`]), so a section it cannot
+    /// read never fails the firmware's check. The manifest the app bundle
+    /// carries for its firmware has none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app: Option<serde_json::Value>,
 }
 
 impl Manifest {
+    /// The app version this release names (`app.version`), when it is a
+    /// stable version; `None` for no app section or one the service cannot
+    /// read.
+    #[must_use]
+    pub fn app_version(&self) -> Option<Version> {
+        let version = self.app.as_ref()?.get("version")?.as_str()?;
+        Version::parse(version)
+            .ok()
+            .filter(|version| version.pre.is_empty() && version.build.is_empty())
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         if self.schema != 1
             || self.product != "openwalkietalkie"
@@ -183,6 +214,39 @@ pub struct Status {
     pub available: bool,
     #[serde(default)]
     pub bootloader_warning: bool,
+    /// The app release the feed named when it last answered ([`AppUpdate`]);
+    /// `None` until it has.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app: Option<AppUpdate>,
+    /// The firmware the deck said it runs, against the release
+    /// ([`Linked`]). The core fills it in for the methods' replies
+    /// ([`Status::with_linked`]): the updater has no hello to read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub linked: Option<Linked>,
+}
+
+/// The app release the release feed names (R8): its version, whether it is
+/// newer than this service, which ships in the same bundle as the app, and
+/// the release's page. It only says so: Sparkle's signed feed stays the one
+/// thing that installs an app.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AppUpdate {
+    pub version: String,
+    pub available: bool,
+    pub release_url: String,
+}
+
+/// The firmware the deck named in its hello (the deck linked now, else the
+/// last one linked here), against the release the last check found (R8). A
+/// check opens only the deck on the cable ([`Status::device`]), so this is
+/// how a deck on Bluetooth alone hears of a newer firmware. Installing it
+/// still takes the cable.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Linked {
+    /// As the deck said it (`0.13.0-openwalkietalkie`).
+    pub fw: String,
+    /// The release's firmware is newer.
+    pub available: bool,
 }
 
 impl Default for Status {
@@ -196,11 +260,32 @@ impl Default for Status {
             error: None,
             available: false,
             bootloader_warning: false,
+            app: None,
+            linked: None,
         }
     }
 }
 
 impl Status {
+    /// This status with [`Status::linked`] for `fw`, the firmware a deck
+    /// named in its hello: whether the release is newer. `None` for no
+    /// deck that said.
+    #[must_use]
+    pub fn with_linked(mut self, fw: Option<&str>) -> Self {
+        let release = self
+            .release
+            .as_ref()
+            .and_then(|release| firmware_version(&release.firmware.version));
+        self.linked = fw.map(|fw| Linked {
+            fw: fw.to_string(),
+            available: release
+                .as_ref()
+                .zip(firmware_version(fw))
+                .is_some_and(|(new, current)| *new > current),
+        });
+        self
+    }
+
     /// An update operation is under way: a check, an install waiting for
     /// the deck's press, or one writing to it. No other starts meanwhile.
     pub fn busy(&self) -> bool {
@@ -229,7 +314,14 @@ pub struct Install {
 #[derive(Clone, Default)]
 pub struct Updater {
     state: Arc<Mutex<Status>>,
+    /// The last check that found a release: an unforced check within
+    /// [`CHECK_INTERVAL`] of it answers the status as it is.
     checked: Arc<Mutex<Option<Instant>>>,
+    /// What the release feed said, and when ([`Feed`]).
+    feed: Arc<Mutex<Feed>>,
+    /// The owner asked for a look while the service's own was under way:
+    /// that look answers the owner then, failure and all.
+    asked: Arc<AtomicBool>,
     /// The install that waits for the deck's press while the phase is
     /// `confirming` ([`Updater::await_confirmation`]).
     awaiting: Arc<Mutex<Option<Install>>>,
@@ -240,6 +332,70 @@ pub struct Updater {
     /// download is ever reached (a started install that fails probes USB).
     #[cfg(test)]
     started: Option<Arc<Mutex<Vec<Install>>>>,
+}
+
+/// What the release feed said, and when: what the service's own looks go by
+/// ([`Schedule`]), and the app release it names ([`Status::app`]).
+#[derive(Clone, Debug, Default)]
+struct Feed {
+    /// When it last answered a look with a manifest the service accepts.
+    answered: Option<Instant>,
+    /// When a look last could not reach it, or failed before it asked.
+    failed: Option<Instant>,
+    /// The app release it named at its last answer: the version, and the
+    /// release's page.
+    app: Option<(Version, String)>,
+}
+
+/// What one look for a release came to ([`Updater::conclude`]).
+struct Found {
+    /// The release to offer, the newer of the one the app carries and the
+    /// one the feed names, or why there is none.
+    release: Result<Manifest, String>,
+    /// The release feed answered with a manifest the service accepts.
+    answered: bool,
+    /// The app release that manifest names ([`Manifest::app_version`]),
+    /// with the release's page.
+    app: Option<(Version, String)>,
+}
+
+impl Found {
+    /// What a look found from the release the app carries (`bundled`) and
+    /// the feed's answer (`remote`): the newer firmware of the two, and
+    /// whether the feed answered and with which app release, whichever
+    /// firmware wins.
+    fn of(bundled: Option<Manifest>, remote: Result<Manifest, String>) -> Found {
+        let answered = remote.is_ok();
+        let app = remote
+            .as_ref()
+            .ok()
+            .and_then(|remote| Some((remote.app_version()?, remote.release_url.clone())));
+        Found {
+            release: select_release(bundled, remote),
+            answered,
+            app,
+        }
+    }
+
+    /// A look that failed before it asked the feed, for `why`.
+    fn failed(why: String) -> Found {
+        Found {
+            release: Err(why),
+            answered: false,
+            app: None,
+        }
+    }
+}
+
+/// The app release `version` the feed names at `release_url`, against
+/// `own`, the version of this service (and so of the app it ships with).
+#[must_use]
+pub fn app_update(version: &Version, release_url: &str, own: &str) -> AppUpdate {
+    AppUpdate {
+        version: version.to_string(),
+        available: Version::parse(own).is_ok_and(|own| *version > own),
+        release_url: release_url.to_string(),
+    }
 }
 
 /// Why an offline updater refuses to install (see [`Updater::offline`]).
@@ -267,9 +423,11 @@ impl Updater {
     ///
     /// The hid thread's `hardware: false` never covered these: a check
     /// opens the deck from a thread of its own, beside the hid thread, and
-    /// then fetches the release manifest. The app sends one on every
-    /// connection, so a throwaway service it was pointed at answered by
+    /// then fetches the release manifest. The app sent one on every
+    /// connection then, so a throwaway service it was pointed at answered by
     /// opening the operator's own deck and downloading the manifest (B2).
+    /// The service's own looks ([`Updater::check_scheduled`]) answer the
+    /// same way here.
     #[must_use]
     pub fn offline() -> Self {
         Updater {
@@ -279,7 +437,16 @@ impl Updater {
     }
 
     pub fn status(&self) -> Status {
-        let mut state = self.state.lock().unwrap().clone();
+        let state = self.state.lock().unwrap().clone();
+        self.derived(state)
+    }
+
+    /// `state` with what is worked out from it: whether the release is newer
+    /// than the deck, the bootloader warning, and the app release the feed
+    /// named against this service's version. Every status the updater
+    /// answers goes through here, so a check and an install answer what
+    /// `firmware.status` says. Called with no lock held: it takes the feed's.
+    fn derived(&self, mut state: Status) -> Status {
         state.available = state
             .device
             .as_ref()
@@ -300,7 +467,31 @@ impl Updater {
             .is_some_and(|(d, r)| {
                 r.firmware.protocol == 2 && (d.recovery_protocol != Some(2) || d.maintenance)
             });
+        state.app = self
+            .feed
+            .lock()
+            .unwrap()
+            .app
+            .as_ref()
+            .map(|(version, page)| app_update(version, page, env!("CARGO_PKG_VERSION")));
         state
+    }
+
+    /// An update operation is under way ([`Status::busy`]).
+    pub fn busy(&self) -> bool {
+        self.state.lock().unwrap().busy()
+    }
+
+    /// When the release feed last answered a look: the service's own looks
+    /// come six hours after it ([`Schedule`]).
+    pub fn last_answered(&self) -> Option<Instant> {
+        self.feed.lock().unwrap().answered
+    }
+
+    /// When a look last could not reach the release feed, or failed before
+    /// it asked: the service's next look waits an hour after it.
+    pub fn last_failed(&self) -> Option<Instant> {
+        self.feed.lock().unwrap().failed
     }
 
     pub fn check(&self, cache: PathBuf, force: bool) -> Result<Status, String> {
@@ -309,65 +500,144 @@ impl Updater {
         if self.offline {
             return Ok(self.status());
         }
-        let mut state = self.state.lock().unwrap();
-        if state.busy() {
-            return Ok(state.clone());
-        }
-        if !force
+        let throttled = !force
             && self
                 .checked
                 .lock()
                 .unwrap()
-                .is_some_and(|t| t.elapsed() < CHECK_INTERVAL)
-        {
-            return Ok(state.clone());
+                .is_some_and(|t| t.elapsed() < CHECK_INTERVAL);
+        self.look(cache, throttled, false)
+    }
+
+    /// The service's own look for a release (R8, [`Schedule`],
+    /// `Core::check_for_updates`): the look **Check** starts, but quiet.
+    /// Nobody asked for it, so one that cannot reach the deck or the feed
+    /// leaves the status as it was instead of saying the update did not
+    /// complete ([`Updater::conclude`]), and the schedule tries again an
+    /// hour later. The schedule decides when, so an unforced check's
+    /// six-hour throttle does not apply. Offline, or while an update
+    /// operation is under way, the status as it is, and nothing starts.
+    pub fn check_scheduled(&self, cache: PathBuf) -> Result<Status, String> {
+        if self.offline {
+            return Ok(self.status());
         }
+        self.look(cache, false, true)
+    }
+
+    /// Start a look for a release on a thread of its own, answering the
+    /// status it starts from (`checking`). While an update operation is
+    /// under way, or when `throttled`, nothing starts and the answer is the
+    /// status as it is. `quiet`: see [`Updater::check_scheduled`].
+    fn look(&self, cache: PathBuf, throttled: bool, quiet: bool) -> Result<Status, String> {
+        let mut state = self.state.lock().unwrap();
+        if throttled {
+            let now = state.clone();
+            drop(state);
+            return Ok(self.derived(now));
+        }
+        if state.busy() {
+            // The owner asked while a look is under way: it answers them.
+            if !quiet && state.phase == "checking" {
+                self.asked.store(true, Ordering::Release);
+            }
+            let now = state.clone();
+            drop(state);
+            return Ok(self.derived(now));
+        }
+        self.asked.store(false, Ordering::Release);
+        let before = state.clone();
         state.phase = "checking".into();
         state.message = "Checking for firmware updates…".into();
         state.error = None;
         let initial = state.clone();
         drop(state);
         let this = self.clone();
-        std::thread::Builder::new()
+        let from = before.clone();
+        let spawned = std::thread::Builder::new()
             .name("firmware-check".into())
             .spawn(move || {
-                let result = (|| {
-                    let device =
-                        crate::hid::probe_mut(transport::inspect).map_err(|e| e.to_string())??;
-                    this.state.lock().unwrap().device = device;
-                    let bundled = bundled_firmware_dir()
-                        .map(|dir| read_bundled_manifest(&dir))
-                        .transpose()?
-                        .flatten();
-                    let path = cache.join("release-manifest.json");
-                    // A packaged release can update a device offline, including
-                    // before publication. Bound the optional network check so
-                    // an unreachable release feed does not block that path.
-                    let remote = fetch_with_timeout(
-                        MANIFEST_URL,
-                        &path,
-                        128 * 1024,
-                        if bundled.is_some() { 10 } else { 120 },
-                    )
-                    .and_then(|()| read_manifest(&path));
-                    let release = select_release(bundled, remote)?;
-                    let mut state = this.state.lock().unwrap();
-                    state.release = Some(release);
-                    state.phase = "ready".into();
-                    state.message =
-                        "Firmware release checked. Installation requires your confirmation.".into();
-                    *this.checked.lock().unwrap() = Some(Instant::now());
-                    Ok(())
-                })();
-                if let Err(e) = result {
-                    this.fail(e);
-                }
-            })
-            .map_err(|e| {
-                self.fail(e.to_string());
-                e.to_string()
-            })?;
-        Ok(initial)
+                let found = this.find_release(&cache);
+                this.conclude(&from, found, quiet, Instant::now());
+            });
+        if let Err(e) = spawned {
+            let why = e.to_string();
+            self.conclude(&before, Found::failed(why.clone()), quiet, Instant::now());
+            return Err(why);
+        }
+        Ok(self.derived(initial))
+    }
+
+    /// One look, on the check's own thread: the deck on the cable, then the
+    /// release the app carries and the one the feed names, the newer of the
+    /// two. What the feed says of the app counts whichever firmware wins.
+    fn find_release(&self, cache: &Path) -> Found {
+        let device = match crate::hid::probe_mut(transport::inspect) {
+            Ok(Ok(device)) => device,
+            Ok(Err(why)) => return Found::failed(why),
+            Err(e) => return Found::failed(e.to_string()),
+        };
+        self.state.lock().unwrap().device = device;
+        let bundled = match bundled_firmware_dir()
+            .map(|dir| read_bundled_manifest(&dir))
+            .transpose()
+        {
+            Ok(bundled) => bundled.flatten(),
+            Err(why) => return Found::failed(why),
+        };
+        let path = cache.join("release-manifest.json");
+        // A packaged release can update a device offline, including
+        // before publication. Bound the optional network check so
+        // an unreachable release feed does not block that path.
+        let remote = fetch_with_timeout(
+            MANIFEST_URL,
+            &path,
+            128 * 1024,
+            if bundled.is_some() { 10 } else { 120 },
+        )
+        .and_then(|()| read_manifest(&path));
+        Found::of(bundled, remote)
+    }
+
+    /// The end of a look, at `now`. A release found is `ready`, as before.
+    /// None: an owner's check says why (`error`, "Update did not
+    /// complete…"), and so does a quiet look the owner asked for while it
+    /// ran; any other quiet look leaves the phase, the message and the error
+    /// as they were `before` it, and logs why. The feed's answer and the app
+    /// release it named, or its silence, are kept for the schedule either
+    /// way: a release the app carries can be found with the feed
+    /// unreachable, and that still counts as a failure to reach it.
+    fn conclude(&self, before: &Status, found: Found, quiet: bool, now: Instant) {
+        {
+            let mut feed = self.feed.lock().unwrap();
+            if found.answered {
+                feed.answered = Some(now);
+                feed.app = found.app;
+            }
+            if !found.answered || found.release.is_err() {
+                feed.failed = Some(now);
+            }
+        }
+        // Under the state's lock, so the owner's check either asked before
+        // this look ended or finds it ended and starts its own.
+        let mut state = self.state.lock().unwrap();
+        let quiet = quiet && !self.asked.swap(false, Ordering::AcqRel);
+        match found.release {
+            Ok(release) => {
+                state.release = Some(release);
+                state.phase = "ready".into();
+                state.message =
+                    "Firmware release checked. Installation requires your confirmation.".into();
+                *self.checked.lock().unwrap() = Some(now);
+            }
+            Err(why) if quiet => {
+                tracing::info!(%why, "updates: no release found; the status stays as it was");
+                state.phase.clone_from(&before.phase);
+                state.progress = before.progress;
+                state.message.clone_from(&before.message);
+                state.error.clone_from(&before.error);
+            }
+            Err(why) => failed(&mut state, why),
+        }
     }
 
     pub fn install(
@@ -511,7 +781,7 @@ impl Updater {
         #[cfg(test)]
         if let Some(started) = &self.started {
             started.lock().unwrap().push(install.clone());
-            return Ok(initial);
+            return Ok(self.derived(initial));
         }
         let this = self.clone();
         let board = install.board.clone();
@@ -591,7 +861,7 @@ impl Updater {
                 self.fail(e.to_string());
                 e.to_string()
             })?;
-        Ok(initial)
+        Ok(self.derived(initial))
     }
 
     fn progress(&self, phase: &str, progress: u8, message: &str) {
@@ -601,11 +871,15 @@ impl Updater {
         state.message = message.into();
     }
     fn fail(&self, error: String) {
-        let mut state = self.state.lock().unwrap();
-        state.phase = "error".into();
-        state.error = Some(error);
-        state.message = "Update did not complete. You can check again and retry.".into();
+        failed(&mut self.state.lock().unwrap(), error);
     }
+}
+
+/// `state` after an update operation that did not complete, for `error`.
+fn failed(state: &mut Status, error: String) {
+    state.phase = "error".into();
+    state.error = Some(error);
+    state.message = "Update did not complete. You can check again and retry.".into();
 }
 
 /// What an install writes, once [`plan`] found it sound.
@@ -992,11 +1266,66 @@ pub(crate) mod testkit {
         }
         (updater, started)
     }
+
+    /// The release feed named app `version` at its last answer.
+    pub fn found_app(updater: &Updater, version: &str) {
+        updater.feed.lock().unwrap().app = Some((
+            Version::parse(version).unwrap(),
+            format!("https://github.com/{REPOSITORY}/releases/tag/v{version}"),
+        ));
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A check and an install answer the status as `firmware.status` says
+    /// it: whether the release is newer than the deck, the bootloader
+    /// warning and the app release the feed named are worked out on every
+    /// answer. A check within six hours of the last answers the status as
+    /// it is, and so does a check while an update operation is under way;
+    /// an install answers the status it starts from. None of them spawns
+    /// anything here: the test updater keeps an install instead of starting
+    /// it, and a throttled or busy check starts nothing.
+    #[test]
+    fn a_check_and_an_install_answer_what_firmware_status_says() {
+        let (updater, started) = testkit::checked(testkit::deck());
+        testkit::found_app(&updater, "99.0.0");
+        *updater.checked.lock().unwrap() = Some(Instant::now());
+        let cache = std::env::temp_dir().join("deckd-firmware-answers-never-written");
+        let said = |status: &Status| {
+            (
+                status.available,
+                status
+                    .app
+                    .as_ref()
+                    .map(|app| (app.version.clone(), app.available)),
+            )
+        };
+        let want = (true, Some(("99.0.0".to_string(), true)));
+        assert_eq!(said(&updater.status()), want, "firmware.status");
+        let throttled = updater.check(cache.clone(), false).unwrap();
+        assert_eq!(throttled.phase, "ready");
+        assert_eq!(said(&throttled), want, "a throttled check");
+        let installing = updater
+            .install(
+                "hw-a",
+                "USB-A",
+                "0.2.0",
+                false,
+                cache.clone(),
+                Maintenance::default(),
+            )
+            .unwrap();
+        assert_eq!(installing.phase, "downloading");
+        assert_eq!(started.lock().unwrap().len(), 1);
+        assert_eq!(said(&installing), want, "an install that starts");
+        let busy = updater.check(cache.clone(), true).unwrap();
+        assert_eq!(busy.phase, "downloading");
+        assert_eq!(said(&busy), want, "a check while it installs");
+        assert!(!cache.exists());
+    }
 
     #[test]
     #[ignore = "requires both boards' built release artifacts in OWT_MIGRATION_ARTIFACTS"]
@@ -1040,8 +1369,229 @@ mod tests {
                 variants: BTreeMap::from([("hw-a".into(), asset)]),
                 migrations: BTreeMap::from([("hw-a".into(), migration)]),
             },
+            app: None,
         };
         (release, image)
+    }
+
+    /// The test release as the feed would serve it, naming the app
+    /// `version` beside its Mac downloads, as `tools/release.py` writes it.
+    fn feed_release(version: &str) -> Manifest {
+        let mut value = serde_json::to_value(fixture().0).unwrap();
+        value["app"] = serde_json::json!({
+            "version": version,
+            "macos": {"aarch64": {"name": format!("OpenWalkieTalkie-{version}-macos-aarch64.dmg")}},
+        });
+        serde_json::from_value(value).unwrap()
+    }
+
+    /// The release feed names the app beside the firmware. A stable version
+    /// is compared with this build's own; a section the service cannot
+    /// read is no version at all, and the firmware's check goes on.
+    #[test]
+    fn the_manifests_app_version_is_compared_with_this_build() {
+        let own = env!("CARGO_PKG_VERSION");
+        let newer = feed_release("99.0.0");
+        newer.validate().unwrap();
+        let version = newer.app_version().unwrap();
+        assert_eq!(version, Version::new(99, 0, 0));
+        let update = app_update(&version, &newer.release_url, own);
+        assert_eq!(
+            update,
+            AppUpdate {
+                version: "99.0.0".into(),
+                available: true,
+                release_url: format!("https://github.com/{REPOSITORY}/releases/tag/v0.3.0"),
+            }
+        );
+        let same = feed_release(own).app_version().unwrap();
+        assert!(!app_update(&same, "", own).available, "this build itself");
+        assert!(!app_update(&Version::new(0, 0, 1), "", own).available);
+        assert!(!app_update(&version, "", "not a version").available);
+        // No app section (the manifest the app bundle carries), a
+        // pre-release, and sections that are not what the release writes.
+        assert_eq!(fixture().0.app_version(), None);
+        assert_eq!(feed_release("1.0.0-beta.1").app_version(), None);
+        for app in [
+            serde_json::json!("1.0.0"),
+            serde_json::json!(5),
+            serde_json::json!({"version": 1}),
+        ] {
+            let mut value = serde_json::to_value(fixture().0).unwrap();
+            value["app"] = app.clone();
+            let odd: Manifest = serde_json::from_value(value).unwrap();
+            odd.validate().unwrap();
+            assert_eq!(odd.app_version(), None, "{app}");
+        }
+        // A manifest without one says nothing of an app when it is passed on.
+        assert!(serde_json::to_value(fixture().0)
+            .unwrap()
+            .get("app")
+            .is_none());
+    }
+
+    /// The release the app bundle carries may win the firmware, but what the
+    /// feed said of the app counts all the same, and a later look that
+    /// cannot reach the feed keeps it.
+    #[test]
+    fn the_feeds_app_version_outlives_a_bundled_firmware_win() {
+        let (old, _) = fixture();
+        let bundled: Manifest = serde_json::from_str(
+            &serde_json::to_string(&old)
+                .unwrap()
+                .replace("0.2.0", "0.4.0"),
+        )
+        .unwrap();
+        let found = Found::of(Some(bundled.clone()), Ok(feed_release("99.0.0")));
+        assert!(found.answered);
+        let release = found.release.as_ref().unwrap();
+        assert_eq!(
+            release.firmware.version, "0.4.0",
+            "the bundle's firmware wins"
+        );
+        assert_eq!(release.app, None);
+        let updater = Updater::default();
+        let at = Instant::now();
+        updater.conclude(&Status::default(), found, true, at);
+        let status = updater.status();
+        assert_eq!(status.phase, "ready");
+        assert_eq!(
+            status.app.as_ref().map(|app| app.version.as_str()),
+            Some("99.0.0")
+        );
+        assert!(status.app.as_ref().unwrap().available);
+        assert_eq!(updater.last_answered(), Some(at));
+        assert_eq!(updater.last_failed(), None);
+        // The feed is unreachable now: the bundle's release is still found,
+        // the app release the feed named last time stays, and the look counts
+        // as one that could not reach the feed.
+        let later = at + Duration::from_secs(60);
+        let found = Found::of(Some(bundled), Err("offline".into()));
+        assert!(!found.answered && found.app.is_none());
+        updater.conclude(&status, found, true, later);
+        let status = updater.status();
+        assert_eq!(status.phase, "ready");
+        assert_eq!(status.app.map(|app| app.version), Some("99.0.0".into()));
+        assert_eq!(updater.last_answered(), Some(at));
+        assert_eq!(updater.last_failed(), Some(later));
+    }
+
+    /// The service's own look that cannot reach the deck or the feed was
+    /// asked for by nobody: the status stays as it was before it started,
+    /// with no error and no "Update did not complete", and the schedule
+    /// hears of the failure.
+    #[test]
+    fn a_scheduled_check_that_cannot_reach_the_feed_leaves_the_status_as_it_was() {
+        let (updater, _) = testkit::checked(testkit::deck());
+        updater.state.lock().unwrap().message =
+            "Firmware release checked. Installation requires your confirmation.".into();
+        let before = updater.state.lock().unwrap().clone();
+        // As `look` leaves it while the thread works.
+        updater.state.lock().unwrap().phase = "checking".into();
+        let at = Instant::now();
+        let why = "Could not download the release.";
+        updater.conclude(&before, Found::failed(why.into()), true, at);
+        let status = updater.status();
+        assert_eq!(status.phase, "ready");
+        assert_eq!(status.message, before.message);
+        assert_eq!(status.error, None);
+        assert!(status.available, "the release it had is still there");
+        assert_eq!(status.release.unwrap().firmware.version, "0.2.0");
+        assert_eq!(updater.last_failed(), Some(at));
+        assert_eq!(updater.last_answered(), None);
+        assert!(updater.checked.lock().unwrap().is_none());
+    }
+
+    /// The owner's own **Check** that fails says so, as it always has.
+    #[test]
+    fn an_owner_check_that_fails_still_says_so() {
+        let (updater, _) = testkit::checked(testkit::deck());
+        let before = updater.state.lock().unwrap().clone();
+        updater.state.lock().unwrap().phase = "checking".into();
+        let at = Instant::now();
+        updater.conclude(&before, Found::failed("no feed".into()), false, at);
+        let status = updater.status();
+        assert_eq!(status.phase, "error");
+        assert_eq!(status.error.as_deref(), Some("no feed"));
+        assert_eq!(
+            status.message,
+            "Update did not complete. You can check again and retry."
+        );
+        assert_eq!(updater.last_failed(), Some(at));
+    }
+
+    /// The owner's **Check** that lands while the service's own look is
+    /// under way is answered by that look, so its failure says so; the
+    /// service's next look is quiet again. A check while an install waits
+    /// for the deck is no look to hand over.
+    #[test]
+    fn an_owner_check_during_the_services_own_look_hears_how_it_went() {
+        let (updater, _) = testkit::checked(testkit::deck());
+        let before = updater.state.lock().unwrap().clone();
+        let under_way = |phase: &str| updater.state.lock().unwrap().phase = phase.into();
+        let now = Instant::now();
+        under_way("checking");
+        // Busy, so this starts nothing: it is handed to the look.
+        let status = updater.check(PathBuf::from("/unused"), true).unwrap();
+        assert_eq!(status.phase, "checking");
+        updater.conclude(&before, Found::failed("no feed".into()), true, now);
+        let status = updater.status();
+        assert_eq!(
+            (status.phase.as_str(), status.error.as_deref()),
+            ("error", Some("no feed"))
+        );
+        *updater.state.lock().unwrap() = before.clone();
+        under_way("checking");
+        updater.conclude(&before, Found::failed("no feed".into()), true, now);
+        assert_eq!(updater.status().phase, "ready", "nobody asked this time");
+        under_way("confirming");
+        updater.check(PathBuf::from("/unused"), true).unwrap();
+        assert!(!updater.asked.load(Ordering::Acquire));
+    }
+
+    /// `--no-device` and every unit-test core: the service's own look
+    /// answers the status it has, and reaches for nothing.
+    #[test]
+    fn an_offline_updater_never_starts_a_scheduled_check() {
+        let cache =
+            std::env::temp_dir().join(format!("owt-offline-schedule-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&cache);
+        let updater = Updater::offline();
+        let status = updater.check_scheduled(cache.clone()).unwrap();
+        assert_eq!(status.phase, "idle");
+        assert!(status.release.is_none() && status.app.is_none() && !status.busy());
+        assert_eq!(
+            (updater.last_answered(), updater.last_failed()),
+            (None, None)
+        );
+        assert!(updater.checked.lock().unwrap().is_none());
+        assert!(!cache.exists(), "no manifest, not even its directory");
+    }
+
+    /// The firmware a deck named in its hello is compared with the release:
+    /// how a deck on Bluetooth alone hears of a newer one.
+    #[test]
+    fn the_hellos_firmware_is_compared_with_the_release() {
+        let (updater, _) = testkit::checked(testkit::deck());
+        let status = updater.status();
+        let linked = |fw: Option<&str>| status.clone().with_linked(fw).linked;
+        assert_eq!(
+            linked(Some("0.1.0-openwalkietalkie")),
+            Some(Linked {
+                fw: "0.1.0-openwalkietalkie".into(),
+                available: true
+            })
+        );
+        for fw in ["0.2.0-openwalkietalkie", "0.3.0", "not a version"] {
+            assert_eq!(linked(Some(fw)).map(|l| l.available), Some(false), "{fw}");
+        }
+        assert_eq!(linked(None), None, "no deck said");
+        // No release found yet: nothing is newer.
+        let found_nothing = Status::default().with_linked(Some("0.1.0"));
+        assert_eq!(found_nothing.linked.map(|l| l.available), Some(false));
+        // Left out of a reply when there is none.
+        let value = serde_json::to_value(Status::default()).unwrap();
+        assert!(value.get("linked").is_none() && value.get("app").is_none());
     }
 
     #[test]

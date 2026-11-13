@@ -92,6 +92,9 @@ pub enum WaitResult {
         ctx: String,
         choice: Option<u8>,
         card: Option<CardId>,
+        /// The order's id (`agent.order.result`); `None` for a chosen
+        /// Ready step, which is a card's answer and not an order of its own.
+        order: Option<String>,
         delivery: Option<Delivery>,
     },
     Snooze {
@@ -301,6 +304,15 @@ pub enum CoreMsg {
     /// What a care method answered on the blocking pool needs from the
     /// core (`crate::care`): the daemon's own paths and how it was started.
     CareContext(oneshot::Sender<crate::care::Context>),
+    /// A session's history read again for the lazy reader feed
+    /// (`crate::reader`), to replace the one the store kept
+    /// (`Command::ChatReplace`). Only the session that owns the agent may.
+    ChatReplace {
+        session: SessionId,
+        agent: AgentId,
+        messages: Vec<(deck_model::MessageMeta, String)>,
+        reply: oneshot::Sender<ApiResult>,
+    },
     Shutdown,
 }
 
@@ -549,6 +561,25 @@ impl CoreHandle {
         let (tx, rx) = oneshot::channel();
         self.send(CoreMsg::CareContext(tx)).await?;
         rx.await.map_err(|_| unavailable())
+    }
+
+    /// Replace the history kept for `agent`, which `session` owns, with
+    /// `messages`, read again from its source (`crate::reader`).
+    pub async fn chat_replace(
+        &self,
+        session: SessionId,
+        agent: AgentId,
+        messages: Vec<(deck_model::MessageMeta, String)>,
+    ) -> ApiResult {
+        let (tx, rx) = oneshot::channel();
+        self.send(CoreMsg::ChatReplace {
+            session,
+            agent,
+            messages,
+            reply: tx,
+        })
+        .await?;
+        rx.await.unwrap_or_else(|_| Err(unavailable()))
     }
 
     /// Queued messages (metrics, tests).

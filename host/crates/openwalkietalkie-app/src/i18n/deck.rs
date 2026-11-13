@@ -123,6 +123,20 @@ pub const STRINGS: &[Entry] = &[
         "背景服務正在等待你的裝置",
         "バックグラウンドサービスがデバイスの接続を待っています",
     ),
+    // The line under it once the service went quiet (`service.dormancy`):
+    // the sheet's words, and the same without the time for an earlier day.
+    (
+        "It stopped collecting from your agent sessions at {0},\nten minutes after the link dropped.",
+        "连接断开十分钟后，\n它已于 {0} 停止从你的助手会话收集信息。",
+        "連線中斷十分鐘後，\n它已於 {0} 停止從你的助理工作階段收集資訊。",
+        "接続が切れて 10 分後の {0} に、\nエージェントのセッションからの情報収集を停止しました。",
+    ),
+    (
+        "It stopped collecting from your agent sessions\nten minutes after the link dropped.",
+        "连接断开十分钟后，\n它已停止从你的助手会话收集信息。",
+        "連線中斷十分鐘後，\n它已停止從你的助理工作階段收集資訊。",
+        "接続が切れて 10 分後に、\nエージェントのセッションからの情報収集を停止しました。",
+    ),
     (
         "If the screen is dark",
         "如果屏幕不亮",

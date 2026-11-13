@@ -1655,3 +1655,303 @@ fn invalid_system_readings_are_rejected_at_both_ends() {
     }
     assert!(encode(&HostLine::System(SystemStatus { cpu: Some(101), ..SystemStatus::EMPTY })).is_err());
 }
+
+// ---- the strip -----------------------------------------------------------------
+
+/// The deck's restore rule, `valid_strip` in `src/ui/state/manager.rs`, on
+/// the host's entries. That file needs the whole UI and cannot be mounted,
+/// so this is a transcription, and `the_host_keeps_the_decks_strip_rules`
+/// fails when the original changes.
+fn deck_restores(list: &[FaceEntry]) -> bool {
+    let Some((first, rest)) = list.split_first() else {
+        return false;
+    };
+    let Some((last, middle)) = rest.split_last() else {
+        return false;
+    };
+    let mut ids = 0u16;
+    let unique = list.iter().all(|face| {
+        let bit = 1u16 << (face.f & 15);
+        let fresh = (1..=STRIP_MAX as u8).contains(&face.f) && ids & bit == 0;
+        ids |= bit;
+        fresh
+    });
+    unique
+        && first.t == Template::Agents
+        && last.t == Template::Settings
+        && middle
+            .iter()
+            .all(|face| !matches!(face.t, Template::Agents | Template::Settings))
+        && list.iter().filter(|face| face.t == Template::Macropad).count() <= MACROPADS_MAX
+}
+
+/// The host's two rules on top of the deck's: a name on every face, and one
+/// Timer at most, as the deck's gallery adds them.
+fn host_rules(list: &[FaceEntry]) -> bool {
+    list.iter().all(|face| !face.n.trim().is_empty())
+        && list.iter().filter(|face| face.t == Template::Timer).count() <= TIMERS_MAX
+}
+
+/// `text` with its whitespace collapsed, so a firmware item reads the same
+/// however it is laid out.
+fn collapsed(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// The firmware's text from the first `head` in `source` to the first `tail`
+/// after it, collapsed.
+fn fw_item(source: &str, head: &str, tail: &str) -> String {
+    let start = source
+        .find(head)
+        .unwrap_or_else(|| panic!("`{head}` is no longer in the firmware"));
+    let len = source[start..]
+        .find(tail)
+        .unwrap_or_else(|| panic!("`{head}` has no `{tail}` after it"));
+    collapsed(&source[start..start + len + tail.len()])
+}
+
+/// The value of the firmware's `pub const {name}: usize = …;`.
+fn fw_usize(source: &str, name: &str) -> usize {
+    let head = format!("pub const {name}: usize = ");
+    let line = source
+        .lines()
+        .find(|line| line.starts_with(&head))
+        .unwrap_or_else(|| panic!("`{name}` is no longer in the firmware"));
+    line[head.len()..]
+        .trim_end_matches(';')
+        .parse()
+        .unwrap_or_else(|e| panic!("{line}: {e}"))
+}
+
+/// The deck's strip rules in the firmware's own words. The host keeps
+/// copies of them (`strip_problem`, which `device.faces.set` refuses by; the
+/// app's strip editor; `deck_restores` above), and the deck's restore cannot
+/// be mounted, so its text is pinned here: when the deck's rules change,
+/// this fails, and the copies are to be read against them again.
+#[test]
+fn the_host_keeps_the_decks_strip_rules() {
+    const MANAGER: &str = include_str!("../../../../src/ui/state/manager.rs");
+    const STATE: &str = include_str!("../../../../src/ui/state/mod.rs");
+    const MODEL: &str = include_str!("../../../../src/deck/model.rs");
+    // The restore: the ends, the ids and the Macropads, which are all of
+    // `strip_problem`'s rules but the host's own two.
+    const VALID_STRIP: &str = "fn valid_strip(list: &[FaceEntry]) -> bool {
+        let Some((first, rest)) = list.split_first() else {
+            return false;
+        };
+        let Some((last, middle)) = rest.split_last() else {
+            return false;
+        };
+        let mut ids = 0u16;
+        let unique = list.iter().all(|face| {
+            let bit = 1u16 << (face.id & 15);
+            let fresh = (1..=MAX_FACES as u8).contains(&face.id) && ids & bit == 0;
+            ids |= bit;
+            fresh
+        });
+        unique
+            && first.template == Template::Agents
+            && last.template == Template::Settings
+            && middle
+                .iter()
+                .all(|face| !matches!(face.template, Template::Agents | Template::Settings))
+            && list.iter().filter(|face| face.template == Template::Macropad).count() <= MAX_MACRO_SETS
+    }";
+    // The gallery: no face past eight, no fourth Macropad, no second Timer
+    // (the host's `max 1 timer`).
+    const GALLERY_FULL: &str = "let full = (strip_len(ui) as usize) >= MAX_FACES
+        || (template == Template::Macropad && macropads(ui) >= MAX_MACRO_SETS)
+        || (template == Template::Timer && has_timer(ui));";
+    const HAS_TIMER: &str = "pub(crate) fn has_timer(ui: &UiState) -> bool {
+        (0..ui.global.strip_len).any(|index| ui.face_at(index).is_some_and(|face| face.template == Template::Timer))
+    }";
+    let rules = [
+        (fw_item(MANAGER, "fn valid_strip(", "\n}\n"), VALID_STRIP),
+        (fw_item(MANAGER, "let full = ", ";"), GALLERY_FULL),
+        (fw_item(MANAGER, "pub(crate) fn has_timer(", "\n}\n"), HAS_TIMER),
+    ];
+    for (firmware, copied) in rules {
+        assert_eq!(
+            firmware,
+            collapsed(copied),
+            "the deck's strip rules changed: read deck_proto::strip_problem, \
+             deck_restores and the app's faces.rs against them, then copy them here"
+        );
+    }
+    // The limits.
+    assert_eq!(fw_usize(STATE, "MAX_FACES"), STRIP_MAX);
+    assert_eq!(usize::from(fwp::MAX_FACE_ID), STRIP_MAX);
+    assert_eq!(fw_usize(MODEL, "MAX_MACRO_SETS"), MACROPADS_MAX);
+    // The power-on strip `ui()` holds is the deck's.
+    assert_eq!(
+        fw_item(include_str!("fw/ui.rs"), "pub const DEFAULT_STRIP", "];"),
+        fw_item(STATE, "pub const DEFAULT_STRIP", "];")
+    );
+}
+
+/// The strip the deck reports, alone and in its hello, passes the host's
+/// rules, so a strip the app builds from it starts as one the host takes.
+#[test]
+fn the_decks_own_strip_passes_the_host_rules() {
+    let ui = ui();
+    let Ok(DeviceLine::Faces { list }) = parse_device_line(&fw_encode(Event::Faces, &ui)) else {
+        panic!("the deck's faces")
+    };
+    assert_eq!(list, default_faces());
+    assert_eq!(strip_problem(&list), None);
+    assert!(deck_restores(&list) && host_rules(&list));
+    let Ok(DeviceLine::Hello { faces, .. }) = parse_device_line(&fw_encode(Event::Hello, &ui)) else {
+        panic!("the deck's hello")
+    };
+    assert_eq!(faces, list);
+}
+
+/// A strip by the deck's rules and the host's: Agents first and Settings
+/// last, up to six faces between them with at most three Macropads and one
+/// Timer, distinct ids from 1..=8 in any order, any names but blank ones.
+fn host_strip() -> impl Strategy<Value = Vec<FaceEntry>> {
+    let others = prop::sample::select(vec![
+        Template::Omarchy,
+        Template::Usage,
+        Template::Arcade,
+        Template::System,
+    ]);
+    (
+        0..=MACROPADS_MAX,
+        0..=TIMERS_MAX,
+        prop::collection::vec(others, 0..=STRIP_MAX - 2),
+    )
+        .prop_flat_map(|(macropads, timers, others)| {
+            let mut middle = vec![Template::Macropad; macropads];
+            middle.extend(vec![Template::Timer; timers]);
+            middle.extend(others);
+            middle.truncate(STRIP_MAX - 2);
+            (
+                Just(middle).prop_shuffle(),
+                Just((1..=STRIP_MAX as u8).collect::<Vec<_>>()).prop_shuffle(),
+                prop::collection::vec("\\PC{0,24}", STRIP_MAX),
+            )
+        })
+        .prop_map(|(middle, ids, names)| {
+            std::iter::once(Template::Agents)
+                .chain(middle)
+                .chain(std::iter::once(Template::Settings))
+                .zip(ids)
+                .zip(names)
+                .map(|((t, f), n)| {
+                    let n = if n.trim().is_empty() { format!("{t:?}") } else { n };
+                    FaceEntry { f, t, n }
+                })
+                .collect()
+        })
+}
+
+/// The lowest id no face of `list` has.
+fn lowest_free_id(list: &[FaceEntry]) -> Option<u8> {
+    (1..=STRIP_MAX as u8).find(|&id| list.iter().all(|face| face.f != id))
+}
+
+/// `list` with faces between its ends turned into `t`, from a place `from`
+/// picks, then new ones put in before its last face, until `want` of its
+/// faces are `t`.
+fn more_of(list: &mut Vec<FaceEntry>, t: Template, want: usize, from: prop::sample::Index) {
+    let count = |list: &[FaceEntry]| list.iter().filter(|face| face.t == t).count();
+    let inner = list.len().saturating_sub(2);
+    if inner > 0 {
+        let start = from.index(inner);
+        for k in 0..inner {
+            if count(list) >= want {
+                break;
+            }
+            let at = 1 + (start + k) % inner;
+            list[at] = FaceEntry { f: list[at].f, t, n: format!("{t:?}") };
+        }
+    }
+    while count(list) < want {
+        let Some(f) = lowest_free_id(list) else {
+            break;
+        };
+        let at = list.len() - 1;
+        list.insert(at, FaceEntry { f, t, n: format!("{t:?}") });
+    }
+}
+
+/// A host strip with one of the rules broken, or none: a stranger at an end,
+/// an end taken away, Agents or Settings between the ends, a fourth
+/// Macropad, a second Timer, an id repeated or out of range, a blank name,
+/// a ninth face. Each is broken alone in about one case in twelve, so a rule
+/// `strip_problem` lost, or one it made up, shows.
+fn near_strip() -> impl Strategy<Value = Vec<FaceEntry>> {
+    (
+        host_strip(),
+        0u8..12,
+        any::<prop::sample::Index>(),
+        any::<prop::sample::Index>(),
+        prop::sample::select(ALL_TEMPLATES.to_vec()),
+    )
+        .prop_map(|(mut list, rule, a, b, t)| {
+            let len = list.len();
+            match rule {
+                1 => list[0].t = t,
+                2 => list[len - 1].t = t,
+                3 => {
+                    list.remove([0, len - 1][b.index(2)]);
+                }
+                4 => more_of(&mut list, Template::Agents, 2, a),
+                5 => more_of(&mut list, Template::Settings, 2, a),
+                6 => more_of(&mut list, Template::Macropad, MACROPADS_MAX + 1, a),
+                7 => more_of(&mut list, Template::Timer, TIMERS_MAX + 1, a),
+                8 => {
+                    let (at, of) = (a.index(len), b.index(len));
+                    list[at].f = list[of].f;
+                }
+                9 => list[a.index(len)].f = [0, 9][b.index(2)],
+                10 => list[a.index(len)].n = ["", " ", "\u{3000}"][b.index(3)].into(),
+                11 => {
+                    while list.len() <= STRIP_MAX {
+                        let f = lowest_free_id(&list).unwrap_or(9);
+                        list.insert(1, FaceEntry { f, t: Template::Usage, n: "Usage".into() });
+                    }
+                }
+                _ => {}
+            }
+            list
+        })
+}
+
+/// How many faces the deck's parser reads of `list` sent as a `faces` line,
+/// each checked against what the host's own reader makes of the line.
+fn fw_faces_count(list: &[FaceEntry]) -> usize {
+    let bytes = encode(&HostLine::Faces { list: list.to_vec() }).unwrap();
+    let fw = fw_parse(&stripped(&bytes)).unwrap_or_else(|why| panic!("{list:?}: {why:?}"));
+    assert_same(&parse_host_line(&stripped(&bytes)).unwrap(), &fw);
+    match &*fw {
+        HostMsg::Faces { count, .. } => usize::from(*count),
+        other => panic!("{other:?}"),
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(200))]
+
+    /// Every strip the host takes is one the deck reads whole, every face of
+    /// it, and restores.
+    #[test]
+    fn every_strip_the_host_takes_the_deck_reads_whole_and_restores(list in host_strip()) {
+        prop_assert_eq!(strip_problem(&list), None);
+        prop_assert!(deck_restores(&list));
+        prop_assert_eq!(fw_faces_count(&list), list.len());
+    }
+
+    /// The host refuses a strip exactly when the deck's restore would or
+    /// one of the host's own two rules does: it is no stricter than that,
+    /// and no looser.
+    #[test]
+    fn the_host_refuses_a_strip_when_the_deck_would_or_its_own_two_rules_do(list in near_strip()) {
+        let takes = strip_problem(&list).is_none();
+        prop_assert_eq!(takes, deck_restores(&list) && host_rules(&list), "{:?}", list);
+        if takes {
+            prop_assert_eq!(fw_faces_count(&list), list.len());
+        }
+    }
+}

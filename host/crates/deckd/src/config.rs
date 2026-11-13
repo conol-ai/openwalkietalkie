@@ -27,7 +27,7 @@ pub const WATCH_DEBOUNCE: Duration = Duration::from_millis(300);
 const WATCH_POLL: Duration = Duration::from_millis(25);
 /// The keys a reload applies without a restart (`<table>.<key>`, or
 /// `<table>.*`); everything else is logged "restart needed".
-pub const HOT_KEYS: [&str; 20] = [
+pub const HOT_KEYS: [&str; 21] = [
     "api.allowed_origins",
     // `deckd::codexd` reads `[codex]` on every connect attempt, and a live
     // connection ends when `daemon` is switched off.
@@ -73,6 +73,9 @@ pub const HOT_KEYS: [&str; 20] = [
     // event (`config.changed` included), the Codex client reads it on
     // every report, and the core redraws the face on `CoreMsg::Config`.
     "usage.providers",
+    // The service's own looks for a release: the core reads the switch on
+    // every tick (`Core::check_for_updates`).
+    "updates.*",
 ];
 
 /// Keys inside a hot table that still need a restart: they are read once,
@@ -169,6 +172,104 @@ fn diff(prefix: &str, a: &serde_json::Value, b: &serde_json::Value, out: &mut Ve
         }
         _ if a != b => out.push(prefix.to_string()),
         _ => {}
+    }
+}
+
+/// A key `config.toml` may still hold that nothing reads any more.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Retired {
+    /// The dotted key, the name `config.get` published it under.
+    pub key: &'static str,
+    /// Why nothing reads it, which the log's warning and a refused
+    /// `config.set` both say.
+    pub why: &'static str,
+    /// The value that asks for what the service does anyway: a
+    /// `config.set` of it, or of `null` (the default), is accepted and
+    /// writes nothing. Any other value is refused by name.
+    pub moot: &'static str,
+}
+
+impl Retired {
+    /// The log line for a file that still names the key: the key as the
+    /// file spells it, why nothing reads it, and that the line can go.
+    #[must_use]
+    pub fn warning(&self) -> String {
+        let (table, name) = self.key.rsplit_once('.').unwrap_or(("", self.key));
+        format!(
+            "[{table}] {name} is no longer read: {}. Remove the line from config.toml.",
+            self.why
+        )
+    }
+
+    /// `config.set`'s `-32602` message for a value that asks for more than
+    /// the service does.
+    #[must_use]
+    pub fn refusal(&self) -> String {
+        format!("{} was removed: {}", self.key, self.why)
+    }
+
+    /// Whether a `config.set` of `value` asks only for what the service
+    /// does anyway.
+    #[must_use]
+    pub fn is_moot(&self, value: &serde_json::Value) -> bool {
+        value.is_null() || value.as_str() == Some(self.moot)
+    }
+}
+
+/// The keys that were removed and that an old file may still name.
+///
+/// A file that names one still loads — every key is optional and an unknown
+/// one is ignored — and the line changes nothing. The service says so in its
+/// log at start, on every reload and on `config.reload` ([`warn_retired`]),
+/// so the operator can take the line out; `config.get` no longer publishes
+/// the key.
+///
+/// `voice.fallback_input` (decision 11) chose what a press recorded when the
+/// deck's microphone was not there: the Mac's own input when it said
+/// `"system_default"`, the default until the companion app. A press that
+/// records the room instead of the deck is not what anyone pressed for, so
+/// that is no longer a choice.
+pub const RETIRED_KEYS: [Retired; 1] = [Retired {
+    key: "voice.fallback_input",
+    why: "a press without the deck's microphone is answered with silence and no_device, and the \
+          Mac's microphone is never opened",
+    moot: "none",
+}];
+
+/// The [`RETIRED_KEYS`] entry for `key`, when it is one.
+#[must_use]
+pub fn retired(key: &str) -> Option<&'static Retired> {
+    RETIRED_KEYS.iter().find(|retired| retired.key == key)
+}
+
+/// The [`RETIRED_KEYS`] that `text` (a `config.toml`) still names, in that
+/// list's order. Text that is not TOML names none: loading it says why.
+#[must_use]
+pub fn retired_in(text: &str) -> Vec<&'static Retired> {
+    let Ok(file) = text.parse::<toml::Table>() else {
+        return Vec::new();
+    };
+    RETIRED_KEYS
+        .iter()
+        .filter(|retired| {
+            let (tables, name) = retired.key.rsplit_once('.').unwrap_or(("", retired.key));
+            let mut at = Some(&file);
+            for table in tables.split('.').filter(|table| !table.is_empty()) {
+                at = at
+                    .and_then(|t| t.get(table))
+                    .and_then(toml::Value::as_table);
+            }
+            at.is_some_and(|t| t.contains_key(name))
+        })
+        .collect()
+}
+
+/// Log a warning for each [`RETIRED_KEYS`] key `text` still names. Called at
+/// start (`core::run`), on every reload of the watcher and on
+/// `config.reload`, so the line is named for as long as it is there.
+pub fn warn_retired(text: &str) {
+    for retired in retired_in(text) {
+        tracing::warn!("{}", retired.warning());
     }
 }
 
@@ -366,7 +467,12 @@ impl Reloader {
             }
         };
         let next = match Config::parse_at(&text) {
-            Ok(next) => next,
+            Ok(next) => {
+                // Before the "nothing changed" return below: a line nothing
+                // reads changes nothing, and it is still worth naming.
+                warn_retired(&text);
+                next
+            }
             Err((message, position)) => {
                 let copy = self.paths.config.with_extension("toml.invalid");
                 if let Err(e) = std::fs::copy(&self.paths.config, &copy) {
@@ -459,10 +565,6 @@ impl Reloader {
             owner: None,
         });
     }
-}
-
-fn t() -> bool {
-    true
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -879,8 +981,11 @@ pub struct Tts {
     /// `"openai"` or `"elevenlabs"`: whose model and key.
     pub provider: String,
     /// The provider's API key. **Empty means Apple speaks.** The key never
-    /// appears on a command line or in the log; `deckd tts key set` writes
-    /// it here.
+    /// appears on a command line or in the log. On a Mac's own install it is
+    /// kept in the Keychain instead (`crate::secrets`): a key found here
+    /// moves there, and the service puts the stored one into the config in
+    /// force. Everywhere else (Linux, a service on a data directory of its
+    /// own) `deckd tts key set` writes it here.
     pub api_key: String,
     /// The model: the provider's (`gpt-4o-mini-tts`, `eleven_flash_v2_5`)
     /// or, for `"mlx"`, the Hugging Face id the sidecar loads. Empty is the
@@ -981,10 +1086,17 @@ impl Tts {
     /// downloaded yet — `voice.engines` checks the disk), else `"apple"`.
     #[must_use]
     pub fn effective_engine(&self) -> &str {
+        self.engine_with_key(self.has_key())
+    }
+
+    /// [`Tts::effective_engine`] for a key held somewhere else (the
+    /// Keychain): `has_key` says whether there is one.
+    #[must_use]
+    pub fn engine_with_key(&self, has_key: bool) -> &str {
         match self.engine.as_str() {
             crate::audio::sidecar::NAME => crate::audio::sidecar::NAME,
             crate::kokoro::ENGINE => crate::kokoro::ENGINE,
-            crate::audio::cloud::NAME if self.has_key() => self.provider.as_str(),
+            crate::audio::cloud::NAME if has_key => self.provider.as_str(),
             _ => "apple",
         }
     }
@@ -1048,13 +1160,9 @@ pub struct Voice {
     pub transport: VoiceTransport,
     pub device_uid: Option<String>,
     pub fallback_output: String,
-    /// What a press records from when the deck's microphone is not there:
-    /// `"none"` (the default: the press gets silence and a code) or
-    /// `"system_default"` (the Mac's own input). It was the Mac's input
-    /// until the companion app; now the Mac microphone is opened only when
-    /// the operator names it here, because a press that records the room
-    /// instead of the deck is not what anyone pressed for.
-    pub fallback_input: String,
+    // No `fallback_input`: a press without the deck's microphone gets
+    // silence and `no_device`, never the Mac's own input (decision 11). An
+    // old file's line is accepted and ignored ([`RETIRED_KEYS`]).
     /// `"never" | "card_pending" | "always"` — when the input stream may
     /// exist (§7.1).
     ///
@@ -1101,7 +1209,6 @@ impl Default for Voice {
             transport: VoiceTransport::Ble,
             device_uid: None,
             fallback_output: "none".into(),
-            fallback_input: "none".into(),
             // V1/V2, measured 2026-09-21; see the fields above.
             mic_warm: "card_pending".into(),
             speak_over_sco: true,
@@ -1111,23 +1218,6 @@ impl Default for Voice {
             stt: Stt::default(),
             tts: Tts::default(),
             voices: Voices::default(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(default)]
-pub struct Desktop {
-    pub inject: Vec<String>,
-    #[serde(default = "t")]
-    pub focus: bool,
-}
-
-impl Default for Desktop {
-    fn default() -> Self {
-        Desktop {
-            inject: vec!["ghostty".into()],
-            focus: true,
         }
     }
 }
@@ -1216,6 +1306,26 @@ impl Default for UsageCfg {
             providers: vec!["codex".into()],
             poll_s: 300,
         }
+    }
+}
+
+/// `[updates]`: the service's own looks for a firmware and app release
+/// (`firmware::schedule`, R8).
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(default)]
+pub struct Updates {
+    /// Look every six hours while a deck was linked in the last ten
+    /// minutes, the first time five minutes after the service starts: each
+    /// look asks the release feed on github.com for one small manifest, and
+    /// reads the deck on the cable, if one is. Off, the service looks only
+    /// when asked (the app's **Check**). Hot. The owner's to edit by hand:
+    /// no control offers it, so `config.set` refuses it.
+    pub check: bool,
+}
+
+impl Default for Updates {
+    fn default() -> Self {
+        Updates { check: true }
     }
 }
 
@@ -1343,10 +1453,13 @@ pub struct Config {
     pub liveness: Liveness,
     pub cards: Cards,
     pub voice: Voice,
-    pub desktop: Desktop,
+    // `[desktop] inject` and `focus` went with the Ghostty injector: a file
+    // that still has the table parses (unknown keys are ignored) and it
+    // changes nothing.
     pub device: Device,
     pub macropad: BTreeMap<String, MacropadLayout>,
     pub usage: UsageCfg,
+    pub updates: Updates,
     pub log: Log,
 }
 
@@ -1361,9 +1474,23 @@ pub enum ConfigError {
     Parse(String),
 }
 
+/// A parse error's message with the line and column it points at, when it
+/// has them.
+#[must_use]
+pub fn placed(message: String, at: Option<(u32, u32)>) -> String {
+    match at {
+        Some((line, col)) => format!("{message} (line {line}, column {col})"),
+        None => message,
+    }
+}
+
 impl Config {
+    /// The file's config, or what is wrong with it: the TOML error's own
+    /// message and where it points ([`Config::parse_at`]). Never the
+    /// rendered error, which quotes the offending line — a pasted key, as
+    /// often as not — and this message reaches replies, the log and the bus.
     pub fn parse(text: &str) -> Result<Config, ConfigError> {
-        toml::from_str(text).map_err(|e| ConfigError::Parse(e.to_string()))
+        Config::parse_at(text).map_err(|(message, at)| ConfigError::Parse(placed(message, at)))
     }
 
     /// `parse`, with the TOML error's own one-line message and the 1-based
@@ -1781,6 +1908,22 @@ mod tests {
         assert!(Config::parse("[sources]\napps_paused = \"Conol\"\n").is_err());
     }
 
+    /// R8: the service looks for a release by itself unless the file says
+    /// otherwise, and a change is applied without a restart.
+    #[test]
+    fn the_updates_switch_is_on_by_default_and_hot() {
+        let c = Config::default();
+        assert!(c.updates.check);
+        assert_eq!(Config::parse("").unwrap().updates, Updates::default());
+        let off = Config::parse("[updates]\ncheck = false\n").unwrap();
+        assert!(!off.updates.check);
+        assert_eq!(off.usage, c.usage, "nothing else moves with it");
+        assert_eq!(changed_keys(&c, &off), ["updates.check"]);
+        assert!(is_hot("updates.check"));
+        assert!(is_hot_change("updates.check", &c, &off));
+        assert!(Config::parse("[updates]\ncheck = \"no\"\n").is_err());
+    }
+
     /// D4: the Claude Channels switch is an opt-in with three positions.
     /// Left out it is unset — the plugin on disk decides — and a file that
     /// sets it says so either way; nothing else in the table moves with it.
@@ -1869,7 +2012,6 @@ hold_s = 30
         assert_eq!(c.hooks.gemini.permission, "notify");
         assert!(!c.cards.paging);
         assert_eq!(c.cards.ready_ttl_s, 900);
-        assert_eq!(c.voice.fallback_input, "none");
         assert_eq!(c.voice.mic_warm, "card_pending");
         assert!(c.voice.speak_over_sco);
         assert_eq!(c.voice.slow_sco_ms, 1500);
@@ -1883,7 +2025,6 @@ hold_s = 30
         assert!(c.voice.tts.voices.is_empty());
         assert_eq!(c.voice.tts.lang, "auto");
         assert_eq!(c.voice.voices.default_pool.len(), 4);
-        assert_eq!(c.desktop.inject, vec!["ghostty"]);
         assert_eq!(c.device.pace_ms, 8);
         assert_eq!(c.device.hello_s, 5);
         assert_eq!(c.device.usage_period, "5h / 7d");
@@ -1891,6 +2032,15 @@ hold_s = 30
         assert_eq!(c.usage.poll_s, 300);
         assert_eq!(c.log.level, "info");
         assert_eq!(Config::parse("").unwrap(), c);
+    }
+
+    /// The Ghostty injector's `[desktop]` table, as a file written before
+    /// the hand-off replaced it: it still parses, and it changes nothing.
+    #[test]
+    fn an_old_desktop_table_is_ignored() {
+        let old = Config::parse("[desktop]\ninject = [\"ghostty\"]\nfocus = false\n")
+            .expect("an old file still parses");
+        assert_eq!(old, Config::default());
     }
 
     /// D3: the Claude bars are opt-in. `Config::default()` names Codex
@@ -1933,25 +2083,80 @@ hold_s = 30
         assert_eq!(changed_keys(&c, &both), ["usage.providers"]);
     }
 
-    /// D3: no Mac microphone unless the file names it. `system_default` is
-    /// still the operator's to choose, the key is as hot as the rest of
-    /// `[voice]`, and the engine's own start-up options say the same.
+    /// Decision 11: no Mac microphone, whatever the file says. An old
+    /// `fallback_input` line still loads, as the defaults exactly (so a
+    /// reload has nothing to report), and is named for the log; a file
+    /// without it names nothing, and so does one that is not TOML.
     #[test]
-    fn the_mac_microphone_is_no_fallback_unless_the_file_names_it() {
+    fn an_old_fallback_input_line_is_accepted_ignored_and_named() {
         let c = Config::default();
-        assert_eq!(c.voice.fallback_input, "none");
-        assert_eq!(
-            crate::audio::AudioConfig::default().fallback_input,
-            c.voice.fallback_input
+        let published = serde_json::to_value(&c).unwrap();
+        assert!(
+            published["voice"].get("fallback_input").is_none(),
+            "no such key any more: {}",
+            published["voice"]
         );
-        let mac = Config::parse("[voice]\nfallback_input = \"system_default\"\n").unwrap();
-        assert_eq!(mac.voice.fallback_input, "system_default");
+        for text in [
+            "[voice]\nfallback_input = \"system_default\"\n",
+            "[voice]\nfallback_input = \"none\"\n",
+            "voice.fallback_input = \"system_default\"\n",
+        ] {
+            let old = Config::parse(text).unwrap();
+            assert_eq!(old, c, "{text:?} is the defaults");
+            assert!(changed_keys(&c, &old).is_empty(), "{text:?}");
+            let named: Vec<&str> = retired_in(text).iter().map(|r| r.key).collect();
+            assert_eq!(named, ["voice.fallback_input"], "{text:?}");
+        }
+        for text in [
+            "",
+            "[voice]\nfallback_output = \"system_default\"\nmic_warm = \"never\"\n",
+            "fallback_input = \"system_default\"\n",
+            "[voice.stt]\nfallback_input = \"system_default\"\n",
+            "[voice\nfallback_input = \"system_default\"\n",
+        ] {
+            assert!(retired_in(text).is_empty(), "{text:?}");
+        }
+
+        let input = retired("voice.fallback_input").expect("in RETIRED_KEYS");
         assert_eq!(
-            mac.voice.fallback_output, "none",
-            "the rest of [voice] keeps its defaults"
+            input.warning(),
+            "[voice] fallback_input is no longer read: a press without the deck's microphone is \
+             answered with silence and no_device, and the Mac's microphone is never opened. \
+             Remove the line from config.toml."
         );
-        assert_eq!(changed_keys(&c, &mac), ["voice.fallback_input"]);
-        assert!(is_hot("voice.fallback_input"));
+        assert_eq!(
+            input.refusal(),
+            "voice.fallback_input was removed: a press without the deck's microphone is \
+             answered with silence and no_device, and the Mac's microphone is never opened"
+        );
+        // What the service does anyway is asked quietly; more is not.
+        assert!(input.is_moot(&serde_json::json!("none")));
+        assert!(input.is_moot(&serde_json::Value::Null));
+        for value in [
+            serde_json::json!("system_default"),
+            serde_json::json!(""),
+            serde_json::json!(false),
+        ] {
+            assert!(!input.is_moot(&value), "{value}");
+        }
+        assert_eq!(retired("voice.fallback_output"), None, "the speaker's stays");
+    }
+
+    /// The warning reaches the log, once for each retired key the file
+    /// names, and a file without one logs nothing.
+    #[test]
+    fn warn_retired_logs_the_line_to_remove() {
+        use crate::core::testkit::warnings_of;
+        let logged = warnings_of(|| {
+            warn_retired("[voice]\nfallback_input = \"system_default\"\nmic_warm = \"never\"\n");
+        });
+        assert_eq!(
+            logged.matches("[voice] fallback_input is no longer read").count(),
+            1,
+            "{logged}"
+        );
+        assert!(logged.contains("Remove the line from config.toml."), "{logged}");
+        assert_eq!(warnings_of(|| warn_retired("[voice]\nmic_warm = \"never\"\n")), "");
     }
 
     /// `[api] tcp`, the Service page's Local API switch (D3), off by default
@@ -2218,6 +2423,22 @@ x = 1
         assert!(c.macropad["Build"].keys[1].b.is_none());
         let pins = c.pins();
         assert_eq!(pins["claude:cohdl-api"].slot, Some(deck_model::Slot(1)));
+    }
+
+    /// A key pasted without its quotes makes the file invalid, and the
+    /// message every caller gets (the reply, the log, the bus) names where
+    /// and what, never the line itself: the TOML error's rendered form
+    /// quotes it, key and all.
+    #[test]
+    fn a_parse_error_names_the_line_and_never_quotes_it() {
+        let text = "[voice.tts]\napi_key = sk-proj-SECRET0123456789\n";
+        let Err(ConfigError::Parse(message)) = Config::parse(text) else {
+            panic!("an unquoted string is invalid");
+        };
+        assert!(!message.contains("SECRET0123456789"), "{message}");
+        assert!(message.contains("line 2, column 11"), "{message}");
+        let shown = Config::parse(text).unwrap_err().to_string();
+        assert!(!shown.contains("SECRET0123456789"), "{shown}");
     }
 
     #[test]

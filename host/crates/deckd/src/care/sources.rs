@@ -75,6 +75,18 @@ impl Source {
         }
     }
 
+    /// The word the delivery record (`crate::deliveries`) files this
+    /// source's cards under: a connected app is `app`, never its name.
+    #[must_use]
+    pub fn word(&self) -> &'static str {
+        match self {
+            Source::Claude => "claude",
+            Source::Codex => "codex",
+            Source::Other => "other",
+            Source::App(_) => "app",
+        }
+    }
+
     /// Whether the owner's switches pause it.
     #[must_use]
     pub fn paused(&self, switches: &config::Sources) -> bool {
@@ -186,6 +198,23 @@ impl Ledger {
     /// keeps its source for the agents it leaves behind.
     pub fn remember(&mut self, sessions: &Sessions, id: SessionId) {
         self.origin(sessions, id);
+    }
+
+    /// What the delivery record (`crate::deliveries`) calls the source of
+    /// session `id`, read without recording anything: its source's
+    /// [`Source::word`], `daemon` for one of the daemon's own sessions, and
+    /// `unknown` for a session neither open nor remembered. A session that
+    /// closed is still its source's while an agent it left names it.
+    #[must_use]
+    pub fn word(&self, sessions: &Sessions, id: SessionId) -> &'static str {
+        if let Some(source) = self.sessions.get(&id) {
+            return source.word();
+        }
+        match sessions.get(id).map(Source::of) {
+            Some(Some(source)) => source.word(),
+            Some(None) => "daemon",
+            None => "unknown",
+        }
     }
 
     /// `session` did something at `at` (a call that passes [`activity`], or
@@ -302,9 +331,9 @@ impl Ledger {
             sessions,
             unit: "sessions",
             last_event_at: self.last_event(&Source::Claude),
-            // A hook-registered session is brought forward by focusing the
-            // terminal tab it runs in.
-            handoff: Some("terminal"),
+            // A hook-registered session is brought forward by raising the
+            // app it runs in, on a press of its `Open app` card.
+            handoff: Some("app"),
             hooks: Some(crate::integrations::claude::managed_hooks(
                 config.hooks.claude.tool_titles,
             )),
@@ -480,9 +509,10 @@ struct Row {
     /// What the counts count: `sessions`, `threads` (Codex) or `chats`.
     unit: &'static str,
     last_event_at: Option<Ts>,
-    /// What a press on the deck does to bring a session forward:
-    /// `terminal` (focuses its tab), `none` (nothing yet), `self` (the app
-    /// does it itself), or `app` (raises the owning app; not built).
+    /// What a press on the deck does to bring a session forward: `app`
+    /// (raises the app the session runs in), `none` (nothing yet), or
+    /// `self` (the app does it itself). `terminal` (focused its Ghostty
+    /// tab) is what a 0.13 service said and this one never does.
     handoff: Option<&'static str>,
     /// The hook events the plugin installs (Claude Code only).
     hooks: Option<usize>,
@@ -624,7 +654,7 @@ mod tests {
             json!({
                 "id": "claude", "kind": "tool", "name": "Claude Code", "enabled": true,
                 "state": null, "on_deck": 0, "sessions": 0, "unit": "sessions",
-                "last_event_at": null, "handoff": "terminal", "hooks": 13, "stale": null,
+                "last_event_at": null, "handoff": "app", "hooks": 13, "stale": null,
                 "does": null,
             })
         );
@@ -890,6 +920,49 @@ mod tests {
         );
         assert_eq!(app_name(" Conol ", &Principal::Uid(501)), "Conol");
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// The word the delivery record files a session's cards under: the
+    /// source, an app as `app` and never its name, the daemon's own as
+    /// `daemon` (the demo's example agent speaks as Claude and is still the
+    /// demo's), and a closed session's while an agent it left names it.
+    #[test]
+    fn the_delivery_record_names_a_source_by_its_word_and_never_an_app_by_name() {
+        let t0 = Instant::now();
+        let mut sessions = Sessions::new();
+        let mut ledger = Ledger::default();
+        for (id, kind) in [
+            (50, AdapterKind::Claude),
+            (51, AdapterKind::Codex),
+            (52, AdapterKind::Gemini),
+            // The demo's and the test agent's.
+            (53, AdapterKind::Virtual),
+        ] {
+            sessions.open_internal(SessionId(id), Principal::Adapter(kind), "internal", t0);
+        }
+        let (tx, _rx) = tokio::sync::mpsc::channel(8);
+        let conol = sessions.open(
+            OpenSession {
+                kind: SessionKind::Live { tx },
+                principal: Principal::Uid(501),
+                scopes: vec![Scope::Agent],
+                trusted: false,
+                client: ClientInfo {
+                    name: "Conol".into(),
+                    version: "1".into(),
+                },
+            },
+            t0,
+        );
+        let words = [50, 51, 52, 53].map(|id| ledger.word(&sessions, SessionId(id)));
+        assert_eq!(words, ["claude", "codex", "other", "daemon"]);
+        assert_eq!(ledger.word(&sessions, conol), "app");
+        assert_eq!(ledger.word(&sessions, SessionId(4242)), "unknown");
+        // The app's connection closes with an agent left in its grace, the
+        // way `Core::close_session` remembers it first.
+        ledger.remember(&sessions, conol);
+        sessions.close(conol);
+        assert_eq!(ledger.word(&sessions, conol), "app");
     }
 
     /// "Pause integrations": every source's sessions leave the deck and the

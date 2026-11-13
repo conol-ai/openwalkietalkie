@@ -25,7 +25,7 @@ pub use assemble::{parse_device_line, parse_host_line, Assembler, DecodeError, L
 pub use chunk::Chunker;
 pub use encode::{caps, encode, fit_doc_window, Caps, EncodeError};
 pub use types::{
-    keystroke_valid, KEYSTROKE_KEYS,
+    keystroke_valid, strip_problem, KEYSTROKE_KEYS, MACROPADS_MAX, STRIP_MAX, TIMERS_MAX,
     AgentState, Binding, CardKind, DeviceLine, DocFont, DocKind, ErrWhy, FaceEntry, HostLine,
     KeyId, Kind, MacroKey, SessionMenu, PttCtx, SetKey, SystemStatus, Template, Tone, UsageItem, Window,
 };

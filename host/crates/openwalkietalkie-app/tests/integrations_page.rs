@@ -545,7 +545,8 @@ fn ages_are_whole_and_never_is_a_dash_and_each_hand_off_has_its_words() {
         "just now"
     );
     assert_eq!(age_words(before(12), NOW, ZH), "12 秒前");
-    // The service focuses a terminal tab in Ghostty alone, and says so.
+    // The service raises a session's own app; a 0.13 service focused a
+    // terminal tab in Ghostty alone, and its words say so.
     for (handoff, words) in [
         (Handoff::Terminal, "Focuses its Ghostty tab"),
         (Handoff::App, "Raises its app"),
@@ -563,6 +564,14 @@ fn ages_are_whole_and_never_is_a_dash_and_each_hand_off_has_its_words() {
         handoff_words(&Handoff::Terminal, Language::Japanese),
         "Ghostty の\nタブを前面へ"
     );
+    // The shipped words for the app hand-off, in each language.
+    for (language, words) in [
+        (ZH, "切换到其应用"),
+        (Language::TraditionalChinese, "切至其應用程式"),
+        (Language::Japanese, "アプリを前面へ"),
+    ] {
+        assert_eq!(handoff_words(&Handoff::App, language), words, "{language:?}");
+    }
     // What a source never said stays empty, and a source not yet read has
     // no figures at all.
     let mut facts = board();
@@ -1124,8 +1133,9 @@ fn a_fresh_services_own_replies_offer_set_up_and_show_the_two_switched_off_as_of
         (
             Some("0 sessions"),
             Some("\u{2014}"),
-            Some("Focuses its Ghostty tab")
-        )
+            Some("Raises its app")
+        ),
+        "the service raises a Claude Code session's own app"
     );
     assert_eq!(claude.total, None);
     assert_eq!(claude.state, state("Not set up", Tone::Gray));

@@ -34,7 +34,7 @@ pub enum TimerKey {
 ///
 /// The distinction an adapter needs is not *who* released the hold but
 /// **what is left on the deck**: a release that runs `Store::degrade_card`
-/// leaves the same card id in place as §5.6's `⌨ Focus terminal`, pointing
+/// leaves the same card id in place as §5.6's `⌨ … Open app`, pointing
 /// at the dialog the CLI is still showing, and one that clears or retires
 /// the card leaves nothing. Both used to arrive as `Expiry`, so an adapter
 /// that remembered "the degraded card of this session" filed a card id the
@@ -72,7 +72,7 @@ pub enum Release {
 
 impl Release {
     /// Whether this release leaves the card on the deck, degraded to
-    /// §5.6's `⌨ Focus terminal` under its own id.
+    /// §5.6's `⌨ … Open app` under its own id.
     ///
     /// An adapter that tracks "the card of this session the CLI's own turn
     /// may take off the deck" asks this before it files one: a card that
@@ -86,15 +86,15 @@ impl Release {
     }
 }
 
-/// Which microphone a PTT session opens (§4.9 `voice.listen{input}`, §7.1's
-/// `fallback_input`).
+/// Which microphone a PTT session opens (§4.9 `voice.listen{input}`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum VoiceInput {
     /// The deck's own input UID — the only one a deck `ptt` edge ever means.
     #[default]
     Deck,
-    /// The Mac's default input device.
+    /// The Mac's default input device: only `voice.listen{input:"mac"}`
+    /// asks for it, and a press never falls back to it.
     Mac,
 }
 
@@ -142,8 +142,8 @@ pub enum AudioCmd {
         #[serde(default)]
         from_deck: bool,
         /// §4.9: the deck's own mic, or the Mac's default input for a
-        /// `voice.listen{input:"mac"}` and for the `fallback_input` of §7.1
-        /// when the deck is BLE-HID-only.
+        /// `voice.listen{input:"mac"}`. A press whose deck microphone is not
+        /// there gets silence and `no_device`, never the Mac's.
         input: VoiceInput,
         /// `[voice.stt] locale` — the recogniser is built per locale, so it
         /// cannot be chosen after the first buffer lands.
@@ -180,15 +180,15 @@ pub enum AudioCmd {
     ///
     /// §7 selects every device by **UID** and never touches the system
     /// default, so the audio side cannot re-derive this from anywhere: it
-    /// is told. `fallback_output`/`fallback_input` are §7.1/§7.2's
-    /// behaviour when the deck's UID is absent (BLE HID only), and they
-    /// change the answer to "what happens when the deck is not there",
-    /// which is exactly the setting somebody edits and expects to take
-    /// effect without a restart.
+    /// is told. `fallback_output` is §7.2's behaviour when the deck's UID
+    /// is absent (BLE HID only), and it changes the answer to "what happens
+    /// when the deck is not there", which is exactly the setting somebody
+    /// edits and expects to take effect without a restart. The input has
+    /// no such setting: a press without the deck's microphone gets silence
+    /// and `no_device` (decision 11 removed `fallback_input`).
     Devices {
         device_uid: Option<String>,
         fallback_output: String,
-        fallback_input: String,
     },
     /// `[voice]`'s **timing policy**, re-read on a hot config reload — the
     /// three keys V1 and V2 forced (measured 2026-09-21).
@@ -280,8 +280,19 @@ impl AudioCmd {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "desktop", rename_all = "snake_case")]
 pub enum DesktopCmd {
+    /// Bring the agent's own app forward (the hand-off, `crate::handoff`):
+    /// a deliberate request, ENTER on a `focus` card or `op.focus`, never a
+    /// device `channel`.
     Focus { agent: AgentId },
-    Inject { agent: AgentId, text: String },
+    /// `op.order` by `inject`: the words, and the id `order.dispatched`
+    /// gave them, so a failure that comes back later names its order. The
+    /// name is the cap's: it means "the daemon delivers", by Claude
+    /// Channels or the session's inbox; nothing is typed into a terminal.
+    Inject {
+        agent: AgentId,
+        text: String,
+        order: String,
+    },
     /// A Macropad key with a keystroke was pressed (or stepped): post the
     /// combo (`ctrl+opt+shift+cmd+<key>`, the deck's own spelling) to the
     /// desktop. The deck itself is never a keyboard (its USB block has one
@@ -445,6 +456,13 @@ pub enum EventKind {
     /// `snapshot.macros[f]` now holds it.
     #[serde(rename = "device.macros")]
     DeviceMacros,
+    /// Another deck linked, and the strip, settings and Macropad keys the
+    /// service keeps for it are now the snapshot's (`device.profile`):
+    /// `{deck, faces, settings, macros}`, each whole, as `device.deck`,
+    /// `faces`, `settings` and `macros` now hold them. The language is the
+    /// Mac's, shared by every deck, and does not change with it.
+    #[serde(rename = "device.profile")]
+    DeviceProfile,
     #[serde(rename = "device.ws")]
     DeviceWs,
     #[serde(rename = "device.refresh")]
@@ -465,6 +483,11 @@ pub enum EventKind {
     PermChanged,
     #[serde(rename = "service.degraded")]
     ServiceDegraded,
+    /// The collectors stopped, with no deck linked for ten minutes, or
+    /// started again (`service.dormancy`): `{window_s, collecting,
+    /// dormant_since}`, or `null` for a service with no dormancy.
+    #[serde(rename = "service.dormancy")]
+    ServiceDormancy,
     #[serde(rename = "service.shutdown")]
     ServiceShutdown,
     #[serde(rename = "hook.raw")]
@@ -474,7 +497,7 @@ pub enum EventKind {
 }
 
 impl EventKind {
-    pub const ALL: [EventKind; 51] = [
+    pub const ALL: [EventKind; 53] = [
         EventKind::SessionSettingsRequested,
         EventKind::AgentAdded,
         EventKind::AgentChanged,
@@ -513,6 +536,7 @@ impl EventKind {
         EventKind::DeviceMacro,
         EventKind::DeviceMacroEdit,
         EventKind::DeviceMacros,
+        EventKind::DeviceProfile,
         EventKind::DeviceWs,
         EventKind::DeviceRefresh,
         EventKind::DeviceRaw,
@@ -523,6 +547,7 @@ impl EventKind {
         EventKind::IntegrationChanged,
         EventKind::PermChanged,
         EventKind::ServiceDegraded,
+        EventKind::ServiceDormancy,
         EventKind::ServiceShutdown,
         EventKind::HookRaw,
         EventKind::Error,
@@ -569,6 +594,7 @@ impl EventKind {
             EventKind::DeviceMacro => "device.macro",
             EventKind::DeviceMacroEdit => "device.macro.edit",
             EventKind::DeviceMacros => "device.macros",
+            EventKind::DeviceProfile => "device.profile",
             EventKind::DeviceWs => "device.ws",
             EventKind::DeviceRefresh => "device.refresh",
             EventKind::DeviceRaw => "device.raw",
@@ -579,6 +605,7 @@ impl EventKind {
             EventKind::IntegrationChanged => "integration.changed",
             EventKind::PermChanged => "perm.changed",
             EventKind::ServiceDegraded => "service.degraded",
+            EventKind::ServiceDormancy => "service.dormancy",
             EventKind::ServiceShutdown => "service.shutdown",
             EventKind::HookRaw => "hook.raw",
             EventKind::Error => "error",
@@ -674,6 +701,14 @@ mod tests {
         // or a mirror of `snapshot.macros` would go stale.
         assert!(!EventKind::DeviceMacros.is_high_volume());
         assert!(!EventKind::DeviceMacros.has_content());
+        // And so does the service's dormancy: whether it collects is about
+        // the service, and a connected app that collects too follows it.
+        assert!(!EventKind::ServiceDormancy.is_high_volume());
+        assert!(!EventKind::ServiceDormancy.has_content());
+        // And a deck's whole profile, which is the same strip, settings and
+        // keys at once, with a label that is no address.
+        assert!(!EventKind::DeviceProfile.is_high_volume());
+        assert!(!EventKind::DeviceProfile.has_content());
     }
 
     /// The one thing an adapter asks a `Release`: is there still a card on

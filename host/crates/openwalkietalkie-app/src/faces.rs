@@ -10,15 +10,18 @@
 //! last adopted (`faces`) ([`strip`]). A change — a face moved, removed or
 //! added — is a whole new strip, built valid by the deck's own rules
 //! ([`pinned`], [`addable`], [`free_id`], [`moved`], [`removed`],
-//! [`added`]) and sent with `device.faces.set`. The service checks little
-//! and adopts nothing, and the deck does not answer a strip: it reports its
-//! own a moment later. So the page shows the deck's strip throughout and
+//! [`added`]) and sent with `device.faces.set`. The service refuses a strip
+//! those rules refuse ([`deck_model::strip_problem`], whose limits these
+//! are) and adopts none, and the deck does not answer a strip: it reports
+//! its own a moment later. So the page shows the deck's strip throughout and
 //! waits for the deck to report the new one, eight seconds at most
 //! ([`Pending`]); a deck that did not take it (its face manager was open)
 //! is said so. Changing the strip needs the deck linked. A Macropad's keys
 //! go with it ([`Forget`]): once the deck reports the strip without it, its
 //! keys are written empty, so the service stops keeping them for a face that
-//! is gone.
+//! is gone. The service keeps a strip and keys for each deck, so what the
+//! page waits on is for one deck ([`StripWrites`]): another one in the hand
+//! lets all of it go.
 //!
 //! **The Usage face's sources** are `usage.providers` in the service's
 //! config, read with `config.get` and written whole ([`UsageConfig`]). The
@@ -33,21 +36,28 @@ use crate::present;
 use crate::shell::{Screen, Sheet, Shell};
 use crate::shots::Scene;
 use crate::style::{palette, Palette};
-use crate::ui::{self, ic, Btn, Press, Row, Segmented, Switch, Type as _};
+use crate::ui::{self, ic, Btn, Layout, Press, Roving, Row, Segmented, Switch, Type as _};
+use deck_client::ClientError;
 use deck_gui_core::admin::method_missing;
 use deck_gui_core::i18n::Language;
 use deck_gui_core::{ConfigValue, UiAction};
-use deck_model::{FaceEntry, SetKey, Snapshot, Template, Ts};
-use gpui::{div, prelude::*, px, AnyElement, Context, Div, SharedString, Subscription, Window};
-use gpui_component::{h_flex, v_flex};
+use deck_model::{FaceEntry, ServiceState, SetKey, Snapshot, Template, Ts};
+use gpui::{
+    div, prelude::*, px, AnyElement, Context, Div, ElementId, KeyDownEvent, Modifiers,
+    SharedString, Subscription, Window,
+};
+use gpui_component::{h_flex, v_flex, StyledExt as _};
 use serde_json::Value;
 use std::time::Duration;
 
 /// A strip holds eight faces at most; the deck then offers no "+".
-pub const MAX_FACES: usize = 8;
+pub const MAX_FACES: usize = deck_model::STRIP_MAX;
 
 /// The deck keeps keys for three Macropad faces at most.
-pub const MAX_MACROPADS: usize = 3;
+pub const MAX_MACROPADS: usize = deck_model::MACROPADS_MAX;
+
+/// The deck's clocks are one per deck: one Timer face at most.
+pub const MAX_TIMERS: usize = deck_model::TIMERS_MAX;
 
 /// How long a strip that was sent waits for the deck to report it.
 pub const PENDING_HOLD: Duration = Duration::from_secs(8);
@@ -162,7 +172,7 @@ pub fn addable(list: &[FaceEntry], linux: bool) -> Vec<Template> {
         .filter(|&face| match face {
             Template::Omarchy => linux,
             Template::Macropad => count(face) < MAX_MACROPADS,
-            Template::Timer => count(face) == 0,
+            Template::Timer => count(face) < MAX_TIMERS,
             Template::Agents | Template::Settings => false,
             Template::Usage | Template::Arcade | Template::System => true,
         })
@@ -200,6 +210,19 @@ pub fn free_id(list: &[FaceEntry], face: Template) -> Option<u8> {
 pub enum Side {
     Left,
     Right,
+}
+
+/// The way a key moves the selected face along the strip: Option-Left and
+/// Option-Right, as **Move Left** and **Move Right** do. Any other key, or
+/// an arrow with another modifier, is `None`.
+pub fn strip_move(key: &str, modifiers: &Modifiers) -> Option<Side> {
+    let option_alone = modifiers.alt
+        && !(modifiers.control || modifiers.shift || modifiers.platform || modifiers.function);
+    match key {
+        "left" if option_alone => Some(Side::Left),
+        "right" if option_alone => Some(Side::Right),
+        _ => None,
+    }
 }
 
 /// `list` with the face at `at` moved one place to `side`: as it was when
@@ -363,6 +386,72 @@ impl Forget {
     }
 }
 
+/// What the page waits on after it changed the strip, and the deck that was
+/// for. Each deck keeps its own strip and keys, so when the service says
+/// another deck is in the hand (`device.deck`), what was sent for the last
+/// one is let go: a strip it never reported is not waited for, and the keys
+/// of a Macropad taken off it are never cleared on this one.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StripWrites {
+    /// The deck the service keeps the strip and keys of, by its label.
+    pub deck: Option<String>,
+    /// A strip sent and not yet reported by the deck.
+    pub pending: Option<Pending>,
+    /// What the pending strip's removal leaves to do once it is taken.
+    pub forget: Option<Forget>,
+    /// The last strip sent was not taken.
+    pub refused: bool,
+}
+
+impl StripWrites {
+    /// The service now keeps the strip and keys of `deck`. Another deck
+    /// than before lets go of everything that was waited on; true then.
+    pub fn follow(&mut self, deck: Option<&str>) -> bool {
+        if self.deck.as_deref() == deck {
+            return false;
+        }
+        *self = StripWrites {
+            deck: deck.map(str::to_string),
+            ..StripWrites::default()
+        };
+        true
+    }
+}
+
+/// The sentence a strip rule the service refused a strip by comes to, in
+/// `language`: `why` is `strip_problem`'s word for it (`device.faces.set`'s
+/// `invalid{field:"list", why}`); `None` for words that name no strip rule.
+#[must_use]
+pub fn strip_rule(why: &str, language: Language) -> Option<&'static str> {
+    Some(match why {
+        "max 8" => language.text("The strip holds eight faces at most."),
+        "f 1..=8" => language.text("Each face needs a number from 1 to 8."),
+        "duplicate f" => language.text("Two faces have the same number."),
+        "empty name" => language.text("Every face needs a name."),
+        "agents first" => language.text("Agents must be the first face."),
+        "settings last" => language.text("Settings must be the last face."),
+        "agents or settings in the middle" => {
+            language.text("Agents and Settings cannot be in the middle.")
+        }
+        "max 3 macropads" => language.text("The strip can hold three Macropads at most."),
+        "max 1 timer" => language.text("The strip can hold one Timer."),
+        _ => return None,
+    })
+}
+
+/// What the toast says when the service would not take a strip: a strip
+/// rule as its sentence, in `language`; any other failure in the service's
+/// own words (`data.why`), else the error itself.
+#[must_use]
+pub fn strip_write_failed(error: &ClientError, language: Language) -> String {
+    let why = crate::updates::failure_text(error);
+    let why = strip_rule(&why, language).map_or(why, str::to_string);
+    language.format(
+        "{0} failed: {1}",
+        &[language.text("Change the deck's faces"), &why],
+    )
+}
+
 /// What the line beside the strip's buttons says.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StripNote {
@@ -505,6 +594,13 @@ pub fn usage_write(providers: Vec<String>) -> UiAction {
     }
 }
 
+/// Whether the Usage panel says when its sources are asked: only for a
+/// service that asks that way (`service.dormancy`), so the note never
+/// claims what an older service does not do.
+pub fn usage_asked_note(service: &ServiceState) -> bool {
+    service.dormancy.is_some()
+}
+
 /// A reply the page keeps: not read yet, a method this service does not
 /// have, or the answer.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -520,12 +616,8 @@ enum Reply<T> {
 pub struct FacesPane {
     /// The face picked on the strip, by its id.
     selected: Option<u8>,
-    /// A strip sent and not yet reported by the deck.
-    pending: Option<Pending>,
-    /// What the pending strip's removal leaves to do once it is taken.
-    forget: Option<Forget>,
-    /// The last strip sent was not taken.
-    refused: bool,
+    /// The strip sent and what it waits on, for the deck in the hand.
+    writes: StripWrites,
     /// `config.get`'s `usage.providers`.
     usage: Reply<UsageConfig>,
     /// A `config.get` is on its way.
@@ -543,9 +635,7 @@ impl FacesPane {
         let (keys, subscriptions) = KeysPane::new(window, cx);
         let pane = FacesPane {
             selected: None,
-            pending: None,
-            forget: None,
-            refused: false,
+            writes: StripWrites::default(),
             usage: Reply::Unknown,
             asking: false,
             keys,
@@ -557,7 +647,9 @@ impl FacesPane {
 impl Shell {
     /// Ask the service for the Usage face's sources and for the grant the
     /// deck's shortcuts need, unless the page has them; `force` asks anyway
-    /// (a reconnect). The strip and the keys are the mirror's.
+    /// (a reconnect). The strip and the keys are the mirror's, and the Label
+    /// field shows the selected key's label as the page opens (words typed
+    /// for that key are kept).
     pub(crate) fn refresh_faces(
         &mut self,
         force: bool,
@@ -568,6 +660,7 @@ impl Shell {
             self.read_usage(window, cx);
         }
         self.refresh_keys(force, window, cx);
+        self.sync_label(window, cx);
     }
 
     /// The page: its head, the strip, and the selected face's panel.
@@ -607,15 +700,26 @@ impl Shell {
 
     /// A strip the deck now reports is no longer waited for, and a Macropad
     /// it took off goes with its keys; the key editor follows the mirror.
+    /// Another deck in the hand lets go of all of it first, and of what the
+    /// key editor held for the last one: the Label field is emptied and
+    /// given this deck's label at once, whatever page is open, so the last
+    /// deck's words are neither shown nor committed to this one.
     pub(crate) fn on_faces_event(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let deck = self.state.mirror().device.deck.clone();
+        if self.faces.writes.follow(deck.as_deref()) {
+            self.faces.keys.other_deck();
+            self.faces.keys.clear_label(window, cx);
+            self.sync_label(window, cx);
+        }
         let taken = self
             .faces
+            .writes
             .pending
             .as_ref()
             .is_some_and(|pending| pending.taken(self.strip_shown()));
         if taken {
-            self.faces.pending = None;
-            if let Some(forget) = self.faces.forget.take() {
+            self.faces.writes.pending = None;
+            if let Some(forget) = self.faces.writes.forget.take() {
                 if forget.due(self.strip_shown()) {
                     self.act(forget.write, window, cx);
                 }
@@ -629,13 +733,14 @@ impl Shell {
     pub(crate) fn tick_faces(&mut self, _beat: u64, window: &mut Window, cx: &mut Context<Self>) {
         let expired = self
             .faces
+            .writes
             .pending
             .as_ref()
             .is_some_and(|pending| pending.expired(present::now()));
         if expired {
-            self.faces.pending = None;
-            self.faces.forget = None;
-            self.faces.refused = true;
+            self.faces.writes.pending = None;
+            self.faces.writes.forget = None;
+            self.faces.writes.refused = true;
         }
         self.tick_keys(window, cx);
     }
@@ -651,9 +756,9 @@ impl Shell {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
-        self.faces.pending = None;
-        self.faces.forget = None;
-        self.faces.refused = false;
+        self.faces.writes.pending = None;
+        self.faces.writes.forget = None;
+        self.faces.writes.refused = false;
         self.stop_recording();
         let Some((_, face, access)) = SCENES.into_iter().find(|(s, ..)| *s == scene) else {
             return false;
@@ -697,7 +802,7 @@ impl Shell {
         self.commit_label(window, cx);
         self.faces.keys.reset();
         self.faces.selected = Some(f);
-        self.faces.refused = false;
+        self.faces.writes.refused = false;
         self.sync_label(window, cx);
         cx.notify();
     }
@@ -705,21 +810,16 @@ impl Shell {
     /// Send a new strip, and wait for the deck to report it.
     fn write_strip(&mut self, list: Vec<FaceEntry>, window: &mut Window, cx: &mut Context<Self>) {
         self.stop_recording();
-        self.faces.refused = false;
-        self.faces.pending = Some(Pending {
+        self.faces.writes.refused = false;
+        self.faces.writes.pending = Some(Pending {
             list: list.clone(),
             at: present::now(),
         });
         self.ask(strip_write(list), window, cx, |this, result, window, cx| {
             if let Err(e) = result {
-                this.faces.pending = None;
-                this.faces.forget = None;
-                let what = this.tr("Change the deck's faces");
-                this.toast(
-                    this.fmt("{0} failed: {1}", &[what, &e.to_string()]),
-                    window,
-                    cx,
-                );
+                this.faces.writes.pending = None;
+                this.faces.writes.forget = None;
+                this.toast(strip_write_failed(&e, this.language()), window, cx);
             }
         });
         cx.notify();
@@ -778,7 +878,7 @@ impl Shell {
         self.faces.selected = at.checked_sub(1).map(|before| list[before].f);
         self.faces.keys.reset();
         // Before the write: a write refused at once lets it go again.
-        self.faces.forget = Forget::of(&list[at], self.state.mirror());
+        self.faces.writes.forget = Forget::of(&list[at], self.state.mirror());
         self.write_strip(removed(&list, at), window, cx);
     }
 
@@ -858,19 +958,22 @@ impl Shell {
 
     /// The strip: a tile for each face, **Add a face** while one more fits,
     /// the buttons that change it and the line that says what they can do.
+    ///
+    /// The tiles are one stop on the Tab order ([`ui::Group`]): Tab reaches
+    /// the selected face, Left and Right move the keyboard along the tiles,
+    /// and Return or Space presses the one that has it (selects a face,
+    /// opens **Add a face**). Option-Left and Option-Right move the
+    /// selected face, as **Move Left** and **Move Right** do.
     fn face_strip(&self, dim: bool, p: &Palette, cx: &Context<Self>) -> Div {
         let linked = self.linked();
         let list = self.strip_shown();
         let at = selection(list, self.faces.selected);
-        let pending = self.faces.pending.is_some();
+        let pending = self.faces.writes.pending.is_some();
         let writable = linked && !pending && !dim;
-        let tiles = list
-            .iter()
-            .enumerate()
-            .map(|(i, face)| self.face_tile(face, Some(i) == at, p, cx));
-        let add = (!addable(list, LINUX).is_empty()).then(|| self.add_tile(writable, p, cx));
-        let full = list.len() + usize::from(add.is_some()) >= FULL_COLUMNS;
-        let tiles = h_flex()
+        let add = !addable(list, LINUX).is_empty();
+        let full = list.len() + usize::from(add) >= FULL_COLUMNS;
+        let mut tiles = ui::Group::new("face-strip", Layout::Row)
+            .h_flex()
             .w_full()
             .items_start()
             .map(|row| {
@@ -883,13 +986,20 @@ impl Shell {
             .pt(px(16.))
             .px(px(16.))
             .pb(px(TILES_BOTTOM))
-            .children(tiles)
-            .children(add);
+            .selected(at);
+        for (i, face) in list.iter().enumerate() {
+            let (key, tile) = self.face_tile(face, Some(i) == at, p, cx);
+            tiles = tiles.wrapped(key, true, tile);
+        }
+        if add {
+            let (key, tile) = self.add_tile(writable, p, cx);
+            tiles = tiles.wrapped(key, writable, tile);
+        }
         let allowed =
             |rule: fn(&[FaceEntry], usize) -> bool| writable && at.is_some_and(|at| rule(list, at));
         // With the service away the frame says so; the line keeps to the
         // strip and does not blame the link.
-        let note = StripNote::of(linked || dim, pending, self.faces.refused);
+        let note = StripNote::of(linked || dim, pending, self.faces.writes.refused);
         let buttons = h_flex()
             .w_full()
             .gap(px(8.))
@@ -926,21 +1036,37 @@ impl Shell {
             ),
             p,
         )
+        .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+            let stroke = &event.keystroke;
+            let Some(side) = strip_move(&stroke.key, &stroke.modifiers) else {
+                return;
+            };
+            cx.stop_propagation();
+            // As the Move buttons: only with the deck linked and no strip
+            // still on its way to it.
+            if this.linked() && this.faces.writes.pending.is_none() {
+                this.move_face(side, window, cx);
+            }
+        }))
     }
 
     /// One face on the strip: its plate, ringed while selected, and its name
     /// under it with a pin when it stays where it is. A press on either
     /// selects it. The column takes the name and pin's width when that is
     /// more than the plate's, up to [`COLUMN_MAX`]; a longer name is cut.
+    ///
+    /// The plate is the strip's member: this answers its id and what draws
+    /// the tile once the strip has given the plate its keyboard.
     fn face_tile(
         &self,
         face: &FaceEntry,
         selected: bool,
         p: &Palette,
         cx: &Context<Self>,
-    ) -> impl IntoElement {
+    ) -> (ElementId, impl FnOnce(&Roving) -> AnyElement + 'static) {
         let f = face.f;
-        let plate = Press::new(("face", usize::from(f)))
+        let id = ElementId::from(("face", usize::from(f)));
+        let plate = Press::new(id.clone())
             .radius(TILE_RADIUS)
             .rest(p.tile_rest)
             .selected(selected)
@@ -967,22 +1093,34 @@ impl Shell {
             .when(pinned(face.t), |name| {
                 name.child(ui::icon(ic::PIN, 11., p.text3))
             });
-        v_flex()
+        let column = v_flex()
             .id(("face-tile", usize::from(f)))
             .flex_none()
             .min_w(px(TILE))
             .max_w(px(COLUMN_MAX))
             .gap(px(8.))
             .cursor_pointer()
-            .on_click(cx.listener(move |this, _, window, cx| this.select_face(f, window, cx)))
-            .child(plate)
-            .child(name)
+            .on_click(cx.listener(move |this, _, window, cx| this.select_face(f, window, cx)));
+        let draw = move |roving: &Roving| {
+            column
+                .child(plate.roving(roving))
+                .child(name)
+                .into_any_element()
+        };
+        (id, draw)
     }
 
     /// **Add a face**: a dashed tile with a plus, faint while the strip
-    /// cannot change.
-    fn add_tile(&self, enabled: bool, p: &Palette, cx: &Context<Self>) -> Div {
-        let tile = Press::new("face-add")
+    /// cannot change. Like a face's plate, the tile is the strip's member:
+    /// this answers its id and what draws it with its keyboard.
+    fn add_tile(
+        &self,
+        enabled: bool,
+        p: &Palette,
+        cx: &Context<Self>,
+    ) -> (ElementId, impl FnOnce(&Roving) -> AnyElement + 'static) {
+        let id = ElementId::from("face-add");
+        let tile = Press::new(id.clone())
             .radius(TILE_RADIUS)
             .own_border(1.5)
             .flex()
@@ -1000,20 +1138,24 @@ impl Shell {
         } else {
             tile
         };
-        v_flex()
+        let column = v_flex()
             .flex_none()
             .w(px(TILE))
             .gap(px(8.))
-            .when(!enabled, |column| column.opacity(0.4))
-            .child(tile)
-            .child(
-                div()
-                    .ts(13., 18.)
-                    .medium()
-                    .whitespace_nowrap()
-                    .text_color(p.text2)
-                    .child(self.tr("Add a face")),
-            )
+            .when(!enabled, |column| column.opacity(0.4));
+        let name = div()
+            .ts(13., 18.)
+            .medium()
+            .whitespace_nowrap()
+            .text_color(p.text2)
+            .child(self.tr("Add a face"));
+        let draw = move |roving: &Roving| {
+            column
+                .child(tile.roving(roving))
+                .child(name)
+                .into_any_element()
+        };
+        (id, draw)
     }
 
     /// The line at the end of the buttons: the strip's limits, why it cannot
@@ -1095,6 +1237,15 @@ impl Shell {
         ];
         if older {
             rows.push(note(self.tr("This needs a newer background service."), p));
+        }
+        // Said only by a service that does it (`service.dormancy`): one that
+        // predates the quiet asks whether or not a deck is there.
+        if usage_asked_note(&self.state.mirror().service) {
+            rows.push(note(
+                self.tr("Asked only while this face is on the strip,\n\
+                     and for up to ten minutes after the deck was last linked."),
+                p,
+            ));
         }
         let sources = v_flex()
             .flex_none()
@@ -1217,43 +1368,47 @@ impl Shell {
     // ---- the add dialog ----------------------------------------------------
 
     /// The faces the strip can take, each its plate and its name; a press
-    /// adds it. As wide as its row of plates.
+    /// adds it. As wide as its row of plates. The plates are one stop on the
+    /// Tab order, as the strip's tiles are: the arrows move the keyboard
+    /// along them, and Return or Space adds the one that has it.
     fn render_add_face(&self, cx: &Context<Self>) -> (AnyElement, f32) {
         let p = *palette(cx);
         let language = self.language();
         let choices = addable(self.strip_shown(), LINUX);
-        let tiles = choices.iter().map(|&face| {
-            v_flex()
+        let mut plates = ui::Group::new("add-face-plates", Layout::Row)
+            .h_flex()
+            .items_start()
+            .gap(px(TILE_GAP));
+        for &face in &choices {
+            let id = ElementId::from(("add-face", usize::from(default_id(face))));
+            let plate = Press::new(id.clone())
+                .radius(TILE_RADIUS)
+                .rest(p.tile_rest)
                 .flex_none()
-                .w(px(TILE))
-                .gap(px(8.))
-                .child(
-                    Press::new(("add-face", usize::from(default_id(face))))
-                        .radius(TILE_RADIUS)
-                        .rest(p.tile_rest)
-                        .flex_none()
-                        .size(px(TILE))
-                        .child(art::plate(Some(face), TILE, Some(TILE_RADIUS), None))
-                        .on_click(
-                            cx.listener(move |this, _, window, cx| this.add_face(face, window, cx)),
-                        ),
-                )
-                .child(
-                    div()
-                        .ts(13., 18.)
-                        .medium()
-                        .truncate()
-                        .text_color(p.text2)
-                        .child(language.text(face_label(face))),
-                )
-        });
+                .size(px(TILE))
+                .child(art::plate(Some(face), TILE, Some(TILE_RADIUS), None))
+                .on_click(cx.listener(move |this, _, window, cx| this.add_face(face, window, cx)));
+            let column = v_flex().flex_none().w(px(TILE)).gap(px(8.));
+            let name = div()
+                .ts(13., 18.)
+                .medium()
+                .truncate()
+                .text_color(p.text2)
+                .child(language.text(face_label(face)));
+            plates = plates.wrapped(id, true, move |roving: &Roving| {
+                column
+                    .child(plate.roving(roving))
+                    .child(name)
+                    .into_any_element()
+            });
+        }
         let count = choices.len().max(1) as f32;
         let width = (40. + count * TILE + (count - 1.) * TILE_GAP).max(320.);
         let body = v_flex()
             .p(px(20.))
             .gap(px(16.))
             .child(div().ts(13., 18.).semibold().child(self.tr("Add a face")))
-            .child(h_flex().items_start().gap(px(TILE_GAP)).children(tiles))
+            .child(plates)
             .child(
                 h_flex()
                     .justify_end()
@@ -1283,7 +1438,6 @@ fn perm_status(accessibility: &str) -> Value {
         "microphone": "unknown",
         "speech": "not_determined",
         "bluetooth": "granted",
-        "automation": {"ghostty": "unknown"},
         "accessibility": accessibility,
         "limits": [],
     })

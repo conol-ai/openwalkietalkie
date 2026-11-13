@@ -20,11 +20,11 @@ use crate::deck::{no_service_title, NoService};
 use crate::present;
 use crate::shell::{Screen, Shell, SIDEBAR_WIDTH};
 use crate::style::{palette, Palette};
-use crate::ui::{self, ic, Row, Type as _, PAGE_END, PAGE_SIDE, PAGE_WIDTH};
+use crate::ui::{self, ic, Layout, Row, Type as _, PAGE_END, PAGE_SIDE, PAGE_WIDTH};
 use deck_gui_core::i18n::Language;
 use deck_model::{DeviceState, Link, Tone, Transport};
 use gpui::{div, prelude::*, px, AnyElement, Context, Div};
-use gpui_component::{h_flex, v_flex};
+use gpui_component::{h_flex, v_flex, StyledExt as _};
 
 /// The traffic lights' row at the sidebar's top: macOS draws the lights,
 /// the sidebar keeps their place (12 px circles in the design, centred 26
@@ -165,6 +165,10 @@ impl Shell {
     /// The sidebar: the lights' row, the brand, a row per page, and the
     /// deck at its foot. A page is fetched on arrival rather than polled,
     /// so a row's click is a [`Shell::go`].
+    ///
+    /// The five rows are one stop on the Tab order ([`ui::Group`]): Tab
+    /// reaches the page that is up, Up and Down move the keyboard along the
+    /// rows, and Return or Space opens the one that has it.
     pub(crate) fn render_sidebar(&self, cx: &Context<Self>) -> AnyElement {
         let p = *palette(cx);
         let row = |screen: Screen| {
@@ -177,6 +181,14 @@ impl Shell {
             )
             .on_click(cx.listener(move |this, _, window, cx| this.go(screen, window, cx)))
         };
+        let current = Screen::NAV
+            .iter()
+            .position(|&screen| Some(screen) == self.screen.nav());
+        let pages = ui::Group::new("nav", Layout::Column)
+            .v_flex()
+            .gap(px(2.))
+            .selected(current)
+            .members(Screen::NAV.map(row));
         v_flex()
             .w(px(SIDEBAR_WIDTH))
             .h_full()
@@ -190,7 +202,7 @@ impl Shell {
             .gap(px(18.))
             .child(div().flex_none().h(px(LIGHTS_ROW)))
             .child(div().px(px(6.)).child(ui::brand()))
-            .child(v_flex().gap(px(2.)).children(Screen::NAV.map(row)))
+            .child(pages)
             .child(div().flex_1())
             .child(self.render_foot(&p))
             .into_any_element()

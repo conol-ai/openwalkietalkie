@@ -21,6 +21,21 @@
 //! `care.test.question` with no deck linked; `integrations.status.no_detect`
 //! beside `integrations.status`, whose default is `detect: true`).
 //!
+//! Four were taken again on 2026-11-13, where the hand-off (raising the
+//! session's own app in place of the Ghostty tab path) changed them, from
+//! the same kind of run of that build: `perm.status` and `sources.list` are
+//! its replies whole (no `automation`; the Claude Code row's hand-off is
+//! `app`); `config.get` is the 0.13.0 reply without its `desktop` table and
+//! `service.info` the 0.13.0 reply with that build's `capabilities` (no
+//! `inject.ghostty`, and `order.result`), so the ports, paths and times the
+//! other files share still agree. `config.get` was then brought by hand to
+//! what the service of the same release answers for the three keys that
+//! changed since: no `voice.fallback_input` (decision 11),
+//! `voice."tts.key_store"` as `config` (a `--no-device` service keeps the
+//! cloud voice key in its own `config.toml`), and the service's own release
+//! looks switched on (`updates.check`). Its `api.tcp` is still the stage-6
+//! service's (see the test that reads it).
+//!
 //! They sit beside the hand-written fixtures of `daemon_replies.rs`, which
 //! are the contract with the boards' values, and never replace them. What a
 //! fresh service really answers that the boards do not draw: a deck that was
@@ -108,9 +123,9 @@ fn a_fresh_services_sources_are_its_three_tools_with_nothing_on_the_deck() {
     assert!(claude.enabled);
     assert_eq!(claude.state, None, "its state is the installer's status");
     assert_eq!(claude.unit, Unit::Sessions);
-    // The service's truth today; the board's `app` waits for the hand-off
-    // repair.
-    assert_eq!(claude.handoff, Some(Handoff::Terminal));
+    // The hand-off raises the session's own app: the board's word, now the
+    // service's.
+    assert_eq!(claude.handoff, Some(Handoff::App));
     assert_eq!((claude.hooks, claude.stale), (Some(13), None));
     let channels = sources
         .get("claude_channels")
@@ -205,11 +220,19 @@ fn one_config_get_reads_every_switch_and_a_port_of_zero_as_no_port() {
         ("cloud", "openai")
     );
     assert!(!tts.has_key(), "the key's hint is empty: no key");
+    assert_eq!(reply["voice"]["tts.key_store"], "config");
+    assert!(
+        !tts.in_keychain(),
+        "a test service keeps its key in its own config.toml"
+    );
     assert!(tts.cloud_selected());
     assert_eq!(tts.effective_model().as_deref(), Some("gpt-4o-mini-tts"));
     assert!(tts.voices.is_empty());
     assert_eq!(reply["usage"]["providers"], json!([]), "the test config's");
-    assert_eq!(reply["voice"]["fallback_input"], "none");
+    // Decision 11: the Mac's microphone is no fallback, and the key is gone.
+    assert!(reply["voice"].get("fallback_input").is_none(), "{reply}");
+    // The service's own looks for a release, on by default.
+    assert_eq!(reply["updates"], json!({"check": true}));
 }
 
 #[test]
@@ -278,10 +301,11 @@ fn the_footprint_of_a_fresh_service_names_nine_items_and_finds_two() {
         .map(|item| item.id.as_str())
         .collect();
     // In the page's order. This service predates the Codex Desktop
-    // launcher's item, the one the page lists that it does not.
+    // launcher's item and the Keychain item, the two the page lists that
+    // it does not.
     let known: Vec<&str> = FOOTPRINT_IDS
         .into_iter()
-        .filter(|id| *id != "codex_desktop")
+        .filter(|id| !["codex_desktop", "keychain"].contains(id))
         .collect();
     assert_eq!(ids, known);
     let present: Vec<&str> = footprint

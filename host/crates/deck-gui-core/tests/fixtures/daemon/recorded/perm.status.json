@@ -1,13 +1,11 @@
 {
   "accessibility": "unknown",
-  "automation": {
-    "ghostty": "unknown"
-  },
   "bluetooth": "unknown",
   "limits": [
-    "microphone and speech are what the audio side last reported; with no engine in this build they stay `unknown` and that is not the same as `not_determined`",
+    "microphone is what the audio side last reported; with no engine in this build it stays `unknown` and that is not the same as `not_determined`",
+    "speech is macOS's own answer (SFSpeechRecognizer.authorizationStatus), read when this is asked while the daemon has an audio engine, whose Apple recogniser is what needs it; a read never asks for the grant. With no engine it is what the audio side last reported, `unknown` like the microphone",
     "bluetooth is CoreBluetooth's authorization for this process as the BLE voice link last read it (`[voice] transport = \"ble\"`, where the deck's microphone and speaker need it instead of Microphone); `unknown` on the CoreAudio transport and until the link has started. macOS asks for it by itself the first time the link starts, so there is no `perm.request` for it, and a denial is lifted in System Settings > Privacy & Security > Bluetooth",
-    "automation.ghostty is what the injector last learned by trying: `granted` once a script has run, `denied` after a -1743, and `unknown` until it has had occasion to ask. accessibility is what the Macropad keys last learned the same way: `granted` once a keystroke went out, `denied` after macOS refused one (which also puts the system prompt up, once per run), and `unknown` until a key has been pressed or `perm.request` asked",
+    "accessibility is what the Macropad keys last learned by trying: `granted` once a keystroke went out, `denied` after macOS refused one (which also puts the system prompt up, once per run), and `unknown` until a key has been pressed or `perm.request` asked",
     "a grant reported here is this process's. A launchd-spawned deckd is its own responsible process with its own TCC row, so a status read from a terminal-spawned daemon says nothing about the shipped one (W4 V9)"
   ],
   "microphone": "unknown",

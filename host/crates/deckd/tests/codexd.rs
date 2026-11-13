@@ -686,6 +686,85 @@ async fn a_loaded_thread_is_an_agent_its_approval_a_card_and_an_order_a_steer() 
     let _ = std::fs::remove_dir_all(path.parent().unwrap());
 }
 
+/// An order the app-server will not take fails on the deck instead of
+/// vanishing: the client reports it as the agent's owner, under the order's
+/// id. A steer refused because the turn ended still becomes a start first.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_refused_turn_reports_the_order_failed() {
+    let path = socket_path("refused-order");
+    let mut fake = fake_daemon(path.clone()).await;
+    let daemon = Daemon::with(Options {
+        codex_socket: Some(path.clone()),
+        ..Options::default()
+    })
+    .await;
+    let (stop, stop_rx) = tokio::sync::watch::channel(false);
+    let client = tokio::spawn(deckd::codexd::run(daemon.api.clone(), stop_rx));
+    let agent = agent_with_key(&daemon, "codex:t1").await;
+    let mut peer = daemon.connect().await;
+    peer.call(
+        "session.hello",
+        json!({"client": {"name": "gui"}, "scopes": ["observe", "operate"], "subscribe": ["order.failed"]}),
+    )
+    .await;
+
+    // A turn is running and the steer is refused: the same words start the
+    // next turn, and nothing failed.
+    fake.push
+        .send(json!({"method": "turn/started", "params": {"threadId": "t1", "turn": {"id": "turn-9"}}}))
+        .unwrap();
+    daemon
+        .until("working", |s| {
+            s.agents[&agent.id].state == AgentState::Working
+        })
+        .await;
+    fake.reject_steer
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    peer.call(
+        "op.order",
+        json!({"agent": agent.id, "text": "also update the README", "ctx": "talk", "source": "ptt"}),
+    )
+    .await;
+    let (_, steer) = fake.request("turn/steer").await;
+    let (_, start) = fake.request("turn/start").await;
+    assert_eq!(start["input"], steer["input"]);
+    fake.reject_steer
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+
+    // The server refuses the turn itself: the order fails, by its owner.
+    fake.reject_turns
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let order = peer
+        .call(
+            "op.order",
+            json!({"agent": agent.id, "text": "run the tests", "ctx": "talk", "source": "ptt"}),
+        )
+        .await;
+    assert_eq!(order["via"], "poll", "{order}");
+    fake.request("turn/start").await;
+    let failed = peer
+        .line_where("order.failed", |l| l["params"]["type"] == "order.failed")
+        .await;
+    let data = &failed["params"]["data"];
+    assert_eq!(data["reason"], "turn_refused");
+    assert_eq!(data["order"], order["order"]);
+    assert_eq!(data["by"], "owner");
+    assert_eq!(data["agent"], agent.id.0.as_str());
+    daemon
+        .until("the failure card", |s| {
+            s.agents[&agent.id]
+                .card
+                .as_ref()
+                .is_some_and(|c| c.text.as_deref() == Some(deck_model::NOT_DELIVERED.text[0]))
+        })
+        .await;
+
+    stop.send(true).unwrap();
+    client.await.unwrap();
+    daemon.shutdown().await;
+    let _ = std::fs::remove_dir_all(path.parent().unwrap());
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_slow_history_does_not_block_questions_or_native_answers() {
     let path = socket_path("history-prompt");
@@ -735,6 +814,93 @@ async fn a_slow_history_does_not_block_questions_or_native_answers() {
         .await
         .is_err(),
         "observing or clearing a native question must not answer it"
+    );
+    stop.send(true).unwrap();
+    client.await.unwrap();
+    daemon.shutdown().await;
+}
+
+/// R6, the lazy reader feed (`deckd::reader`) on the Codex side. A thread
+/// the deck does not read records no history: its first read restores only
+/// its questions, and a turn it runs leaves its reply and nothing else. Once
+/// the deck opens it, its latest items are read again, newest first
+/// (`sortDirection:"desc"`), and replace what the store kept, in order; the
+/// reply on file stays the turn's own.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_thread_the_deck_opens_is_read_again_and_one_it_does_not_keeps_its_replies() {
+    let path = socket_path("lazy");
+    let mut fake = fake_daemon(path.clone()).await;
+    let user = |id: &str, text: &str| {
+        json!({"id": id, "type": "userMessage", "content": [{"type": "text", "text": text}]})
+    };
+    let said = |id: &str, text: &str| json!({"id": id, "type": "agentMessage", "text": text});
+    *fake.history.lock().unwrap() = vec![json!({"id": "old", "status": "completed",
+        "items": [user("h-u", "Earlier prompt"), said("h-a", "Earlier answer")]})];
+    let daemon = Daemon::with(Options {
+        codex_socket: Some(path),
+        lazy: true,
+        ..Options::default()
+    })
+    .await;
+    daemon
+        .until("the deck is linked and the collectors run", |s| {
+            s.service.dormancy.is_some_and(|d| d.collecting)
+        })
+        .await;
+    let (stop, stop_rx) = tokio::sync::watch::channel(false);
+    let client = tokio::spawn(deckd::codexd::run(daemon.api.clone(), stop_rx));
+    let agent = agent_with_key(&daemon, "codex:t1").await;
+    let (_, first) = fake.request("thread/items/list").await;
+    assert_eq!(first["sortDirection"], "asc", "the first read, for questions");
+
+    // A turn, nobody reading: its reply is stored before `ready`, and that
+    // is all of it the store has.
+    for (method, params) in [
+        ("turn/started", json!({"threadId": "t1", "turn": {"id": "now"}})),
+        ("item/started", json!({"threadId": "t1", "item": user("n-u", "Run the tests")})),
+        ("item/completed", json!({"threadId": "t1", "item": said("n-a", "All green.")})),
+        ("turn/completed", json!({"threadId": "t1", "turn": {"id": "now", "status": "completed"}})),
+    ] {
+        fake.push.send(json!({"method": method, "params": params})).unwrap();
+    }
+    daemon
+        .until("the turn ended with its reply", |s| {
+            let a = &s.agents[&agent.id];
+            a.state == AgentState::Ready
+                && a.reply.as_ref().and_then(|r| r.text.as_deref()) == Some("All green.")
+        })
+        .await;
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    let snapshot = daemon.api.bus.snapshot();
+    let kept: Vec<&str> = snapshot.agents[&agent.id]
+        .messages
+        .iter()
+        .map(|m| m.message.id.as_str())
+        .collect();
+    assert_eq!(kept.len(), 1, "the reply alone: {kept:?}");
+    assert!(kept[0].starts_with("reply-"), "{kept:?}");
+
+    // The deck opens the thread.
+    fake.history.lock().unwrap().push(json!({"id": "now", "status": "completed",
+        "items": [user("n-u", "Run the tests"), said("n-a", "All green.")]}));
+    let slot = snapshot.agents[&agent.id].slot.expect("on the deck");
+    daemon.device_input(deck_model::DeviceLine::Channel { slot: slot.0, seq: 1 });
+    let (_, refill) = fake.request("thread/items/list").await;
+    assert_eq!(refill["sortDirection"], "desc", "newest first");
+    daemon
+        .until("the thread's history, in order", |s| {
+            let ids: Vec<&str> = s.agents[&agent.id]
+                .messages
+                .iter()
+                .map(|m| m.message.id.as_str())
+                .collect();
+            ids == ["h-u", "h-a", "n-u", "n-a"]
+        })
+        .await;
+    let snapshot = daemon.api.bus.snapshot();
+    assert_eq!(
+        snapshot.agents[&agent.id].reply.as_ref().and_then(|r| r.text.as_deref()),
+        Some("All green.")
     );
     stop.send(true).unwrap();
     client.await.unwrap();

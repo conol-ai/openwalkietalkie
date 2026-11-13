@@ -84,6 +84,18 @@ An unrelated development daemon is left alone.
 Source and ad-hoc builds keep Sparkle installation disabled. They still
 support firmware checks and updates through the running daemon.
 
+The daemon looks for a release by itself, with the app closed or not
+running: five minutes after it starts, then every six hours while a deck
+was linked in the last ten minutes, an hour after a look that could not
+reach the feed. Each look fetches `release-manifest.json` and reads the
+firmware section and the app's version, `app.version`, which
+`tools/release.py` writes beside the Mac downloads. The app then names a
+newer app on the Service page, in every build, and a newer firmware for
+the linked deck on the Deck page, on the cable or not. Only Sparkle
+installs the app, and the firmware still installs by cable.
+`[updates] check = false` in `config.toml` stops the daemon's own looks;
+**Check** still looks.
+
 ## Factory full-chip images
 
 Build the normal firmware and recovery assets for both boards first. Generate

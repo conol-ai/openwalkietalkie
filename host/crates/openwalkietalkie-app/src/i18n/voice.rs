@@ -239,6 +239,12 @@ pub const STRINGS: &[Entry] = &[
         "金鑰儲存在此 Mac 上的服務設定中。",
         "キーはこの Mac のサービス設定に保存されます。",
     ),
+    (
+        "The key is kept in your Keychain on this Mac.",
+        "密钥保存在此 Mac 上的钥匙串中。",
+        "金鑰儲存在此 Mac 上的鑰匙圈中。",
+        "キーはこの Mac のキーチェーンに保存されます。",
+    ),
     ("Save Key", "保存密钥", "儲存金鑰", "キーを保存"),
     ("Remove Key", "移除密钥", "移除金鑰", "キーを削除"),
     (

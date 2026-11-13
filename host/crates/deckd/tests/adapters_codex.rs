@@ -282,6 +282,57 @@ async fn session_end_releases_the_agent_and_never_resurrects_an_unknown_one() {
     daemon.shutdown().await;
 }
 
+/// The hand-off's input: the hook that puts a session on the roster carries
+/// the app its helper found, and it is registered on the session's
+/// terminal, which is what a press on the session's `Open app` card raises.
+/// A value that does not look like a bundle identifier is dropped at the
+/// door, and the event still lands.
+#[tokio::test]
+async fn a_codex_hook_session_records_its_app() {
+    let daemon = Daemon::with(untrusted()).await;
+    let hooks = daemon.bearer("hooks", &[Scope::HooksIngest]);
+    let start = |session: &str, app: &str| {
+        let mut payload = fixture("session-start");
+        payload["session_id"] = session.into();
+        let mut body: serde_json::Value =
+            serde_json::from_str(&call("hooks.codex", payload)).unwrap();
+        body["params"]["app"] = app.into();
+        body.to_string()
+    };
+    let terminal_of = |s: &deck_model::Snapshot, session: &str| {
+        let key = format!("codex:{session}");
+        s.agents
+            .values()
+            .find(|a| a.session.key.as_deref() == Some(key.as_str()))
+            .map(|a| a.session.terminal.clone().unwrap_or_default())
+    };
+    for (session, app) in [
+        ("s-forged", "-b com.evil"),
+        ("s-ghostty", "com.mitchellh.ghostty"),
+    ] {
+        let out = daemon.rpc(&hooks, &start(session, app)).await;
+        assert_eq!(out["result"], serde_json::json!({}), "{out}");
+    }
+    daemon
+        .until("both sessions land", |s| {
+            terminal_of(s, "s-forged").is_some() && terminal_of(s, "s-ghostty").is_some()
+        })
+        .await;
+    let snapshot = daemon.api.bus.snapshot();
+    let forged = terminal_of(&snapshot, "s-forged").unwrap();
+    assert_eq!(forged.app, None, "dropped at the door");
+    assert_eq!(
+        forged.tty.as_deref(),
+        Some("/dev/ttys004"),
+        "the rest is kept"
+    );
+    assert_eq!(
+        terminal_of(&snapshot, "s-ghostty").unwrap().app.as_deref(),
+        Some("com.mitchellh.ghostty")
+    );
+    daemon.shutdown().await;
+}
+
 /// B8: `integrations.status` reads `capabilities` to tell "the hooks are
 /// installed and the daemon answers them" from "the hooks are installed
 /// and this daemon has no adapter for them". The Codex adapter landing

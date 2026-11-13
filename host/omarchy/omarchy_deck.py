@@ -27,6 +27,13 @@ Edit KEYMAP to change them; an unmapped key does nothing.
 It also puts the Claude Code and Codex sessions of this machine on the deck's
 Agents roster (reported by omarchy_hook.py, see omarchy_sessions.py): selecting
 one on the deck raises its terminal, and a voice order is typed into it.
+
+Like deckd, it goes quiet without a deck: after ten minutes in which deckd's
+`device.link` has said no deck is linked, it stops feeding the face, stops
+looking at sessions (Kimi Code's logs, the session processes) and sends deckd
+nothing about them. The hooks that arrive meanwhile only move each session's
+entry in the bridge's own table, so when the deck links it starts again and
+shows every session as it is then.
 """
 from __future__ import annotations
 
@@ -55,6 +62,11 @@ TITLE_MAX = 48
 SLOTS = 10  # Omarchy gives every monitor its own workspaces 1-10 (a block of ten)
 REPUSH_S = 30.0
 KIMI_POLL_S = 1.0
+# deckd's own window (`deckd::dormancy`): with no deck linked for this long,
+# nothing is collected from agent sessions. The link can drop for seconds at a time.
+DORMANT_AFTER_S = 600.0
+# The link sessions in which deckd counts a deck as there (`host_online`).
+LINKED_SESSIONS = ('live', 'syncing')
 # Hyprland events that can change what the face shows.
 HYPR_EVENTS = (
     'workspace', 'workspacev2', 'createworkspace', 'createworkspacev2',
@@ -263,6 +275,61 @@ class Remote:
         self.last_hypr_error = -HYPR_ERROR_LOG_S
         self.up = False  # whether the daemon connection got as far as hello
         self.kimi_seeded = False
+        # Since when deckd has said no deck is linked (monotonic); None while one is.
+        self.away_since: float | None = None
+        self.quiet = False  # whether the bridge has gone quiet (`tick_quiet`)
+
+    # deck away -------------------------------------------------------------
+    def dormant(self, now: float) -> bool:
+        """Ten minutes in which deckd has said no deck is linked."""
+        return self.away_since is not None and now - self.away_since >= DORMANT_AFTER_S
+
+    def on_link(self, data: dict, now: float) -> None:
+        """`device.link`: a deck counted as there ends the wait, anything else starts it."""
+        if data.get('host_online'):
+            self.away_since = None
+        elif self.away_since is None:
+            self.away_since = now
+
+    def link_at_hello(self, now: float) -> None:
+        """Where the link stands as a connection starts, from `service.info`: the link's session,
+        and whether deckd has already gone quiet itself (`collecting`), which makes the bridge
+        quiet at once. A deckd that answers neither starts the ten minutes now."""
+        try:
+            info = self.rpc.call('service.info')
+        except RpcError:
+            info = {}
+        if info.get('session') in LINKED_SESSIONS:
+            self.away_since = None
+            return
+        start = now - DORMANT_AFTER_S if info.get('collecting') is False else now
+        self.away_since = start if self.away_since is None else min(self.away_since, start)
+
+    def tick_quiet(self, now: float) -> bool:
+        """Whether the bridge is quiet now. Going quiet and waking are each said once, and a
+        wake catches the roster and the face up at once."""
+        quiet = self.dormant(now)
+        if quiet != self.quiet:
+            self.quiet = quiet
+            if quiet:
+                print('no deck linked for ten minutes: the face and the sessions wait for it',
+                      file=sys.stderr)
+            else:
+                print('the deck linked: feeding the face and the roster again', file=sys.stderr)
+                self.last = None
+                self.bridge.reregister()
+                self.try_push(force=True)
+        return quiet
+
+    def take_hooks(self, quiet: bool = False) -> None:
+        """Hand what the hooks reported to the bridge, in order. While quiet the bridge only notes
+        it in its own table: nothing is read or sent until the wake (`Bridge.on_hook`)."""
+        while True:
+            try:
+                message = self.hooks.get_nowait()
+            except queue.Empty:
+                return
+            self.bridge.on_hook(message, quiet=quiet)
 
     def kimi_messages(self) -> list[dict]:
         """Kimi session messages from the log reader.
@@ -348,6 +415,7 @@ class Remote:
             self.on_ws(data)
         elif kind == 'device.link':
             self.last = None
+            self.on_link(data, time.monotonic())
         self.dirty.set()
 
     def serve(self, path: Path) -> None:
@@ -358,17 +426,24 @@ class Remote:
                 'scopes': ['device', 'observe', 'agent'], 'subscribe': EVENTS, 'snapshot': False})
             self.up = True
             self.last = None
-            self.bridge.reregister()  # first: sessions register whether or not Hyprland answers
-            self.try_push(force=True)
+            self.quiet = False
+            self.link_at_hello(time.monotonic())
+            if not self.tick_quiet(time.monotonic()):
+                self.bridge.reregister()  # first: sessions register whether or not Hyprland answers
+                self.try_push(force=True)
             while True:
                 message = self.rpc.receive(0.25)
                 if message and message.get('method') == 'event':
                     self.handle(message['params'])
                 while self.rpc.events:
                     self.handle(self.rpc.events.popleft())
-                while not self.hooks.empty():
-                    self.bridge.on_hook(self.hooks.get_nowait())
                 now = time.monotonic()
+                # No deck for ten minutes: no face, no session looked at, until one links. The hooks
+                # still move the bridge's own table, so the wake shows each session as it is.
+                if self.tick_quiet(now):
+                    self.take_hooks(quiet=True)
+                    continue
+                self.take_hooks()
                 if now - self.kimi_polled >= KIMI_POLL_S:
                     self.kimi_polled = now
                     for message in self.kimi_messages():

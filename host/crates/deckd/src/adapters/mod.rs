@@ -12,8 +12,7 @@
 //!   handler writes the answer **first** and enqueues the requests after
 //!   (design §4.11; the http hooks are synchronous with `timeout: 2`, so
 //!   a daemon that did the work first would put its own latency on every
-//!   prompt the operator types). `Report` answers `{}`; `Beacon` answers a
-//!   body — today only `SessionStart`'s one-shot title stamp (C25).
+//!   prompt the operator types). `Report` answers `{}`.
 //! * **held** — the CLI *is* waiting: the handler parks on the card and
 //!   the adapter turns the answer back into the CLI's own hook output.
 //!
@@ -35,7 +34,7 @@
 //! (`rt::handle`). The two were built in parallel against the same
 //! contract §5 and differ in where the effects sit, not in what reaches
 //! a CLI: both answer `{}` first for a report, both park one held card
-//! at a time, both degrade a released card to `⌨ Focus terminal` under
+//! at a time, both degrade a released card to `⌨ … Open app` under
 //! its own id. Folding them into one is week-4 work; nothing in either
 //! door depends on the other, so the merge keeps both rather than
 //! rewriting a tested adapter against the other's trait.
@@ -92,6 +91,7 @@ pub fn address(req: &mut Request, agent: &AgentId) {
         Request::Reply(r) => replace(&mut r.agent, agent),
         Request::OpAnswer(a) => replace(&mut a.agent, agent),
         Request::OpOrder(o) => replace(&mut o.agent, agent),
+        Request::OrderOutcome(o) => replace(&mut o.agent, agent),
         Request::VoiceListen(l) => replace(&mut l.agent, agent),
         Request::VoiceSay(r) => {
             if let Some(a) = r.agent.as_mut() {
@@ -148,6 +148,7 @@ pub fn agent_of(req: &Request) -> Option<&AgentId> {
         Request::Reply(r) => Some(&r.agent),
         Request::OpAnswer(a) => Some(&a.agent),
         Request::OpOrder(o) => Some(&o.agent),
+        Request::OrderOutcome(o) => Some(&o.agent),
         _ => None,
     }
 }
@@ -235,6 +236,10 @@ pub struct HookCtx {
     pub tty: Option<String>,
     pub cli_pid: Option<u32>,
     pub pid_kind: Option<PidKind>,
+    /// The bundle identifier of the app the session runs in, as the helper
+    /// found it and the door let it through (`crate::hook::app`): what a
+    /// press on the session's `Open app` card brings forward.
+    pub app: Option<String>,
     /// The clock, injected: `ingest` decides dedupe windows from it and a
     /// test drives them without sleeping.
     pub now: Option<Instant>,
@@ -335,16 +340,16 @@ impl GroupPlan {
 }
 
 /// What one payload asks the handler to do.
+///
+/// `Held` is the large one, and it is built once per held hook and moved
+/// straight into the handler: boxing its card would buy nothing.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug)]
 pub enum Ingest {
     /// Report-only: the handler writes `{}` **first**, then enqueues
     /// these. The first request is the `agent.register` that resolves the
     /// agent for the rest ([`address`]).
     Report(Vec<Request>),
-    /// Report-only with a body. Only `SessionStart` uses it: the one-shot
-    /// `terminalSequence` beacon (C25), which must reach the CLI even
-    /// though nothing waits on the daemon.
-    Beacon(HookOutput, Vec<Request>),
     /// The CLI is waiting. `before` runs first (its head is the register),
     /// then `cmd` is parked; `note` is whatever `answer_to_output` needs
     /// and is opaque to the handler; `group` carries the rest of a
@@ -358,17 +363,6 @@ pub enum Ingest {
     /// A dedupe hit, an unknown event, a suppressed `Notification`, an
     /// event this adapter does not act on: answer `{}` and do nothing.
     Nothing,
-}
-
-impl Ingest {
-    /// The answer the handler writes before it does any work.
-    #[must_use]
-    pub fn report_output(&self) -> HookOutput {
-        match self {
-            Ingest::Beacon(out, _) => out.clone(),
-            _ => HookOutput::Empty,
-        }
-    }
 }
 
 /// One CLI's normaliser (design §5).
@@ -422,7 +416,7 @@ pub trait Adapter: Send + Sync {
     ///
     /// `reason` is the difference that matters, and it is why this takes
     /// one: [`Release::degrades_card`] says whether the core left the card
-    /// on the deck as `⌨ Focus terminal` under the same id, pointing at
+    /// on the deck as `⌨ … Open app` under the same id, pointing at
     /// the dialog the CLI is still showing until the CLI's own turn moves
     /// on (§5.6), or whether the card is simply gone
     /// (`agent.card.clear`, a retire, an ack). An adapter that filed a
@@ -480,13 +474,21 @@ pub trait Adapter: Send + Sync {
 /// session.
 pub struct Adapters {
     pub(crate) transcripts: crate::chat::Watches,
+    /// Agent → the transcript its Claude session writes, as its hooks named
+    /// it (the CLI's session id and the permitted path). Kept whether or not
+    /// the deck reads the session, so a watcher can start the moment it
+    /// does (`crate::reader`). Dropped with the session's end, the roster's
+    /// prune and the quiet.
+    pub(crate) transcript_paths: std::sync::Mutex<BTreeMap<AgentId, (String, std::path::PathBuf)>>,
     pub(crate) config: Arc<ArcSwap<Config>>,
     /// Report-only plans run behind the answer that already went out
     /// (§4.11), so they are not on the hook's latency path — but they are
     /// still in an order that means something. This serialises them: a
     /// `Stop` that overtook its own `UserPromptSubmit` would leave the
-    /// agent reading `working` after the turn ended.
-    order: tokio::sync::Mutex<()>,
+    /// agent reading `working` after the turn ended. The transcript
+    /// watcher (`crate::chat`) posts under it too, so none of its messages
+    /// lands inside a plan.
+    order: Arc<tokio::sync::Mutex<()>>,
     pub claude: claude::Claude,
     /// Claude asks waiting out their settle window (`settle`).
     pub settle: settle::Settle,
@@ -509,8 +511,9 @@ impl Adapters {
     pub fn new(config: Arc<ArcSwap<Config>>) -> Self {
         Adapters {
             transcripts: Default::default(),
+            transcript_paths: Default::default(),
             config,
-            order: tokio::sync::Mutex::new(()),
+            order: Arc::new(tokio::sync::Mutex::new(())),
             claude: claude::Claude::default(),
             settle: settle::Settle::default(),
         }
@@ -520,6 +523,31 @@ impl Adapters {
     /// order their events arrived.
     pub async fn order(&self) -> tokio::sync::MutexGuard<'_, ()> {
         self.order.lock().await
+    }
+
+    /// The same lock, for a task that outlives this borrow.
+    pub(crate) fn order_lock(&self) -> Arc<tokio::sync::Mutex<()>> {
+        Arc::clone(&self.order)
+    }
+
+    /// Remember the transcript a Claude session's hooks named for `agent`.
+    pub(crate) fn remember_transcript(&self, agent: &AgentId, cli: &str, path: &std::path::Path) {
+        if let Ok(mut paths) = self.transcript_paths.lock() {
+            paths.insert(agent.clone(), (cli.to_string(), path.to_path_buf()));
+        }
+    }
+
+    /// The transcript remembered for `agent`: the CLI's session id and the
+    /// path.
+    pub(crate) fn transcript(&self, agent: &AgentId) -> Option<(String, std::path::PathBuf)> {
+        self.transcript_paths.lock().ok()?.get(agent).cloned()
+    }
+
+    /// Forget the transcripts of the agents `keep` turns down.
+    pub(crate) fn forget_transcripts(&self, keep: impl Fn(&AgentId) -> bool) {
+        if let Ok(mut paths) = self.transcript_paths.lock() {
+            paths.retain(|agent, _| keep(agent));
+        }
     }
 
     /// `[hooks.<cli>]` as it stands right now (hot reload, §9), for the
@@ -704,16 +732,6 @@ mod tests {
         assert_eq!(
             HookOutput::Json(serde_json::json!({"a": 1})).json(),
             serde_json::json!({"a": 1})
-        );
-        assert!(Ingest::Report(Vec::new()).report_output().is_empty());
-        assert!(Ingest::Nothing.report_output().is_empty());
-        let beacon = Ingest::Beacon(
-            HookOutput::Json(serde_json::json!({"terminalSequence": "x"})),
-            Vec::new(),
-        );
-        assert_eq!(
-            beacon.report_output().json(),
-            serde_json::json!({"terminalSequence": "x"})
         );
     }
 

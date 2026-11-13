@@ -104,13 +104,15 @@ objc2-avf-audio = { version = "=0.3.2", features = ["AVSpeechSynthesis", "AVAudi
 # a tokio worker and from gpui's foreground executor, and neither runtime
 # may ever be asked to block the UI thread to deliver an event.
 async-channel = "=2.5.0"
-# Week 5 (HOST-CONTRACT-W5 §3): `deckd::desktop`. `NSAppleScript` is already
-# in `objc2-foundation`'s default features, so the scripting seam needs no
-# new crate; the **focus fallback** does. AppKit is the biggest framework
-# crate in the tree, so it is taken with `default-features = false` and the
-# two classes §5.5 names — `NSWorkspace` to activate Ghostty by bundle id
-# `com.mitchellh.ghostty`, `NSRunningApplication` to find it — and nothing
-# else. With those features its only extra dependency is `bitflags`.
+# `deckd::desktop`: the hand-off finds the session's app with
+# `NSRunningApplication` (is it running, is it in front) and asks AppKit to
+# activate it when LaunchServices (`open -b`) would not; the hook helper
+# reads an app's bundle identifier with `NSBundle`, which is in
+# `objc2-foundation`'s default features. AppKit is the biggest framework
+# crate in the tree, so it is taken with `default-features = false` and two
+# classes — `NSRunningApplication` and `NSWorkspace` (kept from the retired
+# Ghostty path so the lock does not move) — and nothing else. With those
+# features its only extra dependency is `bitflags`.
 objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["NSWorkspace", "NSRunningApplication"] }
 # The GUI's pin, and it is a pin for measured reasons (HOST-CONTRACT-W5 §1):
 #   * `default-features = false` -- with them gpui's build script shells out

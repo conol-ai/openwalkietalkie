@@ -52,6 +52,8 @@ pub enum MailKind {
         ctx: String,
         choice: Option<u8>,
         card: Option<CardId>,
+        /// The order's id; `None` for a step.
+        order: Option<String>,
     },
     Snooze {
         card: CardId,
@@ -92,11 +94,13 @@ impl Mail {
                 ctx,
                 choice,
                 card,
+                order,
             } => WaitResult::Order {
                 text,
                 ctx,
                 choice,
                 card,
+                order,
                 delivery: card.map(|card| Delivery { agent, card }),
             },
             MailKind::Snooze { card } => WaitResult::Snooze { card },
@@ -154,6 +158,32 @@ pub mod mailbox {
         let before = mailbox.len();
         mailbox.retain(|m| now.saturating_duration_since(m.at) < ttl);
         before - mailbox.len()
+    }
+
+    /// Take every mail of `agent` out (it is gone), oldest first, so the
+    /// orders among it can be reported as failed.
+    pub fn take_agent(mailbox: &mut VecDeque<Mail>, agent: &AgentId) -> Vec<Mail> {
+        take(mailbox, |m| m.agent == *agent)
+    }
+
+    /// Take mail older than `ttl` (`mailbox_ttl_s`, §9) out, oldest first.
+    pub fn take_older(mailbox: &mut VecDeque<Mail>, now: Instant, ttl: Duration) -> Vec<Mail> {
+        take(mailbox, |m| now.saturating_duration_since(m.at) >= ttl)
+    }
+
+    /// The mail `taken` says to take, in order; the rest stays in order.
+    fn take(mailbox: &mut VecDeque<Mail>, mut taken: impl FnMut(&Mail) -> bool) -> Vec<Mail> {
+        let mut out = Vec::new();
+        let mut kept = VecDeque::with_capacity(mailbox.len());
+        for mail in mailbox.drain(..) {
+            if taken(&mail) {
+                out.push(mail);
+            } else {
+                kept.push_back(mail);
+            }
+        }
+        *mailbox = kept;
+        out
     }
 }
 
@@ -225,10 +255,12 @@ pub fn wait_reply(result: WaitResult) -> Reply {
             ctx,
             choice,
             card,
+            order,
             delivery,
         } => Reply {
             result: Ok(serde_json::json!({
                 "kind": "order", "text": text, "ctx": ctx, "choice": choice, "card": card,
+                "order": order,
             })),
             after_write: delivery,
         },
@@ -772,6 +804,7 @@ mod tests {
                     ctx: "talk".into(),
                     choice: None,
                     card: None,
+                    order: Some("or_1".into()),
                 },
                 t0 + Duration::from_secs(2),
             ));
@@ -785,6 +818,7 @@ mod tests {
                 ctx: "step".into(),
                 choice: Some(0),
                 card: Some(CardId(1)),
+                order: None,
             },
             t0,
         ));
@@ -804,6 +838,7 @@ mod tests {
                 ctx: "talk".into(),
                 choice: None,
                 card: None,
+                order: Some("or_2".into()),
             },
             t0,
         ));
@@ -821,6 +856,48 @@ mod tests {
         );
         assert!(e.mailbox.is_empty());
         assert_eq!(s.queued(), (0, 0));
+    }
+
+    /// What a pruning takes out is handed back, so the core can report the
+    /// orders among it; what stays keeps its order.
+    #[test]
+    fn mail_taken_out_by_agent_or_age_is_handed_back_in_order() {
+        let t0 = Instant::now();
+        let order = |agent: &str, id: &str, at| {
+            mail(
+                agent,
+                MailKind::Order {
+                    text: id.into(),
+                    ctx: "talk".into(),
+                    choice: None,
+                    card: None,
+                    order: Some(id.into()),
+                },
+                at,
+            )
+        };
+        let text = |m: &Mail| match &m.kind {
+            MailKind::Order { text, .. } => text.clone(),
+            other => panic!("{other:?}"),
+        };
+        let mut mailbox: VecDeque<Mail> = [
+            order("ag_a", "or_1", t0),
+            order("ag_b", "or_2", t0),
+            order("ag_a", "or_3", t0 + Duration::from_secs(5)),
+            order("ag_b", "or_4", t0 + Duration::from_secs(5)),
+        ]
+        .into();
+        let gone = mailbox::take_agent(&mut mailbox, &AgentId("ag_a".into()));
+        assert_eq!(gone.iter().map(text).collect::<Vec<_>>(), ["or_1", "or_3"]);
+        assert_eq!(
+            mailbox.iter().map(text).collect::<Vec<_>>(),
+            ["or_2", "or_4"]
+        );
+        let ttl = Duration::from_secs(600);
+        assert!(mailbox::take_older(&mut mailbox, t0 + Duration::from_secs(599), ttl).is_empty());
+        let old = mailbox::take_older(&mut mailbox, t0 + Duration::from_secs(600), ttl);
+        assert_eq!(old.iter().map(text).collect::<Vec<_>>(), ["or_2"]);
+        assert_eq!(mailbox.iter().map(text).collect::<Vec<_>>(), ["or_4"]);
     }
 
     #[test]
@@ -871,6 +948,7 @@ mod tests {
                 ctx: "step".into(),
                 choice: Some(0),
                 card: Some(CardId(4)),
+                order: None,
             },
             t0,
         )
@@ -896,12 +974,29 @@ mod tests {
                 ctx: "talk".into(),
                 choice: None,
                 card: None,
+                order: Some("or_7".into()),
             },
             t0,
         )
         .into_result();
         assert!(matches!(&order, WaitResult::Order { delivery: None, .. }));
-        assert!(wait_reply(order).after_write.is_none());
+        let reply = wait_reply(order);
+        assert!(reply.after_write.is_none());
+        // The order's id, for `agent.order.result`; a step has none.
+        assert_eq!(reply.result.as_ref().unwrap()["order"], "or_7");
+        let step = mail(
+            "ag_a",
+            MailKind::Order {
+                text: "Run tests".into(),
+                ctx: "step".into(),
+                choice: Some(0),
+                card: Some(CardId(4)),
+                order: None,
+            },
+            t0,
+        );
+        let reply = wait_reply(step.into_result());
+        assert_eq!(reply.result.unwrap()["order"], serde_json::Value::Null);
         let snooze =
             wait_reply(mail("ag_a", MailKind::Snooze { card: CardId(1) }, t0).into_result());
         assert_eq!(

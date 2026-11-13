@@ -533,7 +533,6 @@ mod tests {
         CaptureOpen {
             input: VoiceInput::Deck,
             device_uid: Some("C2-2D-81-AB-88-81".into()),
-            fallback: "system_default".into(),
             ask_deck: None,
         }
     }

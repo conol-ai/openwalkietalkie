@@ -5,7 +5,10 @@
 //! capture is this process's own window ([`crate::snapshot`]), which needs no
 //! Screen Recording grant. One appearance per run
 //! (`OPENWALKIETALKIE_APPEARANCE`), at the boards' size, 1040×780
-//! ([`SIZE_ENV`] draws at another, under the same names).
+//! ([`SIZE_ENV`] draws at another, under the same names), and the standard
+//! look whatever this Mac's Increase contrast says, unless
+//! `OPENWALKIETALKIE_CONTRAST=more` asks for the contrast palette
+//! ([`crate::style::look_of`]); the names do not say which.
 //!
 //! **Two walks, and never the installed service.**
 //!
@@ -49,9 +52,9 @@ use crate::shell::{Screen, Shell};
 use deck_gui_core::i18n::Language;
 use deck_gui_core::{ApiEvent, AppEvent};
 use deck_model::{
-    Binding, DeviceState, FaceEntry, LastLinked, Link, LinkDrop, MacroKey, MacroLayout,
-    Permission, Permissions, Route, ServiceState, SessionState, Settings, Snapshot, Template,
-    Transport, Ts, VoiceState, VoiceTransport,
+    Binding, DeviceState, DormancyState, FaceEntry, LastLinked, Link, LinkDrop, MacroKey,
+    MacroLayout, Permission, Permissions, Route, ServiceState, SessionState, Settings, Snapshot,
+    Template, Transport, Ts, VoiceState, VoiceTransport,
 };
 use gpui::{App, Context, Entity, Global, Window};
 use std::collections::BTreeMap;
@@ -525,6 +528,13 @@ pub fn board_snapshot() -> Snapshot {
         service: ServiceState {
             version: "0.13.0".into(),
             port: 47_201,
+            // A service with a deck collects while one was linked in the
+            // last ten minutes (`service.dormancy`); this one is linked.
+            dormancy: Some(DormancyState {
+                window_s: 600,
+                collecting: true,
+                dormant_since: None,
+            }),
             ..ServiceState::default()
         },
         ..Snapshot::default()
@@ -560,6 +570,12 @@ pub fn offline_snapshot() -> Snapshot {
         why: "removed".into(),
     }];
     snapshot.voice.route = Route::None;
+    // Ten minutes after the drop the service stopped collecting: 09:51.
+    snapshot.service.dormancy = Some(DormancyState {
+        window_s: 600,
+        collecting: false,
+        dormant_since: Some(gone.plus(Duration::from_secs(600))),
+    });
     snapshot
 }
 

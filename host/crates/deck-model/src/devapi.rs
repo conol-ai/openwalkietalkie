@@ -91,21 +91,17 @@ impl Store {
     }
 
     /// Sent, not adopted: the next device `faces` event is the truth.
+    ///
+    /// A strip the deck would not take is refused here, before it is sent
+    /// (`deck_proto::strip_problem`: Agents first and Settings last with
+    /// neither between them, ids unique in 1..=8, at most three Macropads
+    /// and one Timer, a name on every face). The deck answers such a strip
+    /// with an `err` the host cannot tie to the line and drops it, and the
+    /// link would go on gating `macro` and `ws` lines on the strip it was
+    /// sent rather than the one the deck kept.
     pub(crate) fn device_faces_set(&mut self, list: Vec<FaceEntry>) -> ApiResult {
-        if list.len() > 8 {
-            return Err(ApiError::invalid("list", "max 8"));
-        }
-        let mut seen = [false; 9];
-        for entry in &list {
-            if !(1..=8).contains(&entry.f) {
-                return Err(ApiError::invalid("list", "f 1..=8"));
-            }
-            if std::mem::replace(&mut seen[usize::from(entry.f)], true) {
-                return Err(ApiError::invalid("list", "duplicate f"));
-            }
-            if entry.n.trim().is_empty() {
-                return Err(ApiError::invalid("list", "empty name"));
-            }
+        if let Some(why) = deck_proto::strip_problem(&list) {
+            return Err(ApiError::invalid("list", why));
         }
         self.device_op(DeviceOp::Put(Key::Faces, HostLine::Faces { list }));
         Ok(serde_json::json!({"rev": self.snapshot.rev, "sent": true}))
@@ -298,6 +294,23 @@ mod tests {
         }
     }
 
+    /// Face `f` of template `t`, called by its template.
+    fn entry(f: u8, t: Template) -> FaceEntry {
+        FaceEntry {
+            f,
+            t,
+            n: format!("{t:?}"),
+        }
+    }
+
+    /// A strip the deck takes the ends of: Agents, `middle`, Settings.
+    fn strip(middle: &[FaceEntry]) -> Vec<FaceEntry> {
+        let mut list = vec![entry(1, Template::Agents)];
+        list.extend_from_slice(middle);
+        list.push(entry(5, Template::Settings));
+        list
+    }
+
     #[test]
     fn device_set_pushes_persists_and_validates() {
         let mut sim = Sim::new();
@@ -453,7 +466,7 @@ mod tests {
                 UID,
                 SessionId(1),
                 Request::DeviceFacesSet {
-                    list: vec![face(1), face(2)],
+                    list: strip(&[face(3)]),
                 },
             )
             .unwrap();
@@ -479,6 +492,65 @@ mod tests {
                 .unwrap_err();
             assert_eq!(err.data["why"], why);
         }
+    }
+
+    /// A strip the deck's restore would answer with `err range` and drop,
+    /// or one with a second Timer, which its gallery never adds, is refused
+    /// with the rule it breaks before anything is sent: no line, no event,
+    /// no revision. The most the deck takes goes out as it was given.
+    #[test]
+    fn a_strip_the_deck_would_refuse_is_refused_before_it_is_sent() {
+        let mut sim = Sim::new();
+        let agents = entry(1, Template::Agents);
+        let settings = entry(5, Template::Settings);
+        let inside = "agents or settings in the middle";
+        for (list, why) in [
+            (Vec::new(), "agents first"),
+            (vec![face(3), settings.clone()], "agents first"),
+            (vec![agents.clone()], "settings last"),
+            (vec![agents.clone(), face(3)], "settings last"),
+            (strip(&[entry(2, Template::Agents)]), inside),
+            (strip(&[entry(6, Template::Settings)]), inside),
+            (strip(&[face(2), face(3), face(4), face(6)]), "max 3 macropads"),
+            (
+                strip(&[entry(7, Template::Timer), entry(8, Template::Timer)]),
+                "max 1 timer",
+            ),
+        ] {
+            let before = sim.store.snapshot().clone();
+            let err = sim
+                .api(
+                    UID,
+                    SessionId(1),
+                    Request::DeviceFacesSet { list: list.clone() },
+                )
+                .unwrap_err();
+            assert_eq!(err.code, ApiError::INVALID, "{list:?}");
+            assert_eq!(
+                err.data,
+                serde_json::json!({"field": "list", "why": why}),
+                "{list:?}"
+            );
+            assert!(sim.effects.is_empty() && sim.events.is_empty(), "{list:?}");
+            assert_eq!(sim.store.snapshot(), &before, "{list:?}");
+        }
+        let most = strip(&[
+            face(2),
+            face(3),
+            face(4),
+            entry(8, Template::Timer),
+            entry(6, Template::Arcade),
+            entry(7, Template::System),
+        ]);
+        let res = sim
+            .api(
+                UID,
+                SessionId(1),
+                Request::DeviceFacesSet { list: most.clone() },
+            )
+            .unwrap();
+        assert_eq!(res["sent"], true);
+        assert_eq!(sim.line(Key::Faces), Some(HostLine::Faces { list: most }));
     }
 
     #[test]

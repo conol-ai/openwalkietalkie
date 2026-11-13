@@ -124,6 +124,8 @@ pub struct Terminal {
     pub tmux_pane: Option<String>,
     pub iterm_session: Option<String>,
     pub term_session: Option<String>,
+    /// No longer written since the Ghostty tab path was removed; kept so a
+    /// client that sends it still parses.
     pub title_stamp: Option<String>,
     /// The session's own message inbox: the Unix socket Claude Code binds
     /// for cross-session messaging (`CLAUDE_CODE_MESSAGING_SOCKET`),
@@ -134,6 +136,14 @@ pub struct Terminal {
     /// inside the daemon (`adapters::rt::Adapters`), never in a snapshot.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inbox: Option<String>,
+    /// The macOS bundle identifier of the app the session runs in
+    /// (`dev.zed.Zed`, `com.mitchellh.ghostty`,
+    /// `com.anthropic.claudefordesktop`), as the hook helper found it. A
+    /// press on the session's `Open app` card brings that app forward.
+    /// Informational on an agent a connected app registered: the daemon
+    /// raises only a hook-registered session's app.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app: Option<String>,
 }
 
 /// Where the agent runs (content, except `key`).
@@ -154,7 +164,8 @@ pub enum Deliver {
     Hold,
     Push,
     Poll,
-    /// ENTER focuses the terminal; degraded holds and informational cards.
+    /// ENTER raises the session's own app (hand-off); degraded holds and
+    /// informational cards.
     Focus,
     None,
 }
@@ -704,5 +715,24 @@ mod tests {
             serde_json::to_string(&Caps::default()).unwrap(),
             r#"{"answer":"none","order":"none","focus":false}"#
         );
+    }
+
+    /// `terminal.app` is additive: a terminal that names no app (every
+    /// client older than the hand-off) parses, a missing app is not
+    /// written, and one that is there survives the round trip.
+    #[test]
+    fn a_terminal_app_is_optional_and_additive() {
+        let old: Terminal = serde_json::from_str(r#"{"program":"ghostty"}"#).unwrap();
+        assert_eq!(old.program.as_deref(), Some("ghostty"));
+        assert_eq!(old.app, None);
+        let written = serde_json::to_value(&old).unwrap();
+        assert!(written.get("app").is_none(), "{written}");
+        let zed = Terminal {
+            app: Some("dev.zed.Zed".into()),
+            ..Terminal::default()
+        };
+        let written = serde_json::to_value(&zed).unwrap();
+        assert_eq!(written["app"], "dev.zed.Zed");
+        assert_eq!(serde_json::from_value::<Terminal>(written).unwrap(), zed);
     }
 }

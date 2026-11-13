@@ -530,6 +530,11 @@ mod tests {
                 serde_json::json!({"context": "device.err", "why": "range"}),
             ),
             (EventKind::ServiceShutdown, serde_json::json!({})),
+            (
+                EventKind::ServiceDormancy,
+                serde_json::json!({"window_s": 600, "collecting": false,
+                    "dormant_since": "2026-09-18T19:52:03.000Z"}),
+            ),
         ] {
             let e = event(kind, data);
             let r = redact_event(&e, OBSERVER, false).unwrap();

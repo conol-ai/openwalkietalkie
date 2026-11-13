@@ -26,7 +26,7 @@ use crate::present;
 use crate::shell::{Screen, Shell};
 use crate::shots::Scene;
 use crate::style::{palette, Palette};
-use crate::ui::{self, ic, Btn, PopupButton, Row, Segmented, Switch, Type as _};
+use crate::ui::{self, ic, Btn, Layout, PopupButton, Row, Segmented, Switch, Type as _};
 use crate::voice_actions::Prompts;
 use deck_gui_core::care::{TestState, TestStatus, VoiceTest};
 use deck_gui_core::host_state::{BLUETOOTH_SETTINGS, SPEECH_SETTINGS};
@@ -623,6 +623,17 @@ pub fn key_tail(hint: &str) -> &str {
     hint.split(" (").next().unwrap_or(hint).trim()
 }
 
+/// Where the key dialog says the key is kept: the Keychain when the service
+/// says it keeps it there, else the service's settings (config.toml: Linux,
+/// a service on a data directory of its own, one from before the Keychain).
+pub fn key_kept(tts: Option<&TtsConfig>, language: Language) -> &'static str {
+    if tts.is_some_and(TtsConfig::in_keychain) {
+        language.text("The key is kept in your Keychain on this Mac.")
+    } else {
+        language.text("The key is kept in the service's settings on this Mac.")
+    }
+}
+
 /// The provider the key dialog opens on: the configured one, when this
 /// window knows it, else the first.
 pub fn dialog_provider(tts: Option<&TtsConfig>) -> &'static str {
@@ -779,7 +790,8 @@ pub fn staged(scene: Scene) -> Option<Staged> {
                         json!({"stt.engine": "apple", "stt.language": "auto",
                                "stt.locale": "en-US", "stt.companion": false}),
                         json!({"tts.engine": "cloud", "tts.provider": "elevenlabs",
-                               "tts.api_key": "\u{2026}mnop (35 chars)", "tts.model": ""}),
+                               "tts.api_key": "\u{2026}mnop (35 chars)",
+                               "tts.key_store": "keychain", "tts.model": ""}),
                     ),
                     model("apple", WHISPER, true, false),
                     kokoro,
@@ -1144,6 +1156,12 @@ impl Shell {
     /// Recognition and Spoken replies: side by side on the page, their cards
     /// stretched to one height, the last row of the shorter taking the rest;
     /// one over the other in first run.
+    ///
+    /// Each card's choices are one stop on the Tab order ([`ui::Group`]):
+    /// Tab reaches the chosen one, Up and Down move the keyboard between
+    /// them, and Return or Space chooses. An arrow alone never chooses:
+    /// choosing Whisper or Kokoro without its model starts a download, and
+    /// the cloud voice without a key opens a dialog.
     fn voice_engine_cards(
         &self,
         dim: bool,
@@ -1151,10 +1169,10 @@ impl Shell {
         p: &Palette,
         cx: &Context<Self>,
     ) -> Div {
-        let recognition = ui::card(self.recognition_rows(dim, p, cx), p);
-        let replies = ui::card(self.reply_rows(dim, p, cx), p);
+        let recognition = self.recognition_card(dim, p, cx);
+        let replies = self.replies_card(dim, p, cx);
         if side_by_side {
-            let column = |title: &'static str, card: Div| {
+            let column = |title: &'static str, card: ui::Group| {
                 ui::section(title, card.flex_1(), p).flex_1().min_w_0()
             };
             div()
@@ -1195,9 +1213,10 @@ impl Shell {
         }
     }
 
-    /// Apple's recogniser, Whisper with its model's state, and the switch
-    /// that lets Conol hear the presses meant for its chats.
-    fn recognition_rows(&self, dim: bool, p: &Palette, cx: &Context<Self>) -> Vec<AnyElement> {
+    /// Apple's recogniser and Whisper with its model's state, the card's
+    /// choices, and after them the switch that lets Conol hear the presses
+    /// meant for its chats.
+    fn recognition_card(&self, dim: bool, p: &Palette, cx: &Context<Self>) -> ui::Group {
         let config = self.voice.stt_config.as_ref();
         let chosen = config.and_then(recogniser);
         let enabled = config.is_some() && !dim;
@@ -1246,16 +1265,21 @@ impl Shell {
                     })),
             )
             .grow();
-        vec![
-            apple.into_any_element(),
-            whisper.into_any_element(),
-            conol.into_any_element(),
-        ]
+        let at = chosen.map(|engine| match engine {
+            Recogniser::Apple => 0,
+            Recogniser::Whisper => 1,
+        });
+        ui::Group::new("voice-recognition", Layout::Column)
+            .card(p)
+            .selected(at)
+            .members([apple, whisper])
+            .after(conol)
     }
 
-    /// Apple's voice, Kokoro with its voice's state, the cloud voice with
-    /// its key, and the MLX model while it is the one chosen.
-    fn reply_rows(&self, dim: bool, p: &Palette, cx: &Context<Self>) -> Vec<AnyElement> {
+    /// Apple's voice, Kokoro with its voice's state and the cloud voice with
+    /// its key, the card's choices, and after them the MLX model while it
+    /// is the one chosen (only the command line chooses it).
+    fn replies_card(&self, dim: bool, p: &Palette, cx: &Context<Self>) -> ui::Group {
         let tts = self.voice.tts.as_ref();
         let chosen = tts.and_then(synthesiser);
         let enabled = tts.is_some() && !dim;
@@ -1329,23 +1353,28 @@ impl Shell {
                     .on_click(open),
             ),
         };
-        let mut rows = vec![apple, kokoro, cloud];
-        if chosen == Some(Synthesiser::Mlx) {
-            rows.push(
-                Row::new()
-                    .lead(ui::bare(ui::radio_dot(true, p)))
-                    .title(self.tr("Qwen3-TTS (MLX), on this Mac"))
-                    .sub(self.tr("Set up from the command line.")),
-            );
-        }
-        let last = rows.len() - 1;
-        rows.into_iter()
-            .enumerate()
-            .map(|(i, row)| {
-                let row = if i == last { row.grow() } else { row };
-                row.into_any_element()
-            })
-            .collect()
+        let mlx = (chosen == Some(Synthesiser::Mlx)).then(|| {
+            Row::new()
+                .lead(ui::bare(ui::radio_dot(true, p)))
+                .title(self.tr("Qwen3-TTS (MLX), on this Mac"))
+                .sub(self.tr("Set up from the command line."))
+        });
+        // The card's last row takes the spare height of a stretched card.
+        let (cloud, mlx) = match mlx {
+            Some(mlx) => (cloud, Some(mlx.grow())),
+            None => (cloud.grow(), None),
+        };
+        let at = chosen.and_then(|voice| match voice {
+            Synthesiser::Apple => Some(0),
+            Synthesiser::Kokoro => Some(1),
+            Synthesiser::Cloud => Some(2),
+            Synthesiser::Mlx => None,
+        });
+        ui::Group::new("voice-replies", Layout::Column)
+            .card(p)
+            .selected(at)
+            .members([apple, kokoro, cloud])
+            .when_some(mlx, |card, mlx| card.after(mlx))
     }
 
     /// A local model's row: what it is (or how far its download has come
@@ -1655,9 +1684,11 @@ impl Shell {
             .gap(px(4.))
             .ts(13., 18.)
             .child(div().semibold().child(self.tr("Cloud voice key")))
-            .child(div().text_color(p.text2).child(ui::para(
-                self.tr("The key is kept in the service's settings on this Mac."),
-            )))
+            .child(
+                div()
+                    .text_color(p.text2)
+                    .child(ui::para(key_kept(self.voice.tts.as_ref(), self.language()))),
+            )
             .child(
                 h_flex()
                     .mt(px(12.))

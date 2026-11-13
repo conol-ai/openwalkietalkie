@@ -266,11 +266,13 @@ impl std::fmt::Debug for CaptureSink {
 /// cannot honour it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CaptureOpen {
+    /// The deck's microphone, or the Mac's for `voice.listen{input:"mac"}`.
+    /// There is no fallback from one to the other: a deck input that is not
+    /// there is [`AudioError::NoDevice`] (decision 11).
     pub input: VoiceInput,
-    /// `[voice] device_uid` — the deck, without its `:input` suffix.
+    /// `[voice] device_uid` — the deck, without its `:input` suffix: the
+    /// configured one, else the one the engine discovered at start.
     pub device_uid: Option<String>,
-    /// §7.1's `fallback_input`: `"system_default"` or `"none"`.
-    pub fallback: String,
     /// Nobody pressed: ask the deck to stream its microphone for this many
     /// seconds (1 to 60). Over the BLE voice link the deck streams only on
     /// its own press or when asked; `None` for a press, which already is
@@ -300,8 +302,9 @@ pub trait CaptureSource: Send {
     /// that a second open closes the first.
     ///
     /// # Errors
-    /// [`AudioError::NoDevice`] when the UID is absent and the fallback is
-    /// `"none"`, [`AudioError::Refused`] when the OS said no.
+    /// [`AudioError::NoDevice`] when the input asked for is not there (for
+    /// the deck's, never answered with the Mac's), [`AudioError::Refused`]
+    /// when the OS said no.
     fn open(&mut self, req: &CaptureOpen, sink: CaptureSink) -> Result<CaptureOpened, AudioError>;
 
     /// Close it. Must be safe to call when nothing is open — §3's

@@ -184,6 +184,18 @@ pub struct Status {
     pub charging: Option<bool>,
     #[serde(default)]
     pub board: Option<String>,
+    /// The delivery record in brief (`crate::deliveries`), counts only, for
+    /// `deckd status`; `None` from a daemon that kept none.
+    #[serde(default)]
+    pub deliveries: Option<crate::deliveries::Brief>,
+    /// Whether the collectors run (`crate::dormancy`): a deck linked in the
+    /// last ten minutes. `None` in a daemon with no dormancy
+    /// (`--no-device`).
+    #[serde(default)]
+    pub collecting: Option<bool>,
+    /// When they stopped: the deck's last link plus the window.
+    #[serde(default)]
+    pub dormant_since: Option<Ts>,
 }
 
 impl Status {
@@ -249,6 +261,11 @@ mod tests {
             sid: 9,
             updated: Ts(10_000),
             metric: m,
+            deliveries: Some(crate::deliveries::Brief {
+                cards: 3,
+                answered: 2,
+                ..Default::default()
+            }),
             ..Status::default()
         };
         status.write(&path).unwrap();
@@ -256,8 +273,10 @@ mod tests {
         assert_eq!(back, status);
         assert_eq!(back.age_s(Ts(14_500)), 4);
         assert_eq!(back.age_s(Ts(0)), 0, "saturates");
+        // A file from a daemon that kept no delivery record still reads.
         std::fs::write(&path, "{\"pid\": 3, \"future\": true}").unwrap();
         assert_eq!(Status::read(&path).unwrap().pid, 3);
+        assert_eq!(Status::read(&path).unwrap().deliveries, None);
         std::fs::write(&path, "nope").unwrap();
         assert!(Status::read(&path).is_none());
         std::fs::remove_dir_all(dir).unwrap();

@@ -159,7 +159,6 @@ fn hw_the_sco_bring_up_and_the_a2dp_resume_in_milliseconds() {
         &CaptureOpen {
             input: VoiceInput::Deck,
             device_uid: Some(uid.clone()),
-            fallback: "none".into(),
             ask_deck: None,
         },
         sink,

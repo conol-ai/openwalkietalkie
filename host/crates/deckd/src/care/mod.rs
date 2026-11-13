@@ -12,15 +12,19 @@
 //! - [`footprint`]: `care.footprint`, what the app has put on this Mac, item
 //!   by item, and `care.cache.clear`.
 //! - [`export`]: `care.support_file`, `deckd diagnostics` as a method.
+//! - [`decks`]: `care.decks` and `care.decks.forget`, the decks this Mac
+//!   keeps a strip, settings and keys for, and forgetting one.
 //!
-//! The core answers the first two itself, from its own tables and the
-//! events. The other four methods walk directories, run the doctor and write
-//! or delete files, so the door answers them on the blocking pool the way it
-//! answers `integrations.*` ([`api_dispatch`]), never on the core thread.
+//! The core answers the first two and the decks itself, from its own tables,
+//! the events and `state.json`. The other four methods walk directories, run
+//! the doctor and write or delete files, so the door answers them on the
+//! blocking pool the way it answers `integrations.*` ([`api_dispatch`]),
+//! never on the core thread.
 //! The core only says where this daemon keeps its things and how it was
 //! started ([`Context`]), and the process environment says where the rest
 //! is ([`Homes`]), read the way the installer reads it.
 pub mod checks;
+pub mod decks;
 pub mod export;
 pub mod footprint;
 pub mod sources;
@@ -71,6 +75,10 @@ pub struct Context {
     pub codex_connected: bool,
     /// A firmware check or install is running (`firmware.status`).
     pub firmware_busy: bool,
+    /// Whether the Keychain holds the cloud voice's key, as this service
+    /// last read or wrote it (`crate::secrets::VoiceKey::present`): `None`
+    /// where the key is kept in `config.toml`.
+    pub keychain: Option<bool>,
 }
 
 /// Where the process environment puts what lives outside the data dir,
@@ -223,6 +231,7 @@ pub(crate) mod testkit {
             tcp: Config::default().api.tcp_door(|| false),
             codex_connected: true,
             firmware_busy: false,
+            keychain: None,
         }
     }
 

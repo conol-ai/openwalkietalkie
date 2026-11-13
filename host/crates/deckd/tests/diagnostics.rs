@@ -240,6 +240,14 @@ fn the_bundle_still_carries_everything_a_diagnosis_needs() {
         "the header warns that the operator's project paths are in here: {:?}",
         bundle.kept
     );
+    assert!(
+        bundle
+            .kept
+            .iter()
+            .any(|k| k.contains("delivery record") && k.contains("never the words")),
+        "the header says what the delivery record is and is not: {:?}",
+        bundle.kept
+    );
 }
 
 /// `[privacy] log_content = true` is the operator saying "write it down".

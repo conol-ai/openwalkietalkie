@@ -60,9 +60,9 @@ use deck_gui_core::{
 };
 use deck_model::{Link, SetKey};
 use gpui::{
-    div, ease_out_quint, prelude::*, px, relative, Animation, AnimationExt as _, AnyElement, App,
-    Context, Div, ElementId, FocusHandle, KeyBinding, KeyDownEvent, ScrollHandle, Stateful,
-    Subscription, Task, Window,
+    div, ease_out_quint, prelude::*, px, relative, Action, Animation, AnimationExt as _,
+    AnyElement, App, Context, Div, ElementId, FocusHandle, KeyBinding, KeyDownEvent, ScrollHandle,
+    Stateful, Subscription, Task, Window,
 };
 use gpui_component::notification::Notification;
 use gpui_component::{h_flex, v_flex, Root, WindowExt as _};
@@ -425,6 +425,7 @@ impl Shell {
                 cx.background_executor().timer(TICK).await;
                 beat = beat.wrapping_add(1);
                 let ticked = this.update_in(cx, |this, window, cx| {
+                    follow_look(window, cx);
                     this.tick_pages(beat, window, cx);
                     cx.notify();
                 });
@@ -434,10 +435,13 @@ impl Shell {
             }
         });
         // Light and dark follow the Mac (or `OPENWALKIETALKIE_APPEARANCE`,
-        // which pins the Mac's answer for this app): the palette is
-        // re-derived and re-installed on every change, never patched.
+        // which pins the Mac's answer for this app), and so does Increase
+        // contrast (or `OPENWALKIETALKIE_CONTRAST`): the palette is
+        // re-derived and re-installed on every change, never patched. AppKit
+        // tells the window when light and dark change; Increase contrast is
+        // also looked at on every tick (`follow_look`).
         let appearance = cx.observe_window_appearance(window, |_, window, cx| {
-            style::install(style::Palette::for_appearance(window.appearance()), cx);
+            style::install(style::look(window, cx), cx);
             window.refresh();
         });
         // The screen the window opens on asks for what it draws — from
@@ -887,6 +891,13 @@ impl Shell {
         window.refresh();
     }
 
+    /// Whether a page can be opened now, as from the sidebar: not through
+    /// first run, which has no sidebar, and not under a dialog, whose scrim
+    /// keeps the page and the sidebar out of reach.
+    fn pages_open(&self) -> bool {
+        !self.first_run.active() && self.dialog.is_none()
+    }
+
     /// Escape, or a click on the scrim.
     fn dismiss_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.dialog.is_some_and(Dialog::dismissable) {
@@ -1194,11 +1205,23 @@ impl Render for Shell {
         // The window's type: Geist 13/18, with Chinese and Japanese drawn in
         // the window's language's own family (`style::ui_font`). The root is
         // the keyboard's home: a press on nothing in particular puts the
-        // keyboard there too, so a ring left on a control goes.
+        // keyboard there too, so a ring left on a control goes. It takes the
+        // Window menu's commands, and the View menu's while a page can open:
+        // a menu whose command nobody takes is dimmed.
         div()
             .size_full()
             .relative()
             .track_focus(&self.root_focus)
+            .on_action(|_: &app::Minimize, window, _| window.minimize_window())
+            .on_action(|_: &app::Zoom, window, _| window.zoom_window())
+            .on_action(|_: &app::CloseWindow, _, cx| app::close_window(cx))
+            .when(self.pages_open(), |root| {
+                let root = view::<app::ShowDeck>(root, Screen::Deck, cx);
+                let root = view::<app::ShowFacesKeys>(root, Screen::FacesKeys, cx);
+                let root = view::<app::ShowIntegrations>(root, Screen::Integrations, cx);
+                let root = view::<app::ShowVoice>(root, Screen::Voice, cx);
+                view::<app::ShowService>(root, Screen::Service, cx)
+            })
             .font(style::ui_font(self.language()))
             .ts(13., 18.)
             .text_color(p.text)
@@ -1208,6 +1231,25 @@ impl Render for Shell {
             // `Root` owns the notifications but does not draw them: the
             // view that raises them renders their layer.
             .children(Root::render_notification_layer(window, cx))
+    }
+}
+
+/// `root` with the View menu's command `A`, which opens `screen` as its
+/// sidebar row does.
+fn view<A: Action>(root: Div, screen: Screen, cx: &Context<Shell>) -> Div {
+    root.on_action(cx.listener(move |this, _: &A, window, cx| this.go(screen, window, cx)))
+}
+
+/// Install the palette the Mac asks for now, if it is not the one the window
+/// is drawn in. The tick runs this: AppKit may switch to or from an Increase
+/// contrast appearance without telling the window's view, so the window
+/// follows the setting within a [`TICK`] all the same. Most ticks it
+/// compares two palettes and does nothing.
+fn follow_look(window: &mut Window, cx: &mut App) {
+    let look = style::look(window, cx);
+    if look != *palette(cx) {
+        style::install(look, cx);
+        window.refresh();
     }
 }
 

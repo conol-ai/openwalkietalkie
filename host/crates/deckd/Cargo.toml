@@ -96,11 +96,3 @@ deck-wrap = { path = "../deck-wrap" }
 [[test]]
 name = "voice_mainloop"
 harness = false
-
-# Week 5's in-process AppleScript runner, for the same reason: `NSAppleScript`
-# is not thread-safe, the daemon reaches it through B10's main-thread hop, and
-# a `#[test]` runs on a libtest worker whose main queue nobody drains. Only a
-# `harness = false` target's `fn main` *is* the main thread.
-[[test]]
-name = "desktop_mainloop"
-harness = false

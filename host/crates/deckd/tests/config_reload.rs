@@ -13,7 +13,7 @@ use deckd::bus::Bus;
 use deckd::config::{self, Config, Paths};
 use deckd::core::handle::{CoreHandle, CoreMsg};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 /// The contract's bound on one reload (300 ms debounce + FSEvents).
@@ -67,6 +67,79 @@ fn put(path: &std::path::Path, text: &str) {
     let tmp = path.with_extension("writing");
     std::fs::write(&tmp, text).expect("write the temp file");
     std::fs::rename(&tmp, path).expect("rename it into place");
+}
+
+/// What this test binary has logged at `WARN` and above, from any thread
+/// (the watcher logs from its own). The subscriber is the process's
+/// default, installed by the first caller.
+fn warnings() -> String {
+    #[derive(Clone)]
+    struct Text(Arc<Mutex<Vec<u8>>>);
+    impl std::io::Write for Text {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    static LOG: OnceLock<Arc<Mutex<Vec<u8>>>> = OnceLock::new();
+    let log = LOG.get_or_init(|| {
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let writer = Text(log.clone());
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(move || writer.clone())
+            .with_max_level(tracing::Level::WARN)
+            .with_ansi(false)
+            .finish();
+        tracing::subscriber::set_global_default(subscriber).expect("the only global subscriber");
+        log
+    });
+    let bytes = log.lock().unwrap().clone();
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+
+/// Decision 11: a file that still names `[voice] fallback_input` reloads as
+/// the same config (so nothing reaches the core and no `config.changed` is
+/// raised), and the watcher names the line in the log, as the start and
+/// `config.reload` do.
+#[test]
+fn a_retired_line_changes_nothing_and_the_watcher_names_it() {
+    const NAMED: &str = "[voice] fallback_input is no longer read";
+    assert!(!warnings().contains(NAMED), "nothing named before the file");
+    let dir = data_dir();
+    let paths = Paths::from_data_dir(dir.clone(), dir.join("logs"), dir.join("caches"));
+    put(&paths.config, "[api]\nport = 0\n");
+    let initial = Config::load(&paths.config).expect("the starting config");
+    let bus = Arc::new(Bus::default());
+    let (core, core_rx) = CoreHandle::detached_with(bus.clone());
+    let watch = config::watch(&paths, initial.clone(), core, bus.clone());
+    assert!(watch.watching(), "the recommended watcher is up");
+
+    put(
+        &paths.config,
+        "[api]\nport = 0\n\n[voice]\nfallback_input = \"system_default\"\n",
+    );
+    let deadline = Instant::now() + WAIT;
+    while !warnings().contains(NAMED) {
+        assert!(
+            Instant::now() < deadline,
+            "not named within {WAIT:?}: {}",
+            warnings()
+        );
+        std::thread::sleep(POLL);
+    }
+    assert!(
+        warnings().contains("Remove the line from config.toml."),
+        "{}",
+        warnings()
+    );
+    assert_eq!(*watch.current(), initial, "the line changes nothing");
+    assert!(core_rx.try_recv().is_err(), "so the core is not even told");
+
+    drop(watch);
+    std::fs::remove_dir_all(dir).unwrap();
 }
 
 #[test]

@@ -23,7 +23,10 @@
 //! the endpoint rate-limits eager clients with 429s), at once on the
 //! deck's ENTER (`usage.refresh_requested`) when the last probe is older
 //! than 30 s, doubling from 1 min to 15 min after a failure, and 10 min
-//! between looks for a login that is missing or expired.
+//! between looks for a login that is missing or expired. **Only while
+//! asked** (`crate::dormancy`): the Usage face on the deck's strip and a
+//! deck linked in the last ten minutes. Otherwise the login is not read at
+//! all, neither file nor Keychain, and `curl` is not run.
 use std::io::Write;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -133,35 +136,73 @@ impl Pace {
 }
 
 /// The probe task: one per daemon, from start to `stop`.
-pub async fn run(api: Arc<Api>, mut stop: watch::Receiver<bool>) {
+pub async fn run(api: Arc<Api>, stop: watch::Receiver<bool>) {
+    let probing = api.clone();
+    run_with(api, stop, move || {
+        let api = probing.clone();
+        async move { probe(&api).await }
+    })
+    .await;
+}
+
+/// [`run`] with the probe handed in: the one thing that reads the
+/// credentials file and the Keychain and runs `curl`. A test hands in a
+/// counter instead, and that is how it knows none of them was reached.
+///
+/// It probes only while `[usage] providers` names Claude **and** the
+/// service's gate asks for usage (`crate::dormancy`): a deck linked in the
+/// last ten minutes, with the Usage face on its strip. Put back, the face
+/// is read at once unless a probe ran in the last 30 s; the deck's ENTER is
+/// taken only while it is there.
+pub async fn run_with<F, Fut>(api: Arc<Api>, mut stop: watch::Receiver<bool>, mut probe: F)
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Outcome>,
+{
     let mut events = api.bus.subscribe();
+    let mut gate = api.core.adapters().watch_gate();
+    let mut asked = gate.borrow_and_update().usage;
     let mut pace = Pace::new(Instant::now());
     loop {
         let now = Instant::now();
         let cfg = api.config.load();
-        let enabled = Provider::Claude.enabled(&cfg.usage);
+        let enabled = Provider::Claude.enabled(&cfg.usage) && asked;
         if enabled && pace.next <= now {
-            let outcome = probe(&api).await;
-            if matches!(outcome, Outcome::NoLogin | Outcome::Expired | Outcome::Denied | Outcome::Refused(_)) {
+            let outcome = probe().await;
+            if matches!(
+                outcome,
+                Outcome::NoLogin | Outcome::Expired | Outcome::Denied | Outcome::Refused(_)
+            ) {
                 let _ = feed(&api, Vec::new(), None, Vec::new()).await;
             }
             let poll = Duration::from_secs(u64::from(cfg.usage.poll_s));
             let fresh = pace.settle(&outcome, poll, Instant::now());
-            report(&outcome, fresh, pace.next.saturating_duration_since(Instant::now()));
+            report(
+                &outcome,
+                fresh,
+                pace.next.saturating_duration_since(Instant::now()),
+            );
             continue;
         }
         let wait = if enabled {
             pace.next.saturating_duration_since(now)
         } else {
             // Off in the config: look again in a while, a reload may have
-            // switched it on.
+            // switched it on. (The gate wakes this loop itself.)
             POLL_MIN
         };
         tokio::select! {
             _ = stop.changed() => return,
             () = tokio::time::sleep(wait) => {}
+            () = crate::dormancy::changed(&mut gate) => {
+                let now_asked = gate.borrow_and_update().usage;
+                if now_asked && !asked {
+                    pace.nudge(Instant::now());
+                }
+                asked = now_asked;
+            }
             published = events.recv() => match published {
-                Ok(p) if p.event.kind == EventKind::UsageRefreshRequested => {
+                Ok(p) if p.event.kind == EventKind::UsageRefreshRequested && asked => {
                     pace.nudge(Instant::now());
                 }
                 Ok(_) => {}

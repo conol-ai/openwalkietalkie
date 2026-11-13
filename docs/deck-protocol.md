@@ -132,6 +132,15 @@ host                                   device
   `boot:0` adopt the device's `faces` list instead and persist it. After the
   hello the device is authoritative for strip and settings edits (it sends
   `faces`/`set`), the host for everything else.
+* The hello does not say which deck it is. A host that keeps strips and
+  settings for more than one deck may key them by the HID instance's USB
+  serial number: the deck's random-static Bluetooth address as twelve
+  upper-case hex digits, least significant byte first (`A1B2C3D4E5F6`),
+  which the recovery bootloader reports too. Over Bluetooth HID the platform
+  may list the same address most significant byte first with `:` or `-`
+  between the pairs, or nothing. `deckd` does this, and sends its first
+  hello only once the deck's own values are queued, so the sync is that
+  deck's (`docs/host-service.md` §6.9).
 * The device never sends on channel 5 before it has received a channel-5 line
   on the current connection, so nothing arrives before your first hello.
 * State applied from a host line never echoes back as its mirror event (a
@@ -178,7 +187,7 @@ Required fields have no `?`. Text capacities are in bytes of UTF-8.
 | `ws` | `active` 1-based (0 unknown) `<= count`, `count` `<= 9`, `sel` window row `< windows.length` (0 when empty), `windows?` up to 6 of `{c?, t}` with `c` `blue`/`amber`/`green`/`red`/`gray` (default gray) and `t` (48) | Omarchy face content. |
 | `macro` | `f` face id 1..8, `src?` (16, e.g. the dotfile name), `keys` up to 9 of `{l, b?, k?}`: `l` label (12), `b` `left`/`right`/`enter`/`cw`/`ccw`/`shift+left`/`shift+right`/`shift+enter`, `k` keystroke (32) | Labels of the Macropad instance `f` (there may be up to three). `k` is what the host posts to the desktop when the key is pressed, `ctrl+opt+shift+cmd+<key>` with any subset of the modifiers (`alt` = `opt`) and one key of: `a`–`z`, `0`–`9`, `f1`–`f12`, `up` `down` `left` `right`, `enter` `esc` `tab` `space` `backspace` `delete` `home` `end` `pageup` `pagedown`, `minus` `equal` `lbracket` `rbracket` `backslash` `semicolon` `quote` `comma` `period` `slash` `grave`; the deck shows it as ⌃⌥⇧⌘ glyphs in the key's corner and refuses an unknown one (`err unknown`). `b` is a hardware control of the deck that presses the key. A key with neither is touch-only; missing keys, and keys with an empty `l`, draw as "+ assign" (an empty label is how a cleared slot keeps the later keys in place). Send it when `hello.faces`/`faces`/`face` shows a Macropad instance you have labels for, and again after a `macrokey`. |
 | `usage` | `period` (12), `items` up to 6 of `{n (20), a? (48), p 0..100, r (24), tip? (32), c?}` | Usage face. `a` identifies the account for these percentages, displayed below the provider name; omitted on legacy reports. `tip` is an optional reminder for unused redeemable resets nearing expiry, shown below the reset countdown while connected. `c` overrides the bar tone (`<50` blue, `<80` green, `<95` amber, else red). |
-| `faces` | `list` up to 8 of `{f 1..8 unique, t, n (16)}`, `t` = `agents`/`omarchy`/`macropad`/`usage`/`system`/`arcade`/`settings` | Restore the strip (see `boot`). Ignored while the face manager, gallery or naming overlay is open. |
+| `faces` | `list` up to 8 of `{f 1..8 unique, t, n (16)}`, `t` = `agents`/`omarchy`/`macropad`/`usage`/`system`/`arcade`/`settings`/`timer` | Restore the strip (see `boot`). The list starts with `agents` and ends with `settings`, has neither in between and holds at most three `macropad`; any other list → `range`, and the strip stays as it was. A `t` the firmware predates (`arcade` before 0.6.0, `system` before 0.10.0, `timer` before 0.12.0) → `unknown`. Ignored while the face manager, gallery or naming overlay is open. |
 | `name` | `text` (16) | The spoken name for a new face; applies only while the naming overlay is open (after a `ptt ctx:name`). |
 | `set` | `k` `speaker`/`mic`/`announce`/`chime`/`autojump`/`brightness`/`idlehome`/`demo`/`text`/`arcadesound`, `v` | Host-side override of a setting; not echoed. Ranges: speaker/mic 0..10, announce/chime/autojump/demo 0/1, brightness 1..5, idlehome 0/30/60/120 (seconds; other values round up), text 0/1/2, arcadesound 0 off / 1 SFX / 2 music + SFX. Arcade sound changes originate in the Arcade menu and are persisted like other settings. |
 
@@ -189,7 +198,7 @@ Required fields have no `?`. Text capacities are in bytes of UTF-8.
 | `hello` | `v`, `fw` firmware version, `sid` held (or 0), `boot` 0/1, `rx` 1024, `lang?` 0..3, `lang_rev?` u32, `faces` list of `{f,t,n}` | Reply to every host hello. Both language fields advertise versioned language sync. |
 | `key` | `k` `enter`/`cancel`/`left`/`right`/`cw`/`ccw`, `act` 1 press / 0 release / 2 step (wheel), `shift` 0/1, `f` face id | Hardware keys on an Omarchy-type face, for the host to map to compositor actions. A release carries the `shift` and `f` of its press. SHIFT and PTT never come as keys. |
 | `up` | | Everything is released: sent when a press was stranded by a context change, after the hello that ends a heartbeat gap, and on overflow recovery. Release every key you synthesised and cancel any open PTT utterance. |
-| `channel` | `agent`, `seq` u16 | The active channel changed by a user action or a PTT press; focus that agent's window and echo `focus {agent, ack: seq}`. |
+| `channel` | `agent`, `seq` u16 | The active channel changed by a user action or a PTT press; that agent becomes the PC's focus, and the PC echoes `focus {agent, ack: seq}`. It is not a request to raise anything on the computer: deckd brings a session's own app forward only on an explicit press (ENTER on its `Open app` card). |
 | `ptt` | `act` 1/0, `agent` (0 = none), `ctx` `talk`/`answer`/`name`, `card?`, `abort?` 1, `p?` u16 | Push-to-talk edges. `talk` = dictate into the agent's prompt, `answer` = free-form answer to `card`, `name` = the name of a new face (reply with `name`). The optional nonzero `p` identifies one press; echo it on transcripts so a late result cannot replace a later recording. The release repeats the press's agent/ctx/card/p; `abort:1` means the utterance was cancelled and must be discarded. |
 | `answer` | `agent`, `card`, `choice` 0-based | The user picked a choice. Confirm with `card clear` (the card shows "sent" until then and reverts after 5 s). Only sent while a host is present. |
 | `snooze` | `agent`, `card` | The card went back to the queue (CANCEL on the card). |

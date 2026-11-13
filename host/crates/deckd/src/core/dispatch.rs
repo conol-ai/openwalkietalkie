@@ -29,11 +29,13 @@ use std::time::Instant;
 /// `service.info.capabilities` — one list, both surfaces read it).
 ///
 /// It advertises only what is **built**, never what is designed: §4.1's
-/// example list ends at `["device", "voice.stt.apple", "voice.tts.apple",
-/// "mcp", "hooks.claude", "hooks.codex", "hooks.gemini", "inject.ghostty",
+/// example list is `["device", "voice.stt.apple", "voice.tts.apple",
+/// "mcp", "hooks.claude", "hooks.codex", "hooks.gemini",
 /// "virtual_agents"]`, and each of those joins this array in the commit
 /// that makes it true — `hooks.<cli>` with its adapter in `api::hooks`,
-/// `voice.*` with an engine, `inject.ghostty` with the injector.
+/// `voice.*` with an engine — and leaves it in the one that makes it
+/// false: `inject.ghostty` went with the Ghostty injector, when the
+/// hand-off began to raise the session's own app instead.
 ///
 /// This is not decoration (B8): `integrations.status` reads it to tell
 /// "the hooks are installed and the daemon answers them" from "the hooks
@@ -44,7 +46,8 @@ pub const CAPABILITIES: &[&str] = &[
     "device",
     "hooks.claude",
     "hooks.codex",
-    "inject.ghostty",
+    // `agent.order.result`: an owner reports an order it could not deliver.
+    "order.result",
     // `caps.transcribe: "push"`: `agent.transcribe` offers, the
     // `agent.transcribe.audio` / `agent.transcribe.result` methods.
     "transcribe.companion",
@@ -70,9 +73,7 @@ pub const PERM_LIMITS: &[&str] = &[
      started. macOS asks for it by itself the first time the link starts, so there is no \
      `perm.request` for it, and a denial is lifted in System Settings > Privacy & Security > \
      Bluetooth",
-    "automation.ghostty is what the injector last learned by trying: `granted` once a script \
-     has run, `denied` after a -1743, and `unknown` until it has had occasion to ask. \
-     accessibility is what the Macropad keys last learned the same way: `granted` once a \
+    "accessibility is what the Macropad keys last learned by trying: `granted` once a \
      keystroke went out, `denied` after macOS refused one (which also puts the system prompt \
      up, once per run), and `unknown` until a key has been pressed or `perm.request` asked",
     "a grant reported here is this process's. A launchd-spawned deckd is its own responsible \
@@ -117,7 +118,6 @@ pub const LOG_TAIL_MAX: usize = 5_000;
 ///   requirements `MacVerifier` checks a peer against. Writable means
 ///   "declare anything trusted", and the requirements are hot (§3.7), so
 ///   it would take effect on the next connection.
-/// * `desktop.inject` is which terminals may be typed into.
 /// * `api.allowed_origins` is the browser-origin check, and
 ///   `api.uds_default_scope`/`uds_max_scope` are what a bare Unix peer is
 ///   granted.
@@ -149,6 +149,11 @@ pub const LOG_TAIL_MAX: usize = 5_000;
 /// panel added `usage.providers`, whose Claude switch says where it is
 /// offered that it reads the Claude Code login (the rule
 /// `voice.tts.api_key` joined under).
+///
+/// `voice.fallback_input` left the list when the service stopped reading it
+/// (decision 11, [`config::RETIRED_KEYS`]): a `config.set` that asks for
+/// what the service does anyway is accepted and writes nothing, and one
+/// that asks for the Mac's microphone is refused, saying why.
 pub const MANAGED: &[&str] = &[
     "api.port",
     "api.tcp",
@@ -162,7 +167,6 @@ pub const MANAGED: &[&str] = &[
     "voice.announce_questions",
     "voice.commands",
     "voice.device_uid",
-    "voice.fallback_input",
     "voice.fallback_output",
     "voice.mic_warm",
     "voice.slow_sco_ms",
@@ -182,7 +186,9 @@ pub const MANAGED: &[&str] = &[
     // change as the Voice screen's control that says so (the rule
     // `voice.stt.allow_server` still waits on). `config.get` publishes the
     // key as a hint, never the value, and `config_set` checks that a key
-    // took by its hint.
+    // took by its hint. On a Mac's own install the key goes to the Keychain
+    // instead of the file (`crate::secrets`), written on the keychain
+    // thread, and `config.get` says where it is kept (`tts.key_store`).
     "voice.tts.api_key",
     "voice.tts.engine",
     "voice.tts.instruct",
@@ -358,6 +364,23 @@ impl Core {
             "care.test.question" | "care.test.voice" | "care.test.say" | "care.test.status" => {
                 self.care_test(&ctx, method, &params, now)
             }
+            // The decks `state.json` keeps a setup for (`care::decks`): a
+            // forgotten one is written with the next save, as any change.
+            "care.decks" => match crate::care::decks::list(&self.state, &params) {
+                Ok(decks) => Reply::ok(decks),
+                Err(error) => Reply::err(error),
+            },
+            "care.decks.forget" => match crate::care::decks::forget(&mut self.state, &params) {
+                Ok(forgotten) => {
+                    self.state_dirty.get_or_insert(now);
+                    tracing::info!(
+                        deck = forgotten["deck"].as_str().unwrap_or_default(),
+                        "care: a deck was forgotten"
+                    );
+                    Reply::ok(forgotten)
+                }
+                Err(error) => Reply::err(error),
+            },
             "metrics.get" => {
                 self.refresh_metric(now);
                 match serde_json::to_value(self.metric) {
@@ -373,6 +396,11 @@ impl Core {
                         m["audio_dropped"] = self.audio_dropped().into();
                         m["audio_queue"] = self.audio.queued().into();
                         m["audio_retry"] = self.audio_retry_len().into();
+                        // What became of every card and how the reader was
+                        // used: ids, times, counts and closed words, never
+                        // content (`crate::deliveries`).
+                        self.take_asks();
+                        m["deliveries"] = self.deliveries.json();
                         Reply::ok(m)
                     }
                     Err(e) => Reply::err(ApiError::internal(&e.to_string())),
@@ -455,7 +483,7 @@ impl Core {
             // and never arrive here. These two only read.
             "voice.engines" => self.voice_engines(),
             "voice.test" => self.voice_test(&params),
-            "firmware.status" => Reply::ok(serde_json::to_value(self.firmware.status()).unwrap()),
+            "firmware.status" => Reply::ok(self.firmware_reply(self.firmware.status())),
             "firmware.check" | "firmware.install" => {
                 let cache = self.paths.caches.join(crate::firmware::CACHE_DIR);
                 let result = if method == "firmware.check" {
@@ -497,7 +525,7 @@ impl Core {
                     )
                 };
                 match result {
-                    Ok(status) => Reply::ok(serde_json::to_value(status).unwrap()),
+                    Ok(status) => Reply::ok(self.firmware_reply(status)),
                     Err(why) => Reply::err(ApiError::invalid("firmware", &why)),
                 }
             }
@@ -560,13 +588,17 @@ impl Core {
     /// it ([`crate::config::TcpRule::word`]: `explicit`, `default` or
     /// `legacy_hooks`), so the app can say why the door is open; it is no
     /// key of the file, and `config.set` refuses it as it refuses any
-    /// unmanaged key.
+    /// unmanaged key. `voice."tts.key_store"` is published the same way:
+    /// where the cloud voice's key is kept (`keychain` on a Mac's own
+    /// install, `config` for `config.toml`), so the key dialog can say so.
+    /// The key's hint beside it is the key in force, wherever it is kept.
     fn config_get(&self) -> serde_json::Value {
         let mut published = config_json(self.config());
         published["sources"]["claude_channels"] = self.channels_on().into();
         let door = self.tcp_door();
         published["api"]["tcp"] = door.on.into();
         published["api"]["tcp_rule"] = door.rule.word().into();
+        published["voice"]["tts.key_store"] = self.voice_key.word().into();
         published
     }
 
@@ -632,76 +664,111 @@ impl Core {
     /// watcher's debounce or an operator has edited by hand, and a `changed`
     /// computed from the in-force one would then name the other write's
     /// keys and refuse this one for moving them.
+    ///
+    /// **On a store home the cloud voice's key never reaches the file**
+    /// (`crate::secrets`). A patch naming it is not answered here: `on_msg`
+    /// parks it ([`Core::config_set_keyed`]) while the keychain thread
+    /// writes the key, because a Keychain call can wait on a dialog and this
+    /// thread may not. A caller that reached this method directly anyway is
+    /// refused, rather than given the key in the file or a store call here.
     fn config_set(&mut self, params: &serde_json::Value, now: Instant) -> Reply {
-        let Some(patch) = params.get("patch").and_then(serde_json::Value::as_object) else {
-            return Reply::err(ApiError::invalid_params(
-                "patch is required: {\"<dotted key>\": <value>}, the names config.get publishes \
-                 (a null value removes its key and restores the documented default)",
-            ));
+        let patch = match config_patch(params) {
+            Ok(patch) => patch,
+            Err(e) => return Reply::err(e),
         };
-        if patch.is_empty() {
-            return Reply::err(ApiError::invalid_params("patch names no keys"));
+        if self.voice_key.is_store() && patch.contains_key(VOICE_KEY) {
+            return Reply::err(ApiError::internal(
+                "on this Mac the cloud voice key is written by the keychain thread",
+            ));
         }
-        // The whitelist first, before the file is so much as read, and for
-        // the **whole** patch: one unmanaged key refuses all of it, by name,
-        // and the answer says what the list is rather than leaving a caller
-        // to guess whether it was a key or a value.
-        let unmanaged: Vec<&str> = patch
-            .keys()
-            .map(String::as_str)
-            .filter(|key| !MANAGED.contains(key))
-            .collect();
-        if !unmanaged.is_empty() {
-            return Reply::err(ApiError::invalid_params(&format!(
-                "{} is not a managed key. config.set writes only these: {}. Everything else in \
-                 config.toml — `[trust]`, `[privacy]`, `[desktop] inject`, `[api] \
-                 allowed_origins` and the scope defaults, `[voice.stt] allow_server` — is the \
-                 operator's own file to edit, because a caller that could write it would be \
-                 granting itself trust rather than changing a setting",
-                unmanaged.join(", "),
-                MANAGED.join(", ")
-            )));
+        let edit = match self.config_file_edit(patch, false) {
+            Ok(edit) => edit,
+            Err(e) => return Reply::err(e),
+        };
+        if let Some(text) = &edit.text {
+            if let Err(e) = config::write(&self.paths.config, text) {
+                return Reply::err(ApiError::internal(&e.to_string()));
+            }
         }
-        let path = self.paths.config.clone();
-        let text = match std::fs::read_to_string(&path) {
+        let (hot, restart) = edit.hot_and_restart();
+        // In force before the reply says so; the watcher's reload of this
+        // same file is then the config the core already holds.
+        self.take_config(std::sync::Arc::new(edit.next), now);
+        let keys: Vec<&str> = patch.keys().map(String::as_str).collect();
+        tracing::info!(
+            keys = %keys.join(","),
+            hot = hot.len(),
+            "config.toml written and applied"
+        );
+        Reply::ok(serde_json::json!({
+            "keys": keys, "changed": edit.changed, "applied": hot, "restart_needed": restart,
+        }))
+    }
+
+    /// `patch` applied to `config.toml` in memory and checked the way
+    /// [`Core::config_set`] promises; nothing is written. With
+    /// `key_elsewhere` (a store home) the cloud voice's key is no part of
+    /// the file's patch, and a copy of a key still in the file goes with
+    /// this write.
+    fn config_file_edit(
+        &self,
+        patch: &serde_json::Map<String, serde_json::Value>,
+        key_elsewhere: bool,
+    ) -> Result<FileEdit, ApiError> {
+        let text = match std::fs::read_to_string(&self.paths.config) {
             Ok(text) => text,
             // No file is the documented defaults, which is the same thing
             // `Config::load` says: the first `config.set` creates it.
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-            Err(e) => return Reply::err(ApiError::internal(&e.to_string())),
+            Err(e) => return Err(ApiError::internal(&e.to_string())),
         };
         // A file the daemon could not have loaded is the operator's to fix,
         // and is `-32009 invalid{config.toml}` — the same error
         // `config.reload` gives for the same file — never a write over it.
-        let current = match Config::parse(&text) {
-            Ok(current) => current,
-            Err(e) => return Reply::err(ApiError::invalid("config.toml", &e.to_string())),
-        };
+        let current =
+            Config::parse(&text).map_err(|e| ApiError::invalid("config.toml", &e.to_string()))?;
+        let mut patch = patch.clone();
+        // A retired key got this far only asking for what the service does
+        // anyway (`config_patch`): there is nothing to write for it.
+        patch.retain(|key, _| config::retired(key).is_none());
+        if key_elsewhere {
+            patch.remove(VOICE_KEY);
+            if current.voice.tts.has_key() {
+                patch.insert(VOICE_KEY.into(), serde_json::Value::Null);
+            }
+        }
+        // Only the key, which the store keeps, or only a retired key:
+        // nothing for the file.
+        if patch.is_empty() {
+            return Ok(FileEdit {
+                next: current.clone(),
+                current,
+                text: None,
+                changed: Vec::new(),
+            });
+        }
         let before = config_json(&current);
         // Every edit onto **one** copy, so the validation below sees the
         // whole patch and the write at the end is a single publish.
         // `serde_json`'s map iterates in key order, so the same patch always
         // produces the same file.
-        let mut edited = text.clone();
-        for (key, value) in patch {
+        let mut edited = text;
+        for (key, value) in &patch {
             if key_of(&before, key).is_none() {
-                return Reply::err(ApiError::invalid_params(&format!(
+                return Err(ApiError::invalid_params(&format!(
                     "{key} is not a key of config.get"
                 )));
             }
             edited = match config::edit(&edited, key, value) {
                 Ok(edited) => edited,
                 Err(e @ config::EditError::Unparsable(_)) => {
-                    return Reply::err(ApiError::invalid("config.toml", &e.to_string()))
+                    return Err(ApiError::invalid("config.toml", &e.to_string()))
                 }
-                Err(e) => return Reply::err(ApiError::invalid_params(&e.to_string())),
+                Err(e) => return Err(ApiError::invalid_params(&e.to_string())),
             };
         }
         // Validated whole, exactly as the reload path validates it.
-        let next = match Config::parse(&edited) {
-            Ok(next) => next,
-            Err(e) => return Reply::err(ApiError::invalid_params(&e.to_string())),
-        };
+        let next = Config::parse(&edited).map_err(|e| ApiError::invalid_params(&e.to_string()))?;
         let after = config_json(&next);
         let defaults = config_json(&Config::default());
         // Did each edit **take**? Asked for a value, `config.get` has to
@@ -712,19 +779,19 @@ impl Core {
         // changed nothing *and* did not take is a silent no-op, and a GUI
         // toggle that reports success and moves nothing is the worst of
         // the three outcomes.
-        for (key, value) in patch {
+        for (key, value) in &patch {
             let took = match value {
                 serde_json::Value::Null => key_of(&after, key) == key_of(&defaults, key),
                 // The one key `config.get` does not read back as written:
                 // the hint of the key is what it publishes.
-                serde_json::Value::String(secret) if key == "voice.tts.api_key" => {
+                serde_json::Value::String(secret) if key == VOICE_KEY => {
                     let hint = published_key_hint(secret);
                     key_of(&after, key) == Some(&serde_json::Value::String(hint))
                 }
                 value => key_of(&after, key) == Some(value),
             };
             if !took {
-                return Reply::err(ApiError::invalid_params(&format!(
+                return Err(ApiError::invalid_params(&format!(
                     "{key} does not take that value: config.get would read back {}",
                     key_of(&after, key).unwrap_or(&serde_json::Value::Null)
                 )));
@@ -737,30 +804,191 @@ impl Core {
             .filter(|moved| !patch.contains_key(*moved))
             .collect();
         if !stray.is_empty() {
-            return Reply::err(ApiError::invalid_params(&format!(
+            return Err(ApiError::invalid_params(&format!(
                 "this patch also moves {}, which it does not name",
                 stray.join(", ")
             )));
         }
-        if let Err(e) = config::write(&path, &edited) {
-            return Reply::err(ApiError::internal(&e.to_string()));
+        Ok(FileEdit {
+            current,
+            text: Some(edited),
+            next,
+            changed,
+        })
+    }
+
+    /// `config.set` naming `voice.tts.api_key` on a store home, parked.
+    /// Everything but the key is checked against the file first, so a patch
+    /// the file would refuse never reaches the store. Then the key goes to
+    /// the keychain thread, and the call is answered when the store has
+    /// answered ([`Core::on_keeper`]). The file is written only after the
+    /// store took the key, so a store that refuses leaves the file as it
+    /// was, and a file that cannot be written then gets the previous key put
+    /// back in the store.
+    pub(super) fn config_set_keyed(
+        &mut self,
+        ctx: CallCtx,
+        params: &serde_json::Value,
+        reply: tokio::sync::oneshot::Sender<Reply>,
+    ) {
+        let checked = config_patch(params).and_then(|patch| {
+            let key = voice_key_value(patch)?;
+            self.config_file_edit(patch, true)?;
+            Ok((patch.clone(), key))
+        });
+        let (patch, key) = match checked {
+            Ok(checked) => checked,
+            Err(e) => {
+                let _ = reply.send(Reply::err(e));
+                return;
+            }
+        };
+        if let Err(KeyWork::Set { reply, .. }) =
+            self.keeper.post(key, KeyWork::Set { ctx, patch, reply })
+        {
+            let _ = reply.send(Reply::err(keychain_refusal("the Keychain thread is not running")));
         }
-        let (hot, restart): (Vec<String>, Vec<String>) = changed
-            .iter()
-            .cloned()
-            .partition(|k| is_hot(k) && config::is_hot_change(k, &current, &next));
-        // In force before the reply says so; the watcher's reload of this
-        // same file is then the config the core already holds.
+    }
+
+    /// An answer from the keychain thread (`crate::secrets::Keeper`).
+    pub(super) fn on_keeper(&mut self, done: crate::secrets::Done<KeyWork>, now: Instant) {
+        let crate::secrets::Done { key, result, then } = done;
+        match then {
+            KeyWork::Set { ctx, patch, reply } => {
+                let answer = match result {
+                    Ok(()) => self.config_set_stored(&ctx, &patch, key, now),
+                    Err(why) => Reply::err(keychain_refusal(&why.to_string())),
+                };
+                let _ = reply.send(answer);
+            }
+            KeyWork::Adopt => self.voice_key_moved(key, result, now),
+            KeyWork::Restore => {
+                if let Err(why) = result {
+                    tracing::warn!(
+                        "voice: the Keychain did not take the previous cloud voice key back \
+                         ({why}); it holds the key the failed config.set wrote, which this \
+                         service uses from its next start"
+                    );
+                }
+            }
+        }
+    }
+
+    /// A keyed `config.set` once the store has taken the key: the rest of
+    /// the patch written to the file as it is now (another write may have
+    /// landed meanwhile), the key taken into the config in force, and the
+    /// reply `config_set` gives, with `voice.tts.api_key` named when the
+    /// key in force moved. Nothing in the file changed for the key, so the
+    /// watcher will not announce it: the core does.
+    fn config_set_stored(
+        &mut self,
+        ctx: &CallCtx,
+        patch: &serde_json::Map<String, serde_json::Value>,
+        key: Option<String>,
+        now: Instant,
+    ) -> Reply {
+        let previous = self.voice_key.stored().map(String::from);
+        let before = published_key_hint(&self.config().voice.tts.api_key);
+        let written = self.config_file_edit(patch, true).and_then(|edit| {
+            if let Some(text) = &edit.text {
+                config::write(&self.paths.config, text)
+                    .map_err(|e| ApiError::internal(&e.to_string()))?;
+            }
+            Ok(edit)
+        });
+        let edit = match written {
+            Ok(edit) => edit,
+            Err(e) => {
+                if self.keeper.post(previous, KeyWork::Restore).is_err() {
+                    tracing::warn!(
+                        "voice: no Keychain thread to put the previous cloud voice key back"
+                    );
+                }
+                return Reply::err(e);
+            }
+        };
+        let (mut hot, restart) = edit.hot_and_restart();
+        let FileEdit {
+            next, mut changed, ..
+        } = edit;
+        // A copy the file still held went with this write; that is no
+        // change in force, which only the store's key decides.
+        changed.retain(|k| k != VOICE_KEY);
+        hot.retain(|k| k != VOICE_KEY);
+        self.voice_key.took(key);
         self.take_config(std::sync::Arc::new(next), now);
+        if published_key_hint(&self.config().voice.tts.api_key) != before {
+            for keys in [&mut changed, &mut hot] {
+                keys.push(VOICE_KEY.into());
+                keys.sort();
+            }
+            self.publish_event(
+                EventKind::ConfigChanged,
+                ctx.principal.clone(),
+                serde_json::json!({ "keys": [VOICE_KEY] }),
+                now,
+            );
+        }
         let keys: Vec<&str> = patch.keys().map(String::as_str).collect();
         tracing::info!(
             keys = %keys.join(","),
             hot = hot.len(),
-            "config.toml written and applied"
+            "the cloud voice key written to the Keychain, the rest of the patch applied"
         );
         Reply::ok(serde_json::json!({
             "keys": keys, "changed": changed, "applied": hot, "restart_needed": restart,
         }))
+    }
+
+    /// A key found in `config` (the file's, as it is taken), sent to the
+    /// store on the keychain thread. Until it has moved, the file's key is
+    /// the one in force.
+    pub(super) fn move_voice_key(&mut self, config: &Config) {
+        let Some(key) = self.voice_key.to_move(config) else {
+            return;
+        };
+        if self.keeper.post(Some(key.clone()), KeyWork::Adopt).is_err() {
+            self.voice_key.moved(&key, false);
+            tracing::warn!("voice: no Keychain thread; the cloud voice key stays in config.toml");
+        }
+    }
+
+    /// A key from `config.toml` has been through the keychain thread.
+    /// Taken: the store holds it, the file's copy goes (unless the file
+    /// holds another key by now), and the config is taken again, which
+    /// changes nothing in force. Refused: the key stays in the file, in
+    /// force from there, and the store is not asked again in this run.
+    fn voice_key_moved(
+        &mut self,
+        key: Option<String>,
+        result: Result<(), crate::secrets::StoreError>,
+        now: Instant,
+    ) {
+        let Some(key) = key else {
+            return;
+        };
+        if let Err(why) = result {
+            self.voice_key.moved(&key, false);
+            tracing::warn!(
+                "voice: the Keychain refused the cloud voice key ({why}); it stays in config.toml"
+            );
+            return;
+        }
+        self.voice_key.moved(&key, true);
+        match crate::secrets::remove_from_file(&self.paths, &key) {
+            Ok(Some(next)) => {
+                tracing::info!(
+                    "voice: the cloud voice key moved from config.toml into the Keychain ({})",
+                    crate::secrets::hint(&key)
+                );
+                self.take_config(std::sync::Arc::new(next), now);
+            }
+            Ok(None) => {}
+            Err(why) => tracing::warn!(
+                "voice: the cloud voice key is in the Keychain, and config.toml still holds it: \
+                 {why}"
+            ),
+        }
     }
 
     /// `service.restart` (exit 75) / `service.stop` (exit 0), §4.11.
@@ -1127,8 +1355,8 @@ impl Core {
                         "with `transport = \"ble\"` the deck's microphone arrives as packets \
                          over Bluetooth LE: it needs the Bluetooth permission, not Microphone, \
                          and `mic_warm` has no effect because the deck starts streaming on the \
-                         press itself. `permissions.microphone` is about the Mac's own input \
-                         (`fallback_input`)"
+                         press itself. `permissions.microphone` is about the Mac's own input, \
+                         which only `voice.listen{input:\"mac\"}` opens"
                     } else {
                         "`permissions.microphone` is what the audio side last reported, and a \
                          grant read from a terminal-spawned daemon says nothing about the \
@@ -1177,26 +1405,45 @@ impl Core {
     /// `<table>.<key>` names on the bus.
     fn config_reload(&mut self, ctx: &CallCtx, now: Instant) -> Reply {
         let path = self.paths.config.clone();
-        let next = match Config::load(&path) {
-            Ok(next) => next,
-            Err(e) => {
-                let message = e.to_string();
+        // What is wrong is said as the watcher says it: the TOML error's
+        // message and its line and column, never the offending line, which
+        // can be a pasted key and goes out in the reply, the log and on the
+        // bus (`Config::parse_at`).
+        let read = match std::fs::read_to_string(&path) {
+            Ok(text) => match Config::parse_at(&text) {
+                Ok(next) => Ok((next, Some(text))),
+                Err((message, position)) => Err((
+                    format!("invalid config.toml: {}", config::placed(message, position)),
+                    position,
+                )),
+            },
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok((Config::default(), None)),
+            Err(e) => Err((format!("cannot read config.toml: {e}"), None)),
+        };
+        let (next, text) = match read {
+            Ok(read) => read,
+            Err((message, position)) => {
                 tracing::warn!(path = %path.display(), error = %message, "config.reload refused");
-                self.publish_event(
-                    EventKind::Error,
-                    ctx.principal.clone(),
-                    serde_json::json!({
-                        "code": "config_invalid",
-                        "context": "config.toml",
-                        "message": message,
-                    }),
-                    now,
-                );
+                let mut data = serde_json::json!({
+                    "code": "config_invalid",
+                    "context": "config.toml",
+                    "message": message,
+                });
+                if let Some((line, col)) = position {
+                    data["position"] = serde_json::json!({ "line": line, "col": col });
+                }
+                self.publish_event(EventKind::Error, ctx.principal.clone(), data, now);
                 return Reply::err(ApiError::invalid("config.toml", &message));
             }
         };
+        // A line nothing reads any more is named, as the watcher names it.
+        if let Some(text) = text {
+            config::warn_retired(&text);
+        }
         let before = config_json(self.config());
-        let after = config_json(&next);
+        // The file as it will be in force: a key the store holds is in force
+        // though the file has none, and that is no change.
+        let after = config_json(&self.voice_key.overlay(std::sync::Arc::new(next.clone())));
         let changed = changed_keys(&before, &after);
         let (hot, restart): (Vec<String>, Vec<String>) = changed
             .iter()
@@ -1317,13 +1564,12 @@ impl Core {
     /// `Permissions` was never written.
     ///
     /// It reports what the daemon actually knows and says, in `limits`,
-    /// what it does not. `automation.ghostty` is now answered from what the
-    /// injector learned by *trying* — the only way this permission can be
-    /// read, since TCC offers no query for Apple Events — so it is `unknown`
-    /// until a script has run, then `granted`, or `denied` after a -1743.
-    /// `accessibility` is the same kind of answer from the Macropad keys:
-    /// what the last keystroke (or `perm.request`) learned, `unknown`
-    /// until one has been pressed. `speech` is macOS's own answer, read
+    /// what it does not. `accessibility` is answered from what the Macropad
+    /// keys learned by *trying*: what the last keystroke (or
+    /// `perm.request`) learned, `unknown` until one has been pressed. There
+    /// is no `automation` any more: the hand-off raises an app through
+    /// LaunchServices and sends no Apple Event, so the daemon needs no
+    /// Automation grant. `speech` is macOS's own answer, read
     /// here and now ([`speech_grant`]) once there is a recogniser to need
     /// it; a read, so asking for the status never asks for the grant.
     fn perm_status(&self) -> serde_json::Value {
@@ -1342,7 +1588,6 @@ impl Core {
             "microphone": p.microphone,
             "speech": speech,
             "bluetooth": p.bluetooth,
-            "automation": {"ghostty": learned(self.automation_denied.map(|denied| !denied))},
             "accessibility": learned(self.accessibility_granted),
             "limits": PERM_LIMITS,
         })
@@ -1597,6 +1842,126 @@ fn published_key_hint(key: &str) -> String {
     }
 }
 
+/// The cloud voice's key, by the dotted name `config.set` and `config.get`
+/// give it (also its Keychain item's account).
+const VOICE_KEY: &str = crate::secrets::ACCOUNT;
+
+/// What the core handed the keychain thread, given back with the answer
+/// ([`Core::on_keeper`]).
+pub(crate) enum KeyWork {
+    /// A `config.set` naming the key, parked until the store answers.
+    Set {
+        ctx: CallCtx,
+        patch: serde_json::Map<String, serde_json::Value>,
+        reply: tokio::sync::oneshot::Sender<Reply>,
+    },
+    /// A key found in `config.toml`, on its way into the store.
+    Adopt,
+    /// The key a `config.set` replaced, put back because the rest of that
+    /// patch could not be written after the store had taken the new one.
+    Restore,
+}
+
+/// Whether a `config.set` names the cloud voice's key.
+pub(super) fn names_voice_key(params: &serde_json::Value) -> bool {
+    params
+        .get("patch")
+        .and_then(serde_json::Value::as_object)
+        .is_some_and(|patch| patch.contains_key(VOICE_KEY))
+}
+
+/// `config.set`'s `patch`: an object naming at least one key, every one of
+/// them managed. The whitelist comes before the file is so much as read, and
+/// for the **whole** patch: one unmanaged key refuses all of it, by name,
+/// and the answer says what the list is rather than leaving a caller to
+/// guess whether it was a key or a value.
+///
+/// A key the service no longer reads ([`config::RETIRED_KEYS`]) is let
+/// through only with a value that asks for what the service does anyway
+/// (`"none"` or `null` for `voice.fallback_input`), and
+/// [`Core::config_file_edit`] then writes nothing for it. Any other value is
+/// refused with why the key went, before the whitelist's generic answer.
+fn config_patch(
+    params: &serde_json::Value,
+) -> Result<&serde_json::Map<String, serde_json::Value>, ApiError> {
+    let Some(patch) = params.get("patch").and_then(serde_json::Value::as_object) else {
+        return Err(ApiError::invalid_params(
+            "patch is required: {\"<dotted key>\": <value>}, the names config.get publishes \
+             (a null value removes its key and restores the documented default)",
+        ));
+    };
+    if patch.is_empty() {
+        return Err(ApiError::invalid_params("patch names no keys"));
+    }
+    for (key, value) in patch {
+        if let Some(retired) = config::retired(key).filter(|retired| !retired.is_moot(value)) {
+            return Err(ApiError::invalid_params(&retired.refusal()));
+        }
+    }
+    let unmanaged: Vec<&str> = patch
+        .keys()
+        .map(String::as_str)
+        .filter(|key| !MANAGED.contains(key) && config::retired(key).is_none())
+        .collect();
+    if !unmanaged.is_empty() {
+        return Err(ApiError::invalid_params(&format!(
+            "{} is not a managed key. config.set writes only these: {}. Everything else in \
+             config.toml — `[trust]`, `[privacy]`, `[api] allowed_origins` and the scope \
+             defaults, `[voice.stt] allow_server` — is the \
+             operator's own file to edit, because a caller that could write it would be \
+             granting itself trust rather than changing a setting",
+            unmanaged.join(", "),
+            MANAGED.join(", ")
+        )));
+    }
+    Ok(patch)
+}
+
+/// The key a keyed `config.set` writes to the store: a string, trimmed
+/// (blank is no key), or `None` for `null`, which removes it.
+fn voice_key_value(
+    patch: &serde_json::Map<String, serde_json::Value>,
+) -> Result<Option<String>, ApiError> {
+    match patch.get(VOICE_KEY) {
+        Some(serde_json::Value::String(key)) => {
+            Ok(Some(key.trim().to_string()).filter(|key| !key.is_empty()))
+        }
+        Some(serde_json::Value::Null) | None => Ok(None),
+        Some(_) => Err(ApiError::invalid_params(
+            "voice.tts.api_key takes a string, or null to remove the key",
+        )),
+    }
+}
+
+/// The store did not take the key: `-32009 invalid{keychain}`.
+fn keychain_refusal(why: &str) -> ApiError {
+    ApiError::invalid("keychain", &format!("the Keychain did not take the key: {why}"))
+}
+
+/// A `config.set` patch applied to `config.toml` in memory and checked
+/// whole ([`Core::config_file_edit`]); nothing written yet.
+struct FileEdit {
+    /// The file as it was, parsed.
+    current: Config,
+    /// The file to write; `None` when the patch has nothing for the file.
+    text: Option<String>,
+    /// The file as it will be, parsed.
+    next: Config,
+    /// The keys whose published value moves, file against file.
+    changed: Vec<String>,
+}
+
+impl FileEdit {
+    /// The changed keys a write applies live, and those that need a
+    /// restart.
+    fn hot_and_restart(&self) -> (Vec<String>, Vec<String>) {
+        self.changed
+            .iter()
+            .cloned()
+            .partition(|k| is_hot(k) && config::is_hot_change(k, &self.current, &self.next))
+    }
+}
+
 /// The effective config as JSON (`config.get`). `Config` is
 /// `Deserialize`-only (it is `config.rs`'s, owner B3), so the shape is
 /// written out here; every §9 key the daemon reads is present.
@@ -1688,7 +2053,6 @@ pub fn config_json(c: &Config) -> serde_json::Value {
             "transport": c.voice.transport,
             "device_uid": c.voice.device_uid,
             "fallback_output": c.voice.fallback_output,
-            "fallback_input": c.voice.fallback_input,
             "mic_warm": c.voice.mic_warm,
             "speak_over_sco": c.voice.speak_over_sco,
             "slow_sco_ms": c.voice.slow_sco_ms,
@@ -1718,7 +2082,6 @@ pub fn config_json(c: &Config) -> serde_json::Value {
             "tts.threads": c.voice.tts.threads,
             "voices.default_pool": c.voice.voices.default_pool,
         },
-        "desktop": {"inject": c.desktop.inject, "focus": c.desktop.focus},
         "device": {
             "pace_ms": c.device.pace_ms,
             "hello_s": c.device.hello_s,
@@ -1728,6 +2091,7 @@ pub fn config_json(c: &Config) -> serde_json::Value {
         },
         "macropad": macropad,
         "usage": {"providers": c.usage.providers},
+        "updates": {"check": c.updates.check},
         "log": {"level": c.log.level},
     })
 }
@@ -1930,13 +2294,14 @@ mod tests {
         assert_eq!(http["capabilities"], serde_json::json!(CAPABILITIES));
         // Only what exists: the adapters land in week 3, their names with
         // them (the design's §4.1 example is the v1 end state, not this).
-        for built in ["hooks.claude", "hooks.codex", "inject.ghostty"] {
+        for built in ["hooks.claude", "hooks.codex"] {
             assert!(
                 CAPABILITIES.contains(&built),
                 "this daemon answers {built}, so it says so"
             );
         }
-        for unbuilt in ["hooks.gemini", "mcp"] {
+        // The Ghostty injector is gone, and with it the word.
+        for unbuilt in ["hooks.gemini", "mcp", "inject.ghostty"] {
             assert!(
                 !CAPABILITIES.contains(&unbuilt),
                 "{unbuilt} is advertised but nothing answers it"
@@ -2440,8 +2805,6 @@ mod tests {
             "trust.gui_requirement",
             "trust.dev_requirement",
             "trust.confirm",
-            "desktop.inject",
-            "desktop.focus",
             "api.allowed_origins",
             "api.uds_default_scope",
             "api.uds_max_scope",
@@ -2742,6 +3105,38 @@ mod tests {
         std::fs::remove_dir_all(dir).unwrap();
     }
 
+    /// R8: the switch of the service's own looks for a release is the
+    /// owner's to edit by hand. `config.get` publishes it, on by default;
+    /// `config.set` refuses it, as every key no control offers; a reload
+    /// applies it at once.
+    #[test]
+    fn the_update_checks_switch_is_published_hand_edited_and_hot() {
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("dispatch-updates-switch");
+        let t0 = Instant::now();
+        assert_eq!(c.config_get()["updates"]["check"], true);
+        assert!(!MANAGED.contains(&"updates.check"));
+        std::fs::write(&c.paths.config, "[api]\nport = 47201\n").unwrap();
+        let patch = serde_json::json!({"patch": {"updates.check": false}});
+        let refused = c
+            .call(ctx(2, &[Scope::Admin]), "config.set", patch, t0)
+            .result
+            .unwrap_err();
+        assert_eq!(refused.code, ApiError::INVALID_PARAMS);
+        assert!(c.config().updates.check);
+        std::fs::write(&c.paths.config, "[updates]\ncheck = false\n").unwrap();
+        let params = serde_json::json!({});
+        let reloaded = c
+            .call(ctx(2, &[Scope::Admin]), "config.reload", params, t0)
+            .result
+            .unwrap();
+        assert_eq!(reloaded["changed"], serde_json::json!(["updates.check"]));
+        assert_eq!(reloaded["applied"], serde_json::json!(["updates.check"]));
+        assert_eq!(reloaded["restart_needed"], serde_json::json!([]));
+        assert!(!c.config().updates.check);
+        assert_eq!(c.config_get()["updates"]["check"], false);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     /// R3: what `config.set` reports applied is in force when it answers,
     /// with no reload and no watcher in between. `config.get` reads the
     /// switches back at once, and a Usage face drawn with Claude's windows
@@ -2932,9 +3327,10 @@ mod tests {
     /// the app's fixture (`GC/tests/fixtures/daemon/config_get_sources.json`)
     /// with the same JSON type, `tcp` among them — a bool, which the app also
     /// reads as the mark of a service that writes `usage.providers` — and no
-    /// key the fixture lacks; the usage providers and the Mac microphone
-    /// fallback have the fixture's types; and all three are keys `config.set`
-    /// writes. A default daemon's door is off (the owner's decision 12).
+    /// key the fixture lacks; the usage providers have the fixture's type;
+    /// and both are keys `config.set` writes. The Mac microphone fallback,
+    /// D3's third switch, is gone from both (decision 11). A default
+    /// daemon's door is off (the owner's decision 12).
     #[test]
     fn config_get_has_the_keys_of_the_apps_fixture_for_the_d3_switches() {
         let fixture: serde_json::Value = serde_json::from_str(include_str!(
@@ -2956,7 +3352,7 @@ mod tests {
         for key in got.keys() {
             assert!(want.contains_key(key), "api: {key:?} is not in the fixture");
         }
-        for key in ["api.tcp", "usage.providers", "voice.fallback_input"] {
+        for key in ["api.tcp", "usage.providers"] {
             let (mine, theirs) = (key_of(&published, key), key_of(&fixture, key));
             assert_eq!(mine.map(json_type), theirs.map(json_type), "{key}");
             assert!(
@@ -2974,7 +3370,228 @@ mod tests {
             published["usage"]["providers"],
             serde_json::json!(["codex"])
         );
-        assert_eq!(published["voice"]["fallback_input"], "none");
+        for json in [&published, &fixture] {
+            assert_eq!(key_of(json, "voice.fallback_input"), None, "decision 11");
+        }
+        assert!(!MANAGED.contains(&"voice.fallback_input"));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// Decision 11: `voice.fallback_input` is gone. `config.get` does not
+    /// publish it; a `config.set` asking for the Mac's microphone is
+    /// `-32602` saying why, with the file untouched; one asking for what
+    /// the service does anyway (`"none"`, or `null` for the default) is
+    /// accepted and writes nothing for it, alone or beside a key it does
+    /// write; and an old line in the file changes nothing a reload reports.
+    #[test]
+    fn config_set_refuses_the_mac_microphone_and_accepts_none_quietly() {
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("dispatch-retired-input");
+        let t0 = Instant::now();
+        let path = c.paths.config.clone();
+        let old = "# mine\n[voice]\nfallback_input = \"system_default\"\n";
+        std::fs::write(&path, old).unwrap();
+        let set = |c: &mut Core, patch: serde_json::Value| {
+            c.call(
+                ctx(2, &[Scope::Admin]),
+                "config.set",
+                serde_json::json!({ "patch": patch }),
+                t0,
+            )
+            .result
+        };
+        assert_eq!(key_of(&c.config_get(), "voice.fallback_input"), None);
+
+        let mac = "system_default";
+        for patch in [
+            serde_json::json!({"voice.fallback_input": mac}),
+            serde_json::json!({"voice.fallback_input": true}),
+            serde_json::json!({"voice.fallback_input": mac, "voice.mic_warm": "never"}),
+        ] {
+            let err = set(&mut c, patch.clone()).unwrap_err();
+            assert_eq!(err.code, ApiError::INVALID_PARAMS, "{patch}");
+            let why = err.data["why"].as_str().unwrap_or_default();
+            assert!(
+                why.starts_with("voice.fallback_input was removed: "),
+                "{patch}: {why}"
+            );
+            assert!(why.contains("never opened"), "{why}");
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), old, "{patch}");
+        }
+
+        for value in [serde_json::json!("none"), serde_json::Value::Null] {
+            let ok = set(&mut c, serde_json::json!({"voice.fallback_input": value})).unwrap();
+            assert_eq!(ok["keys"], serde_json::json!(["voice.fallback_input"]));
+            assert_eq!(ok["changed"], serde_json::json!([]), "{value}");
+            assert_eq!(ok["applied"], serde_json::json!([]), "{value}");
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), old, "nothing written");
+        }
+        let ok = set(
+            &mut c,
+            serde_json::json!({"voice.fallback_input": "none", "voice.mic_warm": "never"}),
+        )
+        .unwrap();
+        assert_eq!(ok["changed"], serde_json::json!(["voice.mic_warm"]));
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            text.contains("fallback_input = \"system_default\""),
+            "the operator's line is the operator's to remove: {text:?}"
+        );
+        assert_eq!(Config::parse(&text).unwrap().voice.mic_warm, "never");
+        assert_eq!(c.config().voice.mic_warm, "never", "and in force");
+
+        // Another unmanaged key still gets the whitelist's answer.
+        let err = set(&mut c, serde_json::json!({"voice.stt.allow_server": true})).unwrap_err();
+        let why = err.data["why"].as_str().unwrap_or_default();
+        assert!(why.contains("is not a managed key"), "{why}");
+
+        // A reload of a file that names it reports nothing changed.
+        std::fs::write(&path, "[voice]\nfallback_input = \"none\"\nmic_warm = \"never\"\n").unwrap();
+        let ok = c
+            .call(ctx(2, &[Scope::Admin]), "config.reload", serde_json::json!({}), t0)
+            .result
+            .unwrap();
+        assert_eq!(ok["changed"], serde_json::json!([]));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// A key pasted into `config.toml` without its quotes makes the file
+    /// invalid. What `config.reload` and `config.set` say about it — the
+    /// reply, the `error{code:"config_invalid"}` event every subscriber
+    /// gets (the ring keeps it), and the log — names the line and column,
+    /// never the line itself, which is the key.
+    #[test]
+    fn an_invalid_file_is_never_quoted_by_reload_or_set() {
+        use crate::core::testkit::warnings_of;
+        const SECRET: &str = "SECRET0123456789";
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("dispatch-unquoted");
+        let t0 = Instant::now();
+        std::fs::write(
+            &c.paths.config,
+            format!("[voice.tts]\napi_key = sk-proj-{SECRET}\n"),
+        )
+        .unwrap();
+        let mut seen = c.bus.subscribe();
+        let mut err = None;
+        let logged = warnings_of(|| {
+            err = c
+                .call(
+                    ctx(2, &[Scope::Admin]),
+                    "config.reload",
+                    serde_json::json!({}),
+                    t0,
+                )
+                .result
+                .err();
+        });
+        let err = err.expect("an invalid file is refused");
+        assert_eq!(err.code, ApiError::INVALID);
+        let why = err.data["why"].as_str().unwrap_or_default();
+        assert!(why.contains("line 2, column 11"), "{why}");
+        assert!(!why.contains(SECRET), "{why}");
+        assert!(!logged.contains(SECRET), "{logged}");
+        let published: Vec<_> = std::iter::from_fn(|| seen.try_recv().ok())
+            .filter(|p| {
+                p.event.kind == EventKind::Error && p.event.data["code"] == "config_invalid"
+            })
+            .map(|p| p.event.data.clone())
+            .collect();
+        let [event] = &published[..] else {
+            panic!("one config_invalid event: {published:?}");
+        };
+        assert!(!event.to_string().contains(SECRET), "{event}");
+        assert_eq!(event["position"], serde_json::json!({"line": 2, "col": 11}));
+        let set = c
+            .call(
+                ctx(2, &[Scope::Admin]),
+                "config.set",
+                serde_json::json!({"patch": {"voice.commands": false}}),
+                t0,
+            )
+            .result
+            .unwrap_err();
+        assert_eq!(set.data["field"], "config.toml");
+        assert!(!set.data.to_string().contains(SECRET), "{set:?}");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// The line to remove is named in the log by `config.reload`, as at
+    /// start and by the watcher, and only while the file holds it.
+    #[test]
+    fn config_reload_names_a_retired_line_in_the_log() {
+        use crate::core::testkit::warnings_of;
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("dispatch-retired-reload");
+        let t0 = Instant::now();
+        let path = c.paths.config.clone();
+        let mut reload = |text: &str| {
+            std::fs::write(&path, text).unwrap();
+            warnings_of(|| {
+                c.call(ctx(2, &[Scope::Admin]), "config.reload", serde_json::json!({}), t0)
+                    .result
+                    .unwrap();
+            })
+        };
+        let logged = reload("[voice]\nfallback_input = \"system_default\"\n");
+        assert!(
+            logged.contains(
+                "[voice] fallback_input is no longer read: a press without the deck's \
+                 microphone is answered with silence and no_device"
+            ),
+            "{logged}"
+        );
+        assert_eq!(reload("[voice]\nmic_warm = \"never\"\n"), "", "a clean file");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// `care.decks` lists the decks two links identified, by label, and
+    /// `care.decks.forget` drops the one not in use: `state.json` loses it
+    /// at the next save and nothing else moves. The deck in use is refused,
+    /// and so is a label no deck here has.
+    #[test]
+    fn care_decks_lists_the_decks_and_forgets_one_not_in_use() {
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("dispatch-care-decks");
+        let t0 = Instant::now();
+        let (a, b) = ("A1B2C3D4E5F6", "C0FFEE15600D");
+        c.on_identity(Some(a), t0);
+        c.on_identity(Some(b), t0);
+        c.flush_state();
+        let admin = || ctx(2, &[Scope::Admin]);
+        let listed = c
+            .call(admin(), "care.decks", serde_json::json!({}), t0)
+            .result
+            .unwrap();
+        let labels: Vec<(&str, bool)> = listed["decks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|deck| (deck["deck"].as_str().unwrap(), deck["current"] == true))
+            .collect();
+        let (label_a, label_b) = (
+            crate::device::identity::label(a),
+            crate::device::identity::label(b),
+        );
+        assert_eq!(labels.len(), 2, "{listed}");
+        assert!(labels.contains(&(label_a.as_str(), false)), "{listed}");
+        assert!(labels.contains(&(label_b.as_str(), true)), "{listed}");
+        let refused = c
+            .call(admin(), "care.decks.forget", serde_json::json!({"deck": label_b}), t0)
+            .result
+            .unwrap_err();
+        assert_eq!(refused.code, ApiError::INVALID, "{refused:?}");
+        let missing = c
+            .call(admin(), "care.decks.forget", serde_json::json!({"deck": "0badc0de"}), t0)
+            .result
+            .unwrap_err();
+        assert_eq!(missing.code, ApiError::NOT_FOUND, "{missing:?}");
+        assert!(c.state_dirty.is_none(), "a refusal changes nothing");
+        let forgotten = c
+            .call(admin(), "care.decks.forget", serde_json::json!({"deck": label_a}), t0)
+            .result
+            .unwrap();
+        assert_eq!(forgotten, serde_json::json!({"deck": label_a, "forgotten": true}));
+        c.tick(t0 + crate::core::STATE_DEBOUNCE);
+        let (saved, _) = crate::state::State::load(&dir.join("state.json"));
+        assert_eq!(saved.decks.keys().collect::<Vec<_>>(), vec![b]);
+        assert_eq!(saved.deck.as_deref(), Some(b));
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -3391,6 +4008,413 @@ mod tests {
             Permission::Unknown,
             "a status read changes no state"
         );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    // ---- the cloud voice's key in a store (`crate::secrets`) -------------
+    //
+    // Every store here is a `MemoryKeyStore`: no test touches the Keychain.
+
+    use crate::core::handle::CoreMsg;
+    use crate::secrets::{KeyHome, MemoryKeyStore, VoiceKey};
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    const KEY: &str = "sk-test-0123456789abcd";
+    const KEY_HINT: &str = "\u{2026}abcd (22 chars)";
+
+    /// The core keeps the key in `store`, and has taken the (default)
+    /// config, so a key the store already holds is in force.
+    fn keep_key_in(c: &mut Core, store: &Arc<MemoryKeyStore>) {
+        c.set_voice_key(VoiceKey::open(KeyHome::Store(store.clone())));
+        c.set_config(Arc::new(Config::default()));
+    }
+
+    /// `config.set` the way a door sends it: through `on_msg`, which parks
+    /// a call naming the key on a store home; the keychain thread's
+    /// answers are taken the way `run_core` takes them.
+    fn config_set_parked(
+        c: &mut Core,
+        patch: serde_json::Value,
+        now: Instant,
+    ) -> Result<serde_json::Value, ApiError> {
+        let (reply, mut answer) = tokio::sync::oneshot::channel();
+        c.on_msg(
+            CoreMsg::Call {
+                ctx: ctx(2, &[Scope::Admin]),
+                method: "config.set".into(),
+                params: serde_json::json!({ "patch": patch }),
+                reply,
+            },
+            now,
+        );
+        loop {
+            if let Ok(reply) = answer.try_recv() {
+                return reply.result;
+            }
+            let done = c
+                .keeper
+                .events
+                .recv_timeout(Duration::from_secs(5))
+                .expect("the keychain thread answers");
+            c.on_keeper(done, now);
+        }
+    }
+
+    /// The `config.changed` events published since `seen` was taken.
+    fn config_changes(
+        seen: &mut tokio::sync::broadcast::Receiver<crate::bus::Published>,
+    ) -> Vec<serde_json::Value> {
+        std::iter::from_fn(|| seen.try_recv().ok())
+            .filter(|published| published.event.kind == EventKind::ConfigChanged)
+            .map(|published| published.event.data.clone())
+            .collect()
+    }
+
+    /// R9: on a store home `config.set` writes the key to the store and
+    /// never to `config.toml`, which is not even rewritten for it. The call
+    /// is answered once the keychain thread has written; the reply names
+    /// the key changed and applied, `config.get` publishes its hint and
+    /// where it is kept, the synthesiser's cell has it, and the core
+    /// announces the change itself, because the file did not move for it.
+    #[test]
+    fn config_set_keeps_the_key_in_the_store_and_never_in_the_file() {
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("dispatch-key-store");
+        let t0 = Instant::now();
+        let store = Arc::new(MemoryKeyStore::default());
+        keep_key_in(&mut c, &store);
+        let path = c.paths.config.clone();
+        let mine = "# mine\n[voice.tts]\nprovider = \"openai\"\n";
+        std::fs::write(&path, mine).unwrap();
+        let mut seen = c.bus.subscribe();
+        let ok = config_set_parked(&mut c, serde_json::json!({ "voice.tts.api_key": KEY }), t0)
+            .unwrap();
+        assert_eq!(ok["keys"], serde_json::json!(["voice.tts.api_key"]));
+        assert_eq!(ok["changed"], serde_json::json!(["voice.tts.api_key"]));
+        assert_eq!(ok["applied"], serde_json::json!(["voice.tts.api_key"]));
+        assert_eq!(ok["restart_needed"], serde_json::json!([]));
+        assert_eq!(store.current().as_deref(), Some(KEY));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), mine, "the file is not written");
+        let published = c.config_get();
+        assert_eq!(published["voice"]["tts.api_key"], KEY_HINT);
+        assert_eq!(published["voice"]["tts.key_store"], "keychain");
+        assert_eq!(c.tts_settings.load().api_key, KEY);
+        assert_eq!(c.config().voice.tts.effective_engine(), "openai");
+        assert_eq!(
+            config_changes(&mut seen),
+            [serde_json::json!({ "keys": ["voice.tts.api_key"] })]
+        );
+        // The same key again is written again (the store is the truth), and
+        // nothing in force moved, so nothing is announced.
+        let again =
+            config_set_parked(&mut c, serde_json::json!({ "voice.tts.api_key": KEY }), t0)
+                .unwrap();
+        assert_eq!(again["changed"], serde_json::json!([]));
+        assert_eq!(store.writes(), 2);
+        assert!(config_changes(&mut seen).is_empty());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// The Voice page's Save Key patch (provider, key, the cloud voice, and
+    /// the other provider's model unset) on a store home: the key goes to
+    /// the store, the rest to the file, a copy of an older key left in the
+    /// file goes with that write, and nothing else in the file moves.
+    #[test]
+    fn the_save_key_patch_puts_the_key_in_the_store_and_the_rest_in_the_file() {
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("dispatch-key-save");
+        let t0 = Instant::now();
+        let store = Arc::new(MemoryKeyStore::default());
+        keep_key_in(&mut c, &store);
+        let path = c.paths.config.clone();
+        std::fs::write(
+            &path,
+            "# mine\n[api]\nport = 47201\n\n[voice.tts]\nengine = \"kokoro\"\nmodel = \"gpt-4o-mini-tts\"\napi_key = \"sk-old-in-the-file\"\n",
+        )
+        .unwrap();
+        let ok = config_set_parked(
+            &mut c,
+            serde_json::json!({
+                "voice.tts.provider": "elevenlabs",
+                "voice.tts.api_key": KEY,
+                "voice.tts.engine": "cloud",
+                "voice.tts.model": null,
+            }),
+            t0,
+        )
+        .unwrap();
+        assert_eq!(
+            ok["changed"],
+            serde_json::json!([
+                "voice.tts.api_key",
+                "voice.tts.engine",
+                "voice.tts.model",
+                "voice.tts.provider"
+            ])
+        );
+        assert_eq!(store.current().as_deref(), Some(KEY));
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(
+            text,
+            "# mine\n[api]\nport = 47201\n\n[voice.tts]\nengine = \"cloud\"\nprovider = \"elevenlabs\"\n"
+        );
+        let file = Config::parse(&text).unwrap();
+        assert!(!file.voice.tts.has_key());
+        assert_eq!(c.config().voice.tts.api_key, KEY);
+        assert_eq!(c.config().voice.tts.effective_engine(), "elevenlabs");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// A patch the file half would refuse never reaches the store, and the
+    /// key itself takes a string or `null` and nothing else.
+    #[test]
+    fn a_keyed_patch_the_file_refuses_never_reaches_the_store() {
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("dispatch-key-refused");
+        let t0 = Instant::now();
+        let store = Arc::new(MemoryKeyStore::default());
+        keep_key_in(&mut c, &store);
+        let path = c.paths.config.clone();
+        std::fs::write(&path, "[api]\nport = 47201\n").unwrap();
+        for (patch, why) in [
+            (
+                serde_json::json!({ "voice.tts.api_key": KEY, "voice.tts.engine": 5 }),
+                "the rest of the patch is invalid",
+            ),
+            (
+                serde_json::json!({ "voice.tts.api_key": KEY, "trust.require_trusted_for_allow": false }),
+                "an unmanaged key beside it",
+            ),
+            (serde_json::json!({ "voice.tts.api_key": 5 }), "a key that is no string"),
+            (serde_json::json!({ "voice.tts.api_key": ["sk"] }), "a list"),
+        ] {
+            let err = config_set_parked(&mut c, patch, t0).unwrap_err();
+            assert_eq!(err.code, ApiError::INVALID_PARAMS, "{why}");
+            assert_eq!(store.writes(), 0, "{why}");
+            assert_eq!(
+                std::fs::read_to_string(&path).unwrap(),
+                "[api]\nport = 47201\n",
+                "{why}"
+            );
+        }
+        let err =
+            config_set_parked(&mut c, serde_json::json!({ "voice.tts.api_key": 5 }), t0).unwrap_err();
+        assert!(
+            err.data["why"]
+                .as_str()
+                .unwrap_or(&err.message)
+                .contains("voice.tts.api_key takes a string, or null to remove the key"),
+            "{err:?}"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// A store that refuses the key: `-32009 invalid{keychain}` with its
+    /// words, the file not written (the provider beside the key neither),
+    /// and the key in force as it was.
+    #[test]
+    fn a_store_that_refuses_the_key_leaves_the_file_and_the_key_in_force() {
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("dispatch-key-locked");
+        let t0 = Instant::now();
+        let store = Arc::new(MemoryKeyStore::with("sk-before-0123456789"));
+        keep_key_in(&mut c, &store);
+        let path = c.paths.config.clone();
+        std::fs::write(&path, "[api]\nport = 47201\n").unwrap();
+        let hint = c.config_get()["voice"]["tts.api_key"].clone();
+        assert_eq!(hint, "\u{2026}6789 (20 chars)");
+        store.refuse(Some("User interaction is not allowed. (-25308)"));
+        let err = config_set_parked(
+            &mut c,
+            serde_json::json!({ "voice.tts.api_key": KEY, "voice.tts.provider": "elevenlabs" }),
+            t0,
+        )
+        .unwrap_err();
+        assert_eq!(err.code, ApiError::INVALID);
+        assert_eq!(err.data["field"], "keychain");
+        let words = serde_json::to_string(&err).unwrap();
+        assert!(
+            words.contains("the Keychain did not take the key: User interaction is not allowed."),
+            "{words}"
+        );
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "[api]\nport = 47201\n");
+        assert_eq!(c.config_get()["voice"]["tts.api_key"], hint);
+        assert_eq!(c.config().voice.tts.provider, "openai");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// `null` removes the key from the store: the hint is empty, the
+    /// synthesiser's cell has no key, and Apple's voice speaks.
+    #[test]
+    fn removing_the_key_empties_the_store_and_apple_speaks() {
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("dispatch-key-remove");
+        let t0 = Instant::now();
+        let store = Arc::new(MemoryKeyStore::with(KEY));
+        keep_key_in(&mut c, &store);
+        assert_eq!(c.config_get()["voice"]["tts.api_key"], KEY_HINT);
+        assert_eq!(c.tts_settings.load().api_key, KEY);
+        let ok = config_set_parked(&mut c, serde_json::json!({ "voice.tts.api_key": null }), t0)
+            .unwrap();
+        assert_eq!(ok["changed"], serde_json::json!(["voice.tts.api_key"]));
+        assert_eq!(store.current(), None);
+        assert_eq!(c.config_get()["voice"]["tts.api_key"], "");
+        assert_eq!(c.tts_settings.load().api_key, "");
+        assert_eq!(c.config().voice.tts.effective_engine(), "apple");
+        assert!(!c.paths.config.exists(), "nothing was written to a file");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// The rest of a keyed patch is written to the file as it is when the
+    /// store answers. A file that turned unloadable meanwhile refuses it,
+    /// and the store gets the previous key back.
+    #[test]
+    fn a_file_that_fails_after_the_store_took_the_key_gets_the_previous_key_back() {
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("dispatch-key-restore");
+        let t0 = Instant::now();
+        let store = Arc::new(MemoryKeyStore::with("sk-previous-0123456789"));
+        keep_key_in(&mut c, &store);
+        let path = c.paths.config.clone();
+        let (reply, mut answer) = tokio::sync::oneshot::channel();
+        c.on_msg(
+            CoreMsg::Call {
+                ctx: ctx(2, &[Scope::Admin]),
+                method: "config.set".into(),
+                params: serde_json::json!({
+                    "patch": { "voice.tts.api_key": KEY, "voice.tts.provider": "elevenlabs" }
+                }),
+                reply,
+            },
+            t0,
+        );
+        assert!(answer.try_recv().is_err(), "parked while the store writes");
+        std::fs::write(&path, "[voice\nbroken = 1").unwrap();
+        let done = c.keeper.events.recv_timeout(Duration::from_secs(5)).unwrap();
+        c.on_keeper(done, t0);
+        let err = answer.try_recv().unwrap().result.unwrap_err();
+        assert_eq!((err.code, err.data["field"].clone()), (ApiError::INVALID, "config.toml".into()));
+        // The previous key is put back, on the keychain thread.
+        let restored = c.keeper.events.recv_timeout(Duration::from_secs(5)).unwrap();
+        c.on_keeper(restored, t0);
+        assert_eq!(store.current().as_deref(), Some("sk-previous-0123456789"));
+        assert_eq!(c.config().voice.tts.api_key, "sk-previous-0123456789");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "[voice\nbroken = 1");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// A store's key is in force though the file has none, so a reload
+    /// after an unrelated edit names that edit and not the key.
+    #[test]
+    fn a_reload_does_not_report_a_stored_key_as_changed() {
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("dispatch-key-reload");
+        let t0 = Instant::now();
+        let store = Arc::new(MemoryKeyStore::with(KEY));
+        keep_key_in(&mut c, &store);
+        std::fs::write(&c.paths.config, "[voice]\nannounce_questions = true\n").unwrap();
+        let reloaded = c
+            .call(ctx(2, &[Scope::Admin]), "config.reload", serde_json::json!({}), t0)
+            .result
+            .unwrap();
+        assert_eq!(
+            reloaded["changed"],
+            serde_json::json!(["voice.announce_questions"])
+        );
+        assert_eq!(c.config_get()["voice"]["tts.api_key"], KEY_HINT);
+        assert!(c.keeper.events.try_recv().is_err(), "nothing to move");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// A key pasted into config.toml is in force at the next reload, then
+    /// moves into the store on the keychain thread and out of the file,
+    /// whose comment and provider line stay. A later reload sees no change.
+    /// A store that refuses the move leaves the key in the file, in force,
+    /// and is not asked again in this run.
+    #[test]
+    fn a_key_pasted_into_the_file_moves_into_the_store_at_the_next_reload() {
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("dispatch-key-pasted");
+        let t0 = Instant::now();
+        let store = Arc::new(MemoryKeyStore::with("sk-older-0123456789"));
+        keep_key_in(&mut c, &store);
+        let reload = |c: &mut Core| {
+            c.call(ctx(2, &[Scope::Admin]), "config.reload", serde_json::json!({}), t0)
+                .result
+                .unwrap()
+        };
+        let pasted = "[voice.tts]\n# pasted\nprovider = \"openai\"\napi_key = \"sk-pasted-0123456789wxyz\"\n";
+        std::fs::write(&c.paths.config, pasted).unwrap();
+        let reloaded = reload(&mut c);
+        assert_eq!(reloaded["changed"], serde_json::json!(["voice.tts.api_key"]));
+        assert_eq!(c.config().voice.tts.api_key, "sk-pasted-0123456789wxyz");
+        let done = c.keeper.events.recv_timeout(Duration::from_secs(5)).unwrap();
+        c.on_keeper(done, t0);
+        assert_eq!(store.current().as_deref(), Some("sk-pasted-0123456789wxyz"));
+        assert_eq!(
+            std::fs::read_to_string(&c.paths.config).unwrap(),
+            "[voice.tts]\n# pasted\nprovider = \"openai\"\n"
+        );
+        assert_eq!(c.config_get()["voice"]["tts.api_key"], "\u{2026}wxyz (24 chars)");
+        assert_eq!(reload(&mut c)["changed"], serde_json::json!([]));
+        assert!(c.keeper.events.try_recv().is_err(), "moved once");
+        // A store that refuses: the key stays in the file and in force.
+        store.refuse(Some("locked"));
+        let refused = "[voice.tts]\napi_key = \"sk-refused-0123456789\"\n";
+        std::fs::write(&c.paths.config, refused).unwrap();
+        reload(&mut c);
+        let done = c.keeper.events.recv_timeout(Duration::from_secs(5)).unwrap();
+        c.on_keeper(done, t0);
+        assert_eq!(std::fs::read_to_string(&c.paths.config).unwrap(), refused);
+        assert_eq!(c.config().voice.tts.api_key, "sk-refused-0123456789");
+        std::fs::write(&c.paths.config, "[voice.tts]\napi_key = \"sk-another\"\n").unwrap();
+        reload(&mut c);
+        assert!(
+            c.keeper.events.recv_timeout(Duration::from_millis(200)).is_err(),
+            "not asked again in this run"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// The file home, which every test core and every `--no-device` daemon
+    /// has: the key is written to config.toml exactly as before, and
+    /// `config.get` says so with a string, as the app's fixture has it. On
+    /// a store home a caller that bypasses `on_msg` is refused, never given
+    /// the key in the file.
+    #[test]
+    fn a_file_home_writes_the_key_to_config_toml_as_before() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../deck-gui-core/tests/fixtures/daemon/config_get_sources.json"
+        ))
+        .unwrap();
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("dispatch-key-file");
+        let t0 = Instant::now();
+        let published = c.config_get();
+        assert_eq!(published["voice"]["tts.key_store"], "config");
+        assert_eq!(fixture["voice"]["tts.key_store"], "keychain");
+        assert!(!MANAGED.contains(&"voice.tts.key_store"), "published, never written");
+        let ok = c
+            .call(
+                ctx(2, &[Scope::Admin]),
+                "config.set",
+                serde_json::json!({ "patch": { "voice.tts.api_key": KEY } }),
+                t0,
+            )
+            .result
+            .unwrap();
+        assert_eq!(ok["changed"], serde_json::json!(["voice.tts.api_key"]));
+        let file = Config::parse(&std::fs::read_to_string(&c.paths.config).unwrap()).unwrap();
+        assert_eq!(file.voice.tts.api_key, KEY);
+        assert_eq!(c.config_get()["voice"]["tts.api_key"], KEY_HINT);
+        // A store home, called around `on_msg`.
+        let store = Arc::new(MemoryKeyStore::default());
+        keep_key_in(&mut c, &store);
+        let before = std::fs::read_to_string(&c.paths.config).unwrap();
+        let err = c
+            .call(
+                ctx(2, &[Scope::Admin]),
+                "config.set",
+                serde_json::json!({ "patch": { "voice.tts.api_key": "sk-elsewhere" } }),
+                t0,
+            )
+            .result
+            .unwrap_err();
+        assert_eq!(err.code, ApiError::INTERNAL);
+        assert_eq!(std::fs::read_to_string(&c.paths.config).unwrap(), before);
+        assert_eq!(store.writes(), 0);
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

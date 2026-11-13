@@ -9,7 +9,7 @@ use crate::{
     Agent, AgentId, AgentState, CardId, CardStatus, Command, Control, DeviceLine, DeviceOp,
     DocKind, Effect, Event, EventKind, FaceEntry, FocusSource, HostLine, Key, Kind, LastLinked,
     Link, LinkEvent, MacroLayout, OriginKind, Principal, Scope, SessionState, Settings, Slot,
-    Snapshot, StatePatch, TitleSource, Ts, Usage,
+    Snapshot, Source, StatePatch, TitleSource, Ts, Usage,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -51,6 +51,10 @@ pub struct Persisted {
     /// The deck as it was last linked: `snapshot.device.last` from the start.
     #[serde(default)]
     pub last_linked: Option<LastLinked>,
+    /// The label of the deck whose strip, settings and keys these are:
+    /// `snapshot.device.deck` from the start.
+    #[serde(default)]
+    pub deck: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -163,6 +167,14 @@ pub(crate) struct AgentAux {
     pub(crate) saved_title: Option<(Option<String>, TitleSource)>,
     /// The state before a question card flipped the agent to `question`.
     pub(crate) prev_state: Option<AgentState>,
+    /// The agent turned `working` after the reply on file was stored (or
+    /// with none stored yet): that reply answered an earlier turn, and the
+    /// ready line never speaks it (`Store::ready_line`).
+    pub(crate) reply_stale: bool,
+    /// The agent's turn ended (`ready`) before its reply was stored. The
+    /// turn's own reply, stored before the state moves again, speaks the
+    /// ready line then.
+    pub(crate) ready_line_owed: bool,
     pub(crate) last_active: Option<Instant>,
     /// The 4 s answer → clear budget.
     pub(crate) deliver_at: Option<Instant>,
@@ -173,6 +185,11 @@ pub(crate) struct AgentAux {
     /// Card ids of an agent that is not on the deck (re-allocated per slot
     /// when it gets one).
     pub(crate) offdeck_last: CardId,
+    /// The card the failure card now on the deck took the place of
+    /// (`orders::failure_card`): its owner's `agent.card.clear` of it is
+    /// answered as done, as it was before the failure card. Gone with the
+    /// failure card.
+    pub(crate) failure_replaced: Option<CardId>,
 }
 
 #[derive(Debug)]
@@ -248,6 +265,21 @@ pub struct Store {
     /// nothing of it is spoken (`roster`). The core works the set out and
     /// sends it whole. Not persisted: a session id lasts one run.
     pub(crate) muted: BTreeSet<crate::SessionId>,
+    /// The last order id handed out: `or_<n>`, counted from 1 every run
+    /// (`orders`).
+    pub(crate) order_seq: u64,
+    /// The orders handed to their owners that `agent.order.result` may
+    /// still report on, oldest first (`orders`).
+    pub(crate) pending_orders: VecDeque<crate::orders::PendingOrder>,
+    /// The slot whose reader or card the deck last showed, as the last
+    /// line that names one says (`channel`, `answer`, `snooze`, `doclines`,
+    /// `tool`, `session`): part of [`Store::reader`]. A slot and not an
+    /// agent, because the deck's own view is a slot: an agent that comes
+    /// back on it after a reconnect is the one the deck shows. Not
+    /// persisted, and kept across a link drop, which the deck lives
+    /// through with the same view; another deck in the hand
+    /// (`Store::on_deck_profile`) has a view of its own and drops it.
+    pub(crate) deck_view: Option<Slot>,
 }
 
 /// One released session waiting for its final transcript.
@@ -279,6 +311,7 @@ impl Store {
         snapshot.device.settings = snapshot.settings;
         snapshot.device.pace_ms = 8;
         snapshot.device.last.clone_from(&cfg.persisted.last_linked);
+        snapshot.device.deck.clone_from(&cfg.persisted.deck);
         snapshot.voice.stt.locale.clone_from(&cfg.locale);
         snapshot.service.version = cfg.version.clone();
         snapshot.service.port = cfg.port;
@@ -317,11 +350,47 @@ impl Store {
             live_link: false,
             pending_drop: None,
             muted: BTreeSet::new(),
+            order_seq: 0,
+            pending_orders: VecDeque::new(),
+            deck_view: None,
         }
     }
 
     pub fn snapshot(&self) -> &Snapshot {
         &self.snapshot
+    }
+
+    /// The sessions the deck reads, for the lazy reader feed
+    /// (`deckd::reader`): every agent on a slot that is the focus (the
+    /// channel open on the deck, or the one the host moved it to), is on
+    /// the slot the deck last showed (`deck_view`), or holds a
+    /// card the deck shows. A Ready card counts: acknowledging it opens
+    /// the reader on the deck without a word to the host.
+    ///
+    /// The host cannot see every reader the deck shows (the firmware says
+    /// nothing when it opens one after a Ready card or follows the host's
+    /// own focus), so this leans wide: a session the deck may be showing
+    /// is in it.
+    #[must_use]
+    pub fn reader(&self) -> BTreeSet<AgentId> {
+        let focus = self.snapshot.focus.agent.as_ref();
+        self.snapshot
+            .agents
+            .values()
+            .filter(|agent| {
+                agent.slot.is_some_and(|slot| {
+                    Some(slot) == self.deck_view
+                        || focus == Some(&agent.id)
+                        || agent.card.as_ref().is_some_and(|c| c.status.on_device())
+                })
+            })
+            .map(|agent| agent.id.clone())
+            .collect()
+    }
+
+    /// A line from the deck named this slot: it is the one the deck shows.
+    fn viewed(&mut self, slot: Slot) {
+        self.deck_view = Some(slot);
     }
 
     pub fn config(&self) -> &StoreConfig {
@@ -399,6 +468,7 @@ impl Store {
             Command::SystemStatus(status) => { if status.valid() { self.device_op(DeviceOp::Put(Key::System, HostLine::System(status))); } },
             Command::Link(link) => self.on_link(link),
             Command::DeviceReport(report) => self.on_report(report),
+            Command::DeckProfile { deck, profile } => self.on_deck_profile(deck, profile),
             Command::Device(line) => self.on_device(line),
             Command::SessionControls { agent, session, settled, controls } => self.on_session_controls(agent, session, settled, controls),
             Command::Voice(v) => self.on_voice(v),
@@ -422,7 +492,15 @@ impl Store {
                 text,
                 ok,
                 reason,
-            } => self.on_order_result(principal, &agent, &text, ok, reason.as_deref()),
+                order,
+            } => self.on_order_result(
+                principal,
+                &agent,
+                &text,
+                ok,
+                reason.as_deref(),
+                order.as_deref(),
+            ),
             Command::ConfirmRequested {
                 principal,
                 agent,
@@ -443,8 +521,23 @@ impl Store {
                 degraded,
                 listener,
             } => self.on_service_bound(port, degraded, listener),
+            Command::Dormancy(dormancy) => self.on_dormancy(dormancy),
+            Command::ChatReplace { agent, messages } => self.chat_replace(&agent, messages),
+            Command::ReaderLeft { agent } => self.reader_left(&agent),
         }
         self.take()
+    }
+
+    /// The collectors' dormancy, as the core decided it: a fact of the
+    /// snapshot, and `service.dormancy` when it changed. The data is the
+    /// whole state, or `null` for a service with none.
+    fn on_dormancy(&mut self, dormancy: Option<crate::DormancyState>) {
+        if self.snapshot.service.dormancy == dormancy {
+            return;
+        }
+        self.snapshot.service.dormancy = dormancy;
+        let data = serde_json::to_value(dormancy).unwrap_or_default();
+        self.emit(EventKind::ServiceDormancy, Principal::Uid(0), data);
     }
 
     /// The TCP door's bind result: the bound port is a fact of the snapshot;
@@ -548,7 +641,12 @@ impl Store {
         self.effects.push(Effect::Timer { key, at });
     }
 
-    /// The deck's channel knob: focus the agent on that slot (§6.5, §4.7).
+    /// The deck's channel knob (§6.5, §4.7): the agent on that slot becomes
+    /// the focus. Nothing is raised on the computer: opening a session,
+    /// moving between sessions or cards and a PTT press all send a
+    /// `channel`, and dictating to a session in the background must not pull
+    /// its app forward. A hand-off is a press on an `Open app` card
+    /// (`crate::handoff`).
     fn apply_channel(&mut self, slot: Slot, seq: u16) {
         let agent = self.snapshot.agent_at(slot).map(|a| a.id.clone());
         self.snapshot.focus = crate::Focus {
@@ -557,11 +655,6 @@ impl Store {
             source: Some(FocusSource::Device),
         };
         if let Some(agent) = &agent {
-            if !self.snapshot.agents[agent].native_companion() {
-                self.effects.push(Effect::Desktop(crate::DesktopCmd::Focus {
-                    agent: agent.clone(),
-                }));
-            }
             self.aux.entry(agent.clone()).or_default().reply_first = None;
             self.put_reply(agent);
         }
@@ -625,8 +718,9 @@ impl Store {
     }
 
     /// Re-wrap and re-send every document after a change that moves line
-    /// breaks — today only the `text` size setting.
-    fn relayout_documents(&mut self) {
+    /// breaks — the `text` size setting, from the deck or with another
+    /// deck's profile.
+    pub(crate) fn relayout_documents(&mut self) {
         let ids: Vec<AgentId> = self
             .snapshot
             .agents
@@ -658,7 +752,8 @@ impl Store {
             if card.status.on_device() {
                 let cid = card.id.0;
                 let size = self.snapshot.settings.textsize.min(2) as u8;
-                let line = card_line(slot, card);
+                let hook = self.snapshot.agents[id].source == Source::Hook;
+                let line = card_line(slot, card, crate::handoff::open_app(&self.snapshot), hook);
                 let window = doc_window(slot, DocKind::Card, cid, &card_body(card), 0, size);
                 self.device_op(DeviceOp::Put(Key::Card(slot, cid), line));
                 if let Some(window) = window {
@@ -716,12 +811,16 @@ impl Store {
             LinkEvent::Linked => (Link::Connected, SessionState::AwaitHello),
             LinkEvent::Down => (Link::Offline, SessionState::Absent),
             LinkEvent::Degraded => (Link::Degraded, SessionState::Degraded),
-            LinkEvent::Live { .. } => (Link::Connected, SessionState::Live),
+            // The link's own session id: the start's, until another deck in
+            // the hand gave the link a fresh one (`deckd::hid`).
+            LinkEvent::Live { sid } | LinkEvent::Synced { sid } => {
+                dev.sid = sid;
+                (Link::Connected, SessionState::Live)
+            }
             LinkEvent::Syncing { boot, .. } => {
                 dev.boot = Some(boot);
                 (Link::Connected, SessionState::Syncing)
             }
-            LinkEvent::Synced { .. } => (Link::Connected, SessionState::Live),
             LinkEvent::Overflow => {
                 // Re-seed the view and ask for a barrier (§2.3).
                 let mut ops = self.project();
@@ -799,8 +898,16 @@ impl Store {
                         serde_json::json!({"context": "hello.rx", "rx": rx}),
                     );
                 }
-                if !boot && self.snapshot.faces != faces {
-                    // boot:0 → adopt the device's strip.
+                // boot:0 → adopt the device's strip. So does a boot:1 when
+                // the host keeps no strip for this deck (a deck new here, a
+                // fresh install): the sync sends it none, so the deck keeps
+                // its own, and that is the one remembered for it.
+                let adopt = if boot {
+                    self.snapshot.faces.is_empty() && !faces.is_empty()
+                } else {
+                    self.snapshot.faces != faces
+                };
+                if adopt {
                     self.snapshot.faces = faces.clone();
                     self.effects
                         .push(Effect::Persist(StatePatch::Faces(faces.clone())));
@@ -819,6 +926,9 @@ impl Store {
             DeviceLine::Language { value, revision } => self.receive_language(value, revision),
             DeviceLine::Channel { slot, seq } => {
                 let slot = Slot(slot);
+                // The deck shows that channel now, mid-capture or not: only
+                // the focus waits for the release.
+                self.viewed(slot);
                 // The ack is about ordering, not the PC's success: immediate (P:118).
                 self.effects
                     .push(Effect::Device(DeviceOp::Control(Control::Focus {
@@ -1008,18 +1118,31 @@ impl Store {
                 press,
             } => self.on_ptt(act, Slot(slot), ctx, card.map(CardId), abort, press),
             DeviceLine::Answer { slot, card, choice } => {
+                self.viewed(Slot(slot));
                 self.on_device_answer(Slot(slot), CardId(card), choice)
             }
-            DeviceLine::Snooze { slot, card } => self.on_device_snooze(Slot(slot), CardId(card)),
+            DeviceLine::Snooze { slot, card } => {
+                self.viewed(Slot(slot));
+                self.on_device_snooze(Slot(slot), CardId(card))
+            }
             DeviceLine::DocLines {
                 slot,
                 doc,
                 id,
                 first,
-            } => self.on_device_doc_lines(Slot(slot), doc, id, first),
+            } => {
+                self.viewed(Slot(slot));
+                self.on_device_doc_lines(Slot(slot), doc, id, first)
+            }
             DeviceLine::Image { .. } => {},
-            DeviceLine::Session { slot, field, page, rev, choice } => self.on_device_session(slot, field, page, rev, choice),
-            DeviceLine::Tool { slot, id, index } => self.on_device_tool(Slot(slot), id, index),
+            DeviceLine::Session { slot, field, page, rev, choice } => {
+                self.viewed(Slot(slot));
+                self.on_device_session(slot, field, page, rev, choice)
+            }
+            DeviceLine::Tool { slot, id, index } => {
+                self.viewed(Slot(slot));
+                self.on_device_tool(Slot(slot), id, index)
+            }
         }
     }
 
@@ -1107,9 +1230,10 @@ fn project_with(snapshot: &Snapshot, now: Ts, aux: Option<&BTreeMap<AgentId, Age
             ));
         }
         if let Some(card) = agent.card.as_ref().filter(|c| c.status.on_device()) {
+            let hook = agent.source == Source::Hook;
             ops.push(DeviceOp::Put(
                 Key::Card(slot, card.id.0),
-                card_line(slot, card),
+                card_line(slot, card, crate::handoff::open_app(snapshot), hook),
             ));
             if let Some(window) =
                 doc_window(slot, DocKind::Card, card.id.0, &card_body(card), 0, size)
@@ -1216,16 +1340,24 @@ pub(crate) fn agent_state_line(slot: Slot, agent: &Agent, now: Ts) -> HostLine {
 pub(crate) fn card_body(card: &crate::Card) -> String {
     let text = card.text.clone().unwrap_or_default();
     match card.status {
-        // A degraded hold: ENTER focuses the terminal (§4.8).
+        // A degraded hold: ENTER hands off to the session's app (§4.8).
         CardStatus::Degraded { .. } => format!("⌨ {text}"),
         _ if card.origin.kind == OriginKind::Custom => format!("» {text}"),
         _ => text,
     }
 }
 
-pub(crate) fn card_line(slot: Slot, card: &crate::Card) -> HostLine {
+/// One card's line. `open_app` is the hand-off's one choice in the deck's
+/// language ([`crate::handoff::open_app`]): what a degraded card offers, and
+/// what a hook session's own `focus` card shows in place of the English its
+/// adapter wrote. A connected app's `focus` card keeps its own words: the
+/// app brings itself forward, and the label is its promise.
+pub(crate) fn card_line(slot: Slot, card: &crate::Card, open_app: &str, hook: bool) -> HostLine {
     let (choices, rec) = match card.status {
-        CardStatus::Degraded { .. } => (vec!["Focus terminal".to_string()], Some(0)),
+        CardStatus::Degraded { .. } => (vec![open_app.to_string()], Some(0)),
+        _ if hook && card.deliver == crate::Deliver::Focus && card.choices.len() == 1 => {
+            (vec![open_app.to_string()], card.rec)
+        }
         _ => (
             card.choices
                 .iter()
@@ -1553,6 +1685,11 @@ mod tests {
         assert_eq!(s.snapshot().device.boot, Some(true));
         s.apply(Command::Link(LinkEvent::Live { sid: 314_159 }), t0);
         assert_eq!(s.snapshot().device.session, SessionState::Live);
+        assert_eq!(
+            s.snapshot().device.sid,
+            314_159,
+            "the link's own session id"
+        );
         s.apply(Command::Link(LinkEvent::Degraded), t0);
         assert_eq!(s.snapshot().device.link, Link::Degraded);
         s.apply(Command::Link(LinkEvent::Down), t0);
@@ -1576,7 +1713,14 @@ mod tests {
 
     #[test]
     fn hello_adopts_faces_on_boot_zero_and_keeps_them_on_boot_one() {
-        let mut s = store();
+        let ours = vec![FaceEntry {
+            f: 1,
+            t: Template::Agents,
+            n: "Agents".into(),
+        }];
+        let mut cfg = StoreConfig::new(Instant::now(), Ts(1_000_000), 314_159);
+        cfg.persisted.faces = ours.clone();
+        let mut s = Store::new(cfg);
         let faces = vec![FaceEntry {
             f: 2,
             t: Template::Omarchy,
@@ -1591,7 +1735,7 @@ mod tests {
             faces: faces.clone(),
         };
         let (events, effects) = s.apply(Command::Device(hello(true)), Instant::now());
-        assert!(s.snapshot().faces.is_empty(), "boot:1 pushes ours instead");
+        assert_eq!(s.snapshot().faces, ours, "boot:1 pushes ours instead");
         assert!(effects.is_empty());
         assert_eq!(events.len(), 1);
         assert_eq!(s.snapshot().device.fw.as_deref(), Some("0.1.0"));
@@ -1622,8 +1766,10 @@ mod tests {
             .any(|e| e.kind == EventKind::Error && e.data["context"] == "hello.rx"));
     }
 
+    /// A `channel` is acked at once and moves the focus, and it raises
+    /// nothing on the computer: the hand-off is a press, never a channel.
     #[test]
-    fn channel_acks_immediately_and_moves_focus() {
+    fn channel_acks_immediately_moves_focus_and_raises_nothing() {
         let mut s = store();
         s.snapshot.agents.insert(
             AgentId("ag_1".into()),
@@ -1642,9 +1788,11 @@ mod tests {
         );
         assert_eq!(effects[1], Effect::Device(DeviceOp::Remove(Key::Focus)));
         assert!(
-            matches!(&effects[2], Effect::Desktop(crate::DesktopCmd::Focus { agent }) if agent.0 == "ag_1")
+            !effects.iter().any(|e| matches!(e, Effect::Desktop(_))),
+            "{effects:?}"
         );
         assert_eq!(events[0].kind, EventKind::FocusChanged);
+        assert_eq!(events[0].data["source"], "device");
         assert_eq!(s.snapshot().focus.seq, Some(41));
         assert_eq!(s.snapshot().focus.source, Some(FocusSource::Device));
         assert_eq!(
@@ -1918,19 +2066,19 @@ mod tests {
         let mut a = agent("ag_1", 1, AgentState::Question);
         let card = a.card.as_mut().unwrap();
         card.origin.kind = OriginKind::Custom;
-        let HostLine::Card { text, .. } = card_line(Slot(1), card) else {
+        let HostLine::Card { text, .. } = card_line(Slot(1), card, "Open app", true) else {
             unreachable!()
         };
         assert_eq!(text, "» Bash: psql");
         card.status = CardStatus::Degraded { focused_at: None };
         let HostLine::Card {
             text, choices, rec, ..
-        } = card_line(Slot(1), card)
+        } = card_line(Slot(1), card, "Open app", true)
         else {
             unreachable!()
         };
         assert_eq!(text, "⌨ Bash: psql");
-        assert_eq!(choices, vec!["Focus terminal"]);
+        assert_eq!(choices, vec!["Open app"]);
         assert_eq!(rec, Some(0));
         card.status = CardStatus::Degraded {
             focused_at: Some(Ts(1)),
@@ -1943,6 +2091,55 @@ mod tests {
                 .any(|op| matches!(op, DeviceOp::Put(Key::Card(..), _))),
             "retired"
         );
+    }
+
+    /// The hand-off's one choice is the daemon's, in the deck's language: on
+    /// a degraded card and on a hook session's own `focus` card, which its
+    /// adapter wrote in English. A connected app's `focus` card keeps the
+    /// words it chose, and so does every other card.
+    #[test]
+    fn the_open_app_choice_is_drawn_in_the_decks_language() {
+        let focus_card = |label: &str| {
+            let mut a = agent("ag_1", 1, AgentState::Question);
+            let card = a.card.as_mut().unwrap();
+            card.deliver = crate::Deliver::Focus;
+            card.choices = vec![crate::Choice {
+                label: label.into(),
+                detail: None,
+            }];
+            card.rec = Some(0);
+            a
+        };
+        let choices = |snap: &Snapshot| {
+            project(snap, Ts(0))
+                .into_iter()
+                .find_map(|op| match op {
+                    DeviceOp::Put(Key::Card(..), HostLine::Card { choices, .. }) => Some(choices),
+                    _ => None,
+                })
+                .expect("the card is on the deck")
+        };
+        let mut snap = Snapshot::default();
+        snap.settings.language = 3;
+        let hook = focus_card("Open app");
+        snap.agents.insert(hook.id.clone(), hook);
+        assert_eq!(choices(&snap), vec!["アプリを開く"]);
+        snap.settings.language = 1;
+        assert_eq!(choices(&snap), vec!["打开应用"]);
+        // A degraded hold, whatever its own choices were.
+        let mut degraded = agent("ag_1", 1, AgentState::Question);
+        degraded.card.as_mut().unwrap().status = CardStatus::Degraded { focused_at: None };
+        snap.agents.insert(degraded.id.clone(), degraded);
+        assert_eq!(choices(&snap), vec!["打开应用"]);
+        // A connected app's focus card.
+        let mut app = focus_card("Show in Conol");
+        app.source = Source::Api;
+        snap.agents.insert(app.id.clone(), app);
+        assert_eq!(choices(&snap), vec!["Show in Conol"]);
+        // An ordinary question of a hook session.
+        snap.agents
+            .insert(AgentId("ag_1".into()), agent("ag_1", 1, AgentState::Question));
+        assert_eq!(choices(&snap), vec!["Allow", "Deny"]);
     }
 
     #[test]
@@ -2106,6 +2303,48 @@ mod tests {
         assert_eq!(s.snapshot().rev, 3);
     }
 
+    /// The core's word on the collectors (R5) is a fact of the snapshot, and
+    /// `service.dormancy` says it once per change: the whole state, or
+    /// `null` for a service with none.
+    #[test]
+    fn the_collectors_dormancy_is_a_fact_and_each_change_is_one_event() {
+        let mut s = store();
+        let t = Instant::now();
+        assert_eq!(s.snapshot().service.dormancy, None);
+        let collecting = crate::DormancyState {
+            window_s: 600,
+            collecting: true,
+            dormant_since: None,
+        };
+        let (events, effects) = s.apply(Command::Dormancy(Some(collecting)), t);
+        assert!(effects.is_empty(), "nothing for the deck or the disk");
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].kind, EventKind::ServiceDormancy);
+        assert_eq!(events[0].principal, Principal::Uid(0));
+        assert_eq!(
+            events[0].data,
+            serde_json::json!({"window_s": 600, "collecting": true, "dormant_since": null})
+        );
+        assert_eq!(s.snapshot().service.dormancy, Some(collecting));
+        // The same state again is no news.
+        let (events, _) = s.apply(Command::Dormancy(Some(collecting)), t);
+        assert!(events.is_empty());
+        let quiet = crate::DormancyState {
+            collecting: false,
+            dormant_since: Some(Ts(1_789_760_523_000)),
+            ..collecting
+        };
+        let (events, _) = s.apply(Command::Dormancy(Some(quiet)), t);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].data["dormant_since"], "2026-09-18T19:42:03.000Z");
+        // A service that drops it says `null`.
+        let (events, _) = s.apply(Command::Dormancy(None), t);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].data, serde_json::Value::Null);
+        assert_eq!(s.snapshot().service.dormancy, None);
+        assert_eq!(s.snapshot().rev, 3);
+    }
+
     #[test]
     fn shutdown_and_unknown_api_targets_do_not_panic() {
         let mut s = store();
@@ -2191,5 +2430,74 @@ mod tests {
         assert_eq!(s.snapshot().device.link, Link::Offline);
         assert!(!s.snapshot().device.host_online);
         assert!(events.iter().any(|e| e.kind == EventKind::DeviceLink));
+    }
+
+    /// R6: the sessions the deck reads, for the lazy reader feed. The channel
+    /// open on the deck, the slot a line from the deck last named, and every
+    /// agent whose card the deck shows, a Ready card too; never an agent off
+    /// the deck. The view is a slot: whoever sits on it is the one shown.
+    #[test]
+    fn the_reader_is_the_open_channel_the_slot_the_deck_named_and_the_cards_it_shows() {
+        use crate::testkit::{Sim, UID};
+        use crate::{CardClear, CardKind, Deliver};
+        let mut sim = Sim::new();
+        let a = sim.register(UID, SessionId(1), "a", Some("k:a"));
+        let b = sim.register(UID, SessionId(1), "b", Some("k:b"));
+        let c = sim.register(UID, SessionId(1), "c", Some("k:c"));
+        let paused = sim.register(UID, SessionId(2), "paused", Some("k:paused"));
+        sim.mute(&[SessionId(2)]);
+        let slot = |sim: &Sim, id: &AgentId| sim.slot_of(id).expect("on the deck").0;
+        let read = |sim: &Sim| sim.store.reader();
+        assert!(read(&sim).is_empty(), "nothing open, nothing shown");
+
+        let line = DeviceLine::Channel {
+            slot: slot(&sim, &a),
+            seq: 1,
+        };
+        sim.apply(Command::Device(line));
+        assert_eq!(read(&sim), BTreeSet::from([a.clone()]));
+        // A card on the deck: a Ready one counts, a muted agent's is not
+        // on the deck at all.
+        let ready = sim.set_card(&c, CardKind::R, Deliver::Poll, vec![]);
+        sim.set_card(&paused, CardKind::Q, Deliver::Poll, vec!["Yes", "No"]);
+        assert!(sim.slot_of(&paused).is_none());
+        assert_eq!(read(&sim), BTreeSet::from([a.clone(), c.clone()]));
+        // The deck scrolls B's reader: B is the one shown, the focus stays.
+        let line = DeviceLine::DocLines {
+            slot: slot(&sim, &b),
+            doc: DocKind::Reply,
+            id: 0,
+            first: 0,
+        };
+        sim.apply(Command::Device(line));
+        assert_eq!(
+            read(&sim),
+            BTreeSet::from([a.clone(), b.clone(), c.clone()])
+        );
+        // C's card goes, and C with it: neither the focus nor the view.
+        let clear = Request::CardClear(CardClear {
+            agent: c.clone(),
+            card: ready,
+            delivered: false,
+            reason: None,
+        });
+        sim.api(UID, SessionId(1), clear).unwrap();
+        assert_eq!(read(&sim), BTreeSet::from([a.clone(), b.clone()]));
+        // Any line naming a slot moves the view, a stale one included.
+        let c_slot = slot(&sim, &c);
+        sim.apply(Command::Device(DeviceLine::Snooze {
+            slot: c_slot,
+            card: 99,
+        }));
+        assert_eq!(read(&sim), BTreeSet::from([a.clone(), c.clone()]));
+        // C leaves the deck and D takes its slot: the deck shows D there now.
+        let release = Request::AgentRelease {
+            agent: c.clone(),
+            reason: None,
+        };
+        sim.api(UID, SessionId(1), release).unwrap();
+        let d = sim.register(UID, SessionId(1), "d", Some("k:d"));
+        assert_eq!(sim.slot_of(&d), Some(Slot(c_slot)));
+        assert_eq!(read(&sim), BTreeSet::from([a, d]));
     }
 }

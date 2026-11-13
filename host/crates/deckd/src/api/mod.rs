@@ -205,8 +205,26 @@ pub(crate) mod testkit {
         test_api_with(name, verifier, 0)
     }
 
+    /// The same, its core keeping the cloud voice's key in `store` (a
+    /// `MemoryKeyStore`, never the Keychain).
+    pub fn test_api_keyed(
+        name: &str,
+        verifier: FakeVerifier,
+        store: Arc<dyn crate::secrets::KeyStore>,
+    ) -> TestDaemon {
+        let core = LiveCore::start_with(&format!("api-{name}"), |core| {
+            core.set_voice_key(crate::secrets::VoiceKey::open(
+                crate::secrets::KeyHome::Store(store),
+            ));
+        });
+        test_api_around(core, Arc::new(verifier), 0)
+    }
+
     fn test_api_with(name: &str, verifier: Arc<dyn PeerVerifier>, port: u16) -> TestDaemon {
-        let core = LiveCore::start(&format!("api-{name}"));
+        test_api_around(LiveCore::start(&format!("api-{name}")), verifier, port)
+    }
+
+    fn test_api_around(core: LiveCore, verifier: Arc<dyn PeerVerifier>, port: u16) -> TestDaemon {
         let paths = core.paths();
         let mut config = Config::default();
         config.api.port = port;

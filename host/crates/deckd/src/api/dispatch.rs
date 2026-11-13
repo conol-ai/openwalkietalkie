@@ -62,6 +62,9 @@ pub const METHODS: &[MethodSpec] = &[
     m("agent.card.clear", Some(Scope::Agent), true),
     m("agent.reply", Some(Scope::Agent), true),
     m("agent.wait", Some(Scope::Agent), false),
+    // The owner says what became of an order it was handed: a failure
+    // shows on the deck (`deck_model`'s `orders`).
+    m("agent.order.result", Some(Scope::Agent), true),
     // `caps.transcribe`: the owner pages a press's recording out and
     // answers it with text. Core-answered: the recording lives in the
     // audio engine's hub, not in the reducer.
@@ -146,6 +149,11 @@ pub const METHODS: &[MethodSpec] = &[
     m("care.test.voice", Some(Scope::Admin), false),
     m("care.test.say", Some(Scope::Admin), false),
     m("care.test.status", Some(Scope::Admin), false),
+    // The decks this Mac keeps a strip, settings and keys for, by label,
+    // and forgetting one (`care::decks`). Core-answered: the records are
+    // the core's `state.json`.
+    m("care.decks", Some(Scope::Admin), false),
+    m("care.decks.forget", Some(Scope::Admin), false),
     m("log.tail", Some(Scope::Admin), false),
     m("device.flood", Some(Scope::Admin), false),
     m("device.sync", Some(Scope::Admin), false),
@@ -318,11 +326,12 @@ fn wait_reply(result: WaitResult) -> Reply {
             ctx,
             choice,
             card,
+            order,
             delivery,
         } => (
             serde_json::json!({
                 "kind": "order", "text": text, "ctx": ctx,
-                "choice": choice, "card": card,
+                "choice": choice, "card": card, "order": order,
             }),
             delivery,
         ),
@@ -890,6 +899,18 @@ mod tests {
                         ctx: "step".into(),
                         choice: Some(1),
                         card: Some(CardId(18)),
+                        order: None,
+                        delivery: None,
+                    },
+                ),
+                (
+                    Duration::from_secs(2),
+                    WaitResult::Order {
+                        text: "deploy the api".into(),
+                        ctx: "talk".into(),
+                        choice: None,
+                        card: None,
+                        order: Some("or_5".into()),
                         delivery: None,
                     },
                 ),
@@ -949,6 +970,15 @@ mod tests {
         assert_eq!(value["ctx"], "step");
         assert_eq!(value["choice"], 1);
         assert_eq!(value["card"], 18);
+        assert_eq!(
+            value["order"],
+            serde_json::Value::Null,
+            "a step is no order of its own"
+        );
+        let value = call(Some(2)).result.unwrap();
+        assert_eq!(value["kind"], "order");
+        assert_eq!(value["ctx"], "talk");
+        assert_eq!(value["order"], "or_5", "what agent.order.result reports on");
         let value = call(None).result.unwrap();
         assert_eq!(value["kind"], "snooze");
         assert_eq!(value["card"], 19);

@@ -1456,8 +1456,14 @@ mod tests {
         assert_eq!(again.code, ApiError::INVALID);
         assert_eq!(again.data["why"], "An update operation is already running.");
         let ctx = testkit::ctx(99, &[Scope::Admin]);
+        firmware::testkit::found_app(&c.firmware, "9.9.9");
         let check = c.call(ctx, "firmware.check", json!({"force": true}), t1);
-        assert_eq!(check.result.unwrap()["phase"], "confirming");
+        let check = check.result.unwrap();
+        assert_eq!(check["phase"], "confirming");
+        // Answered as `firmware.status` says it: the release is newer than
+        // the deck (0.2.0 against 0.1.0), and the feed named an app.
+        assert_eq!(check["available"], true, "{check}");
+        assert_eq!(check["app"]["version"], "9.9.9", "{check}");
         let cards = ops
             .try_iter()
             .filter(|op| matches!(op, DeviceOp::Put(Key::Card(..), _)))

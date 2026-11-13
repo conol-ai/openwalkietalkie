@@ -220,3 +220,114 @@ async fn the_uds_view_is_redacted_per_session_scope() {
     );
     daemon.shutdown().await;
 }
+
+/// A connected app that could not deliver an order says so, and the deck
+/// shows it. The id comes with `agent.order`; `agent.order.result` reports
+/// it once; the app hears the failure and sees the card the daemon put on
+/// its agent, marked as the daemon's.
+#[tokio::test]
+async fn an_app_reports_an_order_it_could_not_deliver_and_the_deck_shows_it() {
+    let daemon = Daemon::start().await;
+    let mut app = daemon.connect().await;
+    app.call(
+        "session.hello",
+        serde_json::json!({
+            "client": {"name": "conol", "version": "1"},
+            "scopes": ["observe", "agent"],
+            "subscribe": ["order.failed", "card.set"],
+        }),
+    )
+    .await;
+    let mut params = register_params("chat", "conol:chat-1");
+    params["caps"]["order"] = "push".into();
+    let agent = app.call("agent.register", params).await["agent"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let mut deck = daemon.connect().await;
+    deck.call(
+        "session.hello",
+        hello_params("deck", &["observe", "operate"]),
+    )
+    .await;
+    let dispatched = deck
+        .call(
+            "op.order",
+            serde_json::json!({"agent": agent, "text": "summarise the thread", "ctx": "talk", "source": "ptt"}),
+        )
+        .await;
+    let order = dispatched["order"]
+        .as_str()
+        .expect("op.order names its order")
+        .to_string();
+    let pushed = app
+        .line_where("agent.order", |l| l["params"]["type"] == "agent.order")
+        .await;
+    assert_eq!(pushed["params"]["data"]["order"], order.as_str());
+
+    // The report, then everything it caused, in whatever order the door
+    // writes them: the reply, the failure and the card.
+    app.write_raw(
+        &serde_json::json!({
+            "jsonrpc": "2.0", "id": 100, "method": "agent.order.result",
+            "params": {"agent": agent, "order": order, "ok": false, "reason": "backend_refused"},
+        })
+        .to_string(),
+    )
+    .await;
+    let (mut reply, mut failed, mut card) = (None, None, None);
+    while reply.is_none() || failed.is_none() || card.is_none() {
+        let line = app.line().await;
+        let data = line["params"]["data"].clone();
+        if line["id"] == 100 {
+            reply = Some(line);
+        } else if line["params"]["type"] == "order.failed" {
+            failed = Some(data);
+        } else if line["params"]["type"] == "card.set" {
+            card = Some(data);
+        }
+    }
+    let reply = reply.unwrap();
+    assert!(reply["error"].is_null(), "{reply}");
+    assert_eq!(reply["result"]["shown"], "card");
+    let failed = failed.unwrap();
+    assert_eq!(failed["order"], order.as_str());
+    assert_eq!(failed["reason"], "backend_refused");
+    assert_eq!(failed["by"], "owner");
+    let card = card.unwrap();
+    assert_eq!(card["agent"], agent.as_str());
+    assert_eq!(card["host"], deck_model::HOST_FAILURE);
+    assert_eq!(card["card"]["text"], deck_model::NOT_DELIVERED.text[0]);
+
+    // Once.
+    let err = app
+        .call_err(
+            "agent.order.result",
+            serde_json::json!({"agent": agent, "order": order, "ok": false}),
+        )
+        .await;
+    assert_eq!(err["code"], ApiError::NOT_FOUND);
+    assert_eq!(err["data"]["what"], "order");
+    // Only the owner may report: not the deck, which holds no `agent`
+    // scope, and not another app's session.
+    let err = deck
+        .call_err(
+            "agent.order.result",
+            serde_json::json!({"agent": agent, "order": order, "ok": false}),
+        )
+        .await;
+    assert_eq!(err["code"], ApiError::FORBIDDEN);
+    let mut stranger = daemon.connect().await;
+    stranger
+        .call("session.hello", hello_params("stranger", &["agent"]))
+        .await;
+    let err = stranger
+        .call_err(
+            "agent.order.result",
+            serde_json::json!({"agent": agent, "order": order, "ok": false}),
+        )
+        .await;
+    assert_eq!(err["code"], ApiError::CONFLICT);
+    daemon.shutdown().await;
+}

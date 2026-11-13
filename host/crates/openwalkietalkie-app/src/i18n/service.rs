@@ -3,7 +3,8 @@
 //!
 //! The rows are the service sheet's (`service.tsv` of the string sheets),
 //! copied as written and in its order, with the support file's second note
-//! beside the first; then the two this page added, and the sentences of the
+//! beside the first and the app row's line for a newer app beside the line
+//! it replaces; then the two this page added, and the sentences of the
 //! service's own firmware status, which the review dialog shows. A word
 //! the page shares with another page (Background service, Details, Remove…,
 //! Delete…, the old-helper lines, Not checked…) is in `crate::i18n::kit`, and
@@ -73,6 +74,14 @@ pub const STRINGS: &[Entry] = &[
         "应用和服务会一起更新。",
         "應用程式和服務會一起更新。",
         "アプリとサービスは一緒に更新されます。",
+    ),
+    // In its place once the service's look found a newer app (R8), in the
+    // words of the shipped "Deck firmware {0} is available".
+    (
+        "OpenWalkieTalkie {0} is available.",
+        "OpenWalkieTalkie {0} 现已可用。",
+        "OpenWalkieTalkie {0} 現已可用。",
+        "OpenWalkieTalkie {0} が利用可能です。",
     ),
     ("Check", "检查更新", "檢查", "確認"),
     ("Deck firmware {0}", "设备固件 {0}", "裝置韌體 {0}", "デバイスのファームウェア {0}"),
@@ -288,6 +297,15 @@ pub const STRINGS: &[Entry] = &[
     ),
     ("Settings and backups", "设置和备份", "設定與備份", "設定とバックアップ"),
     ("Preferences", "偏好设置", "偏好設定", "環境設定"),
+    // The Keychain item that holds the cloud voice's key, in macOS's own
+    // word for the Keychain in each language (as on the Usage panel).
+    ("Keychain item", "钥匙串项目", "鑰匙圈項目", "キーチェーン項目"),
+    (
+        "Your cloud voice key",
+        "你的云端语音密钥",
+        "你的雲端語音金鑰",
+        "お使いのクラウド音声のキー",
+    ),
     ("Logs", "日志", "記錄", "ログ"),
     ("Kept", "保留", "保留", "保持"),
     // Uninstall: the page's note, its question and how it went.

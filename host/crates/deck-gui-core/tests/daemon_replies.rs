@@ -13,8 +13,9 @@
 //! `care_test_status`, `care_checks`, `care_footprint` and
 //! `config_get_sources` are written from the wire contract of the methods
 //! the service is still growing, with the boards' values where a board shows
-//! one (the Claude row's hand-off `app` is the board's word; the service
-//! sends `terminal` until the hand-off repair). They are the contract the
+//! one (the Claude row's hand-off `app` is the board's word, and since the
+//! hand-off repair the service's too; 0.13.0 sent `terminal`). They are the
+//! contract the
 //! service's replies are held to, key for key and type for type; a real
 //! reply, once recorded, goes beside its file and never over it. Those
 //! recorded from the finished service are in `fixtures/daemon/recorded/`,
@@ -196,25 +197,33 @@ fn the_footprint_reads_every_item_the_page_lists_and_the_total_of_those_present(
     let footprint = Footprint::parse(&fixture("care_footprint"));
     let ids: Vec<&str> = footprint.items.iter().map(|item| item.id.as_str()).collect();
     // In the service's order: the nine it always had in the page's order,
-    // then the Codex Desktop launcher. The page finds each by its id.
-    let (launcher, nine): (Vec<&str>, Vec<&str>) =
-        FOOTPRINT_IDS.into_iter().partition(|id| *id == "codex_desktop");
+    // then the Codex Desktop launcher, then the Keychain item. The page
+    // finds each by its id.
+    let later = ["codex_desktop", "keychain"];
+    let nine: Vec<&str> = FOOTPRINT_IDS
+        .into_iter()
+        .filter(|id| !later.contains(id))
+        .collect();
     assert_eq!(ids[..9], nine[..]);
-    assert_eq!(ids[9..], launcher[..]);
+    assert_eq!(ids[9..], later[..]);
     assert!(footprint.items.iter().all(|item| item.path.is_some()));
-    // The boards' Mac has the nine the Footprint board draws; its Codex
-    // Desktop was never set up (the Integrations board offers Set Up), so
-    // the launcher is named where it would be and is not there.
+    // The boards' Mac has the ten the Footprint board draws, a cloud voice
+    // key in the Keychain among them; its Codex Desktop was never set up
+    // (the Integrations board offers Set Up), so the launcher is named where
+    // it would be and is not there.
     let present: Vec<&str> = footprint
         .items
         .iter()
         .filter(|item| item.present)
         .map(|item| item.id.as_str())
         .collect();
-    assert_eq!(present.len(), 9);
+    assert_eq!(present.len(), 10);
     assert!(!present.contains(&"codex_desktop"));
+    assert!(present.contains(&"keychain"));
     let launcher = footprint.get("codex_desktop").expect("the launcher");
     assert_eq!((launcher.bytes, launcher.count), (None, None));
+    let keychain = footprint.get("keychain").expect("the Keychain item");
+    assert_eq!((keychain.bytes, keychain.count), (None, None), "no size applies");
     let service = footprint.get("service").expect("the service");
     assert_eq!((service.bytes, service.count), (None, None), "no size applies");
     assert_eq!(footprint.get("claude_plugin").and_then(|i| i.count), Some(13));
@@ -250,6 +259,7 @@ fn one_config_get_reads_the_switches_the_api_and_both_halves_of_voice() {
     let tts = TtsConfig::parse(&reply);
     assert_eq!(tts.engine, "kokoro");
     assert!(!tts.has_key());
+    assert!(tts.in_keychain(), "a Mac's own install keeps the key there");
     assert_eq!(reply["usage"]["providers"], serde_json::json!(["codex"]));
 }
 
