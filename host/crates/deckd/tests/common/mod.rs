@@ -414,13 +414,16 @@ impl UdsClient {
         }
     }
 
-    /// True when the peer closed the connection (EOF).
+    /// True when the peer closed the connection: EOF, or a reset. Linux
+    /// reports a reset instead of EOF when the door hangs up with part of
+    /// what we sent still unread (a line past the cap); macOS gives EOF.
     pub async fn closed(&mut self) -> bool {
         let mut rest = String::new();
-        matches!(
-            tokio::time::timeout(PATIENCE, self.reader.read_line(&mut rest)).await,
-            Ok(Ok(0))
-        )
+        match tokio::time::timeout(PATIENCE, self.reader.read_line(&mut rest)).await {
+            Ok(Ok(0)) => true,
+            Ok(Err(e)) => e.kind() == std::io::ErrorKind::ConnectionReset,
+            _ => false,
+        }
     }
 
     /// `session.hello` with these params; returns the whole response.
