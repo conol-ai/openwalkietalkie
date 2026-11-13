@@ -254,7 +254,7 @@ fi
 bundle=$(ls -d "$root"/dist/*/OpenWalkieTalkie.app 2>/dev/null | head -n 1)
 if [ -n "$bundle" ]; then
     if "$root/tools/assert-bundle-identity.sh" "$bundle" >"$logs/packaging.log" 2>&1; then
-        printf 'ok    packaging identity  one identifier, one team, both entitlements on both Mach-Os\n'
+        printf 'ok    packaging identity  one identifier, one team, the audio-input entitlement on both Mach-Os\n'
     else
         rc=$?
         if [ "$rc" = 3 ]; then

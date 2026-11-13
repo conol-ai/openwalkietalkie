@@ -14,7 +14,7 @@
 # has not produced anything usable, however cleanly it built.
 #
 # Exit status:
-#   0  distributable: Developer ID, one identifier, one team, both entitlements
+#   0  distributable: Developer ID, one identifier, one team, the audio-input entitlement
 #   3  ad-hoc: every structural check holds, but the build is NOT distributable
 #   1  a real failure -- the rows below say which
 #   2  bad usage
@@ -194,4 +194,4 @@ if [ "$adhoc" = true ] || [ "${seen_team[0]}" = "not set" ]; then
 fi
 printf 'assert-bundle-identity: ok -- one identifier (%s), one team (%s),\n' \
     "${seen_identifier[0]}" "${seen_team[0]}"
-printf '  hardened runtime and both entitlements on BOTH Mach-Os.\n'
+printf '  hardened runtime and the audio-input entitlement on BOTH Mach-Os.\n'
