@@ -113,6 +113,53 @@ pub fn adopt_windows_menu(at: usize) {
     }
 }
 
+/// The menu bar as AppKit holds it, for a harness walk (`--shots`' menu
+/// check): each top menu's title, and the title of the menu AppKit keeps the
+/// window list in (`NSApp.windowsMenu`, which [`adopt_windows_menu`] sets).
+/// Empty and `None` before there is a menu bar.
+#[must_use]
+pub fn menu_bar_titles() -> (Vec<String>, Option<String>) {
+    let mut titles = Vec::new();
+    let Some(app_class) = AnyClass::get(c"NSApplication") else {
+        return (titles, None);
+    };
+    // SAFETY: documented NSApplication, NSMenu and NSMenuItem getters
+    // (NSApplication.h, NSMenu.h, NSMenuItem.h); every object is checked for
+    // nil and the index stays below the item count; nothing is retained.
+    unsafe {
+        let app: *mut AnyObject = msg_send![app_class, sharedApplication];
+        if app.is_null() {
+            return (titles, None);
+        }
+        let bar: *mut AnyObject = msg_send![app, mainMenu];
+        if !bar.is_null() {
+            let count: isize = msg_send![bar, numberOfItems];
+            for at in 0..count {
+                let item: *mut AnyObject = msg_send![bar, itemAtIndex: at];
+                if item.is_null() {
+                    continue;
+                }
+                let menu: *mut AnyObject = msg_send![item, submenu];
+                let title: *mut NSString = if menu.is_null() {
+                    msg_send![item, title]
+                } else {
+                    msg_send![menu, title]
+                };
+                if let Some(title) = title.as_ref() {
+                    titles.push(title.to_string());
+                }
+            }
+        }
+        let windows: *mut AnyObject = msg_send![app, windowsMenu];
+        let title: *mut NSString = if windows.is_null() {
+            std::ptr::null_mut()
+        } else {
+            msg_send![windows, title]
+        };
+        (titles, title.as_ref().map(ToString::to_string))
+    }
+}
+
 /// Pin the whole app to Aqua (`dark == false`) or Dark Aqua.
 pub fn pin_appearance(dark: bool) {
     let (Some(app_class), Some(appearance_class), Some(string_class)) = (

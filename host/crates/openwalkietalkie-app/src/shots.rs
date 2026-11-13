@@ -86,6 +86,10 @@ pub const PREFLIGHT_ENV: &str = "OPENWALKIETALKIE_SHOTS_PREFLIGHT";
 /// Steps of keystrokes typed into each scene after its capture, `;` between
 /// steps and spaces between keystrokes: `tab;down down;enter`.
 pub const KEYS_ENV: &str = "OPENWALKIETALKIE_SHOTS_KEYS";
+/// `1`: after each scene's capture, print the menu bar as AppKit holds it
+/// (the top menus' titles and the windows menu's) on stderr as
+/// `shots-menus: <scene>: …`.
+pub const MENUS_ENV: &str = "OPENWALKIETALKIE_SHOTS_MENUS";
 
 /// The preflight's two scenes came out as one image: the window was not
 /// drawn.
@@ -705,6 +709,7 @@ pub fn start(shell: Entity<Shell>, window: &mut Window, cx: &mut App) {
     } else {
         keys_named(std::env::var(KEYS_ENV).ok().as_deref())
     };
+    let menus = !preflight && std::env::var(MENUS_ENV).as_deref() == Ok("1");
     window
         .spawn(cx, async move |cx| {
             // A live walk gives the test service its time to answer first.
@@ -743,6 +748,18 @@ pub fn start(shell: Entity<Shell>, window: &mut Window, cx: &mut App) {
                     Err(e) => eprintln!("openwalkietalkie-app: {name}: {e}"),
                 }
                 captures.push(saved);
+                // The menu bar in the scene's language, as AppKit holds it.
+                #[cfg(target_os = "macos")]
+                if menus {
+                    let (titles, windows) = crate::macos::menu_bar_titles();
+                    eprintln!(
+                        "shots-menus: {name}: {} | windows menu: {}",
+                        titles.join(" · "),
+                        windows.as_deref().unwrap_or("none")
+                    );
+                }
+                #[cfg(not(target_os = "macos"))]
+                let _ = menus;
                 // The keyboard's way through the scene: each step typed into
                 // this window as a person would, then captured.
                 for (n, step) in keys.iter().enumerate() {
