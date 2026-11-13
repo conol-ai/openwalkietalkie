@@ -2,13 +2,40 @@
 //! methods, run on the daemon's own care session the way the demo runs its
 //! roster (`Core::demo_call_as`), and the step that takes the agent off the
 //! deck once its test is over.
+//!
+//! The same session asks the deck before a firmware install
+//! ([`Core::install_after_press`]): the install waits in the updater until
+//! ENTER on the deck starts it ([`Core::start_confirmed_install`]) or its
+//! card goes unanswered.
 use super::handle::{CallCtx, ClientInfo, OpenSession, Reply, SessionKind};
 use super::Core;
-use crate::care::test::{self, Language, Test};
+use crate::care::test::{self, Language, Press, Test};
+use crate::firmware::{self, Install};
 use deck_model::{
-    AgentId, ApiError, ApiResult, CardId, Command, Event, Link, Request, Scope, SessionId,
+    AgentId, AgentRegister, ApiError, ApiResult, CardId, Command, Event, Link, Request, Scope,
+    SessionId,
 };
-use std::time::Instant;
+use std::time::{Duration, Instant};
+
+/// How long an install the deck confirmed waits for the voice to go quiet
+/// before it is given up, with the reason `firmware.install` gives.
+const QUIET_WITHIN: Duration = Duration::from_secs(test::ANSWER_WITHIN_S as u64);
+
+/// What `firmware.install` does about the press on the deck
+/// ([`Core::install_gate`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum InstallGate {
+    /// The deck has a session with the service: it runs its firmware and
+    /// can show a card, so it is asked ([`Core::install_after_press`]).
+    AskTheDeck,
+    /// The deck on the cable is in recovery, as the last check found it,
+    /// and has no session: it cannot show a card, and installs as it always
+    /// has. The only deck that installs without a press.
+    Recovery,
+    /// Neither: a deck that runs its firmware but has not linked, which
+    /// cannot be asked yet. Refused with [`firmware::WAIT_FOR_LINK`].
+    NotLinked,
+}
 
 impl Core {
     /// `care.test.question`, `care.test.voice`, `care.test.say` and
@@ -80,21 +107,170 @@ impl Core {
         Ok(serde_json::json!({"utterance": said["utterance"]}))
     }
 
+    /// How `firmware.install` treats the press on the deck. A session with
+    /// the service — the deck's firmware said hello on this link — means it
+    /// can show a card, so it is asked, whatever the last check found: a
+    /// deck in recovery never says hello, so a session proves the recovery
+    /// flag stale (the deck restarted into its firmware since), and a stale
+    /// flag never skips the card. With no session, only a deck the last
+    /// check found in recovery installs without a press, as it always has;
+    /// any other is refused until it links.
+    pub(crate) fn install_gate(&self) -> InstallGate {
+        if self.store.snapshot().device.fw.is_some() {
+            return InstallGate::AskTheDeck;
+        }
+        let in_recovery = self
+            .firmware
+            .status()
+            .device
+            .is_some_and(|deck| deck.recovery);
+        if in_recovery {
+            InstallGate::Recovery
+        } else {
+            InstallGate::NotLinked
+        }
+    }
+
+    /// `firmware.install` for a deck that cannot be asked yet
+    /// ([`InstallGate::NotLinked`]): every refusal the install itself would
+    /// answer first, as on a deck that can be asked — so a service that
+    /// never opens the deck still says so — and otherwise
+    /// [`firmware::WAIT_FOR_LINK`]. Nothing starts, and nothing is put on
+    /// the deck.
+    pub(crate) fn install_refused_until_linked(&self, install: &Install) -> Reply {
+        let why = match self.firmware.vet(install) {
+            Err(why) => why,
+            Ok(()) => firmware::WAIT_FOR_LINK.to_string(),
+        };
+        tracing::info!(%why, "firmware: the install was refused before any press");
+        Reply::err(ApiError::invalid("firmware", &why))
+    }
+
+    /// `firmware.install` on a deck that can answer it. Every refusal the
+    /// install would answer is answered now, with no card; otherwise the
+    /// deck asks "Install firmware {version}? Press ENTER." with one
+    /// choice, Install, and the reply is the status at once, `confirming`.
+    /// Nothing is downloaded or written until ENTER on the deck
+    /// ([`Core::start_confirmed_install`]); a dismissal, the card's minute
+    /// or any other answer leaves the updater idle with the reason
+    /// ([`firmware::Updater::not_confirmed`]). A second install while one
+    /// waits is refused as busy, so cards never stack.
+    pub(crate) fn install_after_press(&mut self, install: Install, now: Instant) -> Reply {
+        if let Err(why) = self.firmware.vet(&install) {
+            return Reply::err(ApiError::invalid("firmware", &why));
+        }
+        match self.ask_to_install(&install.version, now) {
+            Ok(card) => {
+                self.test_agent.install_asked(card);
+                let status = self.firmware.await_confirmation(install);
+                Reply::ok(serde_json::to_value(status).unwrap())
+            }
+            Err(error) => Reply::err(error),
+        }
+    }
+
+    /// The install's card on the deck, in its language, from the agent
+    /// named for its firmware ([`test::register_installer`]).
+    fn ask_to_install(&mut self, version: &str, now: Instant) -> Result<CardId, ApiError> {
+        let language = Language::of(self.store.snapshot());
+        let held = self.test_agent.installer().cloned();
+        let agent = self.care_agent(held, test::register_installer(language), now)?;
+        self.test_agent.set_installer(agent.clone());
+        let card = test::install_card(&agent, version, language);
+        let set = match self.care_call(Request::CardSet(card), now) {
+            Ok(set) => set,
+            Err(error) => {
+                // A question that never reached the deck leaves no agent
+                // there.
+                self.release_care_agent(agent, now);
+                return Err(error);
+            }
+        };
+        let card: CardId = serde_json::from_value(set["card"]["id"].clone())
+            .map_err(|e| ApiError::internal(&format!("agent.card.set named no card: {e}")))?;
+        tracing::info!(
+            card = card.0,
+            ?language,
+            "firmware: the install waits for a press on the deck"
+        );
+        Ok(card)
+    }
+
+    /// The install's card is over: ENTER on the deck starts the install,
+    /// anything else leaves nothing installed.
+    fn settle_install(&mut self, press: Press, now: Instant) {
+        match press {
+            Press::Confirmed => {
+                tracing::info!("firmware: the deck confirmed the install");
+                self.install_pressed = Some(now);
+                self.start_confirmed_install(now);
+            }
+            Press::NotConfirmed => {
+                tracing::info!("firmware: not confirmed on the deck; nothing was installed");
+                self.firmware.not_confirmed();
+            }
+        }
+    }
+
+    /// The install the deck confirmed starts the way `firmware.install`
+    /// starts one: once nobody is talking ([`Core::quiet`]), because it
+    /// pauses the deck's link. The press may come while the card is still
+    /// being read out, so the install waits for the speech, a held press or
+    /// a transcription to end — at the press and on every tick after — and
+    /// is given up with `firmware.install`'s own reason after
+    /// [`QUIET_WITHIN`]. Meanwhile the status says it waits for that
+    /// ([`firmware::Updater::waits_for_quiet`]), not for a press it has had.
+    pub(super) fn start_confirmed_install(&mut self, now: Instant) {
+        let Some(pressed) = self.install_pressed else {
+            return;
+        };
+        if !self.quiet() {
+            if now.saturating_duration_since(pressed) >= QUIET_WITHIN {
+                self.install_pressed = None;
+                tracing::warn!("firmware: the voice never went quiet; the install did not start");
+                self.firmware.abandon(firmware::VOICE_BUSY);
+            } else {
+                self.firmware.waits_for_quiet();
+            }
+            return;
+        }
+        self.install_pressed = None;
+        let cache = self.paths.caches.join(firmware::CACHE_DIR);
+        match self.firmware.confirmed(cache, self.hid.maintenance.clone()) {
+            Ok(_) => tracing::info!("firmware: the confirmed install started"),
+            Err(why) => tracing::warn!(%why, "firmware: the confirmed install did not start"),
+        }
+    }
+
+    /// Nobody is talking: no press is held, no transcription is on its way
+    /// and nothing is being said. An install waits for this.
+    pub(crate) fn quiet(&self) -> bool {
+        let voice = &self.store.snapshot().voice;
+        voice.ptt.is_none() && voice.speaking.is_none() && !self.store.is_finalizing()
+    }
+
     /// The agent "Test", registered on the care session when it is not.
     fn test_agent_registered(&mut self, now: Instant) -> Result<AgentId, ApiError> {
-        let registered = self
-            .test_agent
-            .agent()
-            .filter(|agent| self.store.snapshot().agents.contains_key(*agent))
-            .cloned();
-        if let Some(agent) = registered {
-            return Ok(agent);
-        }
-        let result = self.care_call(Request::AgentRegister(test::register()), now)?;
-        let agent: AgentId = serde_json::from_value(result["agent"].clone())
-            .map_err(|e| ApiError::internal(&format!("agent.register named no agent: {e}")))?;
+        let held = self.test_agent.agent().cloned();
+        let agent = self.care_agent(held, test::register(), now)?;
         self.test_agent.set_agent(agent.clone());
         Ok(agent)
+    }
+
+    /// `held`, when it is still registered; else `register`'s agent, new on
+    /// the care session.
+    fn care_agent(
+        &mut self,
+        held: Option<AgentId>,
+        register: AgentRegister,
+        now: Instant,
+    ) -> Result<AgentId, ApiError> {
+        if let Some(agent) = held.filter(|agent| self.store.snapshot().agents.contains_key(agent)) {
+            return Ok(agent);
+        }
+        let result = self.care_call(Request::AgentRegister(register), now)?;
+        serde_json::from_value(result["agent"].clone())
+            .map_err(|e| ApiError::internal(&format!("agent.register named no agent: {e}")))
     }
 
     /// Take the agent "Test" off the deck now, when it is registered.
@@ -102,6 +278,11 @@ impl Core {
         let Some(agent) = self.test_agent.agent().cloned() else {
             return;
         };
+        self.release_care_agent(agent, now);
+    }
+
+    /// Take `agent` of the care session off the deck now.
+    fn release_care_agent(&mut self, agent: AgentId, now: Instant) {
         if let Err(error) = self.care_call(
             Request::AgentRelease {
                 agent,
@@ -109,7 +290,7 @@ impl Core {
             },
             now,
         ) {
-            tracing::debug!(%error, "care: the test agent was already gone");
+            tracing::debug!(%error, "care: the agent was already gone");
         }
     }
 
@@ -151,25 +332,29 @@ impl Core {
         result
     }
 
-    /// A step's events end the test on the deck when they answer it or take
-    /// its card away (`care::test`); the agent then leaves the deck, after
-    /// the step's own follow-ups (the answer's delivery first).
+    /// A step's events end a card of the care session when they answer it
+    /// or take it away (`care::test`): the install's answer starts or ends
+    /// the install, and the agent leaves the deck, after the step's own
+    /// follow-ups (the answer's delivery first).
     pub(super) fn settle_tests(&mut self, events: &[Event], now: Instant) {
-        let Some(agent) = self.test_agent.observe(events, now) else {
-            return;
-        };
+        let settled = self.test_agent.observe(events, now);
+        if let Some(press) = settled.install {
+            self.settle_install(press, now);
+        }
         let Some(session) = self.test_agent.session() else {
             return;
         };
-        // Never what was heard: those are the owner's own words.
-        tracing::info!(agent = %agent.0, "care: a test is over; the agent leaves the deck");
-        self.followups.push_back(Command::Api {
-            principal: test::principal(),
-            session,
-            req: Box::new(Request::AgentRelease {
-                agent,
-                reason: None,
-            }),
-        });
+        for agent in settled.release {
+            // Never what was heard: those are the owner's own words.
+            tracing::info!(agent = %agent.0, "care: a card is over; its agent leaves the deck");
+            self.followups.push_back(Command::Api {
+                principal: test::principal(),
+                session,
+                req: Box::new(Request::AgentRelease {
+                    agent,
+                    reason: None,
+                }),
+            });
+        }
     }
 }

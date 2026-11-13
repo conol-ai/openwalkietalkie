@@ -84,7 +84,9 @@ pub const METHODS: &[MethodSpec] = &[
     m("voice.engines", Some(Scope::Voice), false),
     m("voice.test", Some(Scope::Voice), false),
     // USB firmware: observing status is read-only; downloads and flash
-    // operations require the local operator's admin scope.
+    // operations require the local operator's admin scope, and an install
+    // on a deck that can show a card waits for ENTER on it as well
+    // (`Core::install_after_press`).
     m("firmware.status", Some(Scope::Observe), false),
     m("firmware.check", Some(Scope::Admin), false),
     m("firmware.install", Some(Scope::Admin), false),

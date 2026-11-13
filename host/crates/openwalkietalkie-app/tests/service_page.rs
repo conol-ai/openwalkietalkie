@@ -17,12 +17,13 @@ use openwalkietalkie_app::i18n;
 use openwalkietalkie_app::local_api::{self, PortRefusal, Shown};
 use openwalkietalkie_app::present::{self, LoginItem};
 use openwalkietalkie_app::service::{
-    api_clash, api_line, check_rows, codex_check, deck_version, executable, legacy_agent,
-    login_row, stale_helpers, support_note, this_copy, update_titles, Answer, Api, CheckRow,
-    CodexCheck, Setup, Verdict,
+    api_clash, api_line, api_question, check_rows, codex_check, deck_version, executable,
+    firmware_sub, legacy_agent, login_row, stale_helpers, support_note, this_copy, update_titles,
+    Answer, Api, CheckRow, CodexCheck, Setup, TcpRule, Verdict,
 };
 use openwalkietalkie_app::updates::{
-    self, available, board_name, can_install, firmware_step, install_board, FirmwareStep,
+    self, available, board_name, can_install, confirming, firmware_step, install_board,
+    FirmwareStep,
 };
 use serde_json::{json, Value};
 use std::path::Path;
@@ -430,8 +431,12 @@ fn the_local_api_row_says_off_or_on_and_its_port() {
         api_line(&on, None, EN),
         "On. Port 47201. Local tools can use it with a token."
     );
+    // Off, which is what a service of this release says unless its owner
+    // switched the door on: the words say only that it is off and why that
+    // costs nothing, not that something turned it off.
     config["api"]["tcp"] = false.into();
     let off = Api::parse(&config);
+    assert_eq!(off.tcp, Some(false));
     assert_eq!(
         api_line(&off, None, EN),
         "Off. Nothing shipped with the deck uses them."
@@ -452,6 +457,99 @@ fn the_local_api_row_says_off_or_on_and_its_port() {
     .request();
     assert_eq!(method, "config.set");
     assert_eq!(params, json!({"patch": {"api.tcp": false}}));
+}
+
+/// The service says why its door is as it is (`api.tcp_rule`), and the
+/// switch's question follows it: turning the door off while Claude Code's
+/// hooks from before the plugin still use it says so and offers Repair
+/// first — the Integrations page's Repair, the door left as it is — until
+/// the Claude row is no longer `outdated`, when the question is the plain
+/// one again (the service's rule stays until its next start). Any other
+/// rule asks the plain questions, and so does a service that does not say.
+#[test]
+fn the_local_api_off_sheet_offers_repair_first_while_the_old_claude_hooks_use_it() {
+    i18n::install();
+    let mut config = fixture(CONFIG_GET);
+    assert_eq!(Api::parse(&config).tcp_rule, Some(TcpRule::Explicit));
+    for (word, rule) in [
+        ("default", Some(TcpRule::Default)),
+        ("legacy_hooks", Some(TcpRule::LegacyHooks)),
+        ("a word from a newer service", None),
+    ] {
+        config["api"]["tcp_rule"] = word.into();
+        assert_eq!(Api::parse(&config).tcp_rule, rule, "{word}");
+    }
+    let legacy = Api::parse(&config_with_rule("legacy_hooks"));
+    let plain_off = |api: Option<&Api>, claude: Option<&Status>| {
+        let question = api_question(false, api, claude, EN);
+        assert!(!question.repair_first && question.danger, "{question:?}");
+        assert_eq!(
+            (question.title.as_str(), question.body.as_str(), question.confirm.as_str()),
+            ("Turn the local API off?", "The service restarts.", "Turn Off")
+        );
+    };
+    for claude in [None, Some(&Status::Outdated)] {
+        let question = api_question(false, Some(&legacy), claude, EN);
+        assert!(question.repair_first && !question.danger, "{claude:?}");
+        assert_eq!(question.title, "Turn the local API off?");
+        assert_eq!(
+            question.body,
+            "Claude Code's older hooks still use the local API. Repair them first, or Claude \
+             Code's questions stay in the terminal."
+        );
+        assert_eq!(question.confirm, "Repair");
+    }
+    plain_off(Some(&legacy), Some(&Status::Installed));
+    plain_off(Some(&legacy), Some(&Status::Absent));
+    for word in ["explicit", "default"] {
+        let api = Api::parse(&config_with_rule(word));
+        plain_off(Some(&api), Some(&Status::Outdated));
+    }
+    let older = Api::parse(&json!({"api": {"port": 47201, "tcp": true}}));
+    assert_eq!(older.tcp_rule, None);
+    plain_off(Some(&older), None);
+    plain_off(None, None);
+    // Turning it on asks the plain question, whatever the rule.
+    let on = api_question(true, Some(&legacy), None, EN);
+    assert!(!on.repair_first && !on.danger);
+    assert_eq!(
+        (on.title.as_str(), on.body.as_str(), on.confirm.as_str()),
+        ("Turn the local API on?", "The service restarts.", "Turn On")
+    );
+    // In the other three languages, with the shipped word for Repair.
+    for (language, body, repair) in [
+        (
+            ZH,
+            "Claude Code 插件化之前的钩子仍在使用本地 API。请先“修复”，否则 Claude Code 的问题只会留在终端中。",
+            "修复",
+        ),
+        (
+            Language::TraditionalChinese,
+            "Claude Code 外掛化之前的掛鉤仍在使用本機 API。請先「修復」，否則 Claude Code 的問題只會留在終端機中。",
+            "修復",
+        ),
+        (
+            Language::Japanese,
+            "Claude Code の従来のフックがまだローカル API を使っています。先に「修復」してください。修復しないと、Claude Code の質問はターミナルにしか表示されません。",
+            "修復",
+        ),
+    ] {
+        let question = api_question(false, Some(&legacy), None, language);
+        assert_eq!(
+            (question.body.as_str(), question.confirm.as_str()),
+            (body, repair),
+            "{language:?}"
+        );
+        assert_eq!(question.title, language.text("Turn the local API off?"));
+        assert_ne!(question.title, "Turn the local API off?", "{language:?}");
+    }
+}
+
+/// The fixture's `config.get`, its door's rule `word`.
+fn config_with_rule(word: &str) -> Value {
+    let mut config = fixture(CONFIG_GET);
+    config["api"]["tcp_rule"] = word.into();
+    config
 }
 
 #[test]
@@ -582,10 +680,15 @@ fn every_sentence_of_the_services_firmware_status_has_a_row() {
     i18n::install();
     let said = firmware_sentences();
     // Pinned, so a sentence the reading stopped finding fails here.
-    assert_eq!(said.len(), 12, "{said:#?}");
-    assert!(
-        said.contains(&"Firmware release checked. Installation requires your confirmation.".into())
-    );
+    assert_eq!(said.len(), 15, "{said:#?}");
+    for sentence in [
+        "Firmware release checked. Installation requires your confirmation.",
+        "Press ENTER on the deck to start the install.",
+        "Not confirmed on the deck. Nothing was installed.",
+        "Starting the install when the deck stops talking…",
+    ] {
+        assert!(said.contains(&sentence.into()), "{sentence:?} {said:#?}");
+    }
     for sentence in &said {
         assert!(deck_gui_core::i18n::has_entry(sentence), "{sentence:?} has no row");
         for language in [ZH, Language::TraditionalChinese, Language::Japanese] {
@@ -636,6 +739,224 @@ fn the_firmware_dialog_says_the_services_status_in_the_windows_language() {
     assert_eq!(
         updates::status_line(&Value::Null, ZH),
         "请通过 USB 连接设备后检查固件更新。"
+    );
+}
+
+/// A firmware status in `phase`, `progress` per cent of the way, saying
+/// `message`.
+fn phase(phase: &str, progress: u8, message: &str) -> Value {
+    json!({"phase": phase, "progress": progress, "message": message})
+}
+
+/// The dialog's words for every phase an install goes through, as the
+/// service writes them: looking, found, waiting for ENTER on the deck (what
+/// to press there, never a percentage), pressed and waiting for the deck to
+/// stop talking, working with how far it has got, done, failed — and idle
+/// again with the reason when the deck did not confirm.
+#[test]
+fn the_firmware_dialog_says_every_phase_of_an_install() {
+    i18n::install();
+    let walk = [
+        (
+            phase("checking", 0, "Checking for firmware updates…"),
+            "Checking for firmware updates… 0%",
+        ),
+        (
+            phase(
+                "ready",
+                0,
+                "Firmware release checked. Installation requires your confirmation.",
+            ),
+            "Firmware release checked. Installation requires your confirmation.",
+        ),
+        (
+            phase(
+                "confirming",
+                0,
+                "Press ENTER on the deck to start the install.",
+            ),
+            "Press ENTER on the deck to start the install.",
+        ),
+        (
+            phase(
+                "confirming",
+                0,
+                "Starting the install when the deck stops talking…",
+            ),
+            "Starting the install when the deck stops talking…",
+        ),
+        (
+            phase("downloading", 12, "Downloading and verifying firmware…"),
+            "Downloading and verifying firmware… 12%",
+        ),
+        (
+            phase("installing", 45, "Installing firmware. Keep USB connected."),
+            "Installing firmware. Keep USB connected. 45%",
+        ),
+        (
+            phase("complete", 100, "Firmware updated. Your deck is ready."),
+            "Firmware updated. Your deck is ready.",
+        ),
+        (
+            phase(
+                "error",
+                0,
+                "Update did not complete. You can check again and retry.",
+            ),
+            "Update did not complete. You can check again and retry.",
+        ),
+        (
+            phase(
+                "idle",
+                0,
+                "Not confirmed on the deck. Nothing was installed.",
+            ),
+            "Not confirmed on the deck. Nothing was installed.",
+        ),
+    ];
+    for (status, said) in &walk {
+        assert_eq!(updates::status_line(status, EN), *said, "{status}");
+    }
+    // Waiting for the deck says what to press when the service said
+    // nothing else, and has no percentage in any language.
+    let waiting = phase("confirming", 0, "");
+    for (language, said) in [
+        (EN, "Press ENTER on the deck to start the install."),
+        (ZH, "请在设备上按 ENTER 开始安装。"),
+        (
+            Language::TraditionalChinese,
+            "請在裝置上按 ENTER 開始安裝。",
+        ),
+        (
+            Language::Japanese,
+            "デバイスで ENTER を押して、インストールを開始してください。",
+        ),
+    ] {
+        assert_eq!(
+            updates::status_line(&waiting, language),
+            said,
+            "{language:?}"
+        );
+    }
+    // Pressed, while the voice holds the install back: the service says it
+    // has the press and what it waits for, still with no percentage.
+    let pressed = &walk[3].0;
+    for (language, said) in [
+        (ZH, "设备上的语音结束后将开始安装…"),
+        (Language::TraditionalChinese, "裝置上的語音結束後將開始安裝…"),
+        (
+            Language::Japanese,
+            "デバイスの音声が終わったら、インストールを開始します…",
+        ),
+    ] {
+        assert_eq!(
+            updates::status_line(pressed, language),
+            said,
+            "{language:?}"
+        );
+    }
+    let not_confirmed = &walk.last().expect("the walk").0;
+    for (language, said) in [
+        (ZH, "未在设备上确认，未安装任何内容。"),
+        (
+            Language::TraditionalChinese,
+            "未在裝置上確認，未安裝任何內容。",
+        ),
+        (
+            Language::Japanese,
+            "デバイスで承認されませんでした。何もインストールしていません。",
+        ),
+    ] {
+        assert_eq!(
+            updates::status_line(not_confirmed, language),
+            said,
+            "{language:?}"
+        );
+    }
+}
+
+/// While the install waits for the deck the service is busy: the row
+/// offers the review, the dialog's Install is not offered again and the
+/// status is read every second. A card the deck did not confirm leaves the
+/// release to install again.
+#[test]
+fn an_install_waiting_for_the_deck_is_busy_until_the_deck_answers() {
+    let found = json!({
+        "phase": "ready", "available": true,
+        "device": {"serial": "5E2A91C04B7D", "board": "hw-b", "version": "0.13.0"},
+        "release": {"firmware": {"version": "0.14.0", "protocol": 2, "variants": {"hw-b": {}}}}
+    });
+    assert!(can_install(&found, "hw-b") && !confirming(&found));
+    let mut waiting = found.clone();
+    waiting["phase"] = "confirming".into();
+    assert!(confirming(&waiting) && updates::busy(&waiting));
+    assert!(!can_install(&waiting, "hw-b"), "one install at a time");
+    assert_eq!(firmware_step(&waiting), FirmwareStep::Review);
+    let mut not_confirmed = found;
+    not_confirmed["phase"] = "idle".into();
+    not_confirmed["message"] = "Not confirmed on the deck. Nothing was installed.".into();
+    assert!(!updates::busy(&not_confirmed) && !confirming(&not_confirmed));
+    assert!(can_install(&not_confirmed, "hw-b"), "it can be asked again");
+    assert_eq!(firmware_step(&not_confirmed), FirmwareStep::Review);
+}
+
+/// An install the service refuses comes back as its reason, which the
+/// window says in its own language: a deck that is not in recovery and has
+/// not linked cannot be asked for the press, so it is told to try again
+/// once the deck links. The sentence is the service's own
+/// (`deckd::firmware::WAIT_FOR_LINK`), word for word. A reason with no row
+/// is shown as it came, and a failure with no reason as the error says it.
+#[test]
+fn an_install_refused_until_the_deck_links_says_why_in_the_windows_language() {
+    i18n::install();
+    const WAIT: &str = "Wait for the deck to link, then install again.";
+    assert!(
+        include_str!("../../deckd/src/firmware/mod.rs")
+            .contains(&format!("pub const WAIT_FOR_LINK: &str = \"{WAIT}\";")),
+        "the service's sentence and this row are one"
+    );
+    let refused = |why: &str| ClientError::Rpc {
+        code: ApiError::INVALID,
+        message: "invalid".into(),
+        data: Some(json!({"why": why})),
+    };
+    let said = [EN, ZH, Language::TraditionalChinese, Language::Japanese]
+        .map(|language| updates::refusal_line(&refused(WAIT), language));
+    assert_eq!(
+        said,
+        [
+            WAIT,
+            "请等待设备连接，然后重新安装。",
+            "請等待裝置連線，然後重新安裝。",
+            "デバイスが接続されるのを待ってから、もう一度インストールしてください。",
+        ]
+    );
+    assert_eq!(
+        updates::refusal_line(&refused("A reason from a newer service."), ZH),
+        "A reason from a newer service."
+    );
+    let plain = ClientError::Rpc {
+        code: ApiError::INVALID,
+        message: "invalid".into(),
+        data: None,
+    };
+    assert_eq!(updates::refusal_line(&plain, ZH), updates::failure_text(&plain));
+}
+
+/// The firmware row says how an install reaches the deck, in each of the
+/// four languages: by cable, after a press on it.
+#[test]
+fn the_firmware_row_says_an_install_needs_a_press_on_the_deck() {
+    i18n::install();
+    let said = [EN, ZH, Language::TraditionalChinese, Language::Japanese].map(firmware_sub);
+    assert_eq!(
+        said,
+        [
+            "By cable, after a press on the deck.",
+            "通过数据线更新，需先在设备上按键确认。",
+            "透過連接線更新，需先在裝置上按鍵確認。",
+            "ケーブル接続で、本体のボタンを押して開始。",
+        ]
     );
 }
 
@@ -1052,11 +1373,15 @@ fn every_row_the_page_adds_is_the_only_row_of_its_key() {
     }
     // The sheet's 79 rows, copied as written (the question before Stop…
     // among them, once the console's status item that asked it too was
-    // gone), and the page's own two, less "The service is not running":
-    // the page says why no service answers in the Deck page's words now.
-    // Then the support file's note for content logging on, and the twelve
-    // sentences of the service's firmware status.
-    assert_eq!(i18n::service::STRINGS.len(), 93);
+    // gone; the firmware row's line as the design wrote it, now that the
+    // service asks for the press), and the page's own two, less "The
+    // service is not running": the page says why no service answers in the
+    // Deck page's words now. Then the support file's note for content
+    // logging on, and the fourteen sentences of the service's firmware
+    // status. Then three more: the local API's question while Claude
+    // Code's older hooks still use it, what a pressed install waits for,
+    // and why an install waits for the deck to link.
+    assert_eq!(i18n::service::STRINGS.len(), 98);
 }
 
 #[test]
@@ -1069,8 +1394,10 @@ fn every_word_the_page_says_has_a_row() {
     );
     assert_eq!(i18n::missing_rows(source), Vec::<String>::new());
     // Pinned, so a lookup the scanner stopped seeing fails here rather than
-    // passing as a page with less to translate.
-    assert_eq!(i18n::literals(source).len(), 182);
+    // passing as a page with less to translate. (185: the local API's
+    // questions moved into `service::api_question` whole, and gained the
+    // sentence about Claude Code's older hooks and its Repair button.)
+    assert_eq!(i18n::literals(source).len(), 185);
 }
 
 /// A fresh test service's own replies (`deck-gui-core`'s recorded fixtures,
@@ -1155,9 +1482,11 @@ fn a_fresh_test_services_own_replies_read_as_the_service_page_says_them() {
             (Verdict::NotChecked, "Bluetooth is allowed", None),
         ]
     );
-    // The local API: on, at the port the service holds. `port = 0` asks
-    // for any free port and names none, so before `service.info` answers
-    // the line says no port rather than port 0.
+    // The local API: on, at the port the service holds — the recorded
+    // stage-6 service bound its door unless told not to, where a service
+    // of this release leaves it off (`the_local_api_row_says_off_or_on_and_its_port`).
+    // `port = 0` asks for any free port and names none, so before
+    // `service.info` answers the line says no port rather than port 0.
     let api = Api::parse(&fixture(RECORDED_CONFIG));
     assert_eq!((api.tcp, api.config.port), (Some(true), None));
     assert_eq!(info.port, Some(52_098));

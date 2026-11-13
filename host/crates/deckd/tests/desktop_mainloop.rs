@@ -27,15 +27,26 @@
 //!
 //! It prints its own results: a `harness = false` target has no libtest
 //! summary, and forging one would inflate the gate's count.
-#![cfg(target_os = "macos")]
+//!
+//! Every item is macOS's alone, one by one, as in `voice_mainloop`: a
+//! file-wide `#![cfg]` would leave this binary with no `fn main` on any
+//! other platform, which does not build. Off macOS only the `main` at the
+//! end is left, and it says it skipped.
 
+#[cfg(target_os = "macos")]
 use deckd::audio::mainloop::{is_main_thread, pump};
+#[cfg(target_os = "macos")]
 use deckd::desktop::errors::{ScriptError, ERR_NOT_PERMITTED};
+#[cfg(target_os = "macos")]
 use deckd::desktop::ghostty;
+#[cfg(target_os = "macos")]
 use deckd::desktop::script::{AppleScriptRunner, Scripting};
+#[cfg(target_os = "macos")]
 use std::sync::mpsc;
+#[cfg(target_os = "macos")]
 use std::time::{Duration, Instant};
 
+#[cfg(target_os = "macos")]
 fn row(name: &str, ok: bool, failures: &mut usize) {
     if ok {
         println!("ok    desktop {name}");
@@ -47,6 +58,7 @@ fn row(name: &str, ok: bool, failures: &mut usize) {
 
 /// Turn the main run loop until `rx` answers, the way `deckd run` pumps it
 /// once per supervision period.
+#[cfg(target_os = "macos")]
 fn pump_for<T>(rx: &mpsc::Receiver<T>, budget: Duration) -> Option<T> {
     let deadline = Instant::now() + budget;
     loop {
@@ -60,6 +72,7 @@ fn pump_for<T>(rx: &mpsc::Receiver<T>, budget: Duration) -> Option<T> {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn main() {
     let mut failures = 0usize;
 
@@ -227,4 +240,12 @@ fn main() {
     if failures > 0 {
         std::process::exit(1);
     }
+}
+
+/// Off macOS there is no `NSAppleScript` and no main run loop to hop to, so
+/// there is nothing here to run: the target builds and says it skipped,
+/// and no row is printed as passed.
+#[cfg(not(target_os = "macos"))]
+fn main() {
+    println!("skip  desktop mainloop: NSAppleScript and the main run loop are macOS's alone");
 }

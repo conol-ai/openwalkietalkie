@@ -1,7 +1,8 @@
 //! The in-process daemon the API exit tests (contract §5) run against:
 //! a `deckd-core` thread with detached hid channels (`--no-device`), a
 //! temp data dir under `$TMPDIR` with a short socket path, `[api] port =
-//! 0` and a `FakeVerifier`, plus the two tiny clients the tests speak
+//! 0` with `tcp = true` (the door is off unless a file switches it on) and
+//! a `FakeVerifier`, plus the two tiny clients the tests speak
 //! with (HTTP/1.1 and newline-delimited JSON over the Unix socket).
 //!
 //! Nothing here touches the real data dir, port 47201, or the network.
@@ -98,6 +99,9 @@ impl Daemon {
         );
         let mut config = Config::default();
         config.api.port = 0;
+        // Both doors: the TCP one is off unless the file switches it on,
+        // and these tests drive it.
+        config.api.tcp = Some(true);
         config.api.allowed_origins = options.allowed_origins;
         config.api.mailbox_ttl_s = options.mailbox_ttl_s;
         config.api.uds_max_scope = options.uds_max_scope;
@@ -128,6 +132,7 @@ impl Daemon {
             verifier: Arc::new(options.verifier),
             adapters: Arc::new(deckd::adapters::Adapters::new(config)),
             paths: paths.clone(),
+            legacy_hooks: false,
         });
         let served = serve(api.clone()).await;
         let port = served.port.expect("an ephemeral port");

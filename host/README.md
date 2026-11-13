@@ -5,7 +5,8 @@ daemon that owns the Bluetooth HID link, keeps the deck's roster, cards and
 settings, and answers the deck the way the firmware expects, and an API two
 doors wide that everything else speaks: the gpui GUI, the Claude Code and
 Codex hook adapters, scripts and voice are all clients of it, with no
-privileges a `curl` one-liner lacks.
+privileges a `curl` one-liner lacks. The second door, HTTP and WebSocket
+over TCP, is off by default, and the next release removes it (see "The API").
 The design is [docs/host-service.md](../docs/host-service.md)
 (its Status section says what is built), the wire contract is
 [docs/deck-protocol.md](../docs/deck-protocol.md), and the device grammar is
@@ -165,11 +166,54 @@ delivered to the owning session before the card is cleared on the deck
 | Door | Address | Who you are | What it speaks |
 | --- | --- | --- | --- |
 | Unix socket | `~/Library/Application Support/OpenWalkieTalkie/deckd.sock` (dir 0700, socket 0600; `DECKD_DATA_DIR` moves it) | peer credentials: the uid must be the daemon's own; the pid goes through the trust check of design §4.2 (`LOCAL_PEERPID` → code signature → bundle path), which is the only thing that ever sets `trusted` | newline-delimited JSON-RPC, one request or batch per line, `session.hello` as line 1 (anything else is `-32001 {why:"hello_first"}` and the socket closes); events arrive as `event` notifications, a lagged reader gets `resync`; a line over 256 KiB is `-32012` and closes |
-| TCP | `http://127.0.0.1:47201` (`[api] port`; `0` binds an ephemeral port, and the bound port is written to the data dir's `port` file either way) | `Authorization: Bearer dk_…`, verified against `tokens.toml` (blake3 hashes, expiry honoured, mode 0600); the token's name is the principal and its scopes are the maximum. `trusted` is never true over TCP | `POST /v1/rpc` (one request or a batch; notifications alone answer `204`), `GET /v1/ws` (one JSON value per text frame, the same hello-first session protocol as the socket), `GET /v1/events` (SSE, `since=<rev>`, `types=`), and the read-only mirror `GET /v1/state`, `/v1/agents`, `/v1/agents/{id}`, `/v1/cards`, `/v1/device`, `/v1/voice`, `/v1/schema` |
+| TCP (off by default, below) | `http://127.0.0.1:47201` (`[api] port`; `0` binds an ephemeral port, and the bound port is written to the data dir's `port` file either way), only while `[api] tcp = true` | `Authorization: Bearer dk_…`, verified against `tokens.toml` (blake3 hashes, expiry honoured, mode 0600); the token's name is the principal and its scopes are the maximum. `trusted` is never true over TCP | `POST /v1/rpc` (one request or a batch; notifications alone answer `204`), `GET /v1/ws` (one JSON value per text frame, the same hello-first session protocol as the socket), `GET /v1/events` (SSE, `since=<rev>`, `types=`), and the read-only mirror `GET /v1/state`, `/v1/agents`, `/v1/agents/{id}`, `/v1/cards`, `/v1/device`, `/v1/voice`, `/v1/schema` |
 
-`GET /v1/info` is the only route without a token — it is how a client learns
-the daemon's version, socket path, port and `degraded` reason. Everything else
-on the TCP door passes three checks before it is dispatched: `Host` must name
+**The HTTP/WebSocket door and its tokens are off by default, and the next
+release removes them.** Everything shipped with the deck speaks over the Unix socket
+— the app, the Claude Code plugin's hooks, `deckd ctl`, the Omarchy bridge —
+and so do the connected apps such as Conol; nobody else is known to use the
+TCP door or a bearer token. So `deckd run` binds no TCP port unless
+`config.toml` asks for one, and the next release deletes the door and its
+tokens together with `op.*`, the public `voice.*` methods, `focus.report`
+and the socket's `agent.wait`, none of which Conol or the bridge calls. To
+turn the door on until then, set
+
+```toml
+[api]
+tcp = true
+```
+
+and restart the service, or switch **Service → Local API** on in the app,
+which writes the same key and restarts it; `tcp = false` keeps it off. A
+file that leaves the key out gets the door only while the hooks deckd gave
+Claude Code before its integration became a plugin may still post to it.
+Either of two things says so:
+
+- Claude's `settings.json` (under `$CLAUDE_CONFIG_DIR`, else `~/.claude`)
+  still carries one of those `type: "http"` hooks. Only the HTTP hooks
+  count: other leftovers ask for Repair too, but post nothing. The
+  Integrations page's Claude row asks for **Repair** (`deckd integrations
+  install claude`, which migrates them), the app's Local API switch offers
+  that Repair before it turns the door off, and the start after the repair
+  leaves the door off.
+- deckd's own record of the Claude target (`integrations.json` in its data
+  directory) is still a pre-plugin one. That is how hooks written under a
+  `CLAUDE_CONFIG_DIR` the service does not see keep their door. Nothing on
+  the Claude row shows them, so migrate them from a shell that sees them:
+  `CLAUDE_CONFIG_DIR=<that folder> deckd integrations install claude`. Any
+  Claude install, repair or removal replaces the record, and with it this
+  exception, as an explicit `[api] tcp` does.
+
+`deckd run` logs which rule applied as it starts (`tcp door: [api] tcp is
+left out, and the door is off by default`, …), `config.get` publishes the
+result as `api.tcp` and the rule as `api.tcp_rule` (`explicit`, `default` or
+`legacy_hooks`; not a key of the file, so `config.set` refuses it), and
+`deckd doctor`'s `tcp` row calls a door that is off "off", not "degraded".
+
+While the TCP door is on, `GET /v1/info` is the only route without a token —
+it is how a client learns the daemon's version, socket path, port and
+`degraded` reason. Everything else on the door passes three checks before it
+is dispatched: `Host` must name
 loopback on the port the daemon actually holds (else 400 `bad_host`), an
 `Origin` header that is not in `[api] allowed_origins` is 403
 `origin_forbidden` on every route, the WS upgrade and `/v1/info` included, and
@@ -183,12 +227,14 @@ socket is not HTTP); `deckd ctl` is the shell client for that door.
 The CLI under "Running it" below is the shell face of this API and nothing
 else: `deckd ctl` is one call (`--scopes` asks for what it needs, exit 3 means
 `-32002 need:"trusted"`), `deckd events` is a subscription printed as JSON
-lines, `deckd token` mints and rotates the bearer tokens the TCP door checks,
-`deckd status --live` adds `service.info` to the `status.json` it already
-prints, `deckd device flood|sync|metrics` are `admin` calls, and `deckd doctor`
-checks both doors (socket path length, a `session.ping`, `/v1/info` being ours
-and not a squatter's, `tokens.toml` at 0600). All of them go through
-`deck-client`, so they hit exactly the code a third party's client does.
+lines, `deckd token` mints and rotates the bearer tokens the TCP door checks
+(they open nothing while the door is off), `deckd status --live` adds
+`service.info` to the `status.json` it already prints, `deckd device
+flood|sync|metrics` are `admin` calls, and `deckd doctor` checks both doors
+(socket path length, a `session.ping`, `/v1/info` being ours and not a
+squatter's or the door being off, `tokens.toml` at 0600). All of them go
+through `deck-client`, so they hit exactly the code a third party's client
+does.
 
 **Scopes.** A call carries a principal (`uid:501` over the socket, the token's
 name over TCP) and a scope set: `observe`, `observe:content`, `observe:raw`,
@@ -222,8 +268,10 @@ itself is not a permission card, so scripts answer their own cards freely.
 **Writing a virtual agent.** `host/examples/virtual_agent.py` is the whole of
 it: 50 lines of Python over `POST /v1/rpc` that `session.hello`s, registers
 `caps:{answer:"poll", order:"poll"}` with a stable `key`, sets a `q` card, and
-parks in `agent.wait` until the operator answers on the deck. The gate runs it
-end to end on every run, so it cannot rot. The rules it follows are design
+parks in `agent.wait` until the operator answers on the deck. It needs the
+TCP door on (`[api] tcp = true`), and goes with the door in the next release;
+the gate switches the door on for its own daemon and runs it end to end on
+every run until then, so it cannot rot. The rules it follows are design
 §4.15: pass the same `client:{name}` on every plain-HTTP call so they share one
 logical session (a different name under the same token is a different session,
 so registering the same `key` from it is `-32004 conflict{owner}`, and
@@ -235,15 +283,20 @@ or WS the connection *is* the session, the heartbeat is implicit, and `push`
 delivers `agent.answer`/`agent.order` as notifications. Design §4.14's
 one-liner, after a one-time `export DECKD_TOKEN=$(deckd token create --name
 build-bot --scopes observe,voice)` kept by the user (nothing is written to
-disk by the daemon), is the smallest client there is:
+disk by the daemon), is the smallest client there is — while the TCP door is
+on, which it is not by default (`[api] tcp = true` and a restart, or
+**Service → Local API**), and only until the next release, which deletes the
+door, the tokens and the public `voice.*` methods this one calls:
 
 ```sh
+# Needs the TCP door: [api] tcp = true (it is off by default), then restart deckd.
 curl -s -H "Authorization: Bearer $DECKD_TOKEN" -d '{"jsonrpc":"2.0","id":1,"method":"voice.say","params":{"text":"build finished","lane":"chatter"}}' http://127.0.0.1:47201/v1/rpc
 ```
 
-(In the historical week-3 slice, that call reaches its rate limit and its guard and then answers
-`-32013 degraded{reason:"voice_unavailable"}`: the envelope is real, the
-engine is week 4.)
+With the door off nothing listens on 47201 and `curl` cannot connect. (In
+the historical week-3 slice, that call reaches its rate limit and its guard
+and then answers `-32013 degraded{reason:"voice_unavailable"}`: the envelope
+is real, the engine is week 4.)
 
 ## The hooks
 
@@ -256,7 +309,9 @@ other, one internal session each, speaking §4.6.
 **One helper, two doors onto one handler.** Both CLIs run `deckd hook
 <claude|codex>`, which reads the event on stdin and calls the JSON-RPC method
 `hooks.<cli>` over the socket; `POST /v1/hooks/<cli>` with a `hooks:ingest`
-bearer is the same handler for a third party's own http hooks. A report-only
+bearer, on the TCP door while it is on, is the same handler for a third
+party's own http hooks and for the pre-plugin Claude hooks that keep the
+door open until they are migrated. A report-only
 event (`UserPromptSubmit`, `Stop`, `Notification`, `PostToolUse`,
 `SessionEnd`) is answered **before** the work is done — those hooks are
 synchronous with a 2 s budget, so the operator's prompt never waits on the
@@ -516,7 +571,9 @@ The gate prints one line per step, the test count per crate, the ratchet
 the parity diff: `deckd device dry-run` must be byte-identical to
 `tools/deck-sim.py --dry-run` for the same lines. Its `api` step then starts
 a real `deckd run --foreground --no-device` on a private data dir with
-`[api] port = 0` and drives both doors the way a user would: `/v1/info`
+`[api] port = 0` and `tcp = true` (the door is off by default, and this step
+exercises it until it is deleted) and drives both doors the way a user
+would: `/v1/info`
 without a token, `/v1/rpc` without a token (401), `deckd token create`, a
 `session.ping` with the token, a foreign `Origin` (403) and a foreign `Host`
 (400), `deckd ctl session.ping` over the socket, a token minted while the
@@ -590,12 +647,12 @@ deckd device dry-run --sid 314159 --hm 19:42 --flood 3 --send '{"m":"set","k":"b
 | `status [--json] [--live]` | `status.json` as the daemon last wrote it; `--live` adds `service.info` over the socket. | 0; 2 when `--live` cannot reach the daemon. |
 | `ctl [--scopes a,b] [--client N] [--timeout S] <method> [json]` | One API method over the UDS door; the result JSON is printed compact on stdout, a JSON-RPC error object on stderr. | 0 ok; 1 JSON-RPC error; 2 daemon unreachable; 3 `-32002 {need:"trusted"}` (the answer has to come from the deck or the app). |
 | `events [--kinds a,b] [--since REV] [--content] [--snapshot]` | One JSON line per event until Ctrl-C. `--kinds` are subscription globs (default `*`), `--since` replays the ring first, `--content` asks `observe:content`, `--snapshot` prints the snapshot first. Reconnects show as `{"type":"disconnected"}` / `{"type":"reconnected",…}` and a `{"type":"resync","rev"}` line means "call `state.get`". | 0; 2 when the daemon is unreachable at the start. |
-| `token create\|list\|revoke\|rotate` | Bearer tokens for the TCP door, in `tokens.toml` (mode 0600, blake3 hashes). `create` and `rotate` print the plaintext once, on stdout, and nothing else — it is never stored or logged. Edits the file directly, no daemon needed. | 0; 1 on a duplicate name, an unknown scope, a bad expiry or an unknown token. |
+| `token create\|list\|revoke\|rotate` | Bearer tokens for the TCP door, in `tokens.toml` (mode 0600, blake3 hashes); they open nothing while the door is off, its default, and go with it in the next release. `create` and `rotate` print the plaintext once, on stdout, and nothing else — it is never stored or logged. Edits the file directly, no daemon needed. | 0; 1 on a duplicate name, an unknown scope, a bad expiry or an unknown token. |
 | `integrations status [--json] [target]` \| `install <target> [--trust] [--dry-run]` \| `uninstall <target>` \| `repair <target>` | Manages `claude`, `codex`, and the macOS `codex-desktop` launcher (`gemini` and `claude-desktop` are v1.1). No daemon has to run; `status` writes nothing at all, `--dry-run` prints "What this writes". Every replaced file is backed up by rename first. | 0; 1 on a refusal (a translocated binary, a binary with no `deckd hook`, a plan that would void the file), which names what it refused and why. |
 | `hook <claude\|codex\|codex-notify\|claude-statusline\|gemini> [-- <cmd…>]` | What a CLI runs, not what a person runs: reads the event on stdin (or, for `codex-notify`, the last argument), adds the terminal environment and the CLI pid its parent walk found, and prints the daemon's answer. | **Always 0.** A non-zero exit from a hook blocks the CLI's tool call, so every failure prints `{}`, exits 0 and says one line on stderr. The `claude-statusline` passthrough is the exception that reports the user's own command's failure verbatim. |
 | `device flood N \| sync \| metrics` | `ctl` calls (`admin`) against the running service. | As `ctl`. |
 | `device dry-run …` | Frames the demo session offline, in `tools/deck-sim.py --dry-run`'s layout. No daemon, no HID. | 0. |
-| `doctor [--json]` | Data dir, `config.toml`, `state.json`, the lock, `status.json`, the socket (path length and a `session.ping`), the TCP door (`/v1/info` is ours, not a squatter), `tokens.toml` mode, the deck, the LaunchAgents. | 0 when every check passes, 1 on any finding. |
+| `doctor [--json]` | Data dir, `config.toml`, `state.json`, the lock, `status.json`, the socket (path length and a `session.ping`), the TCP door (`/v1/info` is ours, not a squatter; a door that is off, by default or by `[api] tcp = false`, is said to be off, not degraded), `tokens.toml` mode, the deck, the LaunchAgents. | 0 when every check passes, 1 on any finding. |
 
 `--data-dir` and `DECKD_DATA_DIR` are global: they move the socket, the
 tokens, the port file and everything else, and every test or spike against a
@@ -618,16 +675,18 @@ stay untouched. Keep that path short — the socket path has a 104-byte limit.
 
 `config.toml` is optional and parsed in full with the design's §9 defaults.
 Acted on today: `[device]` (`pace_ms`, floor 8; `hello_s`; `clock`), `[api]`
-(`port`, `allowed_origins`, `uds_default_scope`, `uds_max_scope`,
+(`port`, `tcp`, `allowed_origins`, `uds_default_scope`, `uds_max_scope`,
 `mailbox_ttl_s`), `[trust]` (`require_trusted_for_allow`, `gui_requirement`,
 `dev_requirement`), `[log] level`, `[privacy] log_content`, `[cards]
 ready_ttl_s` and the `[agents]` pins, `grace_s` and `evict`. Line
 content is never logged unless `log_content = true`. The file is watched: a
 change is re-read after a 300 ms debounce and applied to everything but
-`[api] port` and `[device]`, which are logged "restart needed"; a file that
+`[api] port`, `[api] tcp` and `[device]`, which are logged "restart needed"; a file that
 does not parse or does not validate is kept out (the last good config stays
 in force, the bad one is copied to `config.toml.invalid` and an `error` event
-names the line). `deckd ctl config.get` prints the effective config and
+names the line). `deckd ctl config.get` prints the effective config (`api.tcp`
+always a bool: the file's value, or for a key left out what `deckd run`
+decided at start) and
 `config.reload` forces the re-read; `tokens.toml` is reloaded by the same
 watcher, so `deckd token create` works while the daemon runs.
 

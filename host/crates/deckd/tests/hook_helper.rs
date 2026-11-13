@@ -92,7 +92,9 @@ fn fake_cli(dir: &Path, name: &str) -> PathBuf {
     path
 }
 
-/// Read a pid a spawned shell wrote, or fail after five seconds.
+/// Read a pid a spawned shell wrote, or fail after five seconds. Only the
+/// macOS parent-walk row reads one.
+#[cfg(target_os = "macos")]
 fn pid_in(file: &Path) -> u32 {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     loop {

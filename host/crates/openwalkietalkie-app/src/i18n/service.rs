@@ -76,7 +76,14 @@ pub const STRINGS: &[Entry] = &[
     ),
     ("Check", "检查更新", "檢查", "確認"),
     ("Deck firmware {0}", "设备固件 {0}", "裝置韌體 {0}", "デバイスのファームウェア {0}"),
-    ("By cable.", "通过数据线更新。", "透過連接線更新。", "ケーブル接続で更新します。"),
+    // The sheet's own line, left out of the redesign until the service
+    // asked for the press.
+    (
+        "By cable, after a press on the deck.",
+        "通过数据线更新，需先在设备上按键确认。",
+        "透過連接線更新，需先在裝置上按鍵確認。",
+        "ケーブル接続で、本体のボタンを押して開始。",
+    ),
     ("Review…", "查看…", "檢視…", "内容を確認…"),
     // The local API: its row, its switch's questions, and its page.
     ("Local API", "本地 API", "本機 API", "ローカル API"),
@@ -107,6 +114,16 @@ pub const STRINGS: &[Entry] = &[
     ),
     ("The service restarts.", "服务将重新启动。", "服務將重新啟動。", "サービスが再起動します。"),
     ("Turn On", "开启", "開啟", "オンにする"),
+    // The question to turn it off, while Claude Code's hooks from before the
+    // plugin still post to it; its button is the shipped "Repair". The
+    // shipped words for those hooks (the Integrations page's Repair hint):
+    // 插件化之前的钩子, 外掛化之前的掛鉤, 従来のフック.
+    (
+        "Claude Code's older hooks still use the local API. Repair them first, or Claude Code's questions stay in the terminal.",
+        "Claude Code 插件化之前的钩子仍在使用本地 API。请先“修复”，否则 Claude Code 的问题只会留在终端中。",
+        "Claude Code 外掛化之前的掛鉤仍在使用本機 API。請先「修復」，否則 Claude Code 的問題只會留在終端機中。",
+        "Claude Code の従来のフックがまだローカル API を使っています。先に「修復」してください。修復しないと、Claude Code の質問はターミナルにしか表示されません。",
+    ),
     // Check my setup, and the support file.
     ("Check my setup", "检查安装状态", "檢查安裝狀態", "セットアップを確認"),
     ("The deck is linked", "设备已连接", "裝置已連線", "デバイスは接続済み"),
@@ -348,6 +365,37 @@ pub const STRINGS: &[Entry] = &[
         "已检查固件版本，安装前需要你确认。",
         "已檢查韌體版本，安裝前需要你確認。",
         "ファームウェアを確認しました。インストールには承認が必要です。",
+    ),
+    // The install waits for ENTER on a linked deck, and comes back with
+    // this when the deck did not give it.
+    (
+        "Press ENTER on the deck to start the install.",
+        "请在设备上按 ENTER 开始安装。",
+        "請在裝置上按 ENTER 開始安裝。",
+        "デバイスで ENTER を押して、インストールを開始してください。",
+    ),
+    (
+        "Not confirmed on the deck. Nothing was installed.",
+        "未在设备上确认，未安装任何内容。",
+        "未在裝置上確認，未安裝任何內容。",
+        "デバイスで承認されませんでした。何もインストールしていません。",
+    ),
+    // After ENTER, while someone is still talking (the install pauses the
+    // deck's link, so it waits for the voice to go quiet).
+    (
+        "Starting the install when the deck stops talking…",
+        "设备上的语音结束后将开始安装…",
+        "裝置上的語音結束後將開始安裝…",
+        "デバイスの音声が終わったら、インストールを開始します…",
+    ),
+    // Why an install is refused for a deck that is not in recovery and has
+    // not linked: it cannot be asked for the press yet (`firmware.install`'s
+    // reason, shown as it comes back).
+    (
+        "Wait for the deck to link, then install again.",
+        "请等待设备连接，然后重新安装。",
+        "請等待裝置連線，然後重新安裝。",
+        "デバイスが接続されるのを待ってから、もう一度インストールしてください。",
     ),
     (
         "Downloading and verifying firmware…",

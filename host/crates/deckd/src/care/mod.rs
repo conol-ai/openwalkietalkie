@@ -6,7 +6,8 @@
 //!   mute a paused source's sessions.
 //! - [`test`]: `care.test.*`, the test agent: a question or a voice card the
 //!   daemon puts on the deck from its own care session, a spoken sample, and
-//!   how the last of each went.
+//!   how the last of each went; and, from the same session, the card that
+//!   asks for a press on the deck before a firmware install.
 //! - [`checks`]: `care.checks`, the Service page's setup checks.
 //! - [`footprint`]: `care.footprint`, what the app has put on this Mac, item
 //!   by item, and `care.cache.clear`.
@@ -62,6 +63,10 @@ pub struct Context {
     pub config: Arc<Config>,
     /// `--no-device`: nothing may enumerate HID for this service.
     pub no_device: bool,
+    /// The TCP door as this service resolves `[api] tcp` (`Core::tcp_door`),
+    /// so the doctor's `tcp` row can tell a door that is off from one that
+    /// is degraded without reading Claude's settings again.
+    pub tcp: crate::config::TcpDoor,
     /// The Codex app-server client is connected now (`crate::codexd`).
     pub codex_connected: bool,
     /// A firmware check or install is running (`firmware.status`).
@@ -215,6 +220,7 @@ pub(crate) mod testkit {
             executable: Some(dir.path().join("bin/deckd")),
             config: Arc::new(Config::default()),
             no_device: false,
+            tcp: Config::default().api.tcp_door(|| false),
             codex_connected: true,
             firmware_busy: false,
         }

@@ -32,6 +32,15 @@
 //! (`care::sources`), so neither "Pause integrations" nor a source's switch
 //! mutes it: the test still reaches the deck while every source is paused,
 //! which is when the owner most needs to know that the deck still answers.
+//!
+//! The same session asks the deck before a firmware install
+//! (`Core::install_after_press`): an agent named for the deck's firmware,
+//! in its language ([`Words::firmware`]), asks "Install firmware {version}?
+//! Press ENTER." with one choice, Install, beside whatever test is on the
+//! deck. Only ENTER on the deck confirms it ([`Press::Confirmed`]): a
+//! dismissal, its minute, words said to it or an answer from anywhere but
+//! the deck end it with nothing installed. The agent leaves the deck either
+//! way.
 use deck_model::{
     AdapterKind, AgentId, AgentRegister, AnswerCap, ApiError, Caps, CardId, CardKind, CardSet,
     Choice, Deliver, Event, EventKind, Kind, OrderCap, Origin, OriginKind, Principal, SessionId,
@@ -68,7 +77,7 @@ pub enum Language {
 }
 
 /// What the service says on the deck, in one language: the four rows of
-/// the string sheet `deckd.tsv`.
+/// the string sheet `deckd.tsv`, then the install's three.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Words {
     /// The test question.
@@ -79,6 +88,12 @@ pub struct Words {
     pub voice: &'static str,
     /// The spoken sample.
     pub sample: &'static str,
+    /// The question before a firmware install, `{0}` its version.
+    pub install: &'static str,
+    /// Its one choice.
+    pub install_choice: &'static str,
+    /// The name it is asked under: the deck's own word for its firmware.
+    pub firmware: &'static str,
 }
 
 impl Language {
@@ -109,24 +124,36 @@ impl Language {
                 ok: "OK",
                 voice: "Hold PTT and say hello.",
                 sample: "This is OpenWalkieTalkie speaking.",
+                install: "Install firmware {0}? Press ENTER.",
+                install_choice: "Install",
+                firmware: "Firmware",
             },
             Language::SimplifiedChinese => Words {
                 question: "来自 Mac 的测试提问。请按 ENTER。",
                 ok: "好",
                 voice: "按住 PTT 并说声你好。",
                 sample: "这里是 OpenWalkieTalkie。",
+                install: "安装固件 {0}？请按 ENTER。",
+                install_choice: "安装",
+                firmware: "固件",
             },
             Language::TraditionalChinese => Words {
                 question: "來自 Mac 的測試提問。請按 ENTER。",
                 ok: "好",
                 voice: "按住 PTT 並說聲你好。",
                 sample: "這裡是 OpenWalkieTalkie。",
+                install: "安裝韌體 {0}？請按 ENTER。",
+                install_choice: "安裝",
+                firmware: "韌體",
             },
             Language::Japanese => Words {
                 question: "Mac からのテスト質問です。ENTER を押してください。",
                 ok: "OK",
                 voice: "PTT を押しながら「こんにちは」と話してください。",
                 sample: "こちらは OpenWalkieTalkie です。",
+                install: "ファームウェア {0} をインストールしますか？ENTER を押してください。",
+                install_choice: "インストール",
+                firmware: "ファームウェア",
             },
         }
     }
@@ -197,7 +224,28 @@ enum Ending {
     Gone,
 }
 
-/// What the core keeps about the test agent between calls.
+/// How the install's card ended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Press {
+    /// ENTER on the deck: its one choice, chosen there.
+    Confirmed,
+    /// Anything else: dismissed on the deck, its minute over, words said
+    /// to it, an answer from anywhere but the deck, or its agent gone.
+    NotConfirmed,
+}
+
+/// What one step's events settled for the care session's cards.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Settled {
+    /// The agents to take off the deck: their card is over and they are
+    /// still registered.
+    pub release: Vec<AgentId>,
+    /// How the install's card ended, when it did.
+    pub install: Option<Press>,
+}
+
+/// What the core keeps about the care session's agents between calls: the
+/// test agent and the install's.
 #[derive(Debug, Default)]
 pub struct TestAgent {
     /// The care session, once opened. It never closes.
@@ -207,6 +255,11 @@ pub struct TestAgent {
     pending: Option<Pending>,
     question: Option<QuestionTest>,
     voice: Option<VoiceTest>,
+    /// The agent that asks before a firmware install, while it is
+    /// registered.
+    installer: Option<AgentId>,
+    /// Its card, while it waits for the press.
+    install_card: Option<CardId>,
 }
 
 impl TestAgent {
@@ -226,6 +279,23 @@ impl TestAgent {
 
     pub fn set_agent(&mut self, agent: AgentId) {
         self.agent = Some(agent);
+    }
+
+    /// The agent that asks before a firmware install, while it is
+    /// registered.
+    #[must_use]
+    pub fn installer(&self) -> Option<&AgentId> {
+        self.installer.as_ref()
+    }
+
+    pub fn set_installer(&mut self, agent: AgentId) {
+        self.installer = Some(agent);
+    }
+
+    /// The install's `card` is on its way to the deck: its answer settles
+    /// the install ([`TestAgent::observe`]).
+    pub fn install_asked(&mut self, card: CardId) {
+        self.install_card = Some(card);
     }
 
     /// `care.test.status`: `{question, voice}`, each `null` before its first
@@ -282,13 +352,24 @@ impl TestAgent {
         }
     }
 
+    /// What one step's events settled for the cards of the care session:
+    /// the test on the deck ([`TestAgent::observe_test`]) and the install's
+    /// card ([`TestAgent::observe_install`]), each with the agent to take
+    /// off the deck once its card is over.
+    pub fn observe(&mut self, events: &[Event], now: Instant) -> Settled {
+        let mut settled = Settled::default();
+        settled.release.extend(self.observe_test(events, now));
+        self.observe_install(events, &mut settled);
+        settled
+    }
+
     /// What one step's events mean for the test on the deck: its card
     /// answered (a choice, or words said to it), the words of a press
     /// addressed to the agent during a voice test, or the card gone
     /// unanswered (`card.expired`, a clear, the agent removed). Returns the
     /// agent to take off the deck when a test ended and its agent is still
     /// registered.
-    pub fn observe(&mut self, events: &[Event], now: Instant) -> Option<AgentId> {
+    fn observe_test(&mut self, events: &[Event], now: Instant) -> Option<AgentId> {
         let mut release = None;
         for event in events {
             let Some(agent) = self.agent.clone() else {
@@ -323,6 +404,45 @@ impl TestAgent {
             release = Some(agent);
         }
         release
+    }
+
+    /// What one step's events mean for the install's card: ENTER on the
+    /// deck confirms it ([`pressed_on_deck`]); whatever else ends it — a
+    /// dismissal (`card.snoozed`), its minute (`card.expired`), an answer
+    /// in words or from anywhere but the deck, a clear, its agent removed —
+    /// does not.
+    fn observe_install(&mut self, events: &[Event], settled: &mut Settled) {
+        for event in events {
+            let Some(agent) = self.installer.clone() else {
+                return;
+            };
+            if crate::core::event_agent(event).as_ref() != Some(&agent) {
+                continue;
+            }
+            if event.kind == EventKind::AgentRemoved {
+                // Nothing left to release, and a card still on it is over.
+                self.installer = None;
+                settled.release.retain(|gone| *gone != agent);
+                if self.install_card.take().is_some() {
+                    settled.install = Some(Press::NotConfirmed);
+                }
+                continue;
+            }
+            if self.install_card.is_none() || card_of(event) != self.install_card {
+                continue;
+            }
+            let press = match event.kind {
+                EventKind::CardAnswered if pressed_on_deck(event) => Press::Confirmed,
+                EventKind::CardAnswered
+                | EventKind::CardSnoozed
+                | EventKind::CardExpired
+                | EventKind::CardCleared => Press::NotConfirmed,
+                _ => continue,
+            };
+            self.install_card = None;
+            settled.install = Some(press);
+            settled.release.push(agent);
+        }
     }
 
     /// The test on the deck is over, the way `ending` says.
@@ -365,6 +485,16 @@ fn card_of(event: &Event) -> Option<CardId> {
     serde_json::from_value(event.data.get("card")?.clone()).ok()
 }
 
+/// ENTER on the deck: the card's one choice, chosen on the deck itself
+/// (`device.answer`). An answer anyone else gives — `op.answer` from the
+/// app or a script — or words said to the card confirm nothing: the press
+/// is the point.
+fn pressed_on_deck(event: &Event) -> bool {
+    event.principal == Principal::Device
+        && event.data.get("source").and_then(serde_json::Value::as_str) == Some("deck")
+        && event.data.get("choice").and_then(serde_json::Value::as_u64) == Some(0)
+}
+
 /// The words of an answer or a transcript: what was said, else the chosen
 /// label.
 fn words_of(event: &Event) -> Option<String> {
@@ -389,9 +519,21 @@ pub fn no_params(params: &serde_json::Value) -> Result<(), ApiError> {
 /// once, and anything else left for the agent goes with it.
 #[must_use]
 pub fn register() -> AgentRegister {
+    care_agent(AGENT)
+}
+
+/// The agent that asks before a firmware install: the test agent's kind
+/// and caps under the deck's own word for its firmware, in `language`.
+#[must_use]
+pub fn register_installer(language: Language) -> AgentRegister {
+    care_agent(language.words().firmware)
+}
+
+/// An agent of the care session named `name` (see [`register`]).
+fn care_agent(name: &str) -> AgentRegister {
     AgentRegister {
         kind: Kind::Other,
-        name: AGENT.into(),
+        name: name.into(),
         key: None,
         cwd: None,
         pid: None,
@@ -416,24 +558,39 @@ pub fn register() -> AgentRegister {
 #[must_use]
 pub fn card(test: Test, agent: &AgentId, language: Language) -> CardSet {
     let words = language.words();
-    let (text, choices, rec, free_text) = match test {
-        Test::Question => (words.question, vec![words.ok], Some(0), false),
-        Test::Voice => (words.voice, Vec::new(), None, true),
-    };
+    match test {
+        Test::Question => question(agent, words.question.into(), Some(words.ok)),
+        Test::Voice => question(agent, words.voice.into(), None),
+    }
+}
+
+/// The install's card for `agent`, in `language`: "Install firmware
+/// {version}? Press ENTER." with one choice, Install, gone after
+/// [`ANSWER_WITHIN_S`] as a test's is.
+#[must_use]
+pub fn install_card(agent: &AgentId, version: &str, language: Language) -> CardSet {
+    let words = language.words();
+    let text = words.install.replace("{0}", version);
+    question(agent, text, Some(words.install_choice))
+}
+
+/// A question of the care session: with one `choice`, recommended, which
+/// ENTER picks; or with none, answered by what a press says to it.
+fn question(agent: &AgentId, text: String, choice: Option<&str>) -> CardSet {
     CardSet {
         agent: agent.clone(),
         id: None,
         kind: CardKind::Q,
-        text: text.into(),
-        choices: choices
+        text,
+        choices: choice
             .into_iter()
             .map(|label| Choice {
                 label: label.into(),
                 detail: None,
             })
             .collect(),
-        rec,
-        free_text,
+        rec: choice.map(|_| 0),
+        free_text: choice.is_none(),
         deliver: Deliver::Poll,
         timeout_s: Some(ANSWER_WITHIN_S),
         origin: Origin {
@@ -466,13 +623,14 @@ mod tests {
     use crate::core::handle::{ClientInfo, CoreMsg, OpenSession, SessionKind};
     use crate::core::testkit::{self, detached_core};
     use crate::core::Core;
+    use crate::firmware;
     use crossbeam_channel::Receiver;
     use deck_model::{
-        Agent, AudioCmd, DeviceLine, DeviceOp, DeviceSet, HostLine, Key, LinkEvent, PttCtx,
-        Request, Scope, SetKey, Slot, VoiceIn,
+        Agent, AudioCmd, Command, DeviceLine, DeviceOp, DeviceSet, HostLine, Key, LinkEvent,
+        OpAnswer, PttCtx, Request, Scope, SetKey, Slot, UtterancePhase, VoiceIn,
     };
     use serde_json::{json, Value};
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
     const METHODS: [&str; 4] = [
@@ -1087,6 +1245,500 @@ mod tests {
                 assert_eq!(reply[test][key], fixture[test][key], "{test}.{key}");
             }
         }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    // ---- the press before a firmware install ----------------------------------
+
+    /// What the not-confirmed install says.
+    const NOT_CONFIRMED: &str = "Not confirmed on the deck. Nothing was installed.";
+
+    /// What an install the deck confirmed says while the voice is not yet
+    /// quiet.
+    const STARTS_WHEN_QUIET: &str = "Starting the install when the deck stops talking…";
+
+    /// The core's updater has checked: `deck` on the cable and the test
+    /// release (0.2.0, Rev A) found. What it starts is listed, never run.
+    fn checked(c: &mut Core, deck: firmware::Device) -> Arc<Mutex<Vec<firmware::Install>>> {
+        let (updater, started) = firmware::testkit::checked(deck);
+        c.firmware = updater;
+        started
+    }
+
+    /// `firmware.install` of the test release on the test deck, as the app
+    /// sends it.
+    fn install(c: &mut Core, now: Instant) -> Result<Value, ApiError> {
+        let params = json!({
+            "board": "hw-a", "serial": "USB-A", "version": "0.2.0",
+            "allow_bootloader_update": false,
+        });
+        let ctx = testkit::ctx(99, &[Scope::Admin]);
+        c.call(ctx, "firmware.install", params, now).result
+    }
+
+    /// `firmware.status`, as the app reads it.
+    fn firmware_status(c: &mut Core, now: Instant) -> Value {
+        let ctx = testkit::ctx(99, &[Scope::Observe]);
+        let status = c.call(ctx, "firmware.status", json!({}), now).result;
+        status.expect("firmware.status answers")
+    }
+
+    /// The agent that asks before an install, in any of the four
+    /// languages, while it is registered.
+    fn installer(c: &Core) -> Option<Agent> {
+        let names = [
+            Language::English,
+            Language::SimplifiedChinese,
+            Language::TraditionalChinese,
+            Language::Japanese,
+        ]
+        .map(|language| language.words().firmware);
+        let agents = &c.store.snapshot().agents;
+        let asking = agents.values().find(|a| names.contains(&a.name.as_str()));
+        asking.cloned()
+    }
+
+    /// The owner's PTT on `slot`, talking: down (`1`) or up (`0`).
+    fn talk(c: &mut Core, slot: Slot, act: u8, now: Instant) {
+        let edge = DeviceLine::Ptt {
+            act,
+            slot: slot.0,
+            ctx: PttCtx::Talk,
+            card: None,
+            abort: false,
+            press: None,
+        };
+        c.on_device_line(edge, now);
+    }
+
+    /// A row of the deck other than `slot`'s.
+    fn other_than(slot: Slot) -> Slot {
+        Slot(if slot.0 == 1 { 2 } else { 1 })
+    }
+
+    /// The engine says the sentence being read out has ended, as the audio
+    /// side reports it (a unit-test core has no engine to).
+    fn said(c: &mut Core, now: Instant) {
+        let speaking = c.store.snapshot().voice.speaking.clone();
+        let utterance = speaking.expect("something is being said").utterance;
+        let ended = VoiceIn::Utterance {
+            utterance,
+            phase: UtterancePhase::Ended,
+        };
+        c.step(Command::Voice(ended), now);
+    }
+
+    /// On a linked deck an install waits for ENTER on it. The reply is
+    /// `confirming` at once; the deck asks "Install firmware 0.2.0? Press
+    /// ENTER." with one choice, Install, from an agent named for its
+    /// firmware, and reads the card out as it reads any question; nothing
+    /// starts before the press. ENTER starts the install the app asked for,
+    /// and the agent leaves the deck.
+    #[test]
+    fn on_a_linked_deck_an_install_waits_for_enter_and_starts_with_it() {
+        let (mut c, ops, _lines, _debug, dir) = detached_core("care-install-confirmed");
+        let started = checked(&mut c, firmware::testkit::deck());
+        let t0 = Instant::now();
+        link(&mut c, None, t0);
+        let _ = ops.try_iter().count();
+        let reply = install(&mut c, t0).unwrap();
+        assert_eq!(reply["phase"], "confirming", "{reply}");
+        assert_eq!(
+            reply["message"],
+            "Press ENTER on the deck to start the install."
+        );
+        assert_eq!(reply["available"], true, "{reply}");
+        let (slot, card, text, choices) = card_sent(&ops).expect("the card went to the deck");
+        assert_eq!(text, "Install firmware 0.2.0? Press ENTER.");
+        assert_eq!(choices, ["Install"]);
+        let agent = installer(&c).expect("the agent is registered");
+        assert_eq!(
+            (agent.name.as_str(), agent.kind, &agent.owner.principal),
+            ("Firmware", Kind::Other, &principal())
+        );
+        assert_eq!(agent.slot, Some(slot));
+        let reading = c.store.snapshot().voice.speaking.clone().unwrap();
+        assert_eq!(
+            (reading.lane.as_str(), reading.agent),
+            ("question", Some(agent.id))
+        );
+        assert!(
+            started.lock().unwrap().is_empty(),
+            "nothing before the press"
+        );
+        assert_eq!(firmware_status(&mut c, t0)["phase"], "confirming");
+        assert!(test_agent(&c).is_none(), "no test is involved");
+
+        said(&mut c, after(t0, 2_000));
+        enter(&mut c, slot, card, after(t0, 2_500));
+        assert_eq!(*started.lock().unwrap(), [firmware::testkit::install()]);
+        assert_eq!(firmware_status(&mut c, t0)["phase"], "downloading");
+        assert!(installer(&c).is_none(), "the agent left the deck");
+        let gone = DeviceOp::Put(Key::AgentGone(slot), HostLine::AgentGone { slot: slot.0 });
+        assert!(ops.try_iter().any(|op| op == gone), "its slot was cleared");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// Every way the card ends but ENTER on the deck leaves nothing
+    /// installed and the updater idle, saying so: CANCEL on the deck, its
+    /// minute over, words said to it, or an answer from the app — even a
+    /// trusted one: the press is the deck's alone. The agent leaves the
+    /// deck each time.
+    #[test]
+    fn an_install_not_confirmed_on_the_deck_is_idle_with_the_reason() {
+        type End = fn(&mut Core, Slot, AgentId, u16, Instant);
+        let endings: [(&str, End); 4] = [
+            ("dismissed", |c, slot, _, card, t0| {
+                let cancel = DeviceLine::Snooze { slot: slot.0, card };
+                c.on_device_line(cancel, after(t0, 3_000));
+            }),
+            ("expired", |c, _, _, _, t0| {
+                c.tick(after(t0, 59_000));
+                assert_eq!(firmware_status(c, t0)["phase"], "confirming", "not yet");
+                c.tick(after(t0, 60_000));
+            }),
+            ("said", |c, slot, _, card, t0| {
+                press(c, slot, Some(card), "install it", after(t0, 3_000));
+            }),
+            ("answered by the app", |c, _, agent, card, t0| {
+                let answer = Request::OpAnswer(OpAnswer {
+                    agent,
+                    card: CardId(card),
+                    choice: Some(0),
+                    text: None,
+                });
+                let app = Principal::Uid(501);
+                c.api_call(app, SessionId(42), true, answer, after(t0, 3_000))
+                    .unwrap();
+            }),
+        ];
+        for (how, end) in endings {
+            let (mut c, ops, _lines, _debug, dir) = detached_core("care-install-unconfirmed");
+            let started = checked(&mut c, firmware::testkit::deck());
+            let t0 = Instant::now();
+            link(&mut c, None, t0);
+            install(&mut c, t0).unwrap();
+            let (slot, card, _, _) = card_sent(&ops).unwrap();
+            let agent = installer(&c).unwrap().id;
+            end(&mut c, slot, agent, card, t0);
+            let status = firmware_status(&mut c, t0);
+            assert_eq!(status["phase"], "idle", "{how}: {status}");
+            assert_eq!(status["message"], NOT_CONFIRMED, "{how}");
+            assert!(status["error"].is_null(), "{how}: {status}");
+            assert_eq!(status["available"], true, "{how}: it can be asked again");
+            assert!(
+                started.lock().unwrap().is_empty(),
+                "{how}: nothing installed"
+            );
+            assert!(installer(&c).is_none(), "{how}: the agent left the deck");
+            std::fs::remove_dir_all(dir).unwrap();
+        }
+    }
+
+    /// A second install while one waits for the deck puts no second card
+    /// there: refused while the card is read out, as any install is while
+    /// the deck talks, then as busy; a check waits too, and one press
+    /// starts one install.
+    #[test]
+    fn a_second_install_while_one_waits_puts_no_second_card_on_the_deck() {
+        let (mut c, ops, _lines, _debug, dir) = detached_core("care-install-again");
+        let started = checked(&mut c, firmware::testkit::deck());
+        let t0 = Instant::now();
+        link(&mut c, None, t0);
+        install(&mut c, t0).unwrap();
+        let (slot, card, _, _) = card_sent(&ops).unwrap();
+
+        let reading = install(&mut c, after(t0, 500)).unwrap_err();
+        assert_eq!(reading.data["why"], firmware::VOICE_BUSY);
+        let t1 = after(t0, 1_000);
+        said(&mut c, t1);
+        let again = install(&mut c, t1).unwrap_err();
+        assert_eq!(again.code, ApiError::INVALID);
+        assert_eq!(again.data["why"], "An update operation is already running.");
+        let ctx = testkit::ctx(99, &[Scope::Admin]);
+        let check = c.call(ctx, "firmware.check", json!({"force": true}), t1);
+        assert_eq!(check.result.unwrap()["phase"], "confirming");
+        let cards = ops
+            .try_iter()
+            .filter(|op| matches!(op, DeviceOp::Put(Key::Card(..), _)))
+            .count();
+        assert_eq!(cards, 0, "no second card");
+        let agents = &c.store.snapshot().agents;
+        let names: Vec<&str> = agents.values().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, ["Firmware"], "one agent asks");
+
+        enter(&mut c, slot, card, after(t1, 1_000));
+        assert_eq!(started.lock().unwrap().len(), 1, "one press, one install");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// Only a deck in recovery installs at once, as it always has, and
+    /// nothing is put on the deck: it cannot show the card, whether it is
+    /// not linked at all or opened by the hid thread but never saying
+    /// hello. The app asks the owner for the board of a deck in recovery,
+    /// and the install answers what it always answered.
+    #[test]
+    fn a_deck_in_recovery_installs_at_once_as_before() {
+        type Session = fn(&mut Core, Instant);
+        let cases: [(&str, Session); 2] = [
+            ("no link", |_, _| {}),
+            ("no hello", |c, t0| {
+                c.on_link(LinkEvent::Linked, t0);
+            }),
+        ];
+        for (how, session) in cases {
+            let (mut c, ops, _lines, _debug, dir) = detached_core("care-install-recovery");
+            let started = checked(&mut c, firmware::testkit::deck_in_recovery());
+            let t0 = Instant::now();
+            session(&mut c, t0);
+            let _ = ops.try_iter().count();
+            let reply = install(&mut c, t0).unwrap();
+            assert_eq!(reply["phase"], "downloading", "{how}: {reply}");
+            let installs = started.lock().unwrap().clone();
+            assert_eq!(installs, [firmware::testkit::install()], "{how}");
+            assert!(card_sent(&ops).is_none(), "{how}: no card");
+            assert!(installer(&c).is_none(), "{how}");
+            std::fs::remove_dir_all(dir).unwrap();
+        }
+    }
+
+    /// A deck that runs its firmware — the last check did not find it in
+    /// recovery — but has no session with the service cannot be asked, and
+    /// nothing installs without the press: not linked, opened by the hid
+    /// thread but never saying hello, or linked and gone again. The install
+    /// is refused with the reason to try again once the deck links; nothing
+    /// starts, nothing is put on the deck, and the release can be asked for
+    /// again. Once the deck links, the same install asks it.
+    #[test]
+    fn a_deck_out_of_recovery_with_no_session_is_refused_until_it_links() {
+        type Session = fn(&mut Core, Instant);
+        let cases: [(&str, Session); 3] = [
+            ("no link", |_, _| {}),
+            ("no hello", |c, t0| {
+                c.on_link(LinkEvent::Linked, t0);
+            }),
+            ("linked, then gone", |c, t0| {
+                link(c, None, t0);
+                c.on_link(LinkEvent::Down, t0);
+            }),
+        ];
+        for (how, session) in cases {
+            let (mut c, ops, _lines, _debug, dir) = detached_core("care-install-unlinked");
+            let started = checked(&mut c, firmware::testkit::deck());
+            let t0 = Instant::now();
+            session(&mut c, t0);
+            let _ = ops.try_iter().count();
+            let refused = install(&mut c, t0).unwrap_err();
+            assert_eq!(refused.code, ApiError::INVALID, "{how}");
+            assert_eq!(refused.data["why"], firmware::WAIT_FOR_LINK, "{how}");
+            assert!(started.lock().unwrap().is_empty(), "{how}: nothing installed");
+            assert!(card_sent(&ops).is_none(), "{how}: no card");
+            assert!(installer(&c).is_none(), "{how}");
+            let status = firmware_status(&mut c, t0);
+            assert_eq!(status["phase"], "ready", "{how}: {status}");
+            assert_eq!(status["available"], true, "{how}: it can be asked again");
+
+            let t1 = after(t0, 1_000);
+            link(&mut c, None, t1);
+            let _ = ops.try_iter().count();
+            let reply = install(&mut c, t1).unwrap();
+            assert_eq!(reply["phase"], "confirming", "{how}, linked: {reply}");
+            assert!(card_sent(&ops).is_some(), "{how}, linked: the card went");
+            assert!(started.lock().unwrap().is_empty(), "{how}: not before the press");
+            std::fs::remove_dir_all(dir).unwrap();
+        }
+    }
+
+    /// A session proves the deck runs its firmware, since a deck in
+    /// recovery never says hello: a check that found the deck in recovery,
+    /// followed by a session (it restarted into its firmware since), still
+    /// asks the deck. The stale flag never skips the card, and ENTER starts
+    /// the install.
+    #[test]
+    fn a_live_session_asks_the_deck_even_when_the_last_check_found_recovery() {
+        let (mut c, ops, _lines, _debug, dir) = detached_core("care-install-stale-recovery");
+        let started = checked(&mut c, firmware::testkit::deck_in_recovery());
+        let t0 = Instant::now();
+        link(&mut c, None, t0);
+        let _ = ops.try_iter().count();
+        let reply = install(&mut c, t0).unwrap();
+        assert_eq!(reply["phase"], "confirming", "{reply}");
+        let (slot, card, text, choices) = card_sent(&ops).expect("the card went to the deck");
+        assert_eq!(text, "Install firmware 0.2.0? Press ENTER.");
+        assert_eq!(choices, ["Install"]);
+        assert!(
+            started.lock().unwrap().is_empty(),
+            "nothing before the press"
+        );
+        said(&mut c, after(t0, 2_000));
+        enter(&mut c, slot, card, after(t0, 2_500));
+        assert_eq!(*started.lock().unwrap(), [firmware::testkit::install()]);
+        assert_eq!(firmware_status(&mut c, t0)["phase"], "downloading");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// What the install would refuse is refused at once and asks the deck
+    /// nothing: a service that never opens the deck (a unit-test core's
+    /// updater is offline, as `--no-device`'s is), and a board the deck is
+    /// not. The board check, the downgrade refusal and the bootloader's
+    /// consent are the install's own (`firmware::Updater::vet`).
+    #[test]
+    fn an_install_that_would_be_refused_is_refused_at_once_without_a_card() {
+        let (mut c, ops, _lines, _debug, dir) = detached_core("care-install-refused");
+        let t0 = Instant::now();
+        link(&mut c, None, t0);
+        let _ = ops.try_iter().count();
+        let offline = install(&mut c, t0).unwrap_err();
+        assert_eq!(offline.data["why"], firmware::NO_DEVICE);
+        let started = checked(&mut c, firmware::testkit::deck());
+        let rev_b = json!({"board": "hw-b", "serial": "USB-A", "version": "0.2.0"});
+        let ctx = testkit::ctx(99, &[Scope::Admin]);
+        let refused = c
+            .call(ctx, "firmware.install", rev_b, t0)
+            .result
+            .unwrap_err();
+        assert_eq!(
+            refused.data["why"],
+            "This firmware is for a different board."
+        );
+        assert!(card_sent(&ops).is_none(), "no card for a refusal");
+        assert!(installer(&c).is_none());
+        assert_eq!(firmware_status(&mut c, t0)["phase"], "ready");
+        assert!(started.lock().unwrap().is_empty());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// The install's card speaks the deck's language, under the deck's own
+    /// word for its firmware.
+    #[test]
+    fn the_install_card_speaks_the_decks_language() {
+        let cases = [
+            (Some(1), "安装固件 0.2.0？请按 ENTER。", "安装", "固件"),
+            (Some(2), "安裝韌體 0.2.0？請按 ENTER。", "安裝", "韌體"),
+            (
+                Some(3),
+                "ファームウェア 0.2.0 をインストールしますか？ENTER を押してください。",
+                "インストール",
+                "ファームウェア",
+            ),
+            (
+                None,
+                "Install firmware 0.2.0? Press ENTER.",
+                "Install",
+                "Firmware",
+            ),
+        ];
+        for (language, question, choice, name) in cases {
+            let (mut c, ops, _lines, _debug, dir) = detached_core("care-install-language");
+            checked(&mut c, firmware::testkit::deck());
+            let t0 = Instant::now();
+            link(&mut c, language, t0);
+            install(&mut c, t0).unwrap();
+            let (_, _, text, choices) = card_sent(&ops).unwrap();
+            assert_eq!(
+                (text.as_str(), choices),
+                (question, vec![choice.to_string()])
+            );
+            assert_eq!(installer(&c).unwrap().name, name, "{language:?}");
+            std::fs::remove_dir_all(dir).unwrap();
+        }
+    }
+
+    /// The press may come while the deck still reads the card out. The
+    /// install waits for quiet, as `firmware.install` does (it pauses the
+    /// deck's link), and starts on the first tick after the sentence ends.
+    /// Meanwhile the status says the press was taken and what the install
+    /// waits for, not to press ENTER again.
+    #[test]
+    fn a_press_while_the_card_is_read_out_starts_the_install_when_it_ends() {
+        let (mut c, ops, _lines, _debug, dir) = detached_core("care-install-reading");
+        let started = checked(&mut c, firmware::testkit::deck());
+        let t0 = Instant::now();
+        link(&mut c, None, t0);
+        install(&mut c, t0).unwrap();
+        let (slot, card, _, _) = card_sent(&ops).unwrap();
+        enter(&mut c, slot, card, after(t0, 1_500));
+        assert!(installer(&c).is_none(), "the card is answered and gone");
+        let waiting = firmware_status(&mut c, t0);
+        assert_eq!(waiting["phase"], "confirming", "{waiting}");
+        assert_eq!(waiting["message"], STARTS_WHEN_QUIET, "at the press");
+        c.tick(after(t0, 2_000));
+        assert!(
+            started.lock().unwrap().is_empty(),
+            "not while it is read out"
+        );
+        let waiting = firmware_status(&mut c, t0);
+        assert_eq!(waiting["phase"], "confirming");
+        assert_eq!(waiting["message"], STARTS_WHEN_QUIET, "and on every tick");
+        said(&mut c, after(t0, 4_000));
+        assert!(
+            started.lock().unwrap().is_empty(),
+            "the next tick starts it"
+        );
+        c.tick(after(t0, 4_250));
+        assert_eq!(*started.lock().unwrap(), [firmware::testkit::install()]);
+        assert_eq!(firmware_status(&mut c, t0)["phase"], "downloading");
+        c.tick(after(t0, 4_500));
+        assert_eq!(started.lock().unwrap().len(), 1, "once");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// The owner's own words hold the install back too: a press held on
+    /// another row, then its transcription.
+    #[test]
+    fn a_press_while_the_owner_talks_starts_the_install_once_it_is_quiet() {
+        let (mut c, ops, _lines, _debug, dir) = detached_core("care-install-talking");
+        let started = checked(&mut c, firmware::testkit::deck());
+        let t0 = Instant::now();
+        link(&mut c, None, t0);
+        install(&mut c, t0).unwrap();
+        let (slot, card, _, _) = card_sent(&ops).unwrap();
+        said(&mut c, after(t0, 500));
+        let row = other_than(slot);
+        talk(&mut c, row, 1, after(t0, 1_000));
+        enter(&mut c, slot, card, after(t0, 1_500));
+        c.tick(after(t0, 2_000));
+        assert!(started.lock().unwrap().is_empty(), "not while PTT is held");
+        assert_eq!(firmware_status(&mut c, t0)["message"], STARTS_WHEN_QUIET);
+        talk(&mut c, row, 0, after(t0, 2_500));
+        c.tick(after(t0, 3_000));
+        assert!(
+            started.lock().unwrap().is_empty(),
+            "nor while it is transcribed"
+        );
+        let heard = VoiceIn::Final {
+            text: "Ship it.".into(),
+        };
+        c.step(Command::Voice(heard), after(t0, 3_500));
+        assert!(c.quiet(), "the words went to no agent, and nothing is said");
+        c.tick(after(t0, 3_750));
+        assert_eq!(*started.lock().unwrap(), [firmware::testkit::install()]);
+        assert_eq!(firmware_status(&mut c, t0)["phase"], "downloading");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// A press the voice never lets start — here a reading the engine
+    /// never finishes — is given up a minute after it, with
+    /// `firmware.install`'s own reason; quiet after that starts nothing.
+    #[test]
+    fn a_confirmed_install_the_voice_never_lets_start_is_given_up() {
+        let (mut c, ops, _lines, _debug, dir) = detached_core("care-install-never-quiet");
+        let started = checked(&mut c, firmware::testkit::deck());
+        let t0 = Instant::now();
+        link(&mut c, None, t0);
+        install(&mut c, t0).unwrap();
+        let (slot, card, _, _) = card_sent(&ops).unwrap();
+        enter(&mut c, slot, card, after(t0, 1_000));
+        c.tick(after(t0, 60_999));
+        assert_eq!(firmware_status(&mut c, t0)["phase"], "confirming");
+        c.tick(after(t0, 61_000));
+        let status = firmware_status(&mut c, t0);
+        assert_eq!(status["phase"], "error", "{status}");
+        assert_eq!(status["error"], firmware::VOICE_BUSY);
+        said(&mut c, after(t0, 62_000));
+        c.tick(after(t0, 62_250));
+        assert!(started.lock().unwrap().is_empty(), "nothing starts late");
+        assert_eq!(firmware_status(&mut c, t0)["phase"], "error");
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

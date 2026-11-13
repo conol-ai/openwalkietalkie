@@ -54,6 +54,36 @@ pub fn present(root: &serde_json::Value, env: &Env) -> bool {
             })
 }
 
+/// Does this settings object still carry one of the old installer's
+/// `type:"http"` hooks — the only entries that reach deckd through its TCP
+/// door (`http://127.0.0.1:<port>/v1/hooks/claude`)? Narrower than
+/// [`present`], which the Claude row asks: the exec-form `SessionStart`
+/// hook reaches the daemon over its socket, and the inventory, the chained
+/// `statusLine` and the allowlist pattern post nothing at all, so none of
+/// them is a reason to keep the door open, though each still asks for
+/// Repair.
+#[must_use]
+pub fn http_hooks_present(root: &serde_json::Value) -> bool {
+    our_handlers(root)
+        .iter()
+        .any(|handler| handler.get("type").and_then(|t| t.as_str()) == Some("http"))
+}
+
+/// [`http_hooks_present`] over the settings file itself ([`settings_path`]),
+/// read as `status` and `install` read it. A missing file, one that cannot
+/// be read and one that is not a JSON object carry nothing of ours that
+/// Claude would run. `deckd run` asks this at start: those hooks post to
+/// the TCP door, which stays open for them while `[api] tcp` is left out
+/// (`config::Api::tcp_door`).
+pub fn http_hooks_on_disk(env: &Env) -> bool {
+    match FileSnapshot::read(&settings_path(env)) {
+        Ok(snapshot) if snapshot.exists() => {
+            super::parse_json_object(&snapshot).is_ok_and(|root| http_hooks_present(&root))
+        }
+        _ => false,
+    }
+}
+
 /// The settings file with every legacy entry taken back out, as a planned
 /// write — or `None` when the file carries nothing of ours (including when
 /// it does not exist). `receipt` is the inventory `integrations.json` kept
@@ -540,6 +570,77 @@ pub(crate) mod tests {
         // A stray pattern of our shape with no inventory is still ours.
         let stray = serde_json::json!({"allowedHttpHookUrls": ["http://localhost:9/v1/hooks/*"]});
         assert!(present(&stray, &env));
+    }
+
+    /// What `deckd run` asks before it decides the TCP door: our old HTTP
+    /// hooks, on the file the installer reads. Only those count; a file
+    /// Claude could not read counts as nothing.
+    #[test]
+    fn the_file_on_disk_carries_the_old_http_hooks_or_it_does_not() {
+        let dir = TestDir::new("legacy-on-disk");
+        let env = test_env(&dir);
+        let path = settings_path(&env);
+        assert!(!path.exists());
+        assert!(!http_hooks_on_disk(&env), "no settings file at all");
+        let write = |value: &serde_json::Value| {
+            std::fs::write(&path, serde_json::to_vec_pretty(value).unwrap()).unwrap();
+        };
+        write(&legacy_settings(&env));
+        assert!(http_hooks_on_disk(&env));
+        let one_hook = serde_json::json!({"hooks": {"PermissionRequest": [{"hooks": [{
+            "type": "http", "url": "http://127.0.0.1:47201/v1/hooks/claude",
+        }]}]}});
+        write(&one_hook);
+        assert!(http_hooks_on_disk(&env), "one http hook of ours is enough");
+        write(&serde_json::json!({
+            "model": "claude-haiku-4-5",
+            "enabledPlugins": {"openwalkietalkie@openwalkietalkie": true},
+        }));
+        assert!(
+            !http_hooks_on_disk(&env),
+            "the plugin's records are not ours to count"
+        );
+        std::fs::write(&path, "{ not json").unwrap();
+        assert!(
+            !http_hooks_on_disk(&env),
+            "Claude ignores a file it cannot parse"
+        );
+    }
+
+    /// Every other leftover of the old installer still asks the Claude row
+    /// for Repair ([`present`]), but none of them reaches the TCP door, so
+    /// none keeps it open ([`http_hooks_present`]): the exec-form
+    /// `SessionStart` hook (which reaches the daemon over its socket), the
+    /// inventory, the chained `statusLine` and the allowlist pattern, each
+    /// alone. Nor does somebody else's http hook, which is not ours.
+    #[test]
+    fn only_the_old_http_hooks_use_the_door() {
+        let dir = TestDir::new("legacy-http-only");
+        let env = test_env(&dir);
+        let legacy = legacy_settings(&env);
+        assert!(present(&legacy, &env) && http_hooks_present(&legacy));
+        let leftovers = [
+            ("the SessionStart command hook", serde_json::json!({"hooks": {
+                "SessionStart": legacy["hooks"]["SessionStart"].clone(),
+            }})),
+            ("the inventory", serde_json::json!({
+                "_openwalkietalkie": legacy["_openwalkietalkie"].clone(),
+            })),
+            ("the chained statusLine", serde_json::json!({
+                "statusLine": legacy["statusLine"].clone(),
+            })),
+            ("the allowlist pattern", serde_json::json!({
+                "allowedHttpHookUrls": ["http://127.0.0.1:47201/v1/hooks/*"],
+            })),
+        ];
+        for (what, root) in &leftovers {
+            assert!(present(root, &env), "{what} still asks for Repair");
+            assert!(!http_hooks_present(root), "{what} posts nothing to the door");
+        }
+        let theirs = serde_json::json!({"hooks": {"Stop": [{"hooks": [{
+            "type": "http", "url": "https://audit.example/hooks",
+        }]}]}});
+        assert!(!present(&theirs, &env) && !http_hooks_present(&theirs));
     }
 
     #[test]

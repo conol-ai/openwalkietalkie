@@ -82,7 +82,7 @@
 <p>Build a native companion for any agent. Your application owns its conversations and model connections; OpenWalkieTalkie supplies a grouped deck roster, voice input, conversation display, questions and session settings. Conol uses this same public interface.</p>
 <p><strong>Requires OpenWalkieTalkie app, service and firmware 0.11.0 or newer.</strong> This is a local desktop integration over JSON-RPC, with no Conol dependency. Existing CLI hooks remain supported.</p>
 <p><a href="/examples/native_companion.py">Download the Python example</a> · <a href="/docs/deckd-api.md">Complete API reference (Markdown)</a> · <a href="/docs/">Documentation home</a></p>
-<nav class="toc" aria-label="On this page"><p class="toc-title">ON THIS PAGE</p><ul><li><a href="#try-the-example">Try the example</a></li><li><a href="#connect-and-discover">Connect and discover</a></li><li><a href="#register-sessions-and-group-them">Register sessions and group them</a></li><li><a href="#start-and-activate-a-new-chat">Start and activate a new chat</a></li><li><a href="#keep-both-transcripts-current">Keep both transcripts current</a></li><li><a href="#handle-complex-questions-on-the-deck">Handle complex questions on the deck</a></li><li><a href="#display-and-change-model-thinking-effort">Display and change model / thinking effort</a></li><li><a href="#integration-checklist">Integration checklist</a></li></ul></nav>
+<nav class="toc" aria-label="On this page"><p class="toc-title">ON THIS PAGE</p><ul><li><a href="#try-the-example">Try the example</a></li><li><a href="#connect-and-discover">Connect and discover</a></li><li><a href="#register-sessions-and-group-them">Register sessions and group them</a></li><li><a href="#start-and-activate-a-new-chat">Start and activate a new chat</a></li><li><a href="#keep-both-transcripts-current">Keep both transcripts current</a></li><li><a href="#transcribe-with-your-own-speech-model">Transcribe with your own speech model</a></li><li><a href="#handle-complex-questions-on-the-deck">Handle complex questions on the deck</a></li><li><a href="#display-and-change-model-thinking-effort">Display and change model / thinking effort</a></li><li><a href="#feed-the-omarchy-face">Feed the Omarchy face</a></li><li><a href="#integration-checklist">Integration checklist</a></li></ul></nav>
 <h2 id="try-the-example">Try the example</h2>
 <p>Start OpenWalkieTalkie, connect your deck, download the example, then run:</p>
 <pre><code class="language-sh">python3 native_companion.py
@@ -94,7 +94,7 @@
 <ul>
 <li>Override: <code>$DECKD_DATA_DIR/deckd.sock</code>, when the variable is set.</li>
 <li>macOS: <code>~/Library/Application Support/OpenWalkieTalkie/deckd.sock</code>.</li>
-<li>Linux socket convention: <code>${XDG_RUNTIME_DIR}/openwalkietalkie/deckd.sock</code>, falling back to <code>~/.local/state/openwalkietalkie/deckd.sock</code>. The distributed desktop app currently targets macOS.</li>
+<li>Linux: <code>${XDG_RUNTIME_DIR}/openwalkietalkie/deckd.sock</code>; without <code>XDG_RUNTIME_DIR</code> the service uses <code>${XDG_CACHE_HOME:-~/.cache}/openwalkietalkie/deckd.sock</code>. The Omarchy setup sets <code>DECKD_DATA_DIR=~/.local/share/openwalkietalkie</code>, so its socket is <code>~/.local/share/openwalkietalkie/deckd.sock</code>. Linux is a supported target for the service and the Omarchy bridge; the desktop window is macOS only.</li>
 </ul>
 <p>Begin every connection with:</p>
 <pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;session.hello&quot;,&quot;params&quot;:{
@@ -105,7 +105,8 @@
 }}
 </code></pre>
 <p>The socket authenticates the local OS user. Request only <code>agent</code> and <code>observe</code> for this integration. Owned events include the content needed to handle your conversations; these scopes do not grant another app's private transcript. No remote API key needs to be sent to the daemon. Keep the socket in your trusted desktop process rather than exposing a raw RPC bridge to web content.</p>
-<p>A missing socket means the service is unavailable: show a disconnected status and retry with backoff. A <code>-32601</code> response to either new method means the daemon lacks native companion support; offer an update instead of silently reporting that the integration connected. The service's <code>/v1/schema</code> lists methods and request schemas for clients already using its authenticated HTTP API.</p>
+<p>A missing socket means the service is unavailable: show a disconnected status and retry with backoff. A <code>-32601</code> response to either new method means the daemon lacks native companion support; offer an update instead of silently reporting that the integration connected. The methods, their scopes and their request schemas are in the <a href="/docs/deckd-api.md">API reference</a>.</p>
+<p><strong>The socket is the one door for connected apps.</strong> The service's HTTP and WebSocket door on <code>127.0.0.1</code>, and the bearer tokens that open it, are off by default. The service keeps the door on only while Claude Code's HTTP hooks from an older OpenWalkieTalkie install still need it, and an explicit <code>[api] tcp</code> setting in its <code>config.toml</code> always wins. Removing the door and its tokens is planned for the next release. Do not build on them.</p>
 <h2 id="register-sessions-and-group-them">Register sessions and group them</h2>
 <p>Register one agent per conversation, plus an optional launcher. Keep a stable, namespaced <code>key</code> for each app/account/conversation. Registration is idempotent for that key on the owning connection.</p>
 <pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:2,&quot;method&quot;:&quot;agent.register&quot;,&quot;params&quot;:{
@@ -208,6 +209,57 @@
 </code></pre>
 <p>Apply the requested setting in your backend, then call <code>agent.session.set</code> with the <strong>actual resulting controls</strong> and <code>request_rev: 19</code>. Use <code>data.request_rev</code>, not the envelope's event <code>rev</code>. The device keeps its existing selection pending until confirmation. On failure, confirm the unchanged actual settings with a short explanatory <code>note</code>.</p>
 <p>Ordinary refreshes omit <code>request_rev</code> and do not settle pending requests. A mismatched, duplicate or expired confirmation is rejected. Pending changes time out after 45 seconds. Preserve request/agent correlation across asynchronous work, and reconcile the backend if a response is lost. The daemon validates transport and ownership; your application remains responsible for authorizing and applying model changes.</p>
+<h2 id="feed-the-omarchy-face">Feed the Omarchy face</h2>
+<p>The deck's Omarchy face is a window switcher: a row of up to nine workspace chips and up to six window rows. Nothing in it is specific to Omarchy. Any app can fill it with <code>device.ws.set</code> and act on what the operator does there through three events. The Omarchy bridge (<code>host/omarchy/</code> in the source repository) is the reference client, and CI runs its tests on every pull request.</p>
+<p><strong>The face feed is a public interface, and additive-only from now on.</strong> <code>device.ws.set</code> and the <code>device.ws</code>, <code>device.key</code> and <code>device.link</code> events may gain fields; none of their fields will be renamed, retyped or removed. Ignore fields you do not know.</p>
+<p>Ask for the <code>device</code> scope, which <code>device.ws.set</code> needs, and name the three events. <code>device.key</code> is a high-volume event that <code>&quot;*&quot;</code> does not match, so it must be named.</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;session.hello&quot;,&quot;params&quot;:{
+  &quot;client&quot;:{&quot;name&quot;:&quot;Example window switcher&quot;,&quot;version&quot;:&quot;1&quot;},
+  &quot;scopes&quot;:[&quot;device&quot;,&quot;observe&quot;],
+  &quot;subscribe&quot;:[&quot;device.ws&quot;,&quot;device.key&quot;,&quot;device.link&quot;],
+  &quot;snapshot&quot;:false
+}}
+</code></pre>
+<p>Send the whole face whenever it changes. The reply is <code>{&quot;rev&quot;:…}</code>.</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:2,&quot;method&quot;:&quot;device.ws.set&quot;,&quot;params&quot;:{
+  &quot;active&quot;:2,&quot;count&quot;:4,&quot;sel&quot;:0,
+  &quot;windows&quot;:[
+    {&quot;tone&quot;:&quot;blue&quot;,&quot;title&quot;:&quot;kitty — claude · header refactor&quot;},
+    {&quot;title&quot;:&quot;firefox — github · pulls&quot;}
+  ]
+}}
+</code></pre>
+<ul>
+<li><code>count</code>: how many workspace chips to draw, 0 to 9.</li>
+<li><code>active</code>: the chip of the current workspace, 1-based and at most <code>count</code>; 0 when none of them is current.</li>
+<li><code>windows</code>: up to six rows, in the order the deck lists them. <code>title</code> is cut to 48 UTF-8 bytes on the deck, ending in “…”. <code>tone</code> is <code>blue</code>, <code>amber</code>, <code>green</code>, <code>red</code> or <code>gray</code>; without one the row is gray.</li>
+<li><code>sel</code>: the highlighted row, 0-based and below the number of rows; 0 when there are none.</li>
+</ul>
+<p>A value out of range is refused with <code>-32009</code> and <code>data.field</code> naming it; a missing field or a wrong type with <code>-32602</code>. The service keeps the last face you sent and shows it whenever the Omarchy face is on screen, including after the deck links again. It does not keep it across its own restart, so send the face again every time you connect. The face must be on the deck's strip. The operator adds it from the deck's own face manager, or a client with the <code>device</code> scope sends the whole strip, with an <code>omarchy</code> entry in it, through <code>device.faces.set</code>. The Mac app's Faces &amp; Keys page does not offer it.</p>
+<p>A tap on the face arrives as <code>device.ws</code>, with either <code>go</code>, the workspace number of the chip, or <code>win</code>, the 0-based row of the windows you sent last:</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{
+  &quot;type&quot;:&quot;device.ws&quot;,&quot;rev&quot;:130,&quot;data&quot;:{&quot;win&quot;:1}
+}}
+</code></pre>
+<p>The deck's keys arrive as <code>device.key</code> while the Omarchy face is on screen:</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{
+  &quot;type&quot;:&quot;device.key&quot;,&quot;rev&quot;:131,&quot;data&quot;:{&quot;k&quot;:&quot;cw&quot;,&quot;act&quot;:2,&quot;shift&quot;:false,&quot;f&quot;:2}
+}}
+</code></pre>
+<ul>
+<li><code>k</code>: <code>enter</code>, <code>cancel</code>, <code>left</code>, <code>right</code>, or the wheel's <code>cw</code> and <code>ccw</code>.</li>
+<li><code>act</code>: 1 a press, 0 a release, 2 one step of the wheel.</li>
+<li><code>shift</code>: whether SHIFT was held. A release carries the <code>shift</code> and <code>f</code> of its press. SHIFT and PTT never arrive as keys of their own.</li>
+<li><code>f</code>: the id of the face the key was pressed on.</li>
+</ul>
+<p>The deck's link arrives as <code>device.link</code>, whenever the link or its session changes:</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{
+  &quot;type&quot;:&quot;device.link&quot;,&quot;rev&quot;:132,
+  &quot;data&quot;:{&quot;link&quot;:&quot;connected&quot;,&quot;session&quot;:&quot;live&quot;,&quot;host_online&quot;:true,
+    &quot;sid&quot;:314159,&quot;fw&quot;:&quot;0.13.1&quot;,&quot;boot&quot;:false}
+}}
+</code></pre>
+<p><code>link</code> is <code>connected</code>, <code>degraded</code> or <code>offline</code>; <code>session</code> is <code>absent</code>, <code>linked</code>, <code>await_hello</code>, <code>syncing</code>, <code>live</code> or <code>degraded</code>; <code>host_online</code> is true while the deck counts this computer as present. <code>fw</code>, the deck's firmware version, and <code>boot</code> are <code>null</code> while unknown. The event the service sends as it shuts down carries only <code>link</code>, <code>session</code> and <code>host_online</code>. Use the event to show whether the deck is there; you need not send the face again when it links.</p>
 <h2 id="integration-checklist">Integration checklist</h2>
 <p>Before shipping, test a first chat and follow-up on both screens; companion transcription and its local fallback, if you offer it; overflow with another app present; sign-out and reconnect; streamed message replacement; stale question presses; multi-select paging; cancel versus submit; backend submission failure; readonly settings; model changes with different effort catalogs; and an expired settings confirmation.</p>
 <p>The runnable example is also checked with a fake backend in <code>tools/tests/test_native_companion.py</code>. The public request schemas and method permissions come from <code>deckd api-doc</code>. Keep these interfaces separate from provider-specific hooks so a custom agent does not need a firmware fork or a Conol account.</p>

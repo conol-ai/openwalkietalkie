@@ -10,6 +10,14 @@
 //! the service look: the shell sends their check as the `firmware.status`
 //! read it would have ended in ([`crate::app::Launch::outgoing`]).
 //!
+//! **The deck has the last word.** On a linked deck the service does not
+//! start the install it is sent: it asks on the deck first, and answers
+//! `confirming` at once. The dialog then says to press ENTER there
+//! ([`status_line`]) and follows the status as it does a download; a card
+//! dismissed or left for a minute comes back as the service's reason, with
+//! nothing installed. A deck in recovery cannot be asked, and installs as
+//! it always has: there the dialog asks the owner for the board.
+//!
 //! The review dialog draws the status as it is now, every frame, so what the
 //! owner confirms is what **Install** sends: a release or a deck that
 //! changes under the open dialog changes its words before the button can be
@@ -74,13 +82,19 @@ fn text<'a>(value: &'a Value, key: &str) -> &'a str {
     value.get(key).and_then(Value::as_str).unwrap_or("")
 }
 
-/// Whether the service is working on the deck: checking, downloading,
-/// installing, waiting for it to come back.
+/// Whether the service is working on the deck: checking, waiting for a
+/// press on it, downloading, installing, waiting for it to come back.
 pub fn busy(status: &Value) -> bool {
     matches!(
         text(status, "phase"),
-        "checking" | "downloading" | "installing" | "reconnecting" | "bootloader"
+        "checking" | "confirming" | "downloading" | "installing" | "reconnecting" | "bootloader"
     )
+}
+
+/// Whether the install waits for ENTER on the deck: nothing is downloaded
+/// or written until the deck confirms it.
+pub fn confirming(status: &Value) -> bool {
+    text(status, "phase") == "confirming"
 }
 
 /// The release a check found newer than the deck's firmware, by its version.
@@ -164,7 +178,8 @@ pub fn confirmation_target(status: &Value) -> Value {
 
 /// What the review dialog says the service is doing: the status's message
 /// in the window's language, with the progress while it works on the deck;
-/// before it has said anything, how to begin.
+/// while the install waits for the deck, what to press there; before the
+/// service has said anything, how to begin.
 ///
 /// The service writes its firmware status in a fixed set of English
 /// sentences (`deckd`'s `firmware/mod.rs` and `firmware/migration.rs`), and
@@ -172,9 +187,22 @@ pub fn confirmation_target(status: &Value) -> Value {
 /// a newer service adds is shown as it came until it has one. The
 /// message this page writes itself when the service cannot be asked is
 /// already in the window's language, and no table has it as a key, so the
-/// lookup leaves it as it is.
+/// lookup leaves it as it is. Why an install the deck did not confirm
+/// installed nothing is one of the service's sentences, and so is what a
+/// confirmed install waits for before it starts.
 pub fn status_line(status: &Value, language: Language) -> String {
     let message = language.text(text(status, "message"));
+    // Waiting for the deck is no progress, and has no percentage: what to
+    // press there, or once it is pressed, what the install still waits for
+    // (the service says which).
+    if confirming(status) {
+        return if message.is_empty() {
+            language.text("Press ENTER on the deck to start the install.")
+        } else {
+            message
+        }
+        .to_string();
+    }
     if busy(status) {
         let progress = status["progress"].as_u64().unwrap_or(0).to_string();
         format!("{message} {}", language.format("{0}%", &[&progress]))
@@ -185,6 +213,13 @@ pub fn status_line(status: &Value, language: Language) -> String {
     } else {
         message.to_string()
     }
+}
+
+/// Why the service refused an install, in the window's language: its
+/// reason is one of its fixed English sentences, looked up like the status
+/// line's; one this build has no row for is shown as it came.
+pub fn refusal_line(error: &ClientError, language: Language) -> String {
+    language.text(&failure_text(error)).to_string()
 }
 
 /// Why a firmware call failed: the service's own reason when it gave one.
@@ -394,7 +429,7 @@ impl Shell {
             this.service.firmware.pending = false;
             match result {
                 Ok(status) => this.service.firmware.status = status,
-                Err(error) => this.toast(failure_text(&error), window, cx),
+                Err(error) => this.toast(refusal_line(&error, this.language()), window, cx),
             }
             this.refresh_firmware(false, window, cx);
         });

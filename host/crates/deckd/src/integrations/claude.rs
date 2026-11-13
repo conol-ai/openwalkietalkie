@@ -598,7 +598,9 @@ pub fn plan(env: &Env, verb: Verb, receipt: Option<&serde_json::Value>) -> Resul
 
 /// The inventory of a pre-plugin install, if that is what the receipt is.
 /// A plugin-era receipt (`schema: 2`) carries no inventory and is not one.
-fn legacy_receipt(receipt: Option<&serde_json::Value>) -> Option<&serde_json::Value> {
+/// `deckd run` reads it too: such a record means the old HTTP hooks may
+/// still post to the TCP door (`integrations::legacy_claude_hooks`).
+pub(crate) fn legacy_receipt(receipt: Option<&serde_json::Value>) -> Option<&serde_json::Value> {
     receipt.filter(|r| r.get("entries").is_some() || r.get("allowlist").is_some())
 }
 

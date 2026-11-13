@@ -607,7 +607,12 @@ mod tests {
             "engine": "whisper", "active": true, "model": "large-v3-turbo", "total": 1624555275u64,
             "present": true, "loaded": true, "loading": false, "download": null
         }));
-        assert_eq!(loaded.line(), "large-v3-turbo (1.6 GB) is loaded and recognises on this Mac.");
+        // "on this Mac." on macOS, "on this computer." elsewhere (`HOST`).
+        assert_eq!(HOST, if cfg!(target_os = "macos") { "Mac" } else { "computer" });
+        assert_eq!(
+            loaded.line(),
+            format!("large-v3-turbo (1.6 GB) is loaded and recognises on this {HOST}.")
+        );
         let apple = SttStatus::parse(&json!({"engine": "apple", "model": "large-v3-turbo", "total": 1624555275u64, "present": false}));
         assert_eq!(apple.line(), "Apple's on-device recogniser. Nothing to download.");
         let failed = SttStatus::parse(&json!({
@@ -651,7 +656,9 @@ mod tests {
         }));
         assert_eq!(
             loaded.line(),
-            "kokoro-multi-lang-v1_1 (365 MB) is loaded and speaks on this Mac. Agents speak as af_maple, zm_010."
+            format!(
+                "kokoro-multi-lang-v1_1 (365 MB) is loaded and speaks on this {HOST}. Agents speak as af_maple, zm_010."
+            )
         );
         let idle = TtsStatus::parse(&json!({"engine": "cloud", "model": "kokoro-multi-lang-v1_1", "total": 364816464u64, "present": false}));
         assert!(idle.line().contains("nothing is until you ask"), "{}", idle.line());

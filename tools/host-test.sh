@@ -319,7 +319,8 @@ fi
 # ---------------------------------------------------------------------------
 # The `api` step (HOST-CONTRACT-W2 §5): one real `deckd run --foreground
 # --no-device` on a private, short data dir with `[api] port = 0` (never
-# 47201, never the user's files), then every door exercised the way a user
+# 47201, never the user's files) and `tcp = true` (the TCP door is off by
+# default until it is deleted), then every door exercised the way a user
 # would — curl over TCP, `deckd ctl` over the UDS, the Python virtual agent,
 # websocat when it is installed. Every row prints ok or FAIL. The only
 # `skip` left is websocat, which §5 allows by name (the Rust WS test covers
@@ -439,9 +440,12 @@ api_step() {
     rm -rf "$api_dir"
     mkdir -p "$api_dir" || { api_row "data dir" 1 "cannot create $api_dir"; return; }
     # Self-contained: no roster seeding from the operator's own Claude
-    # sessions and no attaching to their Codex app-server daemon.
-    printf '[api]\nport = 0\nallowed_origins = ["http://localhost:5173"]\n\n[liveness]\nseed = false\n\n[codex]\ndaemon = false\n' >"$api_dir/config.toml"
-    api_row "data dir" 0 "$api_dir ([api] port = 0, never 47201, never the real data dir)"
+    # sessions and no attaching to their Codex app-server daemon. The TCP
+    # door is off unless the file switches it on, and this step is what
+    # exercises it until it is deleted, so `tcp = true` (named, the daemon
+    # never looks in Claude's settings to decide it).
+    printf '[api]\nport = 0\ntcp = true\nallowed_origins = ["http://localhost:5173"]\n\n[liveness]\nseed = false\n\n[codex]\ndaemon = false\n' >"$api_dir/config.toml"
+    api_row "data dir" 0 "$api_dir ([api] port = 0 and tcp = true, never 47201, never the real data dir)"
 
     # The token is minted before the daemon starts: `deckd token` edits
     # tokens.toml directly and the daemon reads it at start. The reload of
@@ -723,6 +727,8 @@ ad_step() {
         return
     fi
     # A port that is never bound: this step writes files, it runs no daemon.
+    # No `tcp` key either: nothing the installer writes reaches the daemon
+    # through the TCP door, which is off by default.
     printf '[api]\nport = 47250\n\n[hooks.claude]\nhold_s = 120\n' >"$ad_dir/data/config.toml"
     # The originals: a settings file carrying the keys a fatal diagnostic
     # would silently take away, a foreign `SessionStart` hook on one of our
@@ -1280,12 +1286,14 @@ w2_wait_for() {
 hw_week2() {  # $1: the data dir for this run
     w2_dir=$1
     local log="$logs/hw-w2-deckd.log"
-    # sun_path is 104 bytes, and the TCP door must never take 47201.
+    # sun_path is 104 bytes, and the TCP door must never take 47201. The
+    # door is off unless the file switches it on, and these rows wait for
+    # its port file.
     if [ $(( ${#w2_dir} + 11 )) -gt 103 ]; then
         w2_row "data dir" 1 "$w2_dir/deckd.sock is longer than sun_path allows"
         return
     fi
-    printf '[api]\nport = 0\n\n[liveness]\nseed = false\n\n[codex]\ndaemon = false\n' >"$w2_dir/config.toml"
+    printf '[api]\nport = 0\ntcp = true\n\n[liveness]\nseed = false\n\n[codex]\ndaemon = false\n' >"$w2_dir/config.toml"
     local token
     token=$(DECKD_DATA_DIR="$w2_dir" "$deckd" token create --name gate-hw \
         --scopes observe,agent,operate 2>"$logs/hw-w2-token.err")

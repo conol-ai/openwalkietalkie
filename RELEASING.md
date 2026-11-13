@@ -121,10 +121,21 @@ programming and cold-boot test.
 
 ## Device firmware updates
 
-With one deck connected by **USB**, open **Service → Updates → Check
-firmware**. A newer release also produces a notification after the automatic
-check. Review the version, click **Update firmware…**, then **Install
-firmware**. The view shows download, installation, reconnection, and errors.
+With one deck connected by **USB**, open **Service** in the Mac app and click
+**Check** on the **Deck firmware** row under **Updates**. A newer release also
+produces a notification after the automatic check. Click **Review…**, check
+the version, then **Install**. On a linked deck the service does not start yet:
+the deck shows **Install firmware {version}? Press ENTER.** in its own
+language, and only ENTER pressed on the deck itself starts the install. The
+dialog says **Press ENTER on the deck to start the install.** meanwhile.
+CANCEL, a minute without an answer, or any other answer leaves nothing
+installed (**Not confirmed on the deck. Nothing was installed.**). After the
+press, an install that finds the deck talking waits up to a minute for it to
+finish (**Starting the install when the deck stops talking…**). A deck already
+in recovery cannot show the card and installs at once. A deck that runs its
+firmware but has not linked yet is refused with **Wait for the deck to link,
+then install again.** The dialog then shows download, installation,
+reconnection, and errors.
 
 For a device with an old or unknown bootloader, the confirmation instead shows
 **Bootloader update — power must stay connected** and an **I understand — update
@@ -189,9 +200,13 @@ Daemon API calls are `firmware.status` (`observe`), `firmware.check`
 `serial`, and `version` copied from the checked release, plus
 `allow_bootloader_update:true` only after accepting the warning).
 `firmware.status` includes `bootloader_warning`; its device includes optional
-`recovery_protocol` and a `maintenance` flag. The `bootloader` phase is busy and
-prevents service restarts. Installation is
-always explicit; scheduled checks never flash a device.
+`recovery_protocol` and a `maintenance` flag. On a linked deck,
+`firmware.install` answers at once with the phase `confirming` and waits for
+ENTER on the deck, as above; a second install meanwhile is refused as busy.
+Every phase of an operation (`checking`, `confirming`, `downloading`,
+`installing`, `reconnecting`, `bootloader`) is busy and prevents service
+restarts. Installation is always explicit and, unless the deck is already in
+recovery, confirmed on the deck; scheduled checks never flash a device.
 
 ### Hardware validation status
 

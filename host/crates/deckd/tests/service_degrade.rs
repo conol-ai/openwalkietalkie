@@ -68,13 +68,16 @@ impl Daemon {
         daemon
     }
 
-    /// No usage probe: it would read the operator's Claude login from the
-    /// Keychain (redirecting `HOME` does not move the Keychain) and ask
-    /// api.anthropic.com.
+    /// The TCP door switched on: it is off unless the file says so, and its
+    /// degrade is what these tests are about. No usage probe: it would read
+    /// the operator's Claude login from the Keychain (redirecting `HOME`
+    /// does not move the Keychain) and ask api.anthropic.com.
     fn write_config(&self, port: u16) {
         std::fs::write(
             self.dir.join("config.toml"),
-            format!("[api]\nport = {port}\n\n[log]\nlevel = \"warn\"\n\n[usage]\nproviders = []\n"),
+            format!(
+                "[api]\nport = {port}\ntcp = true\n\n[log]\nlevel = \"warn\"\n\n[usage]\nproviders = []\n"
+            ),
         )
         .expect("the daemon's config");
     }
