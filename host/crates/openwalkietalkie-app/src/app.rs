@@ -349,7 +349,7 @@ fn boot(
     // A registration launchd lost — the app was moved or replaced since it
     // was made — is made again from this copy. A service that was never
     // registered is left alone: registering it is first run's **Add These**.
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", windows))]
     if launch.installed() {
         if let Err(error) = crate::login_item::repair_agent_if_registered() {
             eprintln!("openwalkietalkie-app: background service repair: {error}");
@@ -679,28 +679,16 @@ pub fn start_service(bridge: &TokioBridge) -> Receiver {
 /// Where a [`start_service`] answer lands.
 pub type Receiver = async_channel::Receiver<std::result::Result<(), String>>;
 
-/// The blocking half on Windows, which has no launch agent yet: start the
-/// `deckd` beside this app as `deckd run`, detached and windowless. A
-/// second copy finds the lock held and exits, so pressing Start on a
-/// running service changes nothing.
+/// The blocking half on Windows: start the service's host
+/// ([`crate::service_host`]), which runs the `deckd` beside this app and
+/// restarts it as launchd would. A service that already runs keeps running:
+/// the new copy finds its lock held and stands down.
 #[cfg(windows)]
 fn kickstart() -> std::result::Result<(), String> {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     if let Some(why) = launch().hands_off() {
         return Err(why.to_string());
     }
-    let deckd = deckd_path().ok_or("there is no deckd beside this app")?;
-    std::process::Command::new(deckd)
-        .arg("run")
-        .creation_flags(CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .map(drop)
-        .map_err(|e| e.to_string())
+    crate::service_host::start()
 }
 
 /// The blocking half: spawn `launchctl` and read its verdict.

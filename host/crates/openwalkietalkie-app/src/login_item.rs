@@ -243,46 +243,182 @@ fn agent_loaded() -> bool {
         .map_or(true, |s| s.success())
 }
 
-// ---- everything above, for a build that is not macOS -----------------------
+// ---- Windows: the per-user Run key ------------------------------------------
 //
-// There is no `SMAppService` to read or to write, so the honest answer is the
+// Windows' equivalent of both login items is a value under
+// `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, the list Settings ›
+// Apps › Startup shows and switches. Switching one off there leaves the value
+// and records the choice under `Explorer\StartupApproved\Run`; that reads as
+// `RequiresApproval`, the owner's to turn back on, exactly as a macOS item
+// waiting in Login Items. The same three rules hold: only the installed copy
+// changes anything, every change answers with the status read back after
+// it, and nothing is registered because a screen opened.
+//
+// The service's value runs this app as `--service` ([`crate::service_host`]):
+// no window, it keeps `deckd run` going the way launchd's KeepAlive does.
+
+#[cfg(windows)]
+use crate::run_key;
+
+/// The Run value of this app's own "open at login".
+#[cfg(windows)]
+const APP_VALUE: &str = "OpenWalkieTalkie";
+/// The Run value of the background service.
+#[cfg(windows)]
+const SERVICE_VALUE: &str = "OpenWalkieTalkie Service";
+
+/// What a Run value should hold for this copy: the app itself, or the app as
+/// the service's host.
+#[cfg(windows)]
+fn run_command(service: bool) -> Option<String> {
+    let exe = std::env::current_exe().ok()?;
+    Some(if service {
+        format!("\"{}\" {}", exe.display(), crate::service_host::FLAG)
+    } else {
+        format!("\"{}\"", exe.display())
+    })
+}
+
+#[cfg(windows)]
+fn refused(main_item: bool) -> Option<&'static str> {
+    let launch = crate::app::launch();
+    let live = std::env::var(LIVE).as_deref() == Ok("1");
+    if may_change(launch, main_item, live) {
+        None
+    } else {
+        launch.hands_off()
+    }
+}
+
+#[cfg(windows)]
+fn read_status(value: &str) -> LoginItem {
+    match run_key::command(value) {
+        None => LoginItem::NotRegistered,
+        Some(_) if run_key::approved(value) => LoginItem::Enabled,
+        Some(_) => LoginItem::RequiresApproval,
+    }
+}
+
+/// This app's own "open at login", as Windows has it right now.
+#[cfg(windows)]
+pub fn status() -> LoginItem {
+    read_status(APP_VALUE)
+}
+
+/// Open this app at sign-in, then re-read.
+#[cfg(windows)]
+pub fn register() -> Result<LoginItem, String> {
+    if let Some(why) = refused(true) {
+        return Err(format!("{why}; nothing changed (status is {})", status().code()));
+    }
+    let command = run_command(false).ok_or("this app's own path is unknown")?;
+    run_key::set(APP_VALUE, &command).map(|()| status())
+}
+
+/// Stop opening this app at sign-in, then re-read.
+#[cfg(windows)]
+pub fn unregister() -> Result<LoginItem, String> {
+    if let Some(why) = refused(true) {
+        return Err(format!("{why}; nothing changed (status is {})", status().code()));
+    }
+    run_key::delete(APP_VALUE).map(|()| status())
+}
+
+/// The background service's start at sign-in. A copy that is not the
+/// installed one carries no service to report: `NotFound`, without asking.
+#[cfg(windows)]
+pub fn agent_status() -> LoginItem {
+    if !crate::app::launch().bundled {
+        return LoginItem::NotFound;
+    }
+    read_status(SERVICE_VALUE)
+}
+
+/// Start the service at every sign-in, and now, as macOS's agent starts when
+/// it is registered; then re-read.
+#[cfg(windows)]
+pub fn register_agent() -> Result<LoginItem, String> {
+    if let Some(why) = refused(false) {
+        return Err(format!("{why}; nothing changed (status is {})", agent_status().code()));
+    }
+    let command = run_command(true).ok_or("this app's own path is unknown")?;
+    run_key::set(SERVICE_VALUE, &command)?;
+    if let Err(why) = crate::service_host::start() {
+        return Err(format!("start at sign-in is set, but the service did not start: {why}"));
+    }
+    Ok(agent_status())
+}
+
+/// Stop starting the service at sign-in, and stop it now (the deck stops
+/// working until it is started again), as unregistering macOS's agent does;
+/// then re-read.
+#[cfg(windows)]
+pub fn unregister_agent() -> Result<LoginItem, String> {
+    if let Some(why) = refused(false) {
+        return Err(format!("{why}; nothing changed (status is {})", agent_status().code()));
+    }
+    run_key::delete(SERVICE_VALUE)?;
+    crate::service_host::stop();
+    Ok(agent_status())
+}
+
+/// Point a registration this copy no longer matches (the app was moved or
+/// replaced since it was made) at this copy; touch nothing else.
+#[cfg(windows)]
+pub fn repair_agent_if_registered() -> Result<LoginItem, String> {
+    if let Some(why) = refused(false) {
+        return Err(format!("{why}; nothing changed (status is {})", agent_status().code()));
+    }
+    let Some(registered) = run_key::command(SERVICE_VALUE) else {
+        return Ok(LoginItem::NotRegistered);
+    };
+    let command = run_command(true).ok_or("this app's own path is unknown")?;
+    if !registered.eq_ignore_ascii_case(&command) {
+        run_key::set(SERVICE_VALUE, &command)?;
+    }
+    Ok(agent_status())
+}
+
+// ---- everything above, elsewhere --------------------------------------------
+//
+// There is no login item to read or to write, so the honest answer is the
 // one status that claims nothing, and a refusal for every change. The
 // service's own setup there is `host/omarchy/install.sh`'s, not this app's.
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 const MACOS_ONLY: &str = "SMAppService is macOS only";
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 pub fn status() -> LoginItem {
     LoginItem::Unknown(-1)
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 pub fn register() -> Result<LoginItem, String> {
     Err(MACOS_ONLY.into())
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 pub fn unregister() -> Result<LoginItem, String> {
     Err(MACOS_ONLY.into())
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 pub fn agent_status() -> LoginItem {
     LoginItem::Unknown(-1)
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 pub fn register_agent() -> Result<LoginItem, String> {
     Err(MACOS_ONLY.into())
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 pub fn unregister_agent() -> Result<LoginItem, String> {
     Err(MACOS_ONLY.into())
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 pub fn repair_agent_if_registered() -> Result<LoginItem, String> {
     Err(MACOS_ONLY.into())
 }

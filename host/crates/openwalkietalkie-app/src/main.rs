@@ -6,6 +6,12 @@
 //! once, with nothing logged.
 #![cfg_attr(windows, windows_subsystem = "windows")]
 fn main() {
+    // Windows: `--service` makes this the background service's host (no
+    // window; it keeps `deckd run` going, as launchd does on a Mac).
+    #[cfg(windows)]
+    if openwalkietalkie_app::service_host::requested() {
+        std::process::exit(openwalkietalkie_app::service_host::supervise());
+    }
     if let Err(e) = openwalkietalkie_app::run() {
         // There is no window to say this in: the tokio bridge is what a
         // window would have talked to the daemon through.
