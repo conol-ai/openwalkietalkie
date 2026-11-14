@@ -86,6 +86,14 @@ uuid = "1"
 # The local recogniser on Linux: whisper.cpp on the CPU (macOS builds it with Metal).
 whisper-rs = "=0.16.0"
 
+# Windows (the minimal port): process queries in place of `kill(pid, 0)`
+# (`liveness::alive`), and chrono's local zone in place of `localtime_r`
+# (its `clock` dependencies are already in this lock). The named pipe's own
+# calls live in deck-client's `windows` module.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_System_Console", "Win32_System_Threading"] }
+chrono = { version = "=0.4.45", default-features = false, features = ["std", "clock"] }
+
 [dev-dependencies]
 deck-wrap = { path = "../deck-wrap" }
 

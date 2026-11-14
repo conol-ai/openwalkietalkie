@@ -14,3 +14,9 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-tungstenite = { workspace = true }
 futures-util = { workspace = true }
+
+# The local door on Windows is a named pipe (`src/windows.rs`): the pipe's
+# DACL and the same-user checks on both ends need the token and SID calls.
+# 0.61.2 is the copy tokio already brings in on Windows.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_System_Pipes", "Win32_System_Threading"] }

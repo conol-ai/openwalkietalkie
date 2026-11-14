@@ -582,12 +582,42 @@ pub fn last_assistant_text(path: &std::path::Path) -> Option<String> {
     })
 }
 
+/// Whether a process exists, on Windows: it opens for a query and its exit
+/// code is still `STILL_ACTIVE`. Access denied is **alive**, as `EPERM` is
+/// on Unix, and pid 0 (the idle process) is never a CLI.
+#[must_use]
+#[cfg(windows)]
+pub fn alive(pid: u32) -> bool {
+    use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ACCESS_DENIED};
+    use windows_sys::Win32::System::Threading::{
+        GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    /// `STILL_ACTIVE`: the exit code of a process that has not exited.
+    const STILL_ACTIVE: u32 = 259;
+    if pid == 0 {
+        return false;
+    }
+    // SAFETY: a query-only handle, closed below; `code` is written once.
+    unsafe {
+        let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if process.is_null() {
+            // As `EPERM` on Unix: somebody else's process is still a process.
+            return GetLastError() == ERROR_ACCESS_DENIED;
+        }
+        let mut code = 0u32;
+        let ok = GetExitCodeProcess(process, &mut code) != 0;
+        CloseHandle(process);
+        ok && code == STILL_ACTIVE
+    }
+}
+
 /// Whether a process exists, by `kill(pid, 0)`.
 ///
 /// `EPERM` is **alive**: the process is there and belongs to somebody
 /// else. Only `ESRCH` — no such process — is death, and pid 0 (the
 /// process group) is never a CLI.
 #[must_use]
+#[cfg(unix)]
 pub fn alive(pid: u32) -> bool {
     if pid == 0 {
         return false;

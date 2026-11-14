@@ -4,6 +4,11 @@
 //! An uncertain write is never retried through the inbox (that would duplicate it).
 //! The bridge is the owner's opt-in (`[sources] claude_channels`): the door is
 //! open only while it is switched on.
+//!
+//! Windows has no door yet (see [`serve`]); the hub's bookkeeping is kept
+//! so the rest of the daemon reads an empty one.
+#![cfg_attr(not(unix), allow(dead_code, unused_imports))]
+#[cfg(unix)]
 mod mcp;
 
 use crate::desktop::{DesktopError, FromDesktop};
@@ -13,11 +18,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::io;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+#[cfg(unix)]
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
+#[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::{mpsc, watch};
 
@@ -276,17 +284,25 @@ fn finish_delivery(
     }
 }
 
+#[cfg(unix)]
 fn process_alive(pid: u32) -> bool {
     let Ok(pid) = libc::pid_t::try_from(pid) else { return false };
     // SAFETY: signal 0 only checks that the process exists.
     unsafe { libc::kill(pid, 0) == 0 || io::Error::last_os_error().raw_os_error() == Some(libc::EPERM) }
 }
 
+#[cfg(not(unix))]
+fn process_alive(pid: u32) -> bool {
+    crate::liveness::alive(pid)
+}
+
+#[cfg_attr(not(unix), allow(dead_code))]
 fn socket(data: &Path) -> PathBuf {
     data.join("claude-channel.sock")
 }
 
 /// Why [`peer`] said no.
+#[cfg(unix)]
 #[derive(Debug)]
 enum PeerError {
     /// Not a same-user process, no pid, or unreadable credentials.
@@ -297,6 +313,7 @@ enum PeerError {
     OtherExecutable { pid: u32, exe: Option<PathBuf> },
 }
 
+#[cfg(unix)]
 impl PeerError {
     /// Is the refused peer plausibly another copy of `deckd` (as opposed to
     /// some unrelated same-user program)? An unresolvable path counts: that
@@ -314,6 +331,7 @@ impl PeerError {
     }
 }
 
+#[cfg(unix)]
 fn peer(stream: &UnixStream) -> Result<u32, PeerError> {
     let (uid, pid) = crate::api::uds::peer_of(stream).map_err(PeerError::Rejected)?;
     let pid = pid.ok_or_else(|| PeerError::Rejected(io::Error::other("missing peer pid")))?;
@@ -333,11 +351,13 @@ fn peer(stream: &UnixStream) -> Result<u32, PeerError> {
     Ok(pid)
 }
 
+#[cfg(unix)]
 struct Reader<R> {
     input: BufReader<R>,
     bytes: Vec<u8>,
 }
 
+#[cfg(unix)]
 impl<R: tokio::io::AsyncRead + Unpin> Reader<R> {
     fn new(input: R) -> Self {
         Self {
@@ -364,6 +384,7 @@ impl<R: tokio::io::AsyncRead + Unpin> Reader<R> {
     }
 }
 
+#[cfg(unix)]
 async fn write<W: AsyncWrite + Unpin>(output: &mut W, value: &Value) -> io::Result<()> {
     let mut bytes = serde_json::to_vec(value)?;
     bytes.push(b'\n');
@@ -375,6 +396,7 @@ async fn write<W: AsyncWrite + Unpin>(output: &mut W, value: &Value) -> io::Resu
 }
 
 /// Why an open door closed.
+#[cfg(unix)]
 #[derive(Debug)]
 enum Closed {
     /// The daemon is stopping.
@@ -394,6 +416,7 @@ enum Closed {
 /// then finds no door, which it already treats as a daemon that is not
 /// running: it retries quietly, and links again by itself once the switch
 /// is back on.
+#[cfg(unix)]
 pub async fn serve(
     data: PathBuf,
     hub: Arc<Hub>,
@@ -403,7 +426,21 @@ pub async fn serve(
     serve_every(data, hub, on, SWITCH_POLL, stop).await;
 }
 
+/// Windows: no channel door yet (its helper link is a Unix socket checked
+/// by peer credentials). The hub stays empty, so every order takes the
+/// next route, exactly as when the door cannot bind on Unix.
+#[cfg(not(unix))]
+pub async fn serve(
+    _data: PathBuf,
+    _hub: Arc<Hub>,
+    _on: impl Fn() -> bool + Send + Sync + 'static,
+    _stop: watch::Receiver<bool>,
+) {
+    tracing::info!("Claude channel door is not supported on this platform; using the inbox route");
+}
+
 /// [`serve`], reading the switch every `poll`.
+#[cfg(unix)]
 async fn serve_every(
     data: PathBuf,
     hub: Arc<Hub>,
@@ -437,6 +474,7 @@ async fn serve_every(
 
 /// The open door: helpers are accepted until the daemon stops or the switch
 /// goes off. Whatever ends it, every link ends with it and the socket goes.
+#[cfg(unix)]
 async fn door(
     data: &Path,
     hub: &Arc<Hub>,
@@ -497,6 +535,7 @@ async fn door(
     closed
 }
 
+#[cfg(unix)]
 async fn connection(stream: UnixStream, pid: u32, number: u64, hub: &Hub) -> io::Result<()> {
     let (input, mut output) = stream.into_split();
     let mut input = Reader::new(input);
@@ -558,11 +597,17 @@ async fn connection(stream: UnixStream, pid: u32, number: u64, hub: &Hub) -> io:
     }
 }
 
+#[cfg(unix)]
 pub fn main(data: &Path) -> Result<i32, String> {
     mcp::run(data)
 }
 
-#[cfg(test)]
+#[cfg(not(unix))]
+pub fn main(_data: &Path) -> Result<i32, String> {
+    Err("the Claude channel helper is not supported on this platform yet".into())
+}
+
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 

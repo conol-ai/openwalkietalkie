@@ -159,6 +159,14 @@ impl Session {
 }
 
 /// `"HH:MM"` in the local zone for `hello.hm`; `None` when the zone is unknown.
+#[cfg(windows)]
+pub fn local_hm(now: std::time::SystemTime) -> Option<String> {
+    let local: chrono::DateTime<chrono::Local> = now.into();
+    Some(local.format("%H:%M").to_string())
+}
+
+/// `"HH:MM"` in the local zone for `hello.hm`; `None` when the zone is unknown.
+#[cfg(unix)]
 pub fn local_hm(now: std::time::SystemTime) -> Option<String> {
     let secs = now.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs();
     let t = libc::time_t::try_from(secs).ok()?;

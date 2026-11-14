@@ -90,9 +90,52 @@ pub fn ago(ts: Ts, now: Ts, language: Language) -> String {
     }
 }
 
+/// [`local_clock`] on Windows, through chrono's local zone (no `localtime_r`).
+#[cfg(windows)]
+pub fn local_clock(ts: Ts) -> (i32, u32, u32, u32, u32) {
+    use chrono::{Datelike, Timelike};
+    let Some(utc) = i64::try_from(ts.millis())
+        .ok()
+        .and_then(chrono::DateTime::from_timestamp_millis)
+    else {
+        return utc_clock(ts);
+    };
+    let local = utc.with_timezone(&chrono::Local);
+    (
+        local.year(),
+        local.month(),
+        local.day(),
+        local.hour(),
+        local.minute(),
+    )
+}
+
+/// [`local_ts`] on Windows. As `mktime` does, an ambiguous minute (the hour
+/// a summer-time change repeats) is its first occurrence and a skipped one
+/// is moved past the change.
+#[cfg(windows)]
+pub fn local_ts(year: i32, month: u32, day: u32, hour: u32, minute: u32) -> Option<Ts> {
+    use chrono::TimeZone;
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) || hour > 23 || minute > 59 {
+        return None;
+    }
+    let naive = chrono::NaiveDate::from_ymd_opt(year, month, day)?.and_hms_opt(hour, minute, 0)?;
+    let local = chrono::Local
+        .from_local_datetime(&naive)
+        .earliest()
+        .or_else(|| {
+            chrono::Local
+                .from_local_datetime(&(naive + chrono::Duration::hours(1)))
+                .earliest()
+        })?;
+    let millis = u64::try_from(local.timestamp_millis()).ok()?;
+    Some(Ts::from_millis(millis))
+}
+
 /// `ts` on this Mac's clock, through `localtime_r`: the year, the month (1
 /// to 12), the day, the hour (0 to 23) and the minute, in its time zone and
 /// with its summer time. A stamp the zone cannot place is read in UTC.
+#[cfg(unix)]
 pub fn local_clock(ts: Ts) -> (i32, u32, u32, u32, u32) {
     let seconds = libc::time_t::try_from(ts.millis() / 1_000).unwrap_or(libc::time_t::MAX);
     // SAFETY: `tm` is plain C data, and all zeroes (a null `tm_zone` among
@@ -120,6 +163,7 @@ pub fn local_clock(ts: Ts) -> (i32, u32, u32, u32, u32) {
 /// `None` for a date no calendar has (a 13th month, 30 February) or a time
 /// no clock shows (a 25th hour). A minute a summer-time change skips is
 /// moved past the change, as `mktime` moves it.
+#[cfg(unix)]
 pub fn local_ts(year: i32, month: u32, day: u32, hour: u32, minute: u32) -> Option<Ts> {
     if !(1..=12).contains(&month) || !(1..=31).contains(&day) || hour > 23 || minute > 59 {
         return None;

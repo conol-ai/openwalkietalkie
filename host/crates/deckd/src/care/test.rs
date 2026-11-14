@@ -651,13 +651,19 @@ mod tests {
     }
 
     /// The deck links: opened, its hello (with the language a deck that has
-    /// the setting sends), live.
+    /// the setting sends), live. It runs the first firmware that answers the
+    /// install's card (0.14.0, `core::test_agent::CONFIRMS_SINCE`).
     fn link(c: &mut Core, language: Option<u8>, now: Instant) {
+        link_running(c, "0.14.0-openwalkietalkie", language, now);
+    }
+
+    /// [`link`], for a deck that runs firmware `fw`.
+    fn link_running(c: &mut Core, fw: &str, language: Option<u8>, now: Instant) {
         c.on_link(LinkEvent::Linked, now);
         c.on_device_line(
             DeviceLine::Hello {
                 v: 1,
-                fw: "0.13.0".into(),
+                fw: fw.into(),
                 sid: 7,
                 boot: false,
                 rx: deck_model::LINE_MAX_U16,
@@ -1377,6 +1383,33 @@ mod tests {
         let gone = DeviceOp::Put(Key::AgentGone(slot), HostLine::AgentGone { slot: slot.0 });
         assert!(ops.try_iter().any(|op| op == gone), "its slot was cleared");
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// A linked deck whose firmware predates the card's ENTER (0.13 and
+    /// every release before it) cannot answer the card, so it is not asked:
+    /// the install the app confirmed starts at once, with no card, no agent
+    /// and nothing read out, as it did before the card existed. Asked, it
+    /// would wait out the card's minute and install nothing.
+    #[test]
+    fn firmware_too_old_to_confirm_installs_on_the_apps_confirmation() {
+        for fw in ["0.9.0-openwalkietalkie", "0.13.0", "0.13.9-openwalkietalkie"] {
+            let (mut c, ops, _lines, _debug, dir) = detached_core("care-install-old-firmware");
+            let started = checked(&mut c, firmware::testkit::deck());
+            let t0 = Instant::now();
+            link_running(&mut c, fw, None, t0);
+            let _ = ops.try_iter().count();
+            let reply = install(&mut c, t0).unwrap();
+            assert_eq!(reply["phase"], "downloading", "{fw}: {reply}");
+            assert_eq!(
+                *started.lock().unwrap(),
+                [firmware::testkit::install()],
+                "{fw}: started without a press"
+            );
+            assert!(card_sent(&ops).is_none(), "{fw}: no card went to the deck");
+            assert!(installer(&c).is_none(), "{fw}: no agent asks");
+            assert!(c.store.snapshot().voice.speaking.is_none(), "{fw}: nothing read out");
+            std::fs::remove_dir_all(dir).unwrap();
+        }
     }
 
     /// Every way the card ends but ENTER on the deck leaves nothing

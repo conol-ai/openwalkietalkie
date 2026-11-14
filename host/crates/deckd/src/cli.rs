@@ -1313,8 +1313,13 @@ pub fn events_cmd(
         if replay.gap && !line(serde_json::json!({"type": "resync", "rev": hello.rev})) {
             return Ok(0);
         }
+        #[cfg(unix)]
         let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
             .map_err(|e| format!("cannot listen for SIGTERM: {e}"))?;
+        // Windows has no SIGTERM: Ctrl-C (and Ctrl-Break, through the same
+        // console handler) is the only stop.
+        #[cfg(not(unix))]
+        let mut term = Never;
         loop {
             let event = tokio::select! {
                 _ = tokio::signal::ctrl_c() => break,
@@ -1506,8 +1511,24 @@ fn key_notes(
 /// call and gave no answer (a Keychain dialog it waits on, a broken
 /// connection, a timeout) holds a key of its own, and a key written around
 /// it would leave the two apart until it restarts.
+#[cfg(unix)]
 fn service_listening(socket: &Path) -> bool {
     std::os::unix::net::UnixStream::connect(socket).is_ok()
+}
+
+/// [`service_listening`] on Windows: the pipe opens, or every instance of
+/// it is busy, which is a service there just the same.
+#[cfg(windows)]
+fn service_listening(socket: &Path) -> bool {
+    const ERROR_PIPE_BUSY: i32 = 231;
+    match std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(socket)
+    {
+        Ok(_) => true,
+        Err(e) => e.raw_os_error() == Some(ERROR_PIPE_BUSY),
+    }
 }
 
 /// A service is at the socket and did not answer (`why`): nothing is
@@ -2967,6 +2988,17 @@ pub fn dry_run(
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// The SIGTERM stream where there is no SIGTERM (Windows): never fires.
+#[cfg(not(unix))]
+struct Never;
+
+#[cfg(not(unix))]
+impl Never {
+    async fn recv(&mut self) -> Option<()> {
+        std::future::pending().await
+    }
 }
 
 #[cfg(test)]

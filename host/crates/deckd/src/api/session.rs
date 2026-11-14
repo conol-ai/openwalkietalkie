@@ -95,9 +95,20 @@ pub fn has_scope(have: &[Scope], need: Scope) -> bool {
 }
 
 /// The daemon's uid: the only uid a UDS peer may have.
+#[cfg(unix)]
 pub fn own_uid() -> u32 {
     // SAFETY: getuid has no preconditions.
     unsafe { libc::getuid() }
+}
+
+/// The daemon's "uid" on Windows: its user SID's relative id (1001 for the
+/// first local account), which is what `uid:<n>` prints. The pipe door
+/// compares whole SIDs; this number only names the principal.
+#[cfg(windows)]
+pub fn own_uid() -> u32 {
+    deck_client::windows::current_user()
+        .map(|user| user.rid())
+        .unwrap_or(0)
 }
 
 /// The principal of a UDS peer.

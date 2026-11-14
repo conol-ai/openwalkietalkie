@@ -1871,6 +1871,7 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tokio-tungstenite 0.30.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1972,6 +1973,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "whisper-rs",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5474,6 +5476,7 @@ dependencies = [
  "async-channel 2.5.0",
  "base64",
  "cc",
+ "chrono",
  "deck-client",
  "deck-gui-core",
  "deck-model",

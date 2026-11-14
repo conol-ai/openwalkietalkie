@@ -502,16 +502,24 @@ impl Core {
                             .and_then(serde_json::Value::as_bool)
                             .unwrap_or(false),
                     };
-                    // A deck that can show a card is asked first, and the
-                    // install waits for ENTER on it (`care::test`); a deck
-                    // in recovery cannot, and installs as it always has;
-                    // any other deck is refused until it links.
+                    // A deck whose firmware answers the card is asked first,
+                    // and the install waits for ENTER on it (`care::test`);
+                    // older firmware, and a deck in recovery, cannot answer
+                    // one, and install on the app's confirmation as they
+                    // always have; any other deck is refused until it links.
                     match self.install_gate() {
                         super::test_agent::InstallGate::AskTheDeck => {
                             return self.install_after_press(install, now);
                         }
                         super::test_agent::InstallGate::NotLinked => {
                             return self.install_refused_until_linked(&install);
+                        }
+                        super::test_agent::InstallGate::AppConfirmed => {
+                            tracing::info!(
+                                fw = ?self.store.snapshot().device.fw,
+                                "firmware: this deck's firmware cannot confirm on the deck; \
+                                 the app's confirmation starts the install"
+                            );
                         }
                         super::test_agent::InstallGate::Recovery => {}
                     }

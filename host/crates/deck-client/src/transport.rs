@@ -26,12 +26,18 @@ pub async fn open(transport: &Transport) -> Result<Lines, ClientError> {
 }
 
 pub mod uds {
-    //! Newline-delimited JSON-RPC over `tokio::net::UnixStream`.
+    //! Newline-delimited JSON-RPC over the local door: `tokio::net::UnixStream`
+    //! on Unix, the daemon's named pipe on Windows (`crate::windows`). The
+    //! framing is the same on both.
     use super::{LineReader, LineWriter, Lines};
     use crate::ClientError;
     use std::path::Path;
-    use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
-    use tokio::net::UnixStream;
+    use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
+
+    #[cfg(unix)]
+    pub type Stream = tokio::net::UnixStream;
+    #[cfg(windows)]
+    pub type Stream = tokio::net::windows::named_pipe::NamedPipeClient;
 
     /// The longest line read from the daemon. Not the daemon's own
     /// `conn::LINE_MAX` (which caps what it reads from clients): a hello
@@ -40,14 +46,24 @@ pub mod uds {
     pub const LINE_MAX: usize = 16 * 1024 * 1024;
 
     /// Connect to the socket (no hello yet).
-    pub async fn connect(path: &Path) -> Result<UnixStream, ClientError> {
-        Ok(UnixStream::connect(path).await?)
+    #[cfg(unix)]
+    pub async fn connect(path: &Path) -> Result<Stream, ClientError> {
+        Ok(Stream::connect(path).await?)
+    }
+
+    /// Open the pipe, served by this user (no hello yet).
+    #[cfg(windows)]
+    pub async fn connect(path: &Path) -> Result<Stream, ClientError> {
+        Ok(crate::windows::connect(path).await?)
     }
 
     /// The stream as lines: `\n`-terminated, at most `LINE_MAX` bytes (a
     /// longer one is an error that ends the stream), CR stripped.
-    pub fn lines(stream: UnixStream) -> Lines {
-        let (read, write) = stream.into_split();
+    pub fn lines<S>(stream: S) -> Lines
+    where
+        S: AsyncRead + AsyncWrite + Send + 'static,
+    {
+        let (read, write) = tokio::io::split(stream);
         let reader: LineReader = Box::pin(futures_util::stream::unfold(
             Some(BufReader::new(read)),
             |state| async move {

@@ -3,8 +3,11 @@
 //! over `GET /v1/ws`, `session.hello` first, calls matched to responses by
 //! id, `event`/`resync` notifications as a broadcast, auto-reconnect with
 //! backoff and `since: last rev`. Used by `deckd ctl/events/status --live`
-//! and, later, the GUI.
+//! and, later, the GUI. On Windows the "Unix socket" is the daemon's named
+//! pipe (`windows`); `Transport::Uds` names either.
 pub mod transport;
+#[cfg(windows)]
+pub mod windows;
 
 use deck_model::{ApiError, Event, Scope, SessionId, Snapshot};
 use serde::de::DeserializeOwned;
@@ -630,15 +633,46 @@ impl Drop for Client {
 /// set; else on macOS `~/Library/Application Support/OpenWalkieTalkie/
 /// deckd.sock`, and elsewhere `$XDG_RUNTIME_DIR/openwalkietalkie/deckd.sock`,
 /// or, with no runtime dir, `$XDG_CACHE_HOME/openwalkietalkie/deckd.sock`,
-/// else `~/.cache/openwalkietalkie/deckd.sock`.
+/// else `~/.cache/openwalkietalkie/deckd.sock`. On Windows it is the pipe
+/// of `$DECKD_DATA_DIR`, else of `%LOCALAPPDATA%\OpenWalkieTalkie`
+/// ([`local_door_for`]).
 pub fn default_socket() -> PathBuf {
+    #[cfg(windows)]
+    {
+        let data = std::env::var_os("DECKD_DATA_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                std::env::var_os("LOCALAPPDATA")
+                    .map(PathBuf::from)
+                    .unwrap_or_default()
+                    .join("OpenWalkieTalkie")
+            });
+        local_door_for(&data)
+    }
+    #[cfg(not(windows))]
     socket_for(cfg!(target_os = "macos"), |name| std::env::var_os(name))
+}
+
+/// The local door of the daemon whose data directory is `data`:
+/// `<data>/deckd.sock` on Unix, the data directory's named pipe on Windows.
+/// The daemon's `Paths::from_data_dir` calls this too, so the two cannot
+/// disagree.
+pub fn local_door_for(data: &std::path::Path) -> PathBuf {
+    #[cfg(windows)]
+    {
+        windows::pipe_name_for(data)
+    }
+    #[cfg(not(windows))]
+    {
+        data.join("deckd.sock")
+    }
 }
 
 /// [`default_socket`]'s rule over an environment lookup `var`, for the
 /// platform `macos` says. An XDG variable counts only when it is an
 /// absolute path, as the `directories` crate the daemon resolves its paths
 /// with reads it; a relative or empty one is passed over.
+#[cfg_attr(windows, allow(dead_code))]
 fn socket_for(macos: bool, var: impl Fn(&str) -> Option<std::ffi::OsString>) -> PathBuf {
     if let Some(dir) = var("DECKD_DATA_DIR") {
         return PathBuf::from(dir).join("deckd.sock");
@@ -683,6 +717,13 @@ mod tests {
     #[test]
     fn the_default_socket_follows_the_data_dir_rule() {
         let path = default_socket();
+        if cfg!(windows) {
+            assert!(
+                path.to_string_lossy().starts_with(r"\\.\pipe\openwalkietalkie-deckd-"),
+                "{path:?}"
+            );
+            return;
+        }
         assert!(path.ends_with("deckd.sock"), "{path:?}");
         if std::env::var_os("DECKD_DATA_DIR").is_none() && cfg!(target_os = "macos") {
             assert!(path
@@ -695,6 +736,8 @@ mod tests {
     /// against a made-up environment: the data dir first; the Library
     /// folder on macOS; elsewhere the runtime dir, else the cache dir, else
     /// `~/.cache`, each XDG variable only when it is an absolute path.
+    /// (Windows names a pipe instead: `windows::tests`.)
+    #[cfg(not(windows))]
     #[test]
     fn the_socket_rule_is_the_daemons_on_either_platform() {
         let rule = |macos: bool, env: &[(&str, &str)]| {
