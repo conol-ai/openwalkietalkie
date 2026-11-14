@@ -186,6 +186,22 @@ class BridgeSessions(unittest.TestCase):
             ready = deck.calls.index(('agent.update', {'agent': 'ag_1', 'state': 'ready', 'title': ''}))
             self.assertLess(methods.index('agent.reply'), ready, 'the reply first: deckd speaks it at ready')
 
+    def test_a_turn_that_ends_with_the_last_turns_words_still_sends_its_reply(self):
+        # deckd marks the stored reply stale when a turn starts and speaks `ready` only with a
+        # reply stored since: a second "Done." that stayed in the bridge would leave the deck silent.
+        deck = FakeDeck()
+        bridge = make_bridge(deck)
+        for _ in range(2):
+            bridge.on_hook(hook('UserPromptSubmit'))
+            bridge.on_hook(hook('Stop', reply='Done.'))
+        replies = [p['text'] for m, p in deck.calls if m == 'agent.reply']
+        self.assertEqual(replies, ['Done.', 'Done.'])
+        working = ('agent.update', {'agent': 'ag_1', 'state': 'working', 'title': ''})
+        second_turn = len(deck.calls) - deck.calls[::-1].index(working) - 1
+        methods = [m for m, _ in deck.calls[second_turn:]]
+        self.assertLess(methods.index('agent.reply'), methods.index('agent.update', 1),
+                        'the second reply goes before the second ready')
+
     def test_a_reply_too_long_for_the_door_drops_the_message(self):
         self.assertFalse(s.valid_hook(hook('Stop', reply='x' * 8001)))
         self.assertFalse(s.valid_hook(hook('Stop', reply=['not', 'text'])))

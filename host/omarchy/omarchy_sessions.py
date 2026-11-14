@@ -277,7 +277,9 @@ class Bridge:
                     self.read_reply(session)
             elif msg['event'] == 'Stop' and msg.get('reply', '').strip():
                 # Claude Code and Codex carry the reply in the hook itself (`last_assistant_message`).
-                session.reply = clip(msg['reply'], REPLY_MAX)
+                # It is this turn's, so it goes to deckd even when it reads like the last turn's:
+                # deckd speaks a `ready` only with a reply stored since the turn began.
+                session.reply, session.replied = clip(msg['reply'], REPLY_MAX), ''
             state = state_for(msg['event'], msg.get('ntype'))
             if state:
                 session.state = state

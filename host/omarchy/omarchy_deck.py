@@ -441,7 +441,15 @@ class Remote:
         for f, layout in (macros or {}).items():
             keys = layout.get('keys') if isinstance(layout, dict) else None
             if isinstance(keys, list):
-                self.macros[int(f)] = keys
+                self.set_face_macros(f, keys)
+
+    def set_face_macros(self, f, keys: list) -> None:
+        """One face's keys. A face id that is not a number is passed over, as the other handlers
+        pass over bad data: one odd event must not end the connection to deckd."""
+        try:
+            self.macros[int(f)] = keys
+        except (TypeError, ValueError):
+            pass
 
     def on_macro(self, data: dict) -> None:
         """A Macropad key pressed (or a wheel step on one): type its keystroke. A release types
@@ -511,7 +519,7 @@ class Remote:
             self.on_macro(data)
         elif kind == 'device.macros':
             if self.types_macros and isinstance(data.get('keys'), list):
-                self.macros[int(data['f'])] = data['keys']
+                self.set_face_macros(data.get('f'), data['keys'])
         elif kind == 'device.profile':
             if self.types_macros:
                 self.set_macros(data.get('macros'))

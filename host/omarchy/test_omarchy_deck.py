@@ -1,6 +1,7 @@
 """Tests for omarchy_deck.py: python3 -m unittest host/examples/test_omarchy_deck.py"""
 import json
 import os
+import re
 import socket
 import sys
 import tempfile
@@ -153,9 +154,11 @@ class Macropad(unittest.TestCase):
             self.assertIsNone(o.wtype_args(bad), bad)
 
     def test_every_deck_key_has_a_keysym(self):
-        keys = ['a', 'z', '0', '9', 'f1', 'f12', 'up', 'enter', 'esc', 'tab', 'space', 'backspace', 'delete',
-                'home', 'end', 'pageup', 'pagedown', 'minus', 'equal', 'lbracket', 'rbracket', 'backslash',
-                'semicolon', 'quote', 'comma', 'period', 'slash', 'grave']
+        # Read from deck-proto itself, so a key deckd starts accepting cannot go untypeable here.
+        types = Path(__file__).resolve().parent.parent / 'crates/deck-proto/src/types.rs'
+        listed = re.search(r'KEYSTROKE_KEYS: &\[&str\] = &\[(.*?)\];', types.read_text(), re.S)
+        keys = re.findall(r'"([^"]+)"', listed[1])
+        self.assertIn('right', keys)
         for key in keys:
             self.assertIsNotNone(o.wtype_args(key), key)
 
@@ -178,6 +181,13 @@ class Macropad(unittest.TestCase):
         remote.handle({'type': 'device.profile', 'data': {'macros': {}}})
         self.press(remote, 4, 0)
         self.assertEqual(remote.run.call_count, 1)
+
+    def test_a_layout_event_with_a_bad_face_id_is_passed_over(self):
+        remote = self.remote()
+        for f in (None, 'x'):
+            remote.handle({'type': 'device.macros', 'data': {'f': f, 'keys': [{'label': 'x', 'keys': 'x'}]}})
+        remote.handle({'type': 'device.profile', 'data': {'macros': {'nope': {'keys': []}, '5': {'keys': []}}}})
+        self.assertEqual(remote.macros, {5: []})
 
     def test_a_macs_deckd_types_them_on_the_mac(self):
         remote = self.remote(platform='macos')
