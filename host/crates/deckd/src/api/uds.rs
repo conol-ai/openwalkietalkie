@@ -160,8 +160,10 @@ impl Listener {
     }
 }
 
+/// One pipe instance with `security`; `first` refuses a name some other
+/// process already serves. Also the Claude channel's door.
 #[cfg(windows)]
-fn instance(
+pub(crate) fn instance(
     name: &Path,
     security: &deck_client::windows::SecurityDescriptor,
     first: bool,
