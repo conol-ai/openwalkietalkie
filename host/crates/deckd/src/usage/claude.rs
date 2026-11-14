@@ -395,7 +395,7 @@ pub fn profile_account(value: &serde_json::Value) -> Option<String> {
 pub fn statusline_account() -> Option<String> {
     let path = match std::env::var_os("CLAUDE_CONFIG_DIR").filter(|v| !v.is_empty()) {
         Some(dir) => std::path::PathBuf::from(dir).join(".claude.json"),
-        None => std::path::PathBuf::from(std::env::var_os("HOME")?).join(".claude.json"),
+        None => crate::integrations::home_dir().ok()?.join(".claude.json"),
     };
     let bytes = std::fs::read(path).ok()?;
     profile_account(&serde_json::from_slice(&bytes).ok()?)
@@ -418,7 +418,7 @@ pub mod credentials {
     pub fn file() -> Login {
         let dir = std::env::var_os("CLAUDE_CONFIG_DIR")
             .map(std::path::PathBuf::from)
-            .or_else(|| std::env::var_os("HOME").map(|home| std::path::PathBuf::from(home).join(".claude")));
+            .or_else(|| crate::integrations::home_dir().ok().map(|home| home.join(".claude")));
         let Some(dir) = dir else {
             return Login::None;
         };

@@ -209,7 +209,7 @@ fn permitted_path(path: &str, session: &str) -> Option<PathBuf> {
     }
     let root = std::env::var_os("CLAUDE_CONFIG_DIR")
         .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".claude")))?
+        .or_else(|| crate::integrations::home_dir().ok().map(|h| h.join(".claude")))?
         .join("projects")
         .canonicalize()
         .ok()?;

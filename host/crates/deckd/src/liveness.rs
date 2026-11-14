@@ -469,9 +469,11 @@ pub fn claude_dir() -> Option<std::path::PathBuf> {
     if let Some(dir) = std::env::var_os("CLAUDE_CONFIG_DIR").filter(|d| !d.is_empty()) {
         return Some(std::path::PathBuf::from(dir));
     }
-    std::env::var_os("HOME")
-        .filter(|h| !h.is_empty())
-        .map(|home| std::path::PathBuf::from(home).join(".claude"))
+    // `HOME`, else the OS's own idea of it (`%USERPROFILE%` on Windows,
+    // where nothing sets `HOME`).
+    crate::integrations::home_dir()
+        .ok()
+        .map(|home| home.join(".claude"))
 }
 
 /// Does Claude's session registry hold any entry at all?

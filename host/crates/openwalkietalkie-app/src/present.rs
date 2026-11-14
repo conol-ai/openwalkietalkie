@@ -261,7 +261,11 @@ pub const PATH_MAX: usize = 50;
 /// long stays too long, because a name that is not the whole name points at
 /// nothing.
 pub fn home_short(path: &str) -> String {
-    let home = std::env::var("HOME").ok();
+    // Windows names the home `USERPROFILE`, and nothing sets `HOME` there.
+    let home = std::env::var("HOME")
+        .ok()
+        .filter(|home| !home.is_empty())
+        .or_else(|| cfg!(windows).then(|| std::env::var("USERPROFILE").ok()).flatten());
     shorten(path, home.as_deref())
 }
 
@@ -715,11 +719,20 @@ impl LoginItem {
 
 /// System Settings › General › Login Items, verified against the extension
 /// bundle id on this machine.
+#[cfg(not(windows))]
 pub const LOGIN_ITEMS_SETTINGS: &str =
     "x-apple.systempreferences:com.apple.LoginItems-Settings.extension";
+/// Windows Settings › Apps › Startup, where the service's start at sign-in
+/// can be switched off.
+#[cfg(windows)]
+pub const LOGIN_ITEMS_SETTINGS: &str = "ms-settings:startupapps";
 
 /// System Settings › Bluetooth, likewise: where a deck is paired.
+#[cfg(not(windows))]
 pub const BLUETOOTH_SETTINGS: &str = "x-apple.systempreferences:com.apple.BluetoothSettings";
+/// Windows Settings › Bluetooth & devices.
+#[cfg(windows)]
+pub const BLUETOOTH_SETTINGS: &str = "ms-settings:bluetooth";
 
 #[cfg(test)]
 mod tests {

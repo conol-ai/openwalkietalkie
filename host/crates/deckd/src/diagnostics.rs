@@ -92,8 +92,7 @@ pub struct Bundle {
 
 /// `~/Desktop`, where §10.5 puts the file.
 pub fn default_dir() -> Result<PathBuf, String> {
-    let home = std::env::var_os("HOME").ok_or("HOME is not set")?;
-    Ok(PathBuf::from(home).join("Desktop"))
+    Ok(crate::integrations::home_dir()?.join("Desktop"))
 }
 
 /// The file name §10.5 names, with the timestamp flattened so it survives a

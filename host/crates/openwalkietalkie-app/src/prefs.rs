@@ -248,6 +248,16 @@ impl Prefs {
     }
 }
 
+/// The user's configuration directory: on Windows the roaming
+/// `%APPDATA%` (nothing sets `HOME` there, so without this the
+/// preferences lived in memory and were lost at every quit).
+#[cfg(windows)]
+fn config_dir() -> Option<PathBuf> {
+    std::env::var_os("APPDATA")
+        .map(PathBuf::from)
+        .filter(|dir| dir.is_absolute())
+}
+
 /// The user's configuration directory as XDG names it: `$XDG_CONFIG_HOME`
 /// when that is an absolute path, else `~/.config`.
 #[cfg(not(windows))]

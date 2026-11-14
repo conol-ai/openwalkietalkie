@@ -1373,7 +1373,7 @@ fn find_uv() -> Option<PathBuf> {
             .find(|p| p.is_file())
     });
     on_path.or_else(|| {
-        let home = std::env::var_os("HOME").map(PathBuf::from)?;
+        let home = crate::integrations::home_dir().ok()?;
         [home.join(".local/bin/uv"), PathBuf::from("/opt/homebrew/bin/uv")]
             .into_iter()
             .find(|p| p.is_file())
@@ -1399,7 +1399,7 @@ fn hf_cache_dir(model: &str) -> Option<PathBuf> {
     let hub = std::env::var_os("HF_HUB_CACHE")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HF_HOME").map(|h| PathBuf::from(h).join("hub")))
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache/huggingface/hub")))?;
+        .or_else(|| crate::integrations::home_dir().ok().map(|h| h.join(".cache/huggingface/hub")))?;
     Some(hub.join(format!("models--{}", model.replace('/', "--"))))
 }
 

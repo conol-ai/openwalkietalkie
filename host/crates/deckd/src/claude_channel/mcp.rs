@@ -216,7 +216,7 @@ pub(super) fn run(data: &Path) -> Result<i32, String> {
         .ok_or("the Claude channel must be launched by Claude Code")?;
     let config = std::env::var_os("CLAUDE_CONFIG_DIR")
         .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".claude")))
+        .or_else(|| crate::integrations::home_dir().ok().map(|h| h.join(".claude")))
         .ok_or("no Claude config directory")?;
     let (tx, mut stdin) = mpsc::channel(16);
     std::thread::Builder::new()
