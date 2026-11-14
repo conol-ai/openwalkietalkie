@@ -403,6 +403,37 @@ fn a_session_from_hello_to_answer() {
     assert_eq!(out.deck_events().count(), 0, "offline: nothing goes out");
 }
 
+/// deckd's firmware install, line for line as the daemon sends it (its care
+/// session's installer, `Core::install_after_press`), to a deck with the
+/// default settings sitting on the roster. Auto-jump is off, so the card is a
+/// toast; the first ENTER opens it instead of the highlighted session's
+/// channel, and the second, past the card's guard, answers Install. Before
+/// the toast took ENTER, the first ENTER opened web-ui's channel and the
+/// card ran out its minute.
+#[test]
+fn deckds_install_card_is_answered_with_two_enters_from_the_roster() {
+    let line = |ui: &mut UiState, line: &str, at: u32| {
+        let mut msg = Box::new(HostMsg::None);
+        crate::deck::proto::parse(line.as_bytes(), &mut msg).unwrap_or_else(|e| panic!("{line}: {e:?}"));
+        host(ui, &msg, at)
+    };
+    let mut ui = Box::new(UiState::new());
+    ui.reset();
+    line(&mut ui, r#"{"m":"hello","v":1,"sid":7,"hm":"10:00"}"#, 0);
+    line(&mut ui, r#"{"m":"agent","id":1,"kind":"claude","name":"web-ui","state":"working","title":"Refactoring"}"#, 10);
+    line(&mut ui, r#"{"m":"synced"}"#, 20);
+    assert!(!ui.deck.settings.auto_jump);
+    assert_eq!((ui.current_face().template, ui.agents.view, ui.agents.highlight), (Template::Agents, AgentsView::Roster, 1));
+    line(&mut ui, r#"{"m":"agent","id":2,"kind":"other","name":"Firmware","state":"question","title":"Install firmware 0.14.0? Press ENTER."}"#, 10_000);
+    let out = line(&mut ui, r#"{"m":"card","agent":2,"id":7,"type":"q","text":"Install firmware 0.14.0? Press ENTER.","choices":["Install"],"rec":0}"#, 10_005);
+    assert!(out.wake && ui.notify.toast.is_some_and(|t| t.notice() == Some((2, 7)) && t.takes_enter));
+    let out = press(&mut ui, Button::Enter, 10_700);
+    assert_eq!(events(&out), []);
+    assert_eq!((ui.agents.view, ui.agents.agent, ui.agents.choice), (AgentsView::Card, 2, Some(0)));
+    let out = press(&mut ui, Button::Enter, 11_400);
+    assert_eq!(events(&out), [Event::Answer { agent: 2, card: 7, choice: 0 }]);
+}
+
 #[test]
 fn link_drop_and_reconnect_resume_the_same_daemon_without_a_resync() {
     let mut ui = hosted();

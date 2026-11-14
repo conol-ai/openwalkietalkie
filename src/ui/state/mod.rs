@@ -5,10 +5,15 @@
 //! # Call order
 //!
 //! `apply(control, at_ms, out)`
+//!   0. `notify::claims_enter` consumes nothing: any press, detent or new
+//!      touch ends a card toast's claim on ENTER, and it says whether this
+//!      control is the plain ENTER that claim was waiting for.
 //!   1. `global::on_control` sees EVERY control first (SHIFT, double-SHIFT,
 //!      SHIFT+SCROLL, PTT session, release routing to the latched owner,
 //!      swallowed orphans, guards, last-input time). `true` = consumed.
 //!      While the tutorial is open it hands everything to `tutorial` instead.
+//!      An ENTER the toast claimed and global left alone opens the toast's
+//!      card (`notify::toast_tapped`) and goes no further.
 //!   2. otherwise a `Touch` goes to `touch::on_touch` (edge gesture, the unified
 //!      recogniser), which routes through `touch_hit` / `touch_deliver` below;
 //!   3. otherwise a wheel detent or button PRESS goes to `dispatch`: the open
@@ -455,7 +460,14 @@ impl UiState {
         // The firmware hushes before it decides whether to deliver (a
         // waking press is not); here for every other driver of the state.
         timer::hush(self, control);
+        // Any fresh input ends a card toast's claim on ENTER; this may be
+        // the ENTER it was waiting for.
+        let opens_toast = notify::claims_enter(self, control);
         let mut consumed = global::on_control(self, control, at_ms, out);
+        if !consumed && opens_toast {
+            notify::toast_tapped(self, at_ms, out);
+            consumed = true;
+        }
         if !consumed {
             consumed = match control {
                 Control::Touch(touch) => {
