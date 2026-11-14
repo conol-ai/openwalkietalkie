@@ -38,7 +38,9 @@
 //! prints the socket path and whether a token is held, nothing else.
 use crate::desktop::{DesktopError, FromDesktop};
 use deck_model::AgentId;
+#[cfg(unix)]
 use std::io::Write;
+#[cfg(unix)]
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -123,6 +125,16 @@ pub fn post(inbox: &Inbox, text: &str) -> Result<(), DesktopError> {
     post_to(&inbox.socket, &frame(inbox, text))
 }
 
+/// Windows: not built yet. Claude Code's messaging endpoint there is not
+/// a Unix socket, and nothing has measured what it is, so the route reports
+/// itself unreachable and the order falls through to the next one.
+#[cfg(not(unix))]
+fn post_to(socket: &Path, _bytes: &[u8]) -> Result<(), DesktopError> {
+    tracing::debug!(socket = %socket.display(), "inbox: not supported on this platform");
+    Err(DesktopError::Inbox("inbox_unreachable"))
+}
+
+#[cfg(unix)]
 fn post_to(socket: &Path, bytes: &[u8]) -> Result<(), DesktopError> {
     let mut stream = UnixStream::connect(socket).map_err(|e| {
         tracing::debug!(socket = %socket.display(), error = %e, "inbox: connect failed");

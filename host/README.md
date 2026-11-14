@@ -17,7 +17,43 @@ The current voice transport is the deck's custom BLE audio protocol; see
 week-3 snapshot of the eight-week plan (design §15): the device link
 of week 1, the open API of week 2, and the agent adapters of week 3 — Claude
 Code and Codex hooks become cards on the deck. The LaunchAgent runs
-`deckd run`, which owns the deck link. Only macOS is supported.
+`deckd run`, which owns the deck link. macOS is the supported platform;
+Linux runs the service (see `host/omarchy/`), and Windows runs a minimal
+build of the service and the app, below.
+
+## Windows (experimental)
+
+`deckd` and the companion app build for `x86_64-pc-windows-msvc` and have
+been run against a Rev A on USB: the deck links, the app connects, and the
+USB firmware updater has installed a release (0.9.0 → 0.13.0, 2026-11-14).
+
+- **The local door is a named pipe**, `\\.\pipe\openwalkietalkie-deckd-<hash>`,
+  the hash being the data directory's (`deck_client::windows::pipe_name_for`),
+  so `DECKD_DATA_DIR` and `--data-dir` move it as they move the socket. Every
+  instance is created with a DACL that grants only the daemon's user, remote
+  clients are refused, the first instance must be the first of its name, and
+  both ends check that the other runs as the same user. `deckd ctl` and the
+  app speak to it exactly as to the socket. A peer is never `trusted` (there
+  is no code-signature check yet), so allowing a permission card from the app
+  is refused while `[trust] require_trusted_for_allow` holds.
+- **Data** lives in `%LOCALAPPDATA%\OpenWalkieTalkie` (config, state, `logs\`,
+  `caches\`). The single-instance lock is `LockFileEx` on `deckd.lock`.
+- **Nothing starts it at login yet.** Run `deckd run`, or press **Start** in
+  the app, which starts the `deckd.exe` beside it with no window. The app
+  allows `firmware.check`/`install` only when it runs from a folder named
+  `bin`, as on Linux.
+- **Firmware updates** download with `%SystemRoot%\System32\curl.exe`, keep
+  the computer awake while flashing, and wait up to three minutes for the
+  deck to come back after each restart (a deck passed through to a virtual
+  machine took 176 s). Windows binds no driver to recovery's bulk interface,
+  so the transfer uses the HID path (4 min 46 s for 0.13.0 on Rev A).
+- **Not built for Windows yet:** voice (BLE audio, recognisers, speech), the
+  Claude channel door and the Claude inbox, the Codex app-server client,
+  desktop focus and injection, launch at login, and the trusted-GUI check.
+  The Claude and Codex paths log that they are unavailable and leave the
+  rest of the service running; voice has not been tried. The test suite does
+  not compile on Windows (several tests are Unix-only), so CI builds the
+  Windows host and runs the client crate's tests only.
 
 ## Voice over BLE
 

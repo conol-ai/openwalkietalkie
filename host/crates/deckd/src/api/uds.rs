@@ -4,20 +4,29 @@
 //! uid must be ours; the pid goes to the verifier once, before the hello
 //! reply). No HTTP parser here: `curl --unix-socket` is unsupported by
 //! design.
+//!
+//! On Windows the same door is the data directory's named pipe
+//! (`deck_client::windows`): every instance is created with a DACL that
+//! grants only this user, remote clients are refused, the first instance
+//! must be the first of its name (a squatter fails the bind), and each
+//! client's token user is checked on accept in place of the uid. From the
+//! accepted connection on, the two platforms share [`serve_peer`].
 use super::conn::{self, Door, Peer};
 use super::Api;
 use crate::trust::PeerVerdict;
 use deck_model::Principal;
 use std::path::Path;
 use std::sync::Arc;
-use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::watch;
+#[cfg(unix)]
+use tokio::net::{UnixListener, UnixStream};
 
 /// macOS's `sun_path` holds 104 bytes including the NUL.
 pub const SUN_PATH_MAX: usize = 103;
 
 /// Bind the socket, replacing a stale file. A path longer than
 /// `SUN_PATH_MAX` is refused with a clear error (the API still serves TCP).
+#[cfg(unix)]
 pub fn bind(path: &Path) -> std::io::Result<UnixListener> {
     if path.as_os_str().len() > SUN_PATH_MAX {
         return Err(std::io::Error::new(
@@ -48,6 +57,7 @@ pub fn bind(path: &Path) -> std::io::Result<UnixListener> {
 }
 
 /// The peer's uid and pid (`LOCAL_PEERPID` on macOS, through tokio).
+#[cfg(unix)]
 pub fn peer_of(stream: &UnixStream) -> std::io::Result<(u32, Option<u32>)> {
     let cred = stream.peer_cred()?;
     let pid = cred.pid().and_then(|p| u32::try_from(p).ok());
@@ -55,6 +65,7 @@ pub fn peer_of(stream: &UnixStream) -> std::io::Result<(u32, Option<u32>)> {
 }
 
 /// Accept until `stop` flips; every connection runs on its own task.
+#[cfg(unix)]
 pub async fn accept_loop(api: Arc<Api>, listener: UnixListener, mut stop: watch::Receiver<bool>) {
     let own_uid = super::session::own_uid();
     loop {
@@ -80,36 +91,158 @@ pub async fn accept_loop(api: Arc<Api>, listener: UnixListener, mut stop: watch:
             tracing::warn!(uid, "uds peer of another uid; closed");
             continue;
         }
-        // The verification is blocking work (Security.framework plus up
-        // to `ANCESTRY_MAX_HOPS` `proc_pidinfo` calls, 250–500 ms
-        // measured): it runs per connection, on the blocking pool, so a
-        // slow peer never holds up the accept loop — and still before
-        // this connection's hello reply, as §3.3 requires.
-        let api = api.clone();
-        let stop = stop.clone();
-        tokio::spawn(async move {
-            let verdict = verdict_of(&api, pid).await;
-            tracing::debug!(
-                uid,
-                ?pid,
-                trusted = verdict.trusted,
-                capped = verdict.ancestry_capped,
-                "uds peer"
-            );
-            let (reader, writer) = stream.into_split();
-            conn::run(
-                api,
-                Peer {
-                    door: Door::Uds,
-                    principal: Some((Principal::Uid(uid), Vec::new())),
-                    verdict,
-                },
-                conn::line_stream(reader),
-                conn::line_sink(writer),
-                stop,
-            )
-            .await;
-        });
+        let (reader, writer) = stream.into_split();
+        serve_peer(&api, &stop, uid, pid, reader, writer);
+    }
+}
+
+/// One accepted, same-user connection: verify its peer, then run it.
+///
+/// The verification is blocking work (Security.framework plus up to
+/// `ANCESTRY_MAX_HOPS` `proc_pidinfo` calls, 250–500 ms measured): it runs
+/// per connection, on the blocking pool, so a slow peer never holds up the
+/// accept loop — and still before this connection's hello reply, as §3.3
+/// requires.
+fn serve_peer<R, W>(
+    api: &Arc<Api>,
+    stop: &watch::Receiver<bool>,
+    uid: u32,
+    pid: Option<u32>,
+    reader: R,
+    writer: W,
+) where
+    R: tokio::io::AsyncRead + Unpin + Send + 'static,
+    W: tokio::io::AsyncWrite + Unpin + Send + 'static,
+{
+    let api = api.clone();
+    let stop = stop.clone();
+    tokio::spawn(async move {
+        let verdict = verdict_of(&api, pid).await;
+        tracing::debug!(
+            uid,
+            ?pid,
+            trusted = verdict.trusted,
+            capped = verdict.ancestry_capped,
+            "uds peer"
+        );
+        conn::run(
+            api,
+            Peer {
+                door: Door::Uds,
+                principal: Some((Principal::Uid(uid), Vec::new())),
+                verdict,
+            },
+            conn::line_stream(reader),
+            conn::line_sink(writer),
+            stop,
+        )
+        .await;
+    });
+}
+
+/// The bound pipe: its name, the instance waiting for the next client, and
+/// what every further instance is created with.
+#[cfg(windows)]
+pub struct Listener {
+    name: std::path::PathBuf,
+    next: tokio::net::windows::named_pipe::NamedPipeServer,
+    security: deck_client::windows::SecurityDescriptor,
+    user: deck_client::windows::Sid,
+}
+
+#[cfg(windows)]
+impl Listener {
+    fn instance(
+        &self,
+        first: bool,
+    ) -> std::io::Result<tokio::net::windows::named_pipe::NamedPipeServer> {
+        instance(&self.name, &self.security, first)
+    }
+}
+
+#[cfg(windows)]
+fn instance(
+    name: &Path,
+    security: &deck_client::windows::SecurityDescriptor,
+    first: bool,
+) -> std::io::Result<tokio::net::windows::named_pipe::NamedPipeServer> {
+    use tokio::net::windows::named_pipe::ServerOptions;
+    let mut attributes = security.attributes();
+    // SAFETY: `attributes` points at `security`'s descriptor, which outlives
+    // the call; the kernel copies it into the new instance.
+    unsafe {
+        ServerOptions::new()
+            .first_pipe_instance(first)
+            .reject_remote_clients(true)
+            .create_with_security_attributes_raw(name, std::ptr::addr_of_mut!(attributes).cast())
+    }
+}
+
+/// Create the pipe's first instance, owned by and open to this user only.
+/// A name some other process already serves is refused
+/// (`FILE_FLAG_FIRST_PIPE_INSTANCE`): access denied, and the API keeps its
+/// TCP door if that is on, as a socket that cannot bind does on Unix.
+#[cfg(windows)]
+pub fn bind(path: &Path) -> std::io::Result<Listener> {
+    let user = deck_client::windows::current_user()?;
+    let security = deck_client::windows::SecurityDescriptor::only(&user)?;
+    let next = instance(path, &security, true).map_err(|e| {
+        std::io::Error::new(
+            e.kind(),
+            format!("cannot create {} (is another deckd running?): {e}", path.display()),
+        )
+    })?;
+    Ok(Listener {
+        name: path.to_path_buf(),
+        next,
+        security,
+        user,
+    })
+}
+
+/// Accept until `stop` flips; every connection runs on its own task. The
+/// next instance is created as soon as one connects, so a client never
+/// finds the pipe gone between two accepts (it waits out "busy" instead).
+#[cfg(windows)]
+pub async fn accept_loop(api: Arc<Api>, mut listener: Listener, mut stop: watch::Receiver<bool>) {
+    let uid = listener.user.rid();
+    loop {
+        let connected = tokio::select! {
+            _ = stop.changed() => break,
+            connected = listener.next.connect() => connected,
+        };
+        let replacement = match listener.instance(false) {
+            Ok(next) => next,
+            Err(e) => {
+                tracing::error!(error = %e, "pipe: cannot create the next instance; door closed");
+                break;
+            }
+        };
+        let server = std::mem::replace(&mut listener.next, replacement);
+        if let Err(e) = connected {
+            tracing::warn!(error = %e, "pipe accept failed");
+            continue;
+        }
+        let pid = match deck_client::windows::pipe_peer_pid(&server, true) {
+            Ok(pid) => pid,
+            Err(e) => {
+                tracing::warn!(error = %e, "pipe peer unidentifiable; closed");
+                continue;
+            }
+        };
+        match deck_client::windows::process_user(pid) {
+            Ok(user) if user == listener.user => {}
+            Ok(user) => {
+                tracing::warn!(pid, user = %user.string(), "pipe peer of another user; closed");
+                continue;
+            }
+            Err(e) => {
+                tracing::warn!(pid, error = %e, "pipe peer's user unreadable; closed");
+                continue;
+            }
+        }
+        let (reader, writer) = tokio::io::split(server);
+        serve_peer(&api, &stop, uid, Some(pid), reader, writer);
     }
 }
 
@@ -131,7 +264,7 @@ async fn verdict_of(api: &Arc<Api>, pid: Option<u32>) -> PeerVerdict {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use crate::api::testkit::test_api;

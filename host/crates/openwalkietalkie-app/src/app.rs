@@ -239,7 +239,10 @@ pub fn deckd_path() -> Option<PathBuf> {
 
 /// [`deckd_path`] for the executable `exe`.
 pub fn deckd_beside(exe: &Path) -> Option<PathBuf> {
-    let deckd = exe.parent()?.join("deckd");
+    // `deckd.exe` on Windows.
+    let deckd = exe
+        .parent()?
+        .join(format!("deckd{}", std::env::consts::EXE_SUFFIX));
     deckd.is_file().then_some(deckd)
 }
 
@@ -511,8 +514,38 @@ pub fn key_bindings() -> Vec<KeyBinding> {
 /// What the window's close button does, and Window ▸ Close: the app hides.
 /// The service keeps running and the deck keeps working, and the status
 /// item (or the dock icon) opens the window again.
+///
+/// Elsewhere it quits the window: gpui cannot hide an app there (its
+/// Windows `hide` is an empty todo), so a close that only hid would do
+/// nothing at all. The service is its own process and keeps the deck
+/// working either way.
 pub fn close_window(cx: &mut App) {
-    cx.hide();
+    if cfg!(target_os = "macos") {
+        cx.hide();
+    } else {
+        cx.quit();
+    }
+}
+
+/// The window's title bar. On macOS the content runs under a transparent one
+/// with no title, the traffic lights on the sidebar's first row. Elsewhere a
+/// transparent title bar means the app draws its own caption buttons and
+/// drag area (gpui hides the system's on Windows), which this window does
+/// not, so it keeps the system's title bar, with its title.
+fn titlebar() -> TitlebarOptions {
+    if cfg!(target_os = "macos") {
+        TitlebarOptions {
+            title: None,
+            appears_transparent: true,
+            traffic_light_position: Some(traffic_lights()),
+        }
+    } else {
+        TitlebarOptions {
+            title: Some("OpenWalkieTalkie".into()),
+            appears_transparent: false,
+            traffic_light_position: None,
+        }
+    }
 }
 
 /// The window. `first_run` hands it to first run from its first frame, step
@@ -529,11 +562,7 @@ fn open(state: HostState, receiver: EventReceiver, first_run: bool, cx: &mut App
         // traffic lights sit on the sidebar's first row (and first run's top
         // bar), and the shell keeps a band across the top that a double
         // click zooms the window from.
-        titlebar: Some(TitlebarOptions {
-            title: None,
-            appears_transparent: true,
-            traffic_light_position: Some(traffic_lights()),
-        }),
+        titlebar: Some(titlebar()),
         // Opaque: the window is the palette's `win`, never the desktop
         // through glass.
         window_background: WindowBackgroundAppearance::Opaque,
@@ -605,6 +634,7 @@ pub fn log_path(data_dir: Option<OsString>, home: &Path) -> PathBuf {
 /// Registering the agent in the first place is `SMAppService` and first
 /// run's job (§10.2); this button is for the agent that is installed and not
 /// running.
+#[cfg(unix)]
 pub fn kickstart_argv() -> Vec<String> {
     // SAFETY: getuid has no preconditions and cannot fail.
     let uid = unsafe { libc::getuid() };
@@ -637,7 +667,32 @@ pub fn start_service(bridge: &TokioBridge) -> Receiver {
 /// Where a [`start_service`] answer lands.
 pub type Receiver = async_channel::Receiver<std::result::Result<(), String>>;
 
+/// The blocking half on Windows, which has no launch agent yet: start the
+/// `deckd` beside this app as `deckd run`, detached and windowless. A
+/// second copy finds the lock held and exits, so pressing Start on a
+/// running service changes nothing.
+#[cfg(windows)]
+fn kickstart() -> std::result::Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    if let Some(why) = launch().hands_off() {
+        return Err(why.to_string());
+    }
+    let deckd = deckd_path().ok_or("there is no deckd beside this app")?;
+    std::process::Command::new(deckd)
+        .arg("run")
+        .creation_flags(CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map(drop)
+        .map_err(|e| e.to_string())
+}
+
 /// The blocking half: spawn `launchctl` and read its verdict.
+#[cfg(unix)]
 fn kickstart() -> std::result::Result<(), String> {
     // The label is the owner's installed agent's whichever copy asks, so
     // this is the last place a build, a harness walk or a window on a test
@@ -904,6 +959,7 @@ mod tests {
         assert_eq!(APP_ID, "ai.cohdl.openwalkietalkie");
     }
 
+    #[cfg(unix)]
     #[test]
     fn the_start_button_kickstarts_this_users_own_agent_by_label() {
         let argv = kickstart_argv();

@@ -210,8 +210,21 @@ fn open_serial(api: &mut HidApi, serial: &str) -> Result<Wire, String> {
     Ok(Wire(api.open_path(&path).map_err(|e| e.to_string())?))
 }
 
+/// How long the deck may take to show up on USB again after it restarts,
+/// into recovery or back into its firmware. Windows gets longer: the first
+/// time it meets recovery's composite device it sets it up (and looks for a
+/// driver for the bulk interface) before the HID side appears, and a deck
+/// passed through to a virtual machine waits for the hypervisor to attach it
+/// again. Measured on a QEMU guest (2026-11-14): 176 s from the end of the
+/// transfer to the updated deck on the guest's bus.
+const REAPPEAR_WITHIN: Duration = if cfg!(windows) {
+    Duration::from_secs(180)
+} else {
+    Duration::from_secs(40)
+};
+
 fn wait<T>(mut f: impl FnMut() -> Option<T>, what: &str) -> Result<T, String> {
-    let until = Instant::now() + Duration::from_secs(40);
+    let until = Instant::now() + REAPPEAR_WITHIN;
     loop {
         if let Some(value) = f() {
             return Ok(value);

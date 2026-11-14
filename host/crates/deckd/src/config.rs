@@ -1757,7 +1757,9 @@ impl Paths {
             state: data.join("state.json"),
             tokens: data.join("tokens.toml"),
             port: data.join("port"),
-            socket: data.join("deckd.sock"),
+            // `<data>/deckd.sock`, or on Windows the data dir's named pipe:
+            // the client crate's rule, so the two ends cannot disagree.
+            socket: deck_client::local_door_for(&data),
             lock: data.join("deckd.lock"),
             status: data.join("status.json"),
             logs,
@@ -1786,6 +1788,16 @@ impl Paths {
             let [data, logs, caches] = MACOS_LIBRARY_DIRS
                 .map(|base| home.join("Library").join(base).join("OpenWalkieTalkie"));
             Ok(Paths::from_data_dir(data, logs, caches))
+        } else if cfg!(windows) {
+            // One local (not roaming) folder: the deck's state and caches
+            // belong to this machine. `deck_client::default_socket` names
+            // `%LOCALAPPDATA%\OpenWalkieTalkie` the same way.
+            let data = base.data_local_dir().join("OpenWalkieTalkie");
+            Ok(Paths::from_data_dir(
+                data.clone(),
+                data.join("logs"),
+                data.join("caches"),
+            ))
         } else {
             let runtime = base
                 .runtime_dir()

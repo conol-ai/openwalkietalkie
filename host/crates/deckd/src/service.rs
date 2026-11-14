@@ -149,6 +149,13 @@ pub fn lock(path: &Path) -> Result<LockGuard, ServiceError> {
             return Err(ServiceError::AlreadyRunning);
         }
     }
+    // Windows: `LockFileEx` through std, exclusive and non-blocking. It
+    // belongs to this handle (child processes do not inherit it), and the
+    // OS releases it when the handle closes, crashes included.
+    #[cfg(windows)]
+    if file.try_lock().is_err() {
+        return Err(ServiceError::AlreadyRunning);
+    }
     Ok(LockGuard { file })
 }
 
@@ -273,6 +280,24 @@ pub fn capture_std_streams(logs: &Path) -> std::io::Result<PathBuf> {
             libc::dup2(file.as_raw_fd(), 2);
         }
     }
+    // Windows: std looks the standard handles up on every write, so
+    // pointing them at the file is the `dup2`. The handle is leaked on
+    // purpose: it is the process's stdout and stderr from here on.
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::IntoRawHandle;
+        use windows_sys::Win32::System::Console::{
+            SetStdHandle, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE,
+        };
+        let handle = file.into_raw_handle();
+        // SAFETY: a valid file handle that stays open for the process's life.
+        unsafe {
+            SetStdHandle(STD_OUTPUT_HANDLE, handle);
+            SetStdHandle(STD_ERROR_HANDLE, handle);
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
+    drop(file);
     Ok(path)
 }
 

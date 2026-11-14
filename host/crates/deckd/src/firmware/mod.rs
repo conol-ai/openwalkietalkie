@@ -866,11 +866,19 @@ impl Updater {
 
     fn progress(&self, phase: &str, progress: u8, message: &str) {
         let mut state = self.state.lock().unwrap();
+        // The log keeps every step the status overwrites: a failed install
+        // is diagnosed from where it got to, not only its last message.
+        if state.phase != phase {
+            tracing::info!(phase, progress, message, "firmware: install step");
+        }
         state.phase = phase.into();
         state.progress = progress;
         state.message = message.into();
     }
+    /// The status keeps only the latest failure, and a retry replaces it;
+    /// the log keeps each one.
     fn fail(&self, error: String) {
+        tracing::warn!(%error, "firmware: update did not complete");
         failed(&mut self.state.lock().unwrap(), error);
     }
 }
@@ -1114,6 +1122,23 @@ fn validate_layout(bytes: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
+/// The system's own curl, by absolute path (never a `PATH` lookup): the
+/// one in `/usr/bin` on macOS and Linux, and the one Windows 10 and later
+/// ship in `%SystemRoot%\System32`.
+fn curl() -> PathBuf {
+    #[cfg(windows)]
+    {
+        std::env::var_os("SystemRoot")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(r"C:\Windows"))
+            .join(r"System32\curl.exe")
+    }
+    #[cfg(not(windows))]
+    {
+        PathBuf::from("/usr/bin/curl")
+    }
+}
+
 fn fetch(url: &str, path: &Path, max: usize) -> Result<(), String> {
     fetch_with_timeout(url, path, max, 120)
 }
@@ -1122,7 +1147,7 @@ fn fetch_with_timeout(url: &str, path: &Path, max: usize, seconds: u32) -> Resul
     let parent = path.parent().ok_or("Invalid cache path.")?;
     std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     let part = path.with_extension("part");
-    let result = std::process::Command::new("/usr/bin/curl")
+    let result = std::process::Command::new(curl())
         .args([
             "--fail",
             "--location",
@@ -1169,7 +1194,20 @@ impl KeepAwake {
                 .map_err(|e| format!("Cannot keep the computer awake for this update: {e}"))?;
             Ok(Self(Some(child)))
         }
-        #[cfg(not(target_os = "macos"))]
+        // Windows: the calling thread's execution state, which the install
+        // holds from acquire to drop on the one blocking thread it runs on
+        // (and which the OS drops by itself if that thread ends first).
+        #[cfg(windows)]
+        {
+            // SAFETY: flags only; no pointers.
+            if unsafe { win::SetThreadExecutionState(win::ES_CONTINUOUS | win::ES_SYSTEM_REQUIRED) }
+                == 0
+            {
+                return Err("Cannot keep the computer awake for this update.".into());
+            }
+            Ok(Self(None))
+        }
+        #[cfg(not(any(target_os = "macos", windows)))]
         {
             Ok(Self(None))
         }
@@ -1181,6 +1219,24 @@ impl Drop for KeepAwake {
             let _ = child.kill();
             let _ = child.wait();
         }
+        #[cfg(windows)]
+        // SAFETY: flags only: back to the thread's ordinary state.
+        unsafe {
+            win::SetThreadExecutionState(win::ES_CONTINUOUS);
+        }
+    }
+}
+
+/// The one power call `KeepAwake` needs, declared here rather than through
+/// a windows-sys feature: every crate that depends on windows-sys would be
+/// rebuilt for a feature added to it.
+#[cfg(windows)]
+mod win {
+    pub const ES_SYSTEM_REQUIRED: u32 = 0x0000_0001;
+    pub const ES_CONTINUOUS: u32 = 0x8000_0000;
+    #[link(name = "kernel32")]
+    extern "system" {
+        pub fn SetThreadExecutionState(flags: u32) -> u32;
     }
 }
 impl Pause {

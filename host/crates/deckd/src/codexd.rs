@@ -1486,10 +1486,29 @@ fn message_id() -> String {
     )
 }
 
-/// Connect to the control socket and complete the WebSocket handshake.
+/// The control socket's stream. Windows has none yet (the app-server's
+/// control endpoint there has not been looked at), so its stand-in is a
+/// type that is never connected.
+#[cfg(unix)]
+type ControlStream = tokio::net::UnixStream;
+#[cfg(not(unix))]
+type ControlStream = tokio::io::DuplexStream;
+
+#[cfg(not(unix))]
 async fn connect(
     path: &std::path::Path,
-) -> Result<tokio_tungstenite::WebSocketStream<tokio::net::UnixStream>, String> {
+) -> Result<tokio_tungstenite::WebSocketStream<ControlStream>, String> {
+    Err(format!(
+        "connect {}: the Codex daemon client is not supported on this platform",
+        path.display()
+    ))
+}
+
+/// Connect to the control socket and complete the WebSocket handshake.
+#[cfg(unix)]
+async fn connect(
+    path: &std::path::Path,
+) -> Result<tokio_tungstenite::WebSocketStream<ControlStream>, String> {
     let stream = tokio::net::UnixStream::connect(path)
         .await
         .map_err(|e| format!("connect {}: {e}", path.display()))?;
@@ -1606,7 +1625,7 @@ impl End {
 /// One connection, from `initialize` to the socket closing.
 async fn session(
     api: &Arc<Api>,
-    ws: tokio_tungstenite::WebSocketStream<tokio::net::UnixStream>,
+    ws: tokio_tungstenite::WebSocketStream<ControlStream>,
     stop: &mut watch::Receiver<bool>,
     gate: &mut watch::Receiver<crate::dormancy::Gate>,
 ) -> End {

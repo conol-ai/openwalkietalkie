@@ -146,3 +146,29 @@ jobs:
       - name: Test the Omarchy bridge
         run: |
           python3 -m unittest discover -s host/omarchy -p 'test_*.py'
+  windows-host:
+    name: Windows host
+    runs-on: windows-2025
+    timeout-minutes: 60
+    env:
+      # The build is checked, not debugged: without debug info it is a
+      # fraction of the size (the runner's disk, and the cache it never has).
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: 1.98.1
+      # The service and the window build for Windows (named-pipe door,
+      # LockFileEx, the app as a GUI program); the daemon's own tests do
+      # not compile there yet (several are Unix-only), so only the client's
+      # run, which cover the pipe's name and its same-user descriptor.
+      - name: Build the Windows host and app
+        run: |
+          cargo build --manifest-path host/Cargo.toml -p deckd -p openwalkietalkie-app --locked --target x86_64-pc-windows-msvc --target-dir target/host
+      - name: Test the client on Windows
+        run: |
+          cargo test --manifest-path host/Cargo.toml -p deck-client --lib --locked --target x86_64-pc-windows-msvc --target-dir target/host
