@@ -2303,6 +2303,7 @@ pub(crate) mod tests {
     /// that so much as tried it would have degraded `port_in_use`; this one
     /// records no port and no degrade, empties the port file an earlier run
     /// left behind, and answers on the socket with `port: null`.
+    #[cfg(unix)] // the test dials the Unix socket
     #[tokio::test]
     async fn with_the_tcp_door_off_only_the_socket_is_served() {
         let held = tokio::net::TcpListener::bind(("127.0.0.1", 0))

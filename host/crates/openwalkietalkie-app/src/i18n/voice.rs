@@ -31,6 +31,12 @@ pub const STRINGS: &[Entry] = &[
         "Whisper 會自動偵測語言；Apple 辨識器需要在此指定一種。",
         "Whisper は言語を自動で判別します。Apple の認識では、ここで 1 つ選びます。",
     ),
+    (
+        "Whisper detects the language, or keeps to the one chosen here.",
+        "Whisper 会自动检测语言，或使用在此指定的语言。",
+        "Whisper 會自動偵測語言，或使用在此指定的語言。",
+        "Whisper は言語を自動で判別します。ここで選んだ場合はその言語を使います。",
+    ),
     ("Automatic", "自动", "自動", "自動"),
     // The Speech language popup's names for the recognisers' locales; a
     // locale with no row here is shown by its code.
@@ -167,6 +173,12 @@ pub const STRINGS: &[Entry] = &[
         "Whisper（Mac 上）",
     ),
     (
+        "Whisper, on this PC",
+        "Whisper（在此电脑上）",
+        "Whisper（在此電腦上）",
+        "Whisper（PC 上）",
+    ),
+    (
         "Many languages, mixed speech.",
         "支持多种语言，可混合识别。",
         "支援多種語言，可在一句話中混用。",
@@ -197,15 +209,28 @@ pub const STRINGS: &[Entry] = &[
         "這部分語音會傳送到 Conol 的服務。\n關閉後，所有辨識都在此 Mac 上完成。",
         "その音声は Conol のサービスに送信されます。\nオフなら認識はすべてこの Mac 上で行います。",
     ),
+    (
+        "Audio of those presses goes to Conol's service.\nOff keeps all recognition on this PC.",
+        "这部分语音会发送到 Conol 的服务。\n关闭后，所有识别都在此电脑上完成。",
+        "這部分語音會傳送到 Conol 的服務。\n關閉後，所有辨識都在此電腦上完成。",
+        "その音声は Conol のサービスに送信されます。\nオフなら認識はすべてこの PC 上で行います。",
+    ),
     // Spoken replies: the three voices, the key dialog, and the local
     // model only the command line sets up.
     ("Apple voice", "Apple 语音", "Apple 語音", "Apple の音声"),
+    ("Windows voice", "Windows 语音", "Windows 語音", "Windows の音声"),
     ("Built in.", "内置。", "內建。", "内蔵。"),
     (
         "Kokoro, on this Mac",
         "Kokoro（在此 Mac 上）",
         "Kokoro（在此 Mac 上）",
         "Kokoro（Mac 上）",
+    ),
+    (
+        "Kokoro, on this PC",
+        "Kokoro（在此电脑上）",
+        "Kokoro（在此電腦上）",
+        "Kokoro（PC 上）",
     ),
     (
         "Chinese and English.",
@@ -238,6 +263,18 @@ pub const STRINGS: &[Entry] = &[
         "密钥保存在此 Mac 上的服务设置中。",
         "金鑰儲存在此 Mac 上的服務設定中。",
         "キーはこの Mac のサービス設定に保存されます。",
+    ),
+    (
+        "The key is kept in the service's settings on this PC.",
+        "密钥保存在此电脑上的服务设置中。",
+        "金鑰儲存在此電腦上的服務設定中。",
+        "キーはこの PC のサービス設定に保存されます。",
+    ),
+    (
+        "The key is kept in Windows Credential Manager on this PC.",
+        "密钥保存在此电脑上的 Windows 凭据管理器中。",
+        "金鑰儲存在此電腦上的 Windows 認證管理員中。",
+        "キーはこの PC の Windows 資格情報マネージャーに保存されます。",
     ),
     (
         "The key is kept in your Keychain on this Mac.",

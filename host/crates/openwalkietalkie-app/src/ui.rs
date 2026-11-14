@@ -385,6 +385,16 @@ pub fn canonical(mods: &[Mod]) -> Vec<Mod> {
 /// so its colour is the deck's and not the window's.
 pub fn combo(mods: &[Mod], key: impl Into<SharedString>) -> Div {
     let color = hex(deck_colors::KEY_COMBO);
+    // Windows writes a shortcut in words, `Ctrl+Shift+C`, and types ⌃ and ⌘
+    // alike as Ctrl.
+    if cfg!(windows) {
+        return div()
+            .flex_none()
+            .ts(11., 14.)
+            .mono()
+            .text_color(color)
+            .child(windows_combo(mods, &key.into()));
+    }
     h_flex()
         .flex_none()
         .gap(px(1.))
@@ -401,6 +411,24 @@ pub fn combo(mods: &[Mod], key: impl Into<SharedString>) -> Div {
                 .text_color(color)
                 .child(key.into()),
         )
+}
+
+/// A shortcut as Windows writes it: Ctrl (for ⌃ or ⌘, once), Alt, Shift,
+/// then the key, joined by `+`.
+pub fn windows_combo(mods: &[Mod], key: &str) -> String {
+    let ctrl = mods.contains(&Mod::Control) || mods.contains(&Mod::Command);
+    let mut words: Vec<&str> = Vec::new();
+    if ctrl {
+        words.push("Ctrl");
+    }
+    if mods.contains(&Mod::Option) {
+        words.push("Alt");
+    }
+    if mods.contains(&Mod::Shift) {
+        words.push("Shift");
+    }
+    words.push(key);
+    words.join("+")
 }
 
 /// A spinning refresh glyph, for "asking the service".
@@ -2882,6 +2910,14 @@ mod tests {
         let mut sorted = vec![Mod::Command, Mod::Control, Mod::Shift, Mod::Option];
         sorted.sort();
         assert_eq!(sorted, Mod::ALL);
+    }
+
+    #[test]
+    fn a_windows_shortcut_is_written_in_words_with_both_ctrls_as_one() {
+        assert_eq!(windows_combo(&[Mod::Command], "C"), "Ctrl+C");
+        assert_eq!(windows_combo(&[Mod::Shift, Mod::Control, Mod::Command], "T"), "Ctrl+Shift+T");
+        assert_eq!(windows_combo(&[Mod::Option], "F4"), "Alt+F4");
+        assert_eq!(windows_combo(&[], "Space"), "Space");
     }
 
     #[test]

@@ -60,6 +60,11 @@ const AGENT_EVERY: u64 = 5;
 /// How often the footprint is weighed again while its page is open.
 const FOOTPRINT_EVERY: u64 = 5;
 
+/// Where a newer Windows preview is downloaded from: the install guide,
+/// which links the release's zip.
+#[cfg(windows)]
+const WINDOWS_DOWNLOAD: &str = "https://openwalkietalkie.org/docs/windows/";
+
 /// The id of the Integrations page's plan dialog, after which a removal may
 /// have changed what Footprint lists.
 const PLAN_DIALOG: &str = "plan";
@@ -233,7 +238,7 @@ pub struct Setup {
 /// The rows of "Check my setup", in the board's order: the deck, the copy
 /// of the app the service runs from, the Claude Code plugin, the old helper
 /// (only while a session uses one), Codex (only while its switch is on), a
-/// leftover launch agent, Bluetooth.
+/// leftover launch agent and Bluetooth (macOS only).
 pub fn check_rows(setup: &Setup, language: Language) -> Vec<CheckRow> {
     let row = |verdict, title: &str, sub: Option<&str>| CheckRow {
         verdict,
@@ -320,6 +325,11 @@ pub fn check_rows(setup: &Setup, language: Language) -> Vec<CheckRow> {
                 None,
             ));
         }
+    }
+    // macOS's own: an agent from before the rename, and Bluetooth's TCC
+    // grant. Windows has neither to check.
+    if cfg!(windows) {
+        return rows;
     }
     rows.push(match setup.legacy_agent {
         Some(true) => row(Verdict::Ok, language.text("No leftover launch agent"), None),
@@ -1201,12 +1211,43 @@ impl Shell {
             });
         // Sparkle updates a signed release; any other build says why not.
         let signed = self.service.staged || self.service.updater.uses_signed_updates();
+        #[cfg(not(windows))]
         let check_app = Btn::new("service-app-check", self.tr("Check"))
             .disabled(!signed)
             .when(!signed, |button| {
                 button.tooltip(self.tr("automatic updates are unavailable in this build"))
             })
             .on_click(cx.listener(|this, _, window, cx| this.check_app_update(window, cx)));
+        // Windows has no Sparkle: **Check** asks the service to look (the
+        // release manifest names the app's version too), and once it found
+        // a newer app **Update** fetches and installs it (`win_update`).
+        // A copy that is not the installed one (a build, a walk) offers the
+        // page its zip is downloaded from instead.
+        #[cfg(windows)]
+        let check_app = {
+            let _ = signed;
+            let newer = updates::app_update_line(&self.service.firmware.status, self.language())
+                .is_some()
+                .then(|| updates::app_version(&self.service.firmware.status));
+            if let Some(version) = newer.clone().filter(|_| crate::app::launch().installed()) {
+                let updating = crate::win_update::busy();
+                Btn::new(
+                    "service-app-check",
+                    if updating { self.tr("Updating\u{2026}") } else { self.tr("Update") },
+                )
+                .disabled(updating)
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    this.update_app(version.clone(), window, cx);
+                }))
+            } else if newer.is_some() {
+                Btn::new("service-app-check", self.tr("Download\u{2026}"))
+                    .on_click(|_, _, cx: &mut App| cx.open_url(WINDOWS_DOWNLOAD))
+            } else {
+                Btn::new("service-app-check", self.tr("Check"))
+                    .disabled(dim || updates::busy(&self.service.firmware.status))
+                    .on_click(cx.listener(|this, _, window, cx| this.refresh_firmware(true, window, cx)))
+            }
+        };
         let firmware = &self.service.firmware;
         let review = match updates::firmware_step(&firmware.status) {
             FirmwareStep::Check => Btn::new("service-firmware", self.tr("Check"))
@@ -1602,6 +1643,7 @@ mod tests {
     /// prints starts at `~`, and the board's sizes come out as the board
     /// writes them. The Keychain item is no path and has no size, and the
     /// count is the board's ten.
+    #[cfg(not(windows))] // the boards are a Mac's, re-homed under its HOME
     #[test]
     fn the_boards_footprint_is_the_fixtures_under_this_macs_home() {
         let footprint = board_footprint();

@@ -1,5 +1,7 @@
 //! Local computer telemetry. One lightweight sampler, no subprocesses or admin
 //! privileges; transient readings go through the normal coalescing P3 lane.
+//! macOS (`macos`) and Windows (`windows`) read the computer; elsewhere every
+//! reading is unavailable.
 use crate::core::handle::{CoreHandle, CoreMsg};
 use deck_proto::SystemStatus;
 use std::time::Duration;
@@ -12,11 +14,18 @@ mod macos;
 use linux as os;
 #[cfg(target_os = "macos")]
 use macos as os;
+#[cfg(windows)]
+mod windows;
 
 #[derive(Default)]
 pub struct Sampler {
     previous_cpu: Option<[u32; 4]>,
     sequence: u32,
+    /// Windows' GPU counter query: `None` until the first sample opens it
+    /// (and again after a pause closes it), `Some(None)` where the counters
+    /// do not exist.
+    #[cfg(windows)]
+    gpu: Option<Option<windows::Gpu>>,
 }
 fn cpu_percent(previous: [u32; 4], current: [u32; 4]) -> Option<u8> {
     let delta = std::array::from_fn::<_, 4, _>(|i| u64::from(current[i].wrapping_sub(previous[i])));
@@ -34,6 +43,12 @@ impl Sampler {
     /// first sample's is).
     pub fn pause(&mut self) {
         self.previous_cpu = None;
+        // Nothing reads the GPU counters while the face is off the strip:
+        // the query is closed, and the next sample opens it again.
+        #[cfg(windows)]
+        {
+            self.gpu = None;
+        }
     }
 
     pub fn sample(&mut self) -> SystemStatus {
@@ -59,6 +74,28 @@ impl Sampler {
                 status.disk_total_mib = mib(total);
             }
             status.gpu = os::gpu();
+        }
+        #[cfg(windows)]
+        {
+            let cpu = windows::cpu_ticks();
+            status.cpu = self
+                .previous_cpu
+                .zip(cpu)
+                .and_then(|(old, new)| cpu_percent(old, new));
+            self.previous_cpu = cpu;
+            if let Some((used, total)) = windows::memory() {
+                status.memory_used_mib = mib(used.min(total));
+                status.memory_total_mib = mib(total);
+            }
+            if let Some((free, total)) = windows::disk() {
+                status.disk_free_mib = mib(free.min(total));
+                status.disk_total_mib = mib(total);
+            }
+            status.gpu = self
+                .gpu
+                .get_or_insert_with(windows::Gpu::open)
+                .as_mut()
+                .and_then(windows::Gpu::load);
         }
         status
     }
@@ -123,6 +160,9 @@ mod tests {
         let mut sampler = Sampler {
             previous_cpu: Some([1, 2, 3, 4]),
             sequence: 7,
+            // Windows' sampler has a field more: its GPU query.
+            #[cfg(windows)]
+            gpu: None,
         };
         sampler.pause();
         assert_eq!(sampler.previous_cpu, None);

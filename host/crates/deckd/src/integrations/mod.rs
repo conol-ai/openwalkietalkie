@@ -649,7 +649,20 @@ fn validate_executable(path: &Path) -> Result<(), String> {
             return Err(format!("{} is not executable", path.display()));
         }
     }
+    #[cfg(windows)]
+    if !runs_on_windows(path) {
+        return Err(format!("{} is not executable", path.display()));
+    }
     Ok(())
+}
+
+/// Windows runs a file by its extension, not a mode bit: an `.exe` or
+/// `.com`, or a `.cmd`/`.bat` script (what `CreateProcess` and `cmd` take).
+#[cfg(windows)]
+fn runs_on_windows(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| ["exe", "com", "cmd", "bat"].iter().any(|x| e.eq_ignore_ascii_case(x)))
 }
 
 /// deckd's own record of what it wrote, per target. It is *not* the source
@@ -1202,9 +1215,21 @@ pub fn which(binary: &str) -> Option<PathBuf> {
 
 /// [`which`] over a `PATH` value the caller names.
 fn which_in(binary: &str, path: Option<&std::ffi::OsStr>) -> Option<PathBuf> {
-    std::env::split_paths(path?)
-        .map(|dir| dir.join(binary))
-        .find(|candidate| is_executable(candidate))
+    std::env::split_paths(path?).find_map(|dir| in_dir(&dir, binary))
+}
+
+/// `binary` in `dir`, when it is there and runnable. On Windows that is
+/// `binary.exe`, `.cmd`, `.bat` or `.com`, and never the bare name unless it
+/// was given with its extension: npm puts a POSIX shell script named
+/// `claude` beside `claude.cmd`, which Windows cannot run.
+fn in_dir(dir: &Path, binary: &str) -> Option<PathBuf> {
+    if cfg!(windows) && Path::new(binary).extension().is_none() {
+        return [".exe", ".cmd", ".bat", ".com"]
+            .iter()
+            .map(|ext| dir.join(format!("{binary}{ext}")))
+            .find(|candidate| is_executable(candidate));
+    }
+    Some(dir.join(binary)).filter(|candidate| is_executable(candidate))
 }
 
 /// A regular file this process may run.
@@ -1214,7 +1239,11 @@ fn is_executable(path: &Path) -> bool {
         use std::os::unix::fs::PermissionsExt;
         std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        path.is_file() && runs_on_windows(path)
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         path.is_file()
     }
@@ -1232,6 +1261,17 @@ pub fn cli_dirs(home: Option<&Path>) -> Vec<PathBuf> {
         dirs.push(home.join(".local/bin"));
         dirs.push(home.join(".claude/local"));
     }
+    // Windows: Claude Code's native installer also uses `~\.local\bin`;
+    // npm's global installs (`npm i -g`) go to `%APPDATA%\npm`, and Codex's
+    // own installer to `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin`.
+    #[cfg(windows)]
+    {
+        dirs.extend(std::env::var_os("APPDATA").map(|appdata| PathBuf::from(appdata).join("npm")));
+        dirs.extend(std::env::var_os("LOCALAPPDATA").map(|local| {
+            PathBuf::from(local).join("Programs").join("OpenAI").join("Codex").join("bin")
+        }));
+    }
+    #[cfg(not(windows))]
     dirs.extend(["/opt/homebrew/bin", "/usr/local/bin"].map(PathBuf::from));
     dirs
 }
@@ -1251,11 +1291,7 @@ pub fn find_cli(binary: &str) -> Option<PathBuf> {
 /// [`find_cli`] over a `PATH` value and a list of directories the caller
 /// names, so a test can give it a fake home and nothing of this Mac's.
 fn find_cli_in(binary: &str, path: Option<&std::ffi::OsStr>, dirs: &[PathBuf]) -> Option<PathBuf> {
-    which_in(binary, path).or_else(|| {
-        dirs.iter()
-            .map(|dir| dir.join(binary))
-            .find(|candidate| is_executable(candidate))
-    })
+    which_in(binary, path).or_else(|| dirs.iter().find_map(|dir| in_dir(dir, binary)))
 }
 
 /// The process for a CLI [`find_cli`] returned. One found off this
@@ -1357,11 +1393,11 @@ pub fn bytes_of_equivalent_backup(
 /// installer environment that touches nothing outside `dir`.
 #[doc(hidden)]
 pub fn test_env(dir: &testdir::TestDir) -> Env {
-    let exe = dir.path().join("bin/deckd");
+    let exe = runnable(&dir.path().join("bin/deckd"));
     if let Some(parent) = exe.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    std::fs::write(&exe, b"#!/bin/sh\nexit 0\n").expect("write the fake deckd");
+    std::fs::write(&exe, STUB).expect("write the fake deckd");
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -1392,9 +1428,25 @@ pub fn test_env(dir: &testdir::TestDir) -> Env {
     }
 }
 
+/// The tests' stand-in for a binary that answers every argv with exit 0: a
+/// shell script, or on Windows a `.cmd` (which `Command` runs through cmd).
+#[doc(hidden)]
+pub const STUB: &[u8] = if cfg!(windows) { b"@exit /b 0\r\n" } else { b"#!/bin/sh\nexit 0\n" };
+
+/// `path` as a stub binary is named where it can run: unchanged, or on
+/// Windows with `.cmd` added.
+#[doc(hidden)]
+pub fn runnable(path: &Path) -> PathBuf {
+    if cfg!(windows) {
+        path.with_extension("cmd")
+    } else {
+        path.to_path_buf()
+    }
+}
+
 #[cfg(test)]
 fn fake_exe(dir: &testdir::TestDir) -> PathBuf {
-    let exe = dir.path().join("bin/deckd");
+    let exe = runnable(&dir.path().join("bin/deckd"));
     write_exe(&exe);
     exe
 }
@@ -1404,7 +1456,7 @@ fn write_exe(path: &Path) {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).expect("create the bin directory");
     }
-    std::fs::write(path, b"#!/bin/sh\nexit 0\n").expect("write the fake deckd");
+    std::fs::write(path, STUB).expect("write the fake deckd");
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -1668,9 +1720,11 @@ mod tests {
         );
         assert_eq!(env_path("CODEX_HOME", Some(OsStr::new(""))), Ok(None));
         assert_eq!(env_path("CODEX_HOME", None), Ok(None));
+        // An absolute path as this platform writes one.
+        let absolute = if cfg!(windows) { r"C:\tmp\codex" } else { "/tmp/codex" };
         assert_eq!(
-            env_path("CODEX_HOME", Some(OsStr::new("/tmp/codex"))),
-            Ok(Some(PathBuf::from("/tmp/codex")))
+            env_path("CODEX_HOME", Some(OsStr::new(absolute))),
+            Ok(Some(PathBuf::from(absolute)))
         );
     }
 
@@ -1683,7 +1737,7 @@ mod tests {
             dir.path().join("caches"),
         );
         let translocated = dir.sub("AppTranslocation/X/d/OpenWalkieTalkie.app/Contents/MacOS");
-        let exe = translocated.join("deckd");
+        let exe = runnable(&translocated.join("deckd"));
         write_exe(&exe);
         let env = Env::with_exe(exe, &paths, &Config::default());
         // App Translocation and `/Applications` are macOS's: elsewhere such
@@ -1720,10 +1774,7 @@ mod tests {
         assert!(error.contains("cannot inspect"), "{error}");
         let plain = dir.write("plain", "not executable");
         let error = Env::with_exe(plain, &paths, &Config::default()).unwrap_err();
-        #[cfg(unix)]
         assert!(error.contains("is not executable"), "{error}");
-        #[cfg(not(unix))]
-        let _ = error;
     }
 
     /// The C24a rollback has to undo the publish where the publish happened.
@@ -1800,6 +1851,7 @@ mod tests {
     /// no installer of `claude` or `codex` writes there. Off `PATH` the
     /// installer looks where they do write, under the process's `HOME` —
     /// a fake one here, so nothing of this Mac's is consulted.
+    #[cfg(unix)] // Unix's installer directories and executable bits
     #[test]
     fn a_cli_off_path_is_found_where_its_installer_put_it() {
         let dir = TestDir::new("find-cli");
@@ -1849,6 +1901,7 @@ mod tests {
     /// A CLI found off `PATH` runs with the installers' directories after
     /// the `PATH` it inherited, each once, so an npm-installed script finds
     /// the `node` beside it; one found on `PATH` is left as it was.
+    #[cfg(unix)] // `:` between PATH's entries
     #[test]
     fn a_cli_found_off_path_gets_the_installers_directories_on_its_own() {
         let path = std::ffi::OsString::from("/usr/bin:/bin");
@@ -1865,6 +1918,34 @@ mod tests {
         assert!(on_path(Path::new("/usr/bin/claude"), Some(path.as_os_str())));
         assert!(!on_path(Path::new("/h/.local/bin/claude"), Some(path.as_os_str())));
         assert!(!on_path(Path::new("/usr/bin/claude"), None));
+    }
+
+    /// Windows: a CLI is a runnable file by its extension (npm's `.cmd`
+    /// shims, an installer's `.exe`), found on `PATH` first and then where
+    /// its installer put it; PATH's entries are `;`-separated.
+    #[cfg(windows)]
+    #[test]
+    fn on_windows_a_cli_is_found_by_its_extension_and_path_grows_with_semicolons() {
+        let dir = TestDir::new("find-cli-windows");
+        let npm = dir.sub("npm");
+        let elsewhere = dir.sub("bin");
+        let path = std::env::join_paths([&elsewhere]).unwrap();
+        // No extension: not a program Windows runs.
+        std::fs::write(npm.join("claude"), STUB).unwrap();
+        assert_eq!(find_cli_in("claude", Some(&path), std::slice::from_ref(&npm)), None);
+        write_exe(&npm.join("claude.cmd"));
+        assert_eq!(
+            find_cli_in("claude", Some(&path), std::slice::from_ref(&npm)),
+            Some(npm.join("claude.cmd"))
+        );
+        write_exe(&elsewhere.join("claude.exe"));
+        assert_eq!(
+            find_cli_in("claude", Some(&path), std::slice::from_ref(&npm)),
+            Some(elsewhere.join("claude.exe")),
+            "PATH first"
+        );
+        let grown = extended_path(Some(std::ffi::OsStr::new(r"C:\a;C:\b")), &[PathBuf::from(r"C:\b"), npm.clone()]).unwrap();
+        assert_eq!(grown, std::ffi::OsString::from(format!(r"C:\a;C:\b;{}", npm.display())));
     }
 
     /// D7: a command printed for the owner to paste (a `run: …` next step,

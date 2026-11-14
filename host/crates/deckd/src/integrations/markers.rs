@@ -142,6 +142,7 @@ pub fn is_managed_binary(path: &str, exe: &Path) -> bool {
 /// `args` and runs in a shell (C23), and a Codex `command` is a single
 /// shell-interpreted string (C12). A command printed for the owner to paste
 /// is quoted by [`super::command_line`] instead.
+#[cfg(not(windows))]
 pub fn shell_word(word: &str) -> String {
     let bare = !word.is_empty()
         && word
@@ -151,6 +152,26 @@ pub fn shell_word(word: &str) -> String {
         return word.to_string();
     }
     format!("'{}'", word.replace('\'', "'\"'\"'"))
+}
+
+/// [`shell_word`] on Windows, where the same command line may be run by
+/// cmd.exe, PowerShell or Git Bash: single quotes are literal characters to
+/// cmd.exe, and a backslash is an escape to bash. So a path is written with
+/// forward slashes (every one of them, and Windows, reads those), bare while
+/// it holds only characters none of the three treats specially, and in
+/// double quotes otherwise, which cmd.exe and bash both strip.
+/// [`read_shell_word`] reads either back.
+#[cfg(windows)]
+pub fn shell_word(word: &str) -> String {
+    let word = word.replace('\\', "/");
+    let bare = !word.is_empty()
+        && word
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "/_-.+:~".contains(c));
+    if bare {
+        return word;
+    }
+    format!("\"{word}\"")
 }
 
 /// Read one shell word off the front of `text`, returning it and the rest.
@@ -227,8 +248,15 @@ mod tests {
             assert_eq!(decode_shell_word(&quoted).as_deref(), Some(word), "{word}");
         }
         assert_eq!(shell_word("/usr/bin/deckd"), "/usr/bin/deckd");
-        assert_eq!(shell_word("a b"), "'a b'");
-        assert_eq!(shell_word("Tony's"), "'Tony'\"'\"'s'");
+        if cfg!(windows) {
+            // Double quotes, which cmd.exe, PowerShell and bash all strip.
+            assert_eq!(shell_word("a b"), "\"a b\"");
+            assert_eq!(shell_word("Tony's"), "\"Tony's\"");
+            assert_eq!(shell_word(r"C:\Program Files\deckd.exe"), "\"C:/Program Files/deckd.exe\"");
+        } else {
+            assert_eq!(shell_word("a b"), "'a b'");
+            assert_eq!(shell_word("Tony's"), "'Tony'\"'\"'s'");
+        }
         assert_eq!(decode_shell_word("echo hi"), None, "two words");
         assert_eq!(decode_shell_word("'unclosed"), None);
         assert_eq!(decode_shell_word("a\\ b"), None, "backslashes are not ours");
@@ -247,7 +275,14 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(binary, "/tmp/a b/deckd");
-        assert_eq!(rest, "hook claude-statusline -- 'npx ccstatusline@latest'");
+        assert_eq!(
+            rest,
+            if cfg!(windows) {
+                "hook claude-statusline -- \"npx ccstatusline@latest\""
+            } else {
+                "hook claude-statusline -- 'npx ccstatusline@latest'"
+            }
+        );
         assert_eq!(
             decode_shell_word("'npx ccstatusline@latest'").as_deref(),
             Some("npx ccstatusline@latest")
@@ -262,7 +297,9 @@ mod tests {
             "current_exe"
         );
         assert!(is_managed_binary(BUNDLE_BINARY, exe));
-        assert!(is_managed_binary("/opt/other/deckd", exe), "path_drift");
+        // An absolute path as this platform writes one.
+        let drifted = if cfg!(windows) { "C:/opt/other/deckd.exe" } else { "/opt/other/deckd" };
+        assert!(is_managed_binary(drifted, exe), "path_drift");
         // The openmicrokbd heuristics that would claim a sibling product's
         // live hooks on this very machine.
         assert!(!is_managed_binary(

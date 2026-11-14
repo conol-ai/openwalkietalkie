@@ -411,7 +411,8 @@ pub fn fetch(job: &Job, mut on_progress: impl FnMut(u64, u64)) -> Result<PathBuf
     }
 }
 
-#[cfg(test)]
+// Every test here runs curl through a shell-script fake.
+#[cfg(all(test, unix))]
 pub(crate) mod tests {
     use super::*;
 
@@ -419,6 +420,7 @@ pub(crate) mod tests {
     /// exits as told, so the installer's thread, progress, rename, unpack
     /// and failure paths run without a network. `tarball` in the URL makes
     /// it write a real `.tar.bz2` holding `model.onnx`.
+    #[cfg(unix)]
     const FAKE: &str = r#"
 import sys, time, io, tarfile
 args = sys.argv[1:]
@@ -450,6 +452,7 @@ with open(out, "ab") as f:
         time.sleep(0.15)
 "#;
 
+    #[cfg(unix)]
     pub(crate) fn fake_curl(dir: &Path) -> PathBuf {
         let script = dir.join("fake_curl.py");
         std::fs::write(&script, FAKE).unwrap();
@@ -464,6 +467,7 @@ with open(out, "ab") as f:
         curl
     }
 
+    #[cfg(unix)] // for the fake-curl tests
     fn wait(installer: &Installer) -> Progress {
         loop {
             std::thread::sleep(Duration::from_millis(50));
@@ -475,6 +479,7 @@ with open(out, "ab") as f:
     }
 
     #[test]
+    #[cfg(unix)] // the fake curl is a shell script
     fn a_file_job_downloads_reports_progress_and_renames_a_whole_file() {
         let dir = std::env::temp_dir().join(format!("deckd-download-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -512,6 +517,7 @@ with open(out, "ab") as f:
     }
 
     #[test]
+    #[cfg(unix)] // the fake curl is a shell script
     fn an_archive_job_is_unpacked_and_present_only_with_its_marker() {
         let dir = std::env::temp_dir().join(format!("deckd-download-tar-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -544,6 +550,7 @@ with open(out, "ab") as f:
     /// ends and spawns nothing; a model already on disk is still `done`,
     /// because reporting it needs no fetch.
     #[test]
+    #[cfg(unix)] // the fake curl is a shell script
     fn an_offline_installer_never_starts_curl_and_says_why() {
         let dir = std::env::temp_dir()
             .join(format!("deckd-download-offline-{}", std::process::id()));

@@ -188,6 +188,8 @@ enum Backend {
     CoreBluetooth(super::central::Backend),
     #[cfg(target_os = "linux")]
     BlueZ(super::bluez::Backend),
+    #[cfg(windows)]
+    WinRt(super::winrt::Backend),
     /// Nothing drives the Bluetooth port from here: a platform without
     /// CoreBluetooth, or a [`FakeDeck`] that a test drives by hand.
     Manual,
@@ -234,7 +236,13 @@ impl BleAudio {
             let _ = reach;
             Backend::BlueZ(super::bluez::Backend::spawn(shared.clone(), name))
         };
-        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        #[cfg(windows)]
+        let backend = {
+            // Like BlueZ, WinRT here never scans or pairs.
+            let _ = reach;
+            Backend::WinRt(super::winrt::Backend::spawn(shared.clone(), name))
+        };
+        #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
         let backend = {
             let _ = (name, reach);
             shared.set_problem(
@@ -309,6 +317,8 @@ impl BleAudio {
                 Backend::CoreBluetooth(backend) => backend.kick(),
                 #[cfg(target_os = "linux")]
                 Backend::BlueZ(backend) => backend.kick(),
+                #[cfg(windows)]
+                Backend::WinRt(backend) => backend.kick(),
                 Backend::Manual => {}
             },
         }
@@ -612,7 +622,9 @@ pub(crate) struct Shared {
     stream_port: Mutex<Option<Transport>>,
     tx: Mutex<Tx>,
     mic_overflow: AtomicU64,
-    /// A drain is already on its way to the platform's queue.
+    /// A drain is already on its way to the platform's queue (CoreBluetooth's
+    /// serial queue; the other backends drain on their own thread).
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) drain_posted: AtomicBool,
     /// The hid thread's wake-up: a frame was queued for the cable.
     usb_wake: (Sender<()>, Receiver<()>),

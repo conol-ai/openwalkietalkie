@@ -41,6 +41,14 @@ pub mod login_item;
 pub mod macos;
 pub mod prefs;
 pub mod present;
+#[cfg(windows)]
+pub(crate) mod run_key;
+#[cfg(windows)]
+pub mod service_host;
+#[cfg(windows)]
+pub mod win_update;
+#[cfg(windows)]
+mod win_window;
 pub mod shell;
 pub mod shots;
 #[cfg(target_os = "macos")]

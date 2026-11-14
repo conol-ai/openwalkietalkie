@@ -136,6 +136,12 @@ pub const STRINGS: &[Entry] = &[
         "macOS 保留的組合鍵\n請手動選擇。",
         "macOS のショートカットは\n手動で選びます。",
     ),
+    (
+        "Pick by hand the shortcuts\nWindows reserves.",
+        "Windows 保留的组合键\n请手动选择。",
+        "Windows 保留的組合鍵\n請手動選擇。",
+        "Windows のショートカットは\n手動で選びます。",
+    ),
     ("Clear This Key", "清除此按键", "清除此按鍵", "このキーを消去"),
     (
         "Sent to the deck when it links.",

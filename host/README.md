@@ -18,8 +18,8 @@ week-3 snapshot of the eight-week plan (design §15): the device link
 of week 1, the open API of week 2, and the agent adapters of week 3 — Claude
 Code and Codex hooks become cards on the deck. The LaunchAgent runs
 `deckd run`, which owns the deck link. macOS is the supported platform;
-Linux runs the service (see `host/omarchy/`), and Windows runs a minimal
-build of the service and the app, below.
+Linux runs the service (see `host/omarchy/`), and Windows runs the service
+and the app as a preview, below.
 
 ## Windows (experimental)
 
@@ -36,27 +36,67 @@ Releases from 0.14.0 include an unsigned preview zip; the website's
   instance is created with a DACL that grants only the daemon's user, remote
   clients are refused, the first instance must be the first of its name, and
   both ends check that the other runs as the same user. `deckd ctl` and the
-  app speak to it exactly as to the socket. A peer is never `trusted` (there
-  is no code-signature check yet), so allowing a permission card from the app
-  is refused while `[trust] require_trusted_for_allow` holds.
+  app speak to it exactly as to the socket. The binaries are not signed, so
+  a peer is `trusted` when it is the app in the service's own folder
+  (`OpenWalkieTalkie.exe` beside `deckd.exe`) with no agent CLI in its
+  ancestry (`trust::is_gui_path`). Unlike a Mac's signature check, that
+  cannot stop a program running as the same user from replacing the file.
 - **Data** lives in `%LOCALAPPDATA%\OpenWalkieTalkie` (config, state, `logs\`,
-  `caches\`). The single-instance lock is `LockFileEx` on `deckd.lock`.
-- **Nothing starts it at login yet.** Run `deckd run`, or press **Start** in
-  the app, which starts the `deckd.exe` beside it with no window. The app
-  allows `firmware.check`/`install` only when it runs from a folder named
-  `bin`, as on Linux.
+  `caches\`, the voice models, the app's preferences). The single-instance
+  lock is `LockFileEx` on `deckd.lock`. The cloud voice's key is a generic
+  credential in Windows Credential Manager (`secrets::CredentialStore`,
+  target `ai.cohdl.openwalkietalkie/voice.tts.api_key`), as it is a Keychain
+  item on a Mac.
+- **App updates**: the Service page's **Check** (and the tray's **Check for
+  Updates…**) asks the service to look; when the release names a newer app,
+  **Update** fetches the release's zip with `curl.exe`, checks it against the
+  release's `SHA256SUMS`, unpacks it with `tar.exe`, renames the running
+  `OpenWalkieTalkie.exe` and `deckd.exe` aside, copies the new ones in, stops
+  the service and starts the new host and window (`win_update`).
+  `OpenWalkieTalkie.exe --update-to <version>` does the same without a
+  window; `OPENWALKIETALKIE_RELEASES` points it at another release location.
+- **The service host** is `OpenWalkieTalkie.exe --service`: it runs
+  `deckd.exe run` with no window and restarts it the way launchd's
+  `KeepAlive` does (exit 0 stays down, anything else comes back with
+  backoff). It and the app start at sign-in from per-user `Run` values
+  (`OpenWalkieTalkie Service`, `OpenWalkieTalkie`), which Settings › Apps ›
+  Startup can switch off; the app reads that switch. Closing the window
+  hides it to the tray icon, whose menu quits. The app allows
+  `firmware.check`/`install` only when it runs from a folder named `bin`, as
+  on Linux.
+- **Agents.** The roster, Bash approvals and the ancestry cap read the
+  process table (Toolhelp, `NtQueryInformationProcess` for command lines).
+  The Claude inbox and Claude Channels use named pipes beside the API's;
+  Codex is reached through `codex app-server proxy` over stdio. The Macropad
+  keys post keystrokes with `SendInput` (⌘ maps to Ctrl), and the hand-off
+  brings a session's app forward with `SetForegroundWindow`.
+- **Voice** runs the engine Linux runs: the deck's microphone and speaker
+  over Bluetooth (WinRT's GATT client, `ble::winrt`; it never pairs or scans,
+  so pair the deck in Settings first) or over the cable, Whisper on the CPU
+  for recognition (Windows has no recogniser of its own, so any
+  `[voice.stt] engine` is Whisper), and for replies the cloud voice, Kokoro
+  (sherpa-onnx, the C runtime linked statically for it) or Windows' own
+  SAPI voices through `[voice.tts] command`. A press on a computer without
+  the Whisper model says so. `voice.listen{input:"mac"}` opens the
+  computer's default input through WASAPI (cpal).
+- **System status** reads CPU, memory and disk from Win32 and the GPU from
+  the PDH "GPU Engine" counters.
 - **Firmware updates** download with `%SystemRoot%\System32\curl.exe`, keep
   the computer awake while flashing, and wait up to three minutes for the
   deck to come back after each restart (a deck passed through to a virtual
   machine took 176 s). Windows binds no driver to recovery's bulk interface,
   so the transfer uses the HID path (4 min 46 s for 0.13.0 on Rev A).
-- **Not built for Windows yet:** voice (BLE audio, recognisers, speech), the
-  Claude channel door and the Claude inbox, the Codex app-server client,
-  desktop focus and injection, launch at login, and the trusted-GUI check.
-  The Claude and Codex paths log that they are unavailable and leave the
-  rest of the service running; voice has not been tried. The test suite does
-  not compile on Windows (several tests are Unix-only), so CI builds the
-  Windows host and runs the client crate's tests only.
+- **Not on Windows:** the MLX voice (Apple's MLX runs on Apple silicon only)
+  and the Codex Desktop launcher. Codex Desktop has a Windows app (Microsoft
+  Store, 2026-03), but the Mac launcher leans on its undocumented
+  environment (`CODEX_APP_SERVER_WS_URL` over the daemon's socket), which has
+  not been looked at on Windows: its daemon refuses an elevated session, and
+  the test machine runs elevated. The Codex CLI's sessions are followed as
+  everywhere. Bluetooth voice is built but has not
+  been tried against a deck: the test machine has no radio. CI builds the
+  Windows host and app and runs the client's and the daemon's unit tests
+  (those that need a Unix socket, `fork` or a shell-script fake are
+  Unix-only).
 
 ## Voice over BLE
 

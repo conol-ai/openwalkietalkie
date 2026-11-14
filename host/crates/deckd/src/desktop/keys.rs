@@ -49,8 +49,8 @@ impl fmt::Display for KeyError {
             KeyError::NotTrusted => f.write_str(
                 "Accessibility is not granted: System Settings > Privacy & Security > Accessibility, add deckd",
             ),
-            KeyError::Unsupported => f.write_str("keystrokes are posted on macOS only"),
-            KeyError::Event => f.write_str("CoreGraphics returned no event"),
+            KeyError::Unsupported => f.write_str("keystrokes are posted on macOS and Windows only"),
+            KeyError::Event => f.write_str("the system did not take the keystroke"),
         }
     }
 }
@@ -242,7 +242,13 @@ pub fn trusted(prompt: bool) -> Option<bool> {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+/// Windows asks for no grant to post keys to the user's own desktop.
+#[cfg(windows)]
+pub fn trusted(_prompt: bool) -> Option<bool> {
+    Some(true)
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
 pub fn trusted(_prompt: bool) -> Option<bool> {
     None
 }
@@ -288,7 +294,23 @@ fn post(stroke: Stroke) -> Result<(), KeyError> {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+/// Windows: one `SendInput` with the modifiers around the key
+/// (`crate::winwin`). Command and Control are both Ctrl there, so a macro
+/// made on a Mac does the same thing on Windows.
+#[cfg(windows)]
+fn post(stroke: Stroke) -> Result<(), KeyError> {
+    let (vk, extended) =
+        crate::winwin::virtual_key(stroke.keycode).ok_or_else(|| KeyError::Unknown(format!("{stroke:?}")))?;
+    let held = crate::winwin::modifiers(
+        stroke.flags & FLAG_CMD != 0,
+        stroke.flags & FLAG_CTRL != 0,
+        stroke.flags & FLAG_OPT != 0,
+        stroke.flags & FLAG_SHIFT != 0,
+    );
+    crate::winwin::keystroke(&held, vk, extended).map_err(|_| KeyError::Event)
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
 fn post(_stroke: Stroke) -> Result<(), KeyError> {
     Err(KeyError::Unsupported)
 }

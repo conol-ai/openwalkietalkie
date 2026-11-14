@@ -130,7 +130,10 @@ pub fn items(footprint: &Footprint, language: Language) -> Vec<Item> {
             let (name, place, size, action) = match id {
                 "service" => (
                     language.text("Background service"),
-                    Place::Words(language.text("deckd, under Login Items in System Settings")),
+                    Place::Words(language.text(crate::voice::here(
+                        "deckd, under Login Items in System Settings",
+                        "deckd, under Startup apps in Settings",
+                    ))),
                     None,
                     Action::WithUninstall,
                 ),
@@ -200,7 +203,7 @@ pub fn items(footprint: &Footprint, language: Language) -> Vec<Item> {
                 // A Keychain item has no path to print and nothing to
                 // weigh: its place says whose it is.
                 "keychain" => (
-                    language.text("Keychain item"),
+                    language.text(crate::voice::here("Keychain item", "Credential Manager entry")),
                     Place::Words(language.text("Your cloud voice key")),
                     None,
                     Action::WithUninstall,
@@ -437,9 +440,10 @@ impl Shell {
                     .min_w_0()
                     .ts(13., 18.)
                     .text_color(p.text2)
-                    .child(ui::para(self.tr(
+                    .child(ui::para(self.tr(crate::voice::here(
                         "Uninstall removes all of these except the logs and your macOS permissions,\nand puts your CLI settings back. Move the app to the Trash yourself.",
-                    ))),
+                        "Uninstall removes all of these except the logs,\nand puts your CLI settings back. Delete the app's folder yourself.",
+                    )))),
             )
             .child(button)
     }
@@ -517,7 +521,10 @@ impl Shell {
         let sheet = Sheet {
             title: self.tr("Uninstall OpenWalkieTalkie?").into(),
             body: self
-                .tr("Removes everything in this list except the logs and your macOS permissions, and puts your CLI settings back. Then move the app to the Trash.")
+                .tr(crate::voice::here(
+                    "Removes everything in this list except the logs and your macOS permissions, and puts your CLI settings back. Then move the app to the Trash.",
+                    "Removes everything in this list except the logs, and puts your CLI settings back. Then delete the app's folder.",
+                ))
                 .into(),
             confirm: self.tr("Uninstall").into(),
             danger: true,
@@ -571,7 +578,10 @@ impl Shell {
         let outcome = self.service.uninstalled.as_ref()?;
         let (words, button) = match outcome {
             Ok(()) => (
-                self.tr("OpenWalkieTalkie is uninstalled. Move the app to the Trash.")
+                self.tr(crate::voice::here(
+                    "OpenWalkieTalkie is uninstalled. Move the app to the Trash.",
+                    "OpenWalkieTalkie is uninstalled. Delete the app's folder.",
+                ))
                     .to_string(),
                 Btn::new("uninstall-quit", self.tr("Quit OpenWalkieTalkie"))
                     .primary()
@@ -601,7 +611,10 @@ mod tests {
     #[test]
     fn the_codex_desktop_launcher_has_a_row_the_installer_removes_and_is_counted() {
         crate::i18n::install();
-        let home = std::env::var("HOME").expect("a home to print paths from");
+        // Windows sets no HOME: its home is USERPROFILE (`present::home_short`).
+        let home = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .expect("a home to print paths from");
         let footprint = |launcher: bool| {
             Footprint::parse(&serde_json::json!({"items": [
                 {"id": "codex_hooks", "path": format!("{home}/.codex/hooks.json"),

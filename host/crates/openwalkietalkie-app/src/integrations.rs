@@ -428,12 +428,16 @@ pub fn card_state(line: &Line) -> Option<&State> {
 /// The Agent tools card's rows, in the board's order: Claude Code, Claude
 /// Channels, Codex CLI, Codex Desktop.
 pub fn tools(facts: &Facts, now: Ts, language: Language) -> Vec<Line> {
-    vec![
+    let mut lines = vec![
         claude_line(facts, now, language),
         channels_line(facts, language),
         codex_line(facts, now, language),
-        desktop_line(facts, language),
-    ]
+    ];
+    // The Codex Desktop launcher is a macOS app bundle; Windows has none.
+    if cfg!(not(windows)) {
+        lines.push(desktop_line(facts, language));
+    }
+    lines
 }
 
 /// Claude Code: the plugin's state from the installer, its sessions from
@@ -2446,7 +2450,12 @@ mod tests {
         // Beside a switch that is on, or a button, the state is said.
         assert_eq!(word(&rows[0]).as_deref(), Some("Connected"));
         assert_eq!(word(&rows[2]).as_deref(), Some("Codex is not running"));
-        assert_eq!(word(&rows[3]).as_deref(), Some("Not set up"));
+        // Codex Desktop's launcher, a Mac's only.
+        if cfg!(windows) {
+            assert_eq!(rows.len(), 3);
+        } else {
+            assert_eq!(word(&rows[3]).as_deref(), Some("Not set up"));
+        }
         // Codex switched off reads Off once too.
         if let Some(config) = &mut pane.facts.config {
             config.codex_daemon = Some(false);

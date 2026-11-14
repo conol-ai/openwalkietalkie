@@ -101,9 +101,9 @@ pub fn socket_path(configured: Option<&str>) -> Option<PathBuf> {
         .filter(|h| !h.is_empty())
         .map(PathBuf::from)
         .or_else(|| {
-            std::env::var_os("HOME")
-                .filter(|h| !h.is_empty())
-                .map(|h| PathBuf::from(h).join(".codex"))
+            crate::integrations::home_dir()
+                .ok()
+                .map(|h| h.join(".codex"))
         })?;
     Some(
         home.join("app-server-control")
@@ -1486,15 +1486,89 @@ fn message_id() -> String {
     )
 }
 
-/// The control socket's stream. Windows has none yet (the app-server's
-/// control endpoint there has not been looked at), so its stand-in is a
-/// type that is never connected.
+/// The control socket's stream. On Windows the daemon listens on an
+/// AF_UNIX socket at the same path as on macOS (codex-cli 0.169), which
+/// neither std nor tokio can open there, so the stream is the stdio of
+/// `codex app-server proxy`, which relays it byte for byte.
 #[cfg(unix)]
 type ControlStream = tokio::net::UnixStream;
 #[cfg(not(unix))]
 type ControlStream = tokio::io::DuplexStream;
 
-#[cfg(not(unix))]
+/// Whether the daemon's socket is there. On Windows an AF_UNIX socket is a
+/// reparse point that `metadata` cannot follow, so its own entry is asked.
+fn socket_exists(path: &std::path::Path) -> bool {
+    #[cfg(windows)]
+    {
+        std::fs::symlink_metadata(path).is_ok()
+    }
+    #[cfg(not(windows))]
+    {
+        path.exists()
+    }
+}
+
+/// Windows: `codex app-server proxy`, with no window, its stdout and stdin
+/// bridged to one end of an in-memory stream by two threads, and the
+/// WebSocket handshake over the other end. When the session drops its end,
+/// the proxy's stdin closes and it exits.
+#[cfg(windows)]
+async fn connect(
+    path: &std::path::Path,
+) -> Result<tokio_tungstenite::WebSocketStream<ControlStream>, String> {
+    use std::io::{Read, Write};
+    use std::os::windows::process::CommandExt;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let codex = crate::integrations::find_cli("codex").ok_or("codex is not installed")?;
+    let mut child = crate::integrations::cli_command(&codex)
+        .args(["app-server", "proxy"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| format!("codex app-server proxy for {}: {e}", path.display()))?;
+    let (mut stdout, mut stdin) = (
+        child.stdout.take().ok_or("no proxy stdout")?,
+        child.stdin.take().ok_or("no proxy stdin")?,
+    );
+    let (ours, theirs) = tokio::io::duplex(64 * 1024);
+    let (mut from_us, mut to_us) = tokio::io::split(theirs);
+    let runtime = tokio::runtime::Handle::current();
+    let reader = runtime.clone();
+    std::thread::Builder::new()
+        .name("codexd-proxy-out".into())
+        .spawn(move || {
+            let mut buf = [0u8; 16 * 1024];
+            while let Ok(n @ 1..) = stdout.read(&mut buf) {
+                if reader.block_on(to_us.write_all(&buf[..n])).is_err() {
+                    break;
+                }
+            }
+            let _ = reader.block_on(to_us.shutdown());
+        })
+        .map_err(|e| e.to_string())?;
+    std::thread::Builder::new()
+        .name("codexd-proxy-in".into())
+        .spawn(move || {
+            let mut buf = [0u8; 16 * 1024];
+            while let Ok(n @ 1..) = runtime.block_on(from_us.read(&mut buf)) {
+                if stdin.write_all(&buf[..n]).and_then(|()| stdin.flush()).is_err() {
+                    break;
+                }
+            }
+            drop(stdin);
+            let _ = child.wait();
+        })
+        .map_err(|e| e.to_string())?;
+    let (ws, _) = tokio_tungstenite::client_async("ws://localhost/", ours)
+        .await
+        .map_err(|e| format!("websocket handshake: {e}"))?;
+    Ok(ws)
+}
+
+#[cfg(not(any(unix, windows)))]
 async fn connect(
     path: &std::path::Path,
 ) -> Result<tokio_tungstenite::WebSocketStream<ControlStream>, String> {
@@ -1557,7 +1631,7 @@ pub async fn run(api: Arc<Api>, mut stop: watch::Receiver<bool>) {
                 () = crate::dormancy::until_collect(&mut gate, false) => continue,
             }
         };
-        if !path.exists() {
+        if !socket_exists(&path) {
             tracing::debug!(socket = %path.display(), "codexd: no daemon socket");
             tokio::select! {
                 _ = stop.changed() => return,

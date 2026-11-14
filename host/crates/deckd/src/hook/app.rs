@@ -140,8 +140,40 @@ pub fn bundle_id_of(_bundle: &str) -> Option<String> {
     None
 }
 
+/// This helper's own answer on Windows, where there are no bundles: up from
+/// the CLI's parent (the helper's, when the walk found no CLI), the first
+/// process that owns an app window names the app by its executable's file
+/// name (`WindowsTerminal.exe`, `Code.exe`), which [`valid_bundle_id`]
+/// accepts as it accepts an identifier. This app's own window is passed
+/// over, as macOS passes over its own bundle.
+#[cfg(windows)]
+#[must_use]
+pub fn from_process(walk: &walk::Walk) -> Option<String> {
+    let procs = walk::MacProcs;
+    let windowed = crate::winwin::windowed_pids();
+    let below = walk.cli_pid.unwrap_or_else(std::process::id);
+    let mut cur = procs.get_any(below).map(|proc| proc.ppid).filter(|&ppid| ppid > 0)?;
+    for _ in 0..MAX_APP_HOPS {
+        let proc = procs.get_any(cur)?;
+        if windowed.contains(&proc.pid) {
+            let name = proc.names.first()?;
+            let own = name.eq_ignore_ascii_case("OpenWalkieTalkie.exe")
+                || name.eq_ignore_ascii_case("openwalkietalkie-app.exe");
+            if !own && valid_bundle_id(name) {
+                return Some(name.clone());
+            }
+        }
+        if proc.ppid == 0 || proc.ppid == proc.pid {
+            return None;
+        }
+        cur = proc.ppid;
+    }
+    None
+}
+
 /// This helper's own answer: the kernel's process table, the bundles on
 /// disk and its own environment.
+#[cfg(not(windows))]
 #[must_use]
 pub fn from_process(walk: &walk::Walk) -> Option<String> {
     let exe = std::env::current_exe().ok();

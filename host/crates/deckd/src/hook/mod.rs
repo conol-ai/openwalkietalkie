@@ -289,7 +289,11 @@ fn passthrough(rest: &[String], stdin: &[u8], out: &mut impl Write, err: &mut im
     let Some((program, args)) = split_command(rest) else {
         return;
     };
-    let mut child = match std::process::Command::new(program)
+    #[cfg(windows)]
+    let (program, args) = windows_shell(program, args);
+    #[cfg(not(windows))]
+    let program = std::borrow::Cow::Borrowed(program);
+    let mut child = match std::process::Command::new(&*program)
         .args(args)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
@@ -327,6 +331,49 @@ fn split_command(rest: &[String]) -> Option<(&str, Vec<&str>)> {
         [one] => Some(("/bin/sh", vec!["-c", one.as_str()])),
         [program, args @ ..] => Some((program.as_str(), args.iter().map(String::as_str).collect())),
     }
+}
+
+/// Windows: Claude Code runs a `statusLine` command in Git Bash, so the
+/// user's command is bash's to run here too: the bash Claude Code names in
+/// `CLAUDE_CODE_GIT_BASH_PATH`, else Git for Windows' own, else the first
+/// `bash.exe` on `PATH` that is not System32's WSL launcher. Without one,
+/// `cmd.exe /c` runs it as Windows would. An argv (several words) runs as
+/// it is.
+#[cfg(windows)]
+fn windows_shell<'a>(program: &'a str, args: Vec<&'a str>) -> (std::borrow::Cow<'a, str>, Vec<&'a str>) {
+    if program != "/bin/sh" {
+        return (program.into(), args);
+    }
+    match git_bash() {
+        Some(bash) => (bash.to_string_lossy().into_owned().into(), args),
+        None => {
+            let command = args.get(1).copied().unwrap_or_default();
+            ("cmd.exe".into(), vec!["/d", "/s", "/c", command])
+        }
+    }
+}
+
+#[cfg(windows)]
+fn git_bash() -> Option<std::path::PathBuf> {
+    use std::path::PathBuf;
+    let file = |p: PathBuf| p.is_file().then_some(p);
+    if let Some(named) = std::env::var_os("CLAUDE_CODE_GIT_BASH_PATH").map(PathBuf::from).and_then(file) {
+        return Some(named);
+    }
+    for root in ["ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"] {
+        if let Some(found) = std::env::var_os(root).and_then(|r| file(PathBuf::from(r).join(r"Git\bin\bash.exe"))) {
+            return Some(found);
+        }
+    }
+    if let Some(found) = std::env::var_os("LOCALAPPDATA")
+        .and_then(|r| file(PathBuf::from(r).join(r"Programs\Git\bin\bash.exe")))
+    {
+        return Some(found);
+    }
+    let system = std::env::var_os("SystemRoot").map(|s| PathBuf::from(s).to_string_lossy().to_lowercase());
+    std::env::split_paths(&std::env::var_os("PATH")?)
+        .filter(|dir| system.as_deref().is_none_or(|s| !dir.to_string_lossy().to_lowercase().starts_with(s)))
+        .find_map(|dir| file(dir.join("bash.exe")))
 }
 
 /// Connect, hello, one call, close. Errors are kinds, never contents.

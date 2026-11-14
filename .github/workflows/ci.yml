@@ -162,16 +162,24 @@ jobs:
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
         with:
           toolchain: 1.98.1
+          components: clippy
       # The service and the window build for Windows (named-pipe door,
-      # LockFileEx, the app as a GUI program); the daemon's own tests do
-      # not compile there yet (several are Unix-only), so only the client's
-      # run, which cover the pipe's name and its same-user descriptor.
+      # LockFileEx, the app as a GUI program, voice: whisper.cpp through the
+      # runner's CMake and LLVM, sherpa-onnx's static library, the C runtime
+      # linked statically per .cargo/config.toml), then the unit tests of the
+      # client (the pipe's name and its same-user descriptor), the model, the
+      # GUI core, the daemon (those that need a Unix socket, fork or a
+      # shell-script fake are Unix-only) and the app.
       - name: Build the Windows host and app
         run: |
           cargo build --manifest-path host/Cargo.toml -p deckd -p openwalkietalkie-app --locked --target x86_64-pc-windows-msvc --target-dir target/host
-      - name: Test the client on Windows
+      - name: Test the client, the daemon and the app on Windows
         run: |
-          cargo test --manifest-path host/Cargo.toml -p deck-client --lib --locked --target x86_64-pc-windows-msvc --target-dir target/host
+          cargo test --manifest-path host/Cargo.toml -p deck-client -p deck-model -p deck-gui-core -p deckd -p openwalkietalkie-app --lib --locked --target x86_64-pc-windows-msvc --target-dir target/host
+      # The Windows-only code the macOS lint never compiles.
+      - name: Lint the Windows host and app
+        run: |
+          cargo clippy --manifest-path host/Cargo.toml -p deck-client -p deck-gui-core -p deckd -p openwalkietalkie-app --lib --bins --locked --target x86_64-pc-windows-msvc --target-dir target/host -- -D warnings
       # The release packages these binaries the same way (release.yml); doing
       # it here too means a broken package shows on the pull request, not on
       # the tag. The packager also refuses a console-subsystem app.

@@ -120,7 +120,18 @@ impl MacVerifier {
         }
     }
 
-    #[cfg(not(target_os = "macos"))]
+    /// Windows builds are not signed, so there is no signature to check:
+    /// the peer stands for the GUI when it is the app in this service's own
+    /// folder ([`is_gui_path`], checked by `verify`) and no agent CLI is in
+    /// its ancestry. A program running as the same user could still replace
+    /// that file; on a Mac the signature is what stops that, and the install
+    /// guide says Windows has no such guard.
+    #[cfg(windows)]
+    fn satisfies(&self, pid: u32) -> Option<Requirement> {
+        (!ancestry_capped(pid)).then_some(Requirement::Gui)
+    }
+
+    #[cfg(not(any(target_os = "macos", windows)))]
     fn satisfies(&self, _pid: u32) -> Option<Requirement> {
         None
     }
@@ -211,12 +222,27 @@ impl PeerVerifier for FakeVerifier {
 /// a peer the CLI spawned.
 pub fn is_agent_process_name(name: &str) -> bool {
     let base = name.rsplit('/').next().unwrap_or(name);
+    // Windows: `C:\…\claude.exe` — backslashes, and the `.exe` the
+    // executable's name carries.
+    #[cfg(windows)]
+    let base = {
+        let base = base.rsplit('\\').next().unwrap_or(base);
+        match base.len().checked_sub(4) {
+            Some(cut) if base.is_char_boundary(cut) && base[cut..].eq_ignore_ascii_case(".exe") => &base[..cut],
+            _ => base,
+        }
+    };
     if AGENT_PROCESS_NAMES
         .iter()
         .any(|agent| base.eq_ignore_ascii_case(agent))
     {
         return true;
     }
+    #[cfg(windows)]
+    {
+        is_versioned_agent_path(&name.replace('\\', "/"))
+    }
+    #[cfg(not(windows))]
     is_versioned_agent_path(name)
 }
 
@@ -238,8 +264,35 @@ fn is_versioned_agent_path(path: &str) -> bool {
 }
 
 /// The executable of a trusted peer lives at `…app/Contents/MacOS/OpenWalkieTalkie`.
+#[cfg(not(windows))]
 pub fn is_gui_path(path: &Path) -> bool {
     path.to_str().is_some_and(|p| p.ends_with(GUI_EXE_SUFFIX))
+}
+
+/// Windows: the app beside this service, `OpenWalkieTalkie.exe` as the
+/// preview zip names it (or the build's own `openwalkietalkie-app.exe`), in
+/// the folder `deckd.exe` runs from, compared case-blind as Windows does.
+#[cfg(windows)]
+pub fn is_gui_path(path: &Path) -> bool {
+    let Some(dir) = std::env::current_exe().ok().and_then(|exe| exe.parent().map(Path::to_path_buf)) else {
+        return false;
+    };
+    is_gui_path_beside(path, &dir)
+}
+
+/// [`is_gui_path`] against a given service folder.
+#[cfg(windows)]
+pub fn is_gui_path_beside(path: &Path, service_dir: &Path) -> bool {
+    let named = path.file_name().and_then(|n| n.to_str()).is_some_and(|name| {
+        name.eq_ignore_ascii_case("OpenWalkieTalkie.exe") || name.eq_ignore_ascii_case("openwalkietalkie-app.exe")
+    });
+    // Both resolved, so `..`, 8.3 short names and links compare by the
+    // folder they are.
+    let resolve = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    let same_folder = path.parent().is_some_and(|parent| {
+        resolve(parent).to_string_lossy().to_lowercase() == resolve(service_dir).to_string_lossy().to_lowercase()
+    });
+    named && same_folder
 }
 
 /// `proc_pidpath`: the peer's executable, or `None` when the pid is gone
@@ -261,7 +314,13 @@ pub fn exe_path(pid: u32) -> Option<PathBuf> {
     Some(PathBuf::from(OsString::from_vec(buf)))
 }
 
-#[cfg(not(target_os = "macos"))]
+/// `QueryFullProcessImageNameW` (see `crate::winproc`).
+#[cfg(windows)]
+pub fn exe_path(pid: u32) -> Option<PathBuf> {
+    crate::winproc::exe_path(pid)
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
 pub fn exe_path(_pid: u32) -> Option<PathBuf> {
     None
 }
@@ -285,7 +344,8 @@ pub fn ancestry_capped(pid: u32) -> bool {
 /// a walk of names alone left every process such a Claude Code started
 /// uncapped. A hop the kernel will not describe (another user's, such as the
 /// root `login` between a terminal and its shell) ends the walk uncapped.
-#[cfg(target_os = "macos")]
+/// Windows reads the same hops through `crate::winproc`.
+#[cfg(any(target_os = "macos", windows))]
 pub fn ancestry_capped_within(pid: u32, max_hops: usize) -> bool {
     use crate::hook::walk::{MacProcs, Procs};
 
@@ -310,7 +370,7 @@ pub fn ancestry_capped_within(pid: u32, max_hops: usize) -> bool {
     false
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 pub fn ancestry_capped_within(_pid: u32, _max_hops: usize) -> bool {
     false
 }
@@ -319,7 +379,7 @@ pub fn ancestry_capped_within(_pid: u32, _max_hops: usize) -> bool {
 /// hop's `pbi_comm`, `pbi_name` and executable path (empty ones dropped,
 /// repeats folded) — what the cap looked at, for the tests' assertion
 /// messages. Process names and paths only, never content.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 pub fn ancestry_chain(pid: u32) -> Vec<(u32, Vec<String>)> {
     use crate::hook::walk::{MacProcs, Procs};
 
@@ -342,7 +402,7 @@ pub fn ancestry_chain(pid: u32) -> Vec<(u32, Vec<String>)> {
     chain
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 pub fn ancestry_chain(_pid: u32) -> Vec<(u32, Vec<String>)> {
     Vec::new()
 }
@@ -415,6 +475,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(windows))] // a Mac's bundle path; Windows has its own test
     fn only_the_bundle_path_is_the_gui() {
         assert!(is_gui_path(Path::new(
             "/Applications/OpenWalkieTalkie.app/Contents/MacOS/OpenWalkieTalkie"
@@ -491,7 +552,23 @@ mod tests {
     /// whatever ran it. The §4.2 cap is the macOS one and nothing more
     /// (the owner's decision 3 keeps it as it is), and `docs/host-service.md`
     /// §13 says so for Linux.
-    #[cfg(not(target_os = "macos"))]
+    /// Windows: the GUI is the app in the service's own folder, by either of
+    /// its names, and nothing else is.
+    #[cfg(windows)]
+    #[test]
+    fn on_windows_the_gui_is_the_app_beside_the_service() {
+        let dir = std::env::temp_dir().join(format!("owt-trust-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("bin")).unwrap();
+        let bin = dir.join("bin");
+        assert!(is_gui_path_beside(&bin.join("OpenWalkieTalkie.exe"), &bin));
+        assert!(is_gui_path_beside(&bin.join("openwalkietalkie-app.exe"), &bin));
+        assert!(is_gui_path_beside(&bin.join("OPENWALKIETALKIE.EXE"), &bin), "case-blind");
+        assert!(!is_gui_path_beside(&dir.join("OpenWalkieTalkie.exe"), &bin), "another folder");
+        assert!(!is_gui_path_beside(&bin.join("powershell.exe"), &bin), "another program");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(not(any(target_os = "macos", windows)))]
     #[test]
     fn off_macos_no_executable_is_read_and_nothing_is_capped() {
         let me = std::process::id();

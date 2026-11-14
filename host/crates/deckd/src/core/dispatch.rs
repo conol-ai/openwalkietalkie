@@ -244,6 +244,8 @@ pub const fn platform() -> &'static str {
         "macos"
     } else if cfg!(target_os = "linux") {
         "linux"
+    } else if cfg!(windows) {
+        "windows"
     } else {
         "other"
     }
@@ -1078,11 +1080,11 @@ impl Core {
     fn stt_info(&self, apple: &crate::audio::traits::EngineInfo) -> crate::audio::traits::EngineInfo {
         let settings = crate::stt::Settings::from_config(self.config());
         let present = crate::stt::present(&self.paths.stt, &settings.model);
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        #[cfg(any(target_os = "macos", target_os = "linux", windows))]
         {
             crate::audio::whisper::engine_info(&settings, present, apple)
         }
-        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
         {
             let _ = (settings, present);
             apple.clone()
@@ -1099,7 +1101,7 @@ impl Core {
         let path = crate::stt::model_path(&self.paths.stt, &settings.model);
         let present = crate::stt::present(&self.paths.stt, &settings.model);
         let (loaded, loading, load_error) = {
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            #[cfg(any(target_os = "macos", target_os = "linux", windows))]
             {
                 match &self.whisper {
                     Some(whisper) => {
@@ -1110,7 +1112,7 @@ impl Core {
                     None => (false, false, None),
                 }
             }
-            #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+            #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
             {
                 (false, false, Some("no local recogniser in this build".to_string()))
             }
@@ -1174,7 +1176,7 @@ impl Core {
         if let Err(e) = crate::stt::job(&self.paths.stt, &settings.model).remove() {
             return Reply::err(ApiError::internal(&e));
         }
-        #[cfg(any(target_os = "macos", target_os = "linux"))]
+        #[cfg(any(target_os = "macos", target_os = "linux", windows))]
         if let Some(whisper) = &self.whisper {
             whisper.unload();
         }
@@ -1190,7 +1192,7 @@ impl Core {
         let job = crate::kokoro::job(&self.paths.kokoro, &settings.model);
         let present = crate::kokoro::present(&self.paths.kokoro, &settings.model);
         let (loaded, loading, load_error) = {
-            #[cfg(target_os = "macos")]
+            #[cfg(any(target_os = "macos", windows))]
             {
                 match &self.kokoro {
                     Some(kokoro) => {
@@ -1201,7 +1203,7 @@ impl Core {
                     None => (false, false, None),
                 }
             }
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(not(any(target_os = "macos", windows)))]
             {
                 (false, false, Some("no local voice in this build".to_string()))
             }
@@ -1264,7 +1266,7 @@ impl Core {
         if let Err(e) = crate::kokoro::job(&self.paths.kokoro, &settings.model).remove() {
             return Reply::err(ApiError::internal(&e));
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", windows))]
         if let Some(kokoro) = &self.kokoro {
             kokoro.unload();
         }
@@ -1943,7 +1945,10 @@ fn voice_key_value(
 
 /// The store did not take the key: `-32009 invalid{keychain}`.
 fn keychain_refusal(why: &str) -> ApiError {
-    ApiError::invalid("keychain", &format!("the Keychain did not take the key: {why}"))
+    ApiError::invalid(
+        "keychain",
+        &format!("{} did not take the key: {why}", crate::secrets::STORE),
+    )
 }
 
 /// A `config.set` patch applied to `config.toml` in memory and checked
@@ -2412,7 +2417,12 @@ mod tests {
         assert_eq!(info["mcp"], serde_json::Value::Null);
         assert_eq!(info["degraded"], serde_json::Value::Null);
         assert_eq!(info["port"], 47201);
-        assert!(info["uds"].as_str().unwrap().ends_with("deckd.sock"));
+        let door = info["uds"].as_str().unwrap();
+        if cfg!(windows) {
+            assert!(door.starts_with(r"\\.\pipe\openwalkietalkie-deckd-"), "{door}");
+        } else {
+            assert!(door.ends_with("deckd.sock"), "{door}");
+        }
         assert_eq!(info["pid"], std::process::id());
         assert_eq!(info["metric"]["lines_sent"], 9);
         assert_eq!(info["sid"], 7);
@@ -4239,7 +4249,10 @@ mod tests {
         assert_eq!(err.data["field"], "keychain");
         let words = serde_json::to_string(&err).unwrap();
         assert!(
-            words.contains("the Keychain did not take the key: User interaction is not allowed."),
+            words.contains(&format!(
+                "{} did not take the key: User interaction is not allowed.",
+                crate::secrets::STORE
+            )),
             "{words}"
         );
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "[api]\nport = 47201\n");

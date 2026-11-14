@@ -469,9 +469,11 @@ pub fn claude_dir() -> Option<std::path::PathBuf> {
     if let Some(dir) = std::env::var_os("CLAUDE_CONFIG_DIR").filter(|d| !d.is_empty()) {
         return Some(std::path::PathBuf::from(dir));
     }
-    std::env::var_os("HOME")
-        .filter(|h| !h.is_empty())
-        .map(|home| std::path::PathBuf::from(home).join(".claude"))
+    // `HOME`, else the OS's own idea of it (`%USERPROFILE%` on Windows,
+    // where nothing sets `HOME`).
+    crate::integrations::home_dir()
+        .ok()
+        .map(|home| home.join(".claude"))
 }
 
 /// Does Claude's session registry hold any entry at all?
@@ -1209,14 +1211,22 @@ mod tests {
         assert!(alive(std::process::id()));
         assert!(!alive(0));
         assert!(!alive(u32::MAX));
-        // launchd is pid 1 and belongs to root: EPERM, which is alive.
-        assert!(alive(1));
+        // Somebody else's process is alive though it cannot be opened:
+        // launchd (pid 1, root's: EPERM), or Windows' System (pid 4:
+        // access denied).
+        assert!(alive(if cfg!(windows) { 4 } else { 1 }));
     }
 
     /// A probe that cannot run is inconclusive, never "no sessions".
     #[test]
     fn a_probe_that_cannot_run_is_inconclusive() {
-        let probe = Probe::on_path("claude", "/nonexistent-deckd-probe");
+        // Windows looks a bare name up in this process's own `PATH` too, so
+        // a missing binary is named by an absolute path there.
+        let probe = if cfg!(windows) {
+            Probe::new(r"C:\nonexistent-deckd-probe\claude.exe")
+        } else {
+            Probe::on_path("claude", "/nonexistent-deckd-probe")
+        };
         let why = probe.rows().expect_err("no such binary");
         assert!(!why.is_empty());
         // A binary that prints something else is inconclusive too.

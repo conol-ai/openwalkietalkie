@@ -866,7 +866,7 @@ fn the_harness_scenes_are_the_services_replies_parsed_as_the_page_reads_them() {
     assert_eq!(synthesiser(&downloading.tts), Some(Synthesiser::Apple));
     assert_eq!(
         tts_slot(&downloading.kokoro),
-        Slot::Download { bytes: 364_816_464 }
+        Slot::Download { bytes: 364_855_331 }
     );
     assert_eq!(
         speech_choice(&downloading.stt_config),
@@ -923,7 +923,7 @@ fn the_harness_scenes_are_the_services_replies_parsed_as_the_page_reads_them() {
     );
     assert_eq!(
         tts_slot(&fresh.kokoro),
-        Slot::Download { bytes: 364_816_464 }
+        Slot::Download { bytes: 364_855_331 }
     );
     assert!(fresh.stt_config.companion && !fresh.add_key);
     // Every other scene is another page's, live ones included.
@@ -946,8 +946,28 @@ fn every_row_the_page_adds_is_the_only_row_of_its_key() {
         assert_eq!(rows, 1, "{english:?} is in another table too");
     }
     // The sheet's 67 rows, copied as written, and the key dialog's line
-    // for a key kept in the Keychain.
-    assert_eq!(i18n::voice::STRINGS.len(), 68);
+    // for a key kept in the Keychain; then Windows' seven (the engines on
+    // this PC, Windows voice, the Conol note, the speech language, and where
+    // the key is kept).
+    assert_eq!(i18n::voice::STRINGS.len(), 75);
+}
+
+/// The words the page says on Windows only (`voice::here`'s second form,
+/// which the literal scanner does not see) have rows of their own.
+#[test]
+fn the_windows_words_have_rows() {
+    i18n::install();
+    for english in [
+        "Whisper, on this PC",
+        "Kokoro, on this PC",
+        "Windows voice",
+        "Audio of those presses goes to Conol's service.\nOff keeps all recognition on this PC.",
+        "Whisper detects the language, or keeps to the one chosen here.",
+        "The key is kept in the service's settings on this PC.",
+        "The key is kept in Windows Credential Manager on this PC.",
+    ] {
+        assert!(deck_gui_core::i18n::has_entry(english), "{english:?}");
+    }
 }
 
 /// The key dialog says where the service keeps the key: the Keychain when
@@ -992,8 +1012,10 @@ fn every_word_the_page_says_has_a_row() {
     assert_eq!(i18n::missing_rows(source), Vec::<String>::new());
     // Pinned, so a lookup the scanner stopped seeing fails here rather than
     // passing as a page with less to translate. (121: the key dialog's
-    // line became one of two, by where the key is kept.)
-    assert_eq!(i18n::literals(source).len(), 121);
+    // line became one of two, by where the key is kept; 114 with seven
+    // lines one of two by platform, `voice::here`, which the scanner does
+    // not read: `the_windows_words_have_rows` holds their Windows forms.)
+    assert_eq!(i18n::literals(source).len(), 114);
 }
 
 /// A fresh test service's own replies (`deck-gui-core`'s recorded fixtures,

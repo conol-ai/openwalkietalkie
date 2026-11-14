@@ -2594,6 +2594,10 @@ enabled = false
         );
         assert_eq!(p.config, PathBuf::from("/d/config.toml"));
         assert_eq!(p.state, PathBuf::from("/d/state.json"));
+        // The local door: the socket, or on Windows the named pipe named
+        // after the data directory.
+        assert_eq!(p.socket, deck_client::local_door_for(Path::new("/d")));
+        #[cfg(not(windows))]
         assert_eq!(p.socket, PathBuf::from("/d/deckd.sock"));
         assert_eq!(p.lock, PathBuf::from("/d/deckd.lock"));
         assert_eq!(p.status, PathBuf::from("/d/status.json"));

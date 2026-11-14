@@ -25,6 +25,10 @@ pub const CTL_CLIENT: &str = "deckd-ctl";
 pub const EVENTS_CLIENT: &str = "deckd-events";
 /// `doctor`'s probes give the daemon this long.
 pub const DOCTOR_TIMEOUT: Duration = Duration::from_secs(3);
+/// The synthesiser the system ships, as `deckd tts` names it.
+const SYSTEM_SYNTH: &str = if cfg!(windows) { "Windows' own voice" } else { "Apple's synthesiser" };
+/// The computer the service runs on, as `deckd tts` names it.
+const THIS_COMPUTER: &str = if cfg!(windows) { "this PC" } else { "this Mac" };
 
 /// Why a socket call did not return a result.
 #[derive(Debug)]
@@ -243,7 +247,7 @@ pub const ANCESTRY_HINT: &str =
 #[derive(Parser, Debug)]
 #[command(name = "deckd", version, about = "OpenWalkieTalkie host service")]
 pub struct Cli {
-    /// Data directory (default: ~/Library/Application Support/OpenWalkieTalkie, or $DECKD_DATA_DIR).
+    /// Data directory (default: $DECKD_DATA_DIR, else ~/Library/Application Support/OpenWalkieTalkie on a Mac, %LOCALAPPDATA%\OpenWalkieTalkie on Windows).
     #[arg(long, global = true)]
     pub data_dir: Option<PathBuf>,
     #[command(subcommand)]
@@ -1100,7 +1104,8 @@ pub fn uninstall_preview(
         ));
         if keys.store().is_some() {
             out.push_str(&format!(
-                "  - PURGE the cloud voice key from the Keychain ({}), if one is there\n",
+                "  - PURGE the cloud voice key from {} ({}), if one is there\n",
+                crate::secrets::STORE,
                 crate::secrets::SERVICE
             ));
         }
@@ -1373,7 +1378,7 @@ fn find_uv() -> Option<PathBuf> {
             .find(|p| p.is_file())
     });
     on_path.or_else(|| {
-        let home = std::env::var_os("HOME").map(PathBuf::from)?;
+        let home = crate::integrations::home_dir().ok()?;
         [home.join(".local/bin/uv"), PathBuf::from("/opt/homebrew/bin/uv")]
             .into_iter()
             .find(|p| p.is_file())
@@ -1399,7 +1404,7 @@ fn hf_cache_dir(model: &str) -> Option<PathBuf> {
     let hub = std::env::var_os("HF_HUB_CACHE")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HF_HOME").map(|h| PathBuf::from(h).join("hub")))
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache/huggingface/hub")))?;
+        .or_else(|| crate::integrations::home_dir().ok().map(|h| h.join(".cache/huggingface/hub")))?;
     Some(hub.join(format!("models--{}", model.replace('/', "--"))))
 }
 
@@ -1469,7 +1474,7 @@ fn published_config(paths: &Paths) -> Option<serde_json::Value> {
 /// `config.get`.
 fn key_place(paths: &Paths, published: &serde_json::Value) -> String {
     if published["voice"]["tts.key_store"] == "keychain" {
-        "the Keychain".into()
+        crate::secrets::STORE.into()
     } else {
         paths.config.display().to_string()
     }
@@ -1593,13 +1598,13 @@ fn tts_key_set(
                 Some(store) => {
                     store
                         .set(key)
-                        .map_err(|why| format!("the Keychain did not take the key: {why}"))?;
+                        .map_err(|why| format!("{} did not take the key: {why}", crate::secrets::STORE))?;
                     let config = Config::load(&paths.config).unwrap_or_default();
                     if config.voice.tts.has_key() {
                         file.push(("voice.tts.api_key", serde_json::Value::Null));
                     }
                     let next = if file.is_empty() { config } else { write_tts_keys(paths, &file)? };
-                    (next, "the Keychain".to_string())
+                    (next, crate::secrets::STORE.to_string())
                 }
                 None => {
                     file.push(("voice.tts.api_key", serde_json::Value::String(key.into())));
@@ -1660,11 +1665,11 @@ fn tts_key_clear(
                 Some(store) => {
                     store
                         .delete()
-                        .map_err(|why| format!("the Keychain did not remove the key: {why}"))?;
+                        .map_err(|why| format!("{} did not remove the key: {why}", crate::secrets::STORE))?;
                     let config = Config::load(&paths.config).unwrap_or_default();
                     let next =
                         if config.voice.tts.has_key() { write_tts_keys(paths, &clear)? } else { config };
-                    (next, "the Keychain".to_string())
+                    (next, crate::secrets::STORE.to_string())
                 }
                 None => (write_tts_keys(paths, &clear)?, paths.config.display().to_string()),
             };
@@ -1703,7 +1708,7 @@ fn key_line(paths: &Paths, config: &Config, keys: &crate::secrets::KeyHome) -> K
             return none();
         }
         let line = if voice["tts.key_store"] == "keychain" {
-            format!("{hint}, in the Keychain")
+            format!("{hint}, in {}", crate::secrets::STORE)
         } else {
             hint.to_string()
         };
@@ -1722,11 +1727,11 @@ fn key_line(paths: &Paths, config: &Config, keys: &crate::secrets::KeyHome) -> K
     match keys.store().map(|store| store.exists()) {
         Some(Ok(true)) => KeyLine {
             present: true,
-            line: "in the Keychain (start the service to see its last four characters)".into(),
+            line: format!("in {} (start the service to see its last four characters)", crate::secrets::STORE),
         },
         Some(Err(why)) => KeyLine {
             present: false,
-            line: format!("the Keychain did not answer: {why}"),
+            line: format!("{} did not answer: {why}", crate::secrets::STORE),
         },
         Some(Ok(false)) | None => none(),
     }
@@ -1870,7 +1875,7 @@ pub fn tts_cmd(
                     let _ = writeln!(out, "tts: removed {}", crate::kokoro::dir(&paths.kokoro, &settings.model).display());
                 }
             }
-            let _ = writeln!(out, "tts: Apple's synthesiser speaks from the next utterance");
+            let _ = writeln!(out, "tts: {SYSTEM_SYNTH} speaks from the next utterance");
             Ok(0)
         }
         TtsCmd::Status => {
@@ -1884,10 +1889,10 @@ pub fn tts_cmd(
                 "engine:  [voice.tts] engine = {:?} → {}",
                 tts.engine,
                 match tts.engine_with_key(key.as_ref().is_some_and(|key| key.present)) {
-                    "apple" => "Apple's synthesiser speaks, on this Mac".to_string(),
+                    "apple" => format!("{SYSTEM_SYNTH} speaks, on {THIS_COMPUTER}"),
                     sidecar::NAME => "the local model in its sidecar speaks".to_string(),
-                    crate::kokoro::ENGINE if kokoro_present => "the Kokoro voice speaks, on this Mac".to_string(),
-                    crate::kokoro::ENGINE => "Apple's synthesiser, until the Kokoro voice is downloaded".to_string(),
+                    crate::kokoro::ENGINE if kokoro_present => format!("the Kokoro voice speaks, on {THIS_COMPUTER}"),
+                    crate::kokoro::ENGINE => format!("{SYSTEM_SYNTH}, until the Kokoro voice is downloaded"),
                     provider => format!("{provider}'s model speaks (your key)"),
                 }
             );
@@ -2514,6 +2519,7 @@ pub struct Doctor {
 /// A stray `~/Library/LaunchAgents/<label>.plist`: what `deckd install
 /// --dev` writes, and what an SMAppService registration leaves behind only
 /// as a file when the bundle is gone.
+#[cfg(not(windows))]
 fn user_launch_agent(label: &str) -> Option<PathBuf> {
     let path = std::env::var_os("HOME")
         .map(PathBuf::from)?
@@ -2530,6 +2536,41 @@ fn user_launch_agent(label: &str) -> Option<PathBuf> {
 /// The exit and dangling rows are `crate::launchd`'s: they are text and
 /// filesystem, so they are unit-tested there, and this only decides which
 /// rows to print and whether each is a failure.
+/// Windows' row in place of launchd's: whether the service starts at
+/// sign-in, which the app sets as a Run value (`login_item`). Reading only.
+#[cfg(windows)]
+pub fn launchd_checks() -> Vec<(String, bool, String)> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let reg = std::env::var_os("SystemRoot")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| "C:\\Windows".into())
+        .join(r"System32\reg.exe");
+    let query = std::process::Command::new(reg)
+        .args([
+            "query",
+            r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
+            "/v",
+            "OpenWalkieTalkie Service",
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output();
+    let registered = query.ok().filter(|out| out.status.success()).and_then(|out| {
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .find_map(|line| line.split_once("REG_SZ").map(|(_, command)| command.trim().to_string()))
+    });
+    vec![(
+        "startup".into(),
+        true,
+        match registered {
+            Some(command) => format!("the service starts at sign-in: {command}"),
+            None => "the service does not start at sign-in (the app's Service page sets it)".into(),
+        },
+    )]
+}
+
+#[cfg(not(windows))]
 pub fn launchd_checks() -> Vec<(String, bool, String)> {
     let mut checks = Vec::new();
     match crate::launchd::Agent::load(DECKD_LABEL) {
@@ -2833,12 +2874,19 @@ pub fn setup_checks(
                     use std::os::unix::fs::PermissionsExt;
                     meta.permissions().mode() & 0o777
                 };
-                #[cfg(not(unix))]
-                let mode = 0o600;
                 let count = crate::tokens::Tokens::load(&paths.tokens)
                     .map(|t| t.list().len())
                     .map_err(|e| e.to_string());
-                match (mode, count) {
+                // Windows has no mode bits: the file is private because the
+                // data directory (%LOCALAPPDATA%) is the user's own, which
+                // is what is said, rather than a mode nothing checked.
+                #[cfg(not(unix))]
+                let row = {
+                    let _ = meta;
+                    count.map(|n| format!("{n} token(s), in this user's own data folder"))
+                };
+                #[cfg(unix)]
+                let row = match (mode, count) {
                     (0o600, Ok(n)) => Ok(format!("mode 0600, {n} token(s)")),
                     (0o600, Err(e)) => Err(e),
                     (mode, _) => Err(format!(
@@ -2849,7 +2897,8 @@ pub fn setup_checks(
                             &paths.tokens.display().to_string(),
                         ])
                     )),
-                }
+                };
+                row
             }
         },
     );
@@ -3598,7 +3647,9 @@ mod tests {
             .checks
             .iter()
             .any(|(n, ok, d)| n == "status.json" && *ok && d.starts_with("absent")));
-        assert!(d.checks.iter().any(|(n, _, _)| n == "launchd deckd"));
+        // How the service starts: launchd's agent, or Windows' Run value.
+        let start_row = if cfg!(windows) { "startup" } else { "launchd deckd" };
+        assert!(d.checks.iter().any(|(n, _, _)| n == start_row));
         // A status file makes the text report the link; stale only counts while running.
         let live = LiveStatus {
             pid: 1,
@@ -4165,6 +4216,7 @@ mod tests {
     /// contributes its own row, and that a **loaded** daemon agent brings the two week-7 rows with it
     /// — the exit meaning and the dangling-program verdict.
     #[test]
+    #[cfg(not(windows))] // launchd's rows; Windows has a startup row
     fn the_launchd_rows_always_cover_our_label_and_grow_when_it_is_loaded() {
         let checks = launchd_checks();
         let names: Vec<&str> = checks.iter().map(|(name, _, _)| name.as_str()).collect();
@@ -4224,7 +4276,13 @@ mod tests {
     }
 
     fn text(out: Vec<u8>) -> String {
-        String::from_utf8(out).unwrap()
+        mac_words(String::from_utf8(out).unwrap())
+    }
+
+    /// `words` with the store named as on a Mac, so one expected line holds
+    /// for Credential Manager on Windows too (`crate::secrets::STORE`).
+    fn mac_words(words: String) -> String {
+        words.replace(crate::secrets::STORE, "the Keychain")
     }
 
     /// The in-process daemon's doors, served on a runtime of their own; the
@@ -4284,7 +4342,7 @@ mod tests {
         let before = std::fs::read_to_string(&paths.config).unwrap();
         let err = tts_key_set(&paths, Some(Provider::OpenAi), Provider::OpenAi, KEY, &home, &mut Vec::new())
             .unwrap_err();
-        assert_eq!(err, "the Keychain did not take the key: locked");
+        assert_eq!(mac_words(err), "the Keychain did not take the key: locked");
         assert_eq!(std::fs::read_to_string(&paths.config).unwrap(), before);
     }
 
@@ -4294,6 +4352,7 @@ mod tests {
     /// service that did not answer. Only a socket nothing accepts on means
     /// no service.
     #[test]
+    #[cfg(unix)] // a Unix socket stands in for the service
     fn a_service_that_does_not_answer_is_never_written_around() {
         use std::sync::atomic::{AtomicBool, Ordering};
         // `sun_path` holds 103 bytes: a short directory of its own.
@@ -4459,7 +4518,7 @@ mod tests {
         assert!(!held.contains("abcd"), "{held}");
         store.set("").unwrap();
         let none = status(&KeyHome::Store(store.clone()));
-        assert!(none.contains("→ Apple's synthesiser speaks, on this Mac"), "{none}");
+        assert!(none.contains(&format!("→ {SYSTEM_SYNTH} speaks, on {THIS_COMPUTER}")), "{none}");
         assert!(
             none.contains("key:     (none) — `deckd tts key set --provider openai|elevenlabs`\n"),
             "{none}"
@@ -4480,8 +4539,9 @@ mod tests {
         let line =
             "  - PURGE the cloud voice key from the Keychain (ai.cohdl.openwalkietalkie), if one is there\n";
         let store = KeyHome::Store(Arc::new(MemoryKeyStore::with(KEY)));
-        assert!(uninstall_preview(&env, &paths, true, &store).contains(line));
-        assert!(!uninstall_preview(&env, &paths, false, &store).contains("Keychain"));
-        assert!(!uninstall_preview(&env, &paths, true, &KeyHome::File).contains("Keychain"));
+        assert!(mac_words(uninstall_preview(&env, &paths, true, &store)).contains(line));
+        let store_named = crate::secrets::STORE;
+        assert!(!uninstall_preview(&env, &paths, false, &store).contains(store_named));
+        assert!(!uninstall_preview(&env, &paths, true, &KeyHome::File).contains(store_named));
     }
 }
