@@ -6,13 +6,12 @@
 //!
 //! **The login** is Claude Code's own `claudeAiOauth` record: the
 //! `~/.claude/.credentials.json` file where Claude writes one, else the
-//! macOS Keychain item `Claude Code-credentials`. Reading the Keychain
-//! item from a binary that did not create it makes macOS ask once
-//! ("deckd wants to use your confidential information…"); *Always Allow*
-//! adds this build of deckd to the item's access list. A *Deny* is
-//! honoured for an hour, so the dialog does not come back every poll. The
-//! token is used for the usage and account-profile requests and is never
-//! logged or written.
+//! macOS Keychain item `Claude Code-credentials`, read through
+//! `/usr/bin/security` (the tool Claude Code writes it with, so already on
+//! the item's access list: no dialog, whichever build of deckd asks). A
+//! refusal is honoured for an hour, so a dialog does not come back every
+//! poll. The token is used for the usage and account-profile requests and
+//! is never logged or written.
 //!
 //! **The request** goes through `/usr/bin/curl` rather than a TLS stack
 //! of our own: the daemon has none, and curl is on every Mac. The token
@@ -56,6 +55,9 @@ const BACKOFF_MAX: Duration = Duration::from_secs(15 * 60);
 const NO_LOGIN_RETRY: Duration = Duration::from_secs(10 * 60);
 /// After the operator denied the Keychain dialog.
 const DENIED_RETRY: Duration = Duration::from_secs(60 * 60);
+/// How long `security` may wait on a dialog before it counts as denied.
+#[cfg(target_os = "macos")]
+const SECURITY_TIMEOUT: Duration = Duration::from_secs(120);
 /// `curl --max-time`, and the wait on the child on top of it.
 const HTTP_TIMEOUT_S: u64 = 20;
 const CHILD_TIMEOUT: Duration = Duration::from_secs(HTTP_TIMEOUT_S + 10);
@@ -429,22 +431,61 @@ pub mod credentials {
     }
 
     /// The `Claude Code-credentials` item of the login keychain, under
-    /// this user's account name.
+    /// this user's account name, **read through `/usr/bin/security`**.
+    ///
+    /// Claude Code writes the item with that tool, so `security` is on the
+    /// item's access list and is let in without a dialog. Asking the
+    /// Security framework from this process instead makes macOS check *this*
+    /// binary against the list on every read: a daemon that outlived a
+    /// Sparkle update (its executable deleted, its path a staging directory)
+    /// or a build that is not signed like the app fails the check, so the
+    /// dialog came back at every poll and "Always Allow" never stuck.
     #[cfg(target_os = "macos")]
     pub fn keychain() -> Login {
         let Some(account) = account() else {
             return Login::None;
         };
-        match security_framework::passwords::get_generic_password(super::KEYCHAIN_SERVICE, &account) {
-            Ok(bytes) => from_bytes(&bytes),
-            // `errSecItemNotFound`: no login on this Mac. Anything else is
-            // the operator's answer to the dialog (or a locked keychain),
-            // and is not asked again soon.
-            Err(e) if e.code() == -25300 => Login::None,
-            Err(e) => {
-                tracing::debug!(code = e.code(), "usage: the Keychain refused the Claude Code login");
-                Login::Denied
+        let child = std::process::Command::new("/usr/bin/security")
+            .args(["find-generic-password", "-s", super::KEYCHAIN_SERVICE, "-a", &account, "-w"])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn();
+        let Ok(mut child) = child else {
+            return Login::Denied;
+        };
+        // A dialog the operator never answers must not hold the probe forever.
+        let deadline = std::time::Instant::now() + super::SECURITY_TIMEOUT;
+        let status = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break status,
+                Ok(None) if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
+                _ => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Login::Denied;
+                }
             }
+        };
+        let mut out = Vec::new();
+        if let Some(mut stdout) = child.stdout.take() {
+            let _ = std::io::Read::read_to_end(&mut stdout, &mut out);
+        }
+        from_security(status.code(), &out)
+    }
+
+    /// What `security find-generic-password -w` came to: its exit status and
+    /// the secret it printed.
+    #[cfg(any(target_os = "macos", test))]
+    pub fn from_security(code: Option<i32>, stdout: &[u8]) -> Login {
+        match code {
+            Some(0) => from_bytes(stdout.trim_ascii()),
+            // `errSecItemNotFound` (44): no login on this Mac. Anything else
+            // is a refusal or a locked keychain, and is not asked again soon.
+            Some(44) => Login::None,
+            _ => Login::Denied,
         }
     }
 
@@ -492,6 +533,20 @@ pub mod credentials {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_security_tools_answer_maps_to_a_login() {
+        use credentials::from_security;
+        let live = format!(
+            r#"{{"claudeAiOauth":{{"accessToken":"sk-ant-oat01-x","expiresAt":{}}}}}"#,
+            (std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() + 3_600_000)
+        );
+        let with_newline = format!("{live}\n");
+        assert_eq!(from_security(Some(0), with_newline.as_bytes()), Login::Token("sk-ant-oat01-x".into()));
+        assert_eq!(from_security(Some(44), b""), Login::None);
+        assert_eq!(from_security(Some(36), b""), Login::Denied);
+        assert_eq!(from_security(None, b""), Login::Denied);
+    }
 
     #[test]
     fn profiles_supply_only_the_email_and_missing_identity_stays_unknown() {
