@@ -1202,9 +1202,21 @@ pub fn which(binary: &str) -> Option<PathBuf> {
 
 /// [`which`] over a `PATH` value the caller names.
 fn which_in(binary: &str, path: Option<&std::ffi::OsStr>) -> Option<PathBuf> {
-    std::env::split_paths(path?)
-        .map(|dir| dir.join(binary))
-        .find(|candidate| is_executable(candidate))
+    std::env::split_paths(path?).find_map(|dir| in_dir(&dir, binary))
+}
+
+/// `binary` in `dir`, when it is there and runnable. On Windows that is
+/// `binary.exe`, `.cmd`, `.bat` or `.com`, and never the bare name unless it
+/// was given with its extension: npm puts a POSIX shell script named
+/// `claude` beside `claude.cmd`, which Windows cannot run.
+fn in_dir(dir: &Path, binary: &str) -> Option<PathBuf> {
+    if cfg!(windows) && Path::new(binary).extension().is_none() {
+        return [".exe", ".cmd", ".bat", ".com"]
+            .iter()
+            .map(|ext| dir.join(format!("{binary}{ext}")))
+            .find(|candidate| is_executable(candidate));
+    }
+    Some(dir.join(binary)).filter(|candidate| is_executable(candidate))
 }
 
 /// A regular file this process may run.
@@ -1232,6 +1244,17 @@ pub fn cli_dirs(home: Option<&Path>) -> Vec<PathBuf> {
         dirs.push(home.join(".local/bin"));
         dirs.push(home.join(".claude/local"));
     }
+    // Windows: Claude Code's native installer also uses `~\.local\bin`;
+    // npm's global installs (`npm i -g`) go to `%APPDATA%\npm`, and Codex's
+    // own installer to `%LOCALAPPDATA%\Programs\OpenAI\Codex\bin`.
+    #[cfg(windows)]
+    {
+        dirs.extend(std::env::var_os("APPDATA").map(|appdata| PathBuf::from(appdata).join("npm")));
+        dirs.extend(std::env::var_os("LOCALAPPDATA").map(|local| {
+            PathBuf::from(local).join("Programs").join("OpenAI").join("Codex").join("bin")
+        }));
+    }
+    #[cfg(not(windows))]
     dirs.extend(["/opt/homebrew/bin", "/usr/local/bin"].map(PathBuf::from));
     dirs
 }
@@ -1251,11 +1274,7 @@ pub fn find_cli(binary: &str) -> Option<PathBuf> {
 /// [`find_cli`] over a `PATH` value and a list of directories the caller
 /// names, so a test can give it a fake home and nothing of this Mac's.
 fn find_cli_in(binary: &str, path: Option<&std::ffi::OsStr>, dirs: &[PathBuf]) -> Option<PathBuf> {
-    which_in(binary, path).or_else(|| {
-        dirs.iter()
-            .map(|dir| dir.join(binary))
-            .find(|candidate| is_executable(candidate))
-    })
+    which_in(binary, path).or_else(|| dirs.iter().find_map(|dir| in_dir(dir, binary)))
 }
 
 /// The process for a CLI [`find_cli`] returned. One found off this

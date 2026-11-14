@@ -166,8 +166,13 @@ const BINDING_WIDTH: f32 = 132.;
 const KEY_WIDTH: f32 = 96.;
 
 /// Where a denied Accessibility grant is lifted.
+#[cfg(not(windows))]
 pub const ACCESSIBILITY_SETTINGS: &str =
     "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
+/// Windows needs no grant to send keys to the user's own desktop; the
+/// nearest page is Accessibility's keyboard settings.
+#[cfg(windows)]
+pub const ACCESSIBILITY_SETTINGS: &str = "ms-settings:easeofaccess-keyboard";
 
 // ---- shortcuts ---------------------------------------------------------------
 

@@ -101,9 +101,9 @@ pub fn socket_path(configured: Option<&str>) -> Option<PathBuf> {
         .filter(|h| !h.is_empty())
         .map(PathBuf::from)
         .or_else(|| {
-            std::env::var_os("HOME")
-                .filter(|h| !h.is_empty())
-                .map(|h| PathBuf::from(h).join(".codex"))
+            crate::integrations::home_dir()
+                .ok()
+                .map(|h| h.join(".codex"))
         })?;
     Some(
         home.join("app-server-control")
