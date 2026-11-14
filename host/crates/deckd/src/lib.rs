@@ -41,6 +41,8 @@ pub mod procs;
 pub mod trust;
 #[cfg(windows)]
 pub mod winproc;
+#[cfg(windows)]
+pub mod winwin;
 pub mod uninstall;
 pub mod usage;
 pub mod system_status;

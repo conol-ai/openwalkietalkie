@@ -3236,7 +3236,7 @@ pub fn run(mut opts: RunOptions) -> Result<i32, CoreError> {
     // The desktop side (§5.5). `--no-device` leaves `DesktopHandle::none()`
     // in place, which is what the `api` gate step runs with: a door test may
     // not raise an app or post a keystroke.
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", windows))]
     if !opts.no_device {
         core.set_desktop(crate::desktop::spawn(
             crate::desktop::DesktopConfig::from_config(&opts.config),
