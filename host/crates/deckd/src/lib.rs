@@ -39,6 +39,8 @@ pub mod stt;
 pub mod tokens;
 pub mod procs;
 pub mod trust;
+#[cfg(windows)]
+pub mod winproc;
 pub mod uninstall;
 pub mod usage;
 pub mod system_status;

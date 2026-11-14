@@ -179,7 +179,16 @@ impl Procs for MacProcs {
         })
     }
 
-    #[cfg(not(target_os = "macos"))]
+    /// Windows: the Toolhelp snapshot's parent and executable name, and the
+    /// image path (`crate::winproc`), with a reused parent pid ending the
+    /// chain rather than continuing it through an unrelated process.
+    #[cfg(windows)]
+    fn get(&self, pid: u32) -> Option<Proc> {
+        let (ppid, names) = crate::winproc::describe(pid)?;
+        Some(Proc { pid, ppid, names })
+    }
+
+    #[cfg(not(any(target_os = "macos", windows)))]
     fn get(&self, _pid: u32) -> Option<Proc> {
         None
     }
@@ -249,6 +258,15 @@ pub fn from_process() -> Walk {
 /// displayed, a fork is affordable once per `SessionStart`, and the
 /// `?`/`??` a pty-less process reports is exactly the "no terminal" answer.
 #[must_use]
+#[cfg(windows)]
+pub fn tty_of(_pid: u32) -> Option<String> {
+    // Windows consoles have no tty device; a session is never told apart by one.
+    None
+}
+
+/// `ps -o tty= -p <pid>` (see the Windows twin).
+#[must_use]
+#[cfg(not(windows))]
 pub fn tty_of(pid: u32) -> Option<String> {
     let out = std::process::Command::new("/bin/ps")
         .args(["-o", "tty=", "-p", &pid.to_string()])

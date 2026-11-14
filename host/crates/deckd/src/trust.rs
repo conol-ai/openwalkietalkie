@@ -211,12 +211,27 @@ impl PeerVerifier for FakeVerifier {
 /// a peer the CLI spawned.
 pub fn is_agent_process_name(name: &str) -> bool {
     let base = name.rsplit('/').next().unwrap_or(name);
+    // Windows: `C:\…\claude.exe` — backslashes, and the `.exe` the
+    // executable's name carries.
+    #[cfg(windows)]
+    let base = {
+        let base = base.rsplit('\\').next().unwrap_or(base);
+        match base.len().checked_sub(4) {
+            Some(cut) if base.is_char_boundary(cut) && base[cut..].eq_ignore_ascii_case(".exe") => &base[..cut],
+            _ => base,
+        }
+    };
     if AGENT_PROCESS_NAMES
         .iter()
         .any(|agent| base.eq_ignore_ascii_case(agent))
     {
         return true;
     }
+    #[cfg(windows)]
+    {
+        is_versioned_agent_path(&name.replace('\\', "/"))
+    }
+    #[cfg(not(windows))]
     is_versioned_agent_path(name)
 }
 
@@ -261,7 +276,13 @@ pub fn exe_path(pid: u32) -> Option<PathBuf> {
     Some(PathBuf::from(OsString::from_vec(buf)))
 }
 
-#[cfg(not(target_os = "macos"))]
+/// `QueryFullProcessImageNameW` (see `crate::winproc`).
+#[cfg(windows)]
+pub fn exe_path(pid: u32) -> Option<PathBuf> {
+    crate::winproc::exe_path(pid)
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
 pub fn exe_path(_pid: u32) -> Option<PathBuf> {
     None
 }
@@ -285,7 +306,8 @@ pub fn ancestry_capped(pid: u32) -> bool {
 /// a walk of names alone left every process such a Claude Code started
 /// uncapped. A hop the kernel will not describe (another user's, such as the
 /// root `login` between a terminal and its shell) ends the walk uncapped.
-#[cfg(target_os = "macos")]
+/// Windows reads the same hops through `crate::winproc`.
+#[cfg(any(target_os = "macos", windows))]
 pub fn ancestry_capped_within(pid: u32, max_hops: usize) -> bool {
     use crate::hook::walk::{MacProcs, Procs};
 
@@ -310,7 +332,7 @@ pub fn ancestry_capped_within(pid: u32, max_hops: usize) -> bool {
     false
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 pub fn ancestry_capped_within(_pid: u32, _max_hops: usize) -> bool {
     false
 }
@@ -319,7 +341,7 @@ pub fn ancestry_capped_within(_pid: u32, _max_hops: usize) -> bool {
 /// hop's `pbi_comm`, `pbi_name` and executable path (empty ones dropped,
 /// repeats folded) — what the cap looked at, for the tests' assertion
 /// messages. Process names and paths only, never content.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 pub fn ancestry_chain(pid: u32) -> Vec<(u32, Vec<String>)> {
     use crate::hook::walk::{MacProcs, Procs};
 
@@ -342,7 +364,7 @@ pub fn ancestry_chain(pid: u32) -> Vec<(u32, Vec<String>)> {
     chain
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 pub fn ancestry_chain(_pid: u32) -> Vec<(u32, Vec<String>)> {
     Vec::new()
 }
