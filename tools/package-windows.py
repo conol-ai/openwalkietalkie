@@ -4,12 +4,15 @@
 The zip holds one folder, OpenWalkieTalkie-<version>-windows-x86_64, with
 the two programs in bin\\ (the app allows firmware installs only when it runs
 from a folder named bin, and starts the deckd.exe beside it), the install
-notes and the licence. A <zip>.sha256 is written beside it.
+notes, the licence, and in licenses\\ the licences of the fonts and icons the
+app has built in (the Mac app carries the same files). A <zip>.sha256 is
+written beside it.
 
 Neither program is signed. Both are checked before they are packed: x86-64,
 the app a GUI program (a console program opens a console window, and
 closing it ends the app) and deckd a console program (it is also the CLI).
-The archive is deterministic: fixed member order and timestamps.
+The archive is deterministic on any platform: fixed member order, timestamps,
+compression level and "made on" system.
 """
 import argparse
 import hashlib
@@ -23,6 +26,19 @@ SUBSYSTEM_GUI = 2
 SUBSYSTEM_CONSOLE = 3
 # Zip timestamps cannot predate 1980; one fixed stamp keeps rebuilds identical.
 STAMP = (1980, 1, 1, 0, 0, 0)
+# "Made on Unix", whichever system packs it, so the 0644 modes below mean what
+# they say and a Windows runner's zip has the same bytes as a Linux rebuild.
+CREATE_SYSTEM_UNIX = 3
+COMPRESS_LEVEL = 9
+# The fonts and icons built into the app, under the names the Mac app's
+# Resources/licenses uses (tools/package-macos.sh).
+THIRD_PARTY_LICENSES = [
+    ("Geist-OFL.txt", "host/crates/openwalkietalkie-app/assets/fonts/OFL.txt"),
+    ("NotoSans-OFL.txt", "assets/fonts/OFL.txt"),
+    ("NotoSansMono-OFL.txt", "assets/fonts/NotoSansMono-OFL.txt"),
+    ("Lucide-LICENSE.txt", "assets/lucide/LICENSE"),
+    ("PressStart2P-OFL.txt", "site/public/fonts/PressStart2P-OFL.txt"),
+]
 
 README = """OpenWalkieTalkie {version} for Windows (preview)
 ================================================
@@ -45,6 +61,9 @@ Not in this preview: voice, starting with Windows, Claude Code and Codex
 integration, and automatic app updates. Firmware updates use the slower USB
 transfer. New versions are published on the latest release page:
 https://github.com/conol-ai/openwalkietalkie/releases/latest
+To update, quit the app, end deckd.exe, and replace this folder with the new
+version's (each version's folder has its own name). Settings stay in
+%LOCALAPPDATA%\\OpenWalkieTalkie.
 
 Verify the download against the .sha256 file published beside the zip.
 """
@@ -81,17 +100,21 @@ def package(version, deckd, app, output):
         ("README.txt", README.format(version=version).replace("\n", "\r\n").encode()),
         ("bin/OpenWalkieTalkie.exe", app_bytes),
         ("bin/deckd.exe", deckd_bytes),
-    ]
+    ] + [(f"licenses/{name}", (ROOT / source).read_bytes()) for name, source in THIRD_PARTY_LICENSES]
     output.mkdir(parents=True, exist_ok=True)
     archive = output / f"{folder}.zip"
-    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
         for name, data in members:
             info = zipfile.ZipInfo(f"{folder}/{name}", STAMP)
             info.compress_type = zipfile.ZIP_DEFLATED
+            info.create_system = CREATE_SYSTEM_UNIX
             info.external_attr = 0o644 << 16
-            zf.writestr(info, data)
+            # A ZipInfo of our own takes no level from the ZipFile: pass it here.
+            zf.writestr(info, data, compresslevel=COMPRESS_LEVEL)
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-    (output / f"{archive.name}.sha256").write_text(f"{digest}  {archive.name}\n")
+    # Bytes, not text: on the Windows runner text mode would end the line in
+    # CRLF, and `shasum -c` would then look for "<name>.zip\r".
+    (output / f"{archive.name}.sha256").write_bytes(f"{digest}  {archive.name}\n".encode())
     return archive
 
 

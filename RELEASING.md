@@ -70,10 +70,11 @@ of `deckd.exe` and the app, packaged by `tools/package-windows.py` as
 `OpenWalkieTalkie-<version>-windows-x86_64.zip` with its `.sha256`. The zip
 holds one folder with `bin\OpenWalkieTalkie.exe`, `bin\deckd.exe` (the app
 installs firmware only from a folder named `bin` and starts the `deckd.exe`
-beside it), install notes and the licence. The packager refuses an app that
-is not a GUI-subsystem program, a `deckd` that is not a console program, or
-either built for another machine; CI packages its own build the same way on
-every pull request.
+beside it), install notes, the licence, and in `licenses\` the licences of
+the fonts and icons built into the app, as the Mac app carries them. The
+packager refuses an app that is not a GUI-subsystem program, a `deckd` that
+is not a console program, or either built for another machine; CI packages
+its own build the same way on every pull request.
 
 The Windows binaries are **not code-signed**, by decision: SmartScreen warns
 on first run ("More info" → "Run anyway"), and Smart App Control blocks them.

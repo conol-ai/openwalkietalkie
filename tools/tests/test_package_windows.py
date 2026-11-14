@@ -31,21 +31,31 @@ class PackageWindowsTests(unittest.TestCase):
         (directory / "app.exe").write_bytes(app)
         return package_windows.package("1.2.3", directory / "deckd.exe", directory / "app.exe", directory / "out")
 
-    def test_the_zip_holds_bin_the_notes_and_the_licence_under_one_folder(self):
+    def test_the_zip_holds_bin_the_notes_and_the_licences_under_one_folder(self):
         deckd, app = pe(3, body=b"deckd"), pe(2, body=b"app")
         archive = self.build(deckd, app)
         self.assertEqual(archive.name, "OpenWalkieTalkie-1.2.3-windows-x86_64.zip")
         with zipfile.ZipFile(archive) as zf:
             root = "OpenWalkieTalkie-1.2.3-windows-x86_64/"
+            licences = ["Geist-OFL.txt", "Lucide-LICENSE.txt", "NotoSans-OFL.txt", "NotoSansMono-OFL.txt",
+                        "PressStart2P-OFL.txt"]
             self.assertEqual(sorted(zf.namelist()), [root + name for name in
-                             ["LICENSE.txt", "README.txt", "bin/OpenWalkieTalkie.exe", "bin/deckd.exe"]])
+                             ["LICENSE.txt", "README.txt", "bin/OpenWalkieTalkie.exe", "bin/deckd.exe"]
+                             + [f"licenses/{name}" for name in licences]])
             self.assertEqual(zf.read(root + "bin/deckd.exe"), deckd)
             self.assertEqual(zf.read(root + "bin/OpenWalkieTalkie.exe"), app)
+            # The fonts and icons the app has built in travel with their licences, as on the Mac.
+            self.assertIn(b"SIL OPEN FONT LICENSE", zf.read(root + "licenses/Geist-OFL.txt").upper())
             readme = zf.read(root + "README.txt").decode()
             self.assertIn("1.2.3", readme)
             self.assertIn("Run anyway", readme)
+            self.assertIn("replace this folder", readme, "an update replaces the versioned folder")
             self.assertIn("\r\n", readme, "Notepad-friendly line endings")
-        digest, name = (archive.parent / f"{archive.name}.sha256").read_text().split()
+            # Made on Unix wherever it is packed, so a Windows runner's bytes match a rebuild here.
+            self.assertEqual({info.create_system for info in zf.infolist()}, {3})
+        checksum = (archive.parent / f"{archive.name}.sha256").read_bytes()
+        self.assertTrue(checksum.endswith(b".zip\n") and b"\r" not in checksum, checksum)
+        digest, name = checksum.decode().split()
         self.assertEqual((digest, name), (hashlib.sha256(archive.read_bytes()).hexdigest(), archive.name))
 
     def test_rebuilding_gives_the_same_bytes(self):

@@ -48,7 +48,7 @@ jobs:
           python3 - <<'PY'
           import json
           jobs = {j['name']: j['conclusion'] for j in json.load(open('/tmp/source-jobs.json'))['jobs']}
-          required = ['validate', 'checks / macOS host'] + ['checks / Firmware (' + b + ')' for b in ('lilygo', 'hw-a', 'hw-b')]
+          required = ['validate', 'checks / macOS host', 'checks / Windows host', 'windows'] + ['checks / Firmware (' + b + ')' for b in ('lilygo', 'hw-a', 'hw-b')]
           assert all(jobs.get(name) == 'success' for name in required), jobs
           PY
   recover:
@@ -86,6 +86,8 @@ jobs:
             cp "$directory"/*.dmg "$directory/appcast-$arch.xml" "$directory/package-manifest-$arch.json" dist/release/
           done
           for board in hw-a hw-b; do cp dist/source-artifacts/firmware-$board/* dist/release/; done
+          # The Windows preview zip and its .sha256: the manifest lists the zip.
+          cp dist/source-artifacts/windows-x86_64/* dist/release/
           version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')
           for board in hw-a hw-b; do
             output="dist/factory/OpenWalkieTalkie-$version-factory-$board"
