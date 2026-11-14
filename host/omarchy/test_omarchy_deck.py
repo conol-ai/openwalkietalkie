@@ -124,6 +124,67 @@ class Keys(unittest.TestCase):
         f.assert_called_once_with(4)
 
 
+class Macropad(unittest.TestCase):
+    """deckd types Macropad keys only on macOS: on Linux the bridge types them with wtype."""
+
+    LAYOUT = {'3': {'keys': [{'label': 'Shot', 'keys': 'cmd+shift+4'}, {'label': 'Note'},
+                             {'label': 'Bad', 'keys': 'cmd+nope'}]}}
+
+    def remote(self, platform='linux'):
+        remote = o.Remote()
+        calls = {'service.info': {'platform': platform, 'session': 'live'},
+                 'state.get': {'agents': {}, 'macros': self.LAYOUT}}
+        remote.rpc = mock.Mock(call=mock.Mock(side_effect=lambda method, params=None: calls[method]))
+        remote.run = mock.Mock(return_value=SimpleNamespace(returncode=0))
+        remote.link_at_hello(0.0)
+        return remote
+
+    def press(self, remote, f, i, act=1):
+        with mock.patch.object(o, 'ensure_instance'):
+            remote.handle({'type': 'device.macro', 'data': {'f': f, 'i': i, 'act': act}})
+
+    def test_combos_become_wtype_arguments(self):
+        self.assertEqual(o.wtype_args('cmd+shift+4'), ['wtype', '-M', 'logo', '-M', 'shift', '-k', '4',
+                                                       '-m', 'shift', '-m', 'logo'])
+        self.assertEqual(o.wtype_args('ctrl+opt+pageup'), ['wtype', '-M', 'ctrl', '-M', 'alt', '-k', 'Prior',
+                                                           '-m', 'alt', '-m', 'ctrl'])
+        self.assertEqual(o.wtype_args('enter'), ['wtype', '-k', 'Return'])
+        for bad in ('cmd', 'a+b', 'cmd+nope', ''):
+            self.assertIsNone(o.wtype_args(bad), bad)
+
+    def test_every_deck_key_has_a_keysym(self):
+        keys = ['a', 'z', '0', '9', 'f1', 'f12', 'up', 'enter', 'esc', 'tab', 'space', 'backspace', 'delete',
+                'home', 'end', 'pageup', 'pagedown', 'minus', 'equal', 'lbracket', 'rbracket', 'backslash',
+                'semicolon', 'quote', 'comma', 'period', 'slash', 'grave']
+        for key in keys:
+            self.assertIsNotNone(o.wtype_args(key), key)
+
+    def test_a_press_types_its_keystroke_and_nothing_else_does(self):
+        remote = self.remote()
+        self.press(remote, 3, 0)
+        self.assertEqual(remote.run.call_args[0][0], o.wtype_args('cmd+shift+4'))
+        self.press(remote, 3, 0, act=0)  # a release
+        self.press(remote, 3, 1)  # an event-only key
+        self.press(remote, 3, 2)  # not typeable
+        self.press(remote, 3, 7)  # no such slot
+        self.press(remote, 9, 0)  # no such face
+        self.assertEqual(remote.run.call_count, 1)
+
+    def test_layout_changes_follow_the_events(self):
+        remote = self.remote()
+        remote.handle({'type': 'device.macros', 'data': {'f': 4, 'src': 'deck', 'keys': [{'label': 'x', 'keys': 'x'}]}})
+        self.press(remote, 4, 0)
+        self.assertEqual(remote.run.call_args[0][0], ['wtype', '-k', 'x'])
+        remote.handle({'type': 'device.profile', 'data': {'macros': {}}})
+        self.press(remote, 4, 0)
+        self.assertEqual(remote.run.call_count, 1)
+
+    def test_a_macs_deckd_types_them_on_the_mac(self):
+        remote = self.remote(platform='macos')
+        self.press(remote, 3, 0)
+        remote.run.assert_not_called()
+
+
 class Resilience(unittest.TestCase):
     def test_a_hyprctl_that_times_out_does_not_stop_the_bridge(self):
         import subprocess

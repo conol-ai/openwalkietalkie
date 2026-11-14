@@ -172,6 +172,25 @@ class BridgeSessions(unittest.TestCase):
         make_bridge(other).on_hook(hook('Stop'))
         self.assertNotIn('agent.reply', [m for m, _ in other.calls])
 
+    def test_a_claude_or_codex_turn_end_pushes_the_reply_its_hook_carries(self):
+        for cli in ('claude', 'codex'):
+            deck = FakeDeck()
+            bridge = make_bridge(deck)
+            bridge.on_hook({**hook('UserPromptSubmit'), 'cli': cli})
+            bridge.on_hook({**hook('Stop', reply='Done:\n  the tests ' + 'pass ' * 200), 'cli': cli})
+            replies = [p for m, p in deck.calls if m == 'agent.reply']
+            self.assertEqual(len(replies), 1, cli)
+            self.assertTrue(replies[0]['text'].startswith('Done: the tests pass'), replies[0])
+            self.assertEqual(len(replies[0]['text']), s.REPLY_MAX)
+            methods = [m for m, _ in deck.calls]
+            ready = deck.calls.index(('agent.update', {'agent': 'ag_1', 'state': 'ready', 'title': ''}))
+            self.assertLess(methods.index('agent.reply'), ready, 'the reply first: deckd speaks it at ready')
+
+    def test_a_reply_too_long_for_the_door_drops_the_message(self):
+        self.assertFalse(s.valid_hook(hook('Stop', reply='x' * 8001)))
+        self.assertFalse(s.valid_hook(hook('Stop', reply=['not', 'text'])))
+        self.assertTrue(s.valid_hook(hook('Stop', reply='x' * 8000)))
+
     def test_a_session_registered_just_now_gets_its_state_before_the_reply_it_already_had(self):
         # First seen at its turn's end (the bridge started late), and again after a reconnect:
         # neither is the end of a turn, so the last reply must not be read out as if it were.

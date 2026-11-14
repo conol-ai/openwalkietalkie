@@ -69,13 +69,16 @@ Kimi Code has hooks (`[[hooks]]` in its `config.toml`). `omarchy_hook.py install
 | **Omarchy sessions on the roster** | Every Claude Code / Codex / Kimi Code session on Omarchy appears on the Agents roster, as working / ready / question / error |
 | Select a session | Selecting a session on the deck, or `op.focus` from a client, brings its terminal window to the front on Omarchy |
 | **Voice orders** | Press PTT on a selected Omarchy session and speak: the recognised text is typed into its terminal, followed by Enter (with `wtype`) |
+| Replies | When a turn ends, its reply (600 characters at most) goes to the session's Ready card and is spoken, for Claude Code and Codex from their Stop hook, for Kimi Code from its log |
+| **Macropad** | A Macropad key with a keystroke (`cmd+shift+4`) types it on Omarchy with `wtype`: `cmd` is Super, `opt` / `alt` is Alt. Only with the Linux `deckd`: a Mac's `deckd` types them on the Mac |
+| **System face** | The Linux `deckd` fills it: CPU (`/proc/stat`), memory in use (`MemTotal - MemAvailable`), free space on `/`, and the busiest GPU whose driver reports its load (`gpu_busy_percent`: amdgpu; Intel and NVIDIA's driver show none) |
 
 The key map is `KEYMAP` at the top of `omarchy_deck.py`; that is the one place to change it.
 
 ## What it deliberately does not do
 
 - **Permission prompts are not answered on the deck.** The dialog stays in the terminal. While a session is in the `question` state, voice orders to it are refused (`dialog_open`), so nothing you say can be taken as the answer to a prompt.
-- **Little leaves Omarchy.** Only event names, states, project names and the notification line Claude itself shows (the question's title). Prompts and tool inputs stay on Omarchy; for Kimi Code, only a summary of each reply (600 characters at most) goes to the deck.
+- **Little leaves Omarchy.** Only event names, states, project names and the notification line Claude itself shows (the question's title). Prompts and tool inputs stay on Omarchy; of each turn's reply, at most its first 600 characters go to the deck.
 - **No pid or terminal is sent to `deckd`.** `deckd` checks a pid as a process on its own machine, so a session is registered with its name, its project directory and its capabilities only.
 - **A hook never blocks.** Whether the bridge is there or not, and whatever the data, the hook prints `{}` and exits 0: it never stops your tool call.
 - **Nothing is collected while the deck is away.** After ten minutes in which `deckd` reports no deck linked (`device.link`), the bridge stops feeding the Omarchy face and stops looking at sessions: no Kimi Code log reads, no process checks, and nothing about a session goes to `deckd`. What the hooks report meanwhile only moves each session's entry in the bridge's own table. The moment the deck links it registers every session as it is then (a dialog opened meanwhile is a question again, a session that ended meanwhile is released, a session that started meanwhile appears, and a Kimi Code turn that ended meanwhile has its reply read) and sends the face. `deckd` does the same for its own collectors (`docs/host-service.md` §5.8).
@@ -161,7 +164,8 @@ They cover turning Hyprland's data into the face's `ws` line, the key map, the p
 - Permission prompts can be answered only in the terminal, never on the deck.
 - A workspace shows at most 6 windows, and there are at most 9 workspace chips, so Omarchy's 10th workspace does not show on the deck.
 - Sessions are found only through their hooks: one that was open before the hooks were installed does not appear until it is reopened.
-- Only Kimi Code's reply summaries reach the deck; for Claude and Codex, only the state does, never the reply's text.
+- Claude and Codex hooks installed before replies were forwarded still send them: the reply is read from the Stop payload the existing hook already receives.
+- The Reader's history, plans and tool rows stay empty for Omarchy sessions: only the closing reply is sent.
 - Claude and Codex hooks installed by an older version need `install` once more to gain `PostToolUse`; without it, a session stays in `question` after an approval until its turn ends.
 - While the tunnel is down, the Omarchy face and the roster keep their last state, and catch up when it is back.
 

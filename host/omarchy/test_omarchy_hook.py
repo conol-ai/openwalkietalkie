@@ -162,6 +162,15 @@ class Hook(unittest.TestCase):
                                              'notification_type': 'idle_prompt', 'message': 'waiting'}, 904, proc)
         self.assertEqual((message['ntype'], message['message']), ('idle_prompt', 'waiting'))
 
+    def test_a_turn_end_carries_its_reply_and_nothing_else_does(self):
+        proc = fake_proc(TREE)
+        stop = h.build_message('claude', {'session_id': 's1', 'hook_event_name': 'Stop',
+                                          'last_assistant_message': 'y' * 9000}, 904, proc)
+        self.assertEqual(stop['reply'], 'y' * h.REPLY_SEND)
+        tool = h.build_message('claude', {'session_id': 's1', 'hook_event_name': 'PostToolUse',
+                                          'last_assistant_message': 'no'}, 904, proc)
+        self.assertNotIn('reply', tool)
+
     def test_no_cli_ancestor_or_a_bad_payload_means_no_message(self):
         proc = fake_proc(TREE)
         self.assertIsNone(h.build_message('codex', {'session_id': 's', 'hook_event_name': 'Stop'}, 904, proc))

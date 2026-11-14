@@ -69,13 +69,16 @@ Kimi Code 有 hook（`config.toml` 里的 `[[hooks]]`），`omarchy_hook.py inst
 | **名册里的 Omarchy 会话** | Omarchy 上每个 Claude Code / Codex / Kimi Code 会话出现在 Agents 名册，状态是 working / ready / question / error |
 | 选中会话 | 在对讲机上选中某个会话，或客户端发 `op.focus`，Omarchy 上它所在的终端窗口会被拉到前台 |
 | **语音指令** | 对选中的 Omarchy 会话按 PTT 说话，识别出的文字会被输入到它的终端并回车（用 `wtype`） |
+| 回复 | 一轮结束时，它的回复（最多 600 字）显示在会话的 Ready 卡片上并播报；Claude Code 和 Codex 取自 Stop hook，Kimi Code 取自它的日志 |
+| **Macropad** | 带按键组合（如 `cmd+shift+4`）的 Macropad 键，在 Omarchy 上用 `wtype` 输入：`cmd` 是 Super，`opt` / `alt` 是 Alt。仅限 Linux 版 `deckd`：连着 Mac 的 `deckd` 会在 Mac 上输入 |
+| **System 页** | 由 Linux 版 `deckd` 填写：CPU（`/proc/stat`）、已用内存（`MemTotal - MemAvailable`）、`/` 的剩余空间，以及驱动报告负载的 GPU 中最忙的一块（`gpu_busy_percent`：amdgpu 有；Intel 和 NVIDIA 闭源驱动没有） |
 
 按键映射在 `omarchy_deck.py` 顶部的 `KEYMAP`，想改只改那一处。
 
 ## 刻意不做的事
 
 - **不在对讲机上回答权限提示。** 权限对话框留在终端里，会话进入 `question` 状态时，语音指令会被拒绝（`dialog_open`），避免你说的话被当成权限回答。
-- **少转发内容。** 只发事件名、状态、项目名，以及 Claude 自己显示的那行通知（用作 question 的标题）。提示词和工具输入不会离开 Omarchy；Kimi Code 的回复只发一段摘要（最多 600 字）到对讲机。
+- **少转发内容。** 只发事件名、状态、项目名，以及 Claude 自己显示的那行通知（用作 question 的标题）。提示词和工具输入不会离开 Omarchy；每轮回复最多只发前 600 字到对讲机。
 - **不把 pid 或终端信息发给 deckd。** `deckd` 会把 pid 当成本机进程去检查，所以注册时只发名字、项目目录和能力。
 - **hook 一律放行。** 无论守护进程在不在、数据对不对，hook 都输出 `{}` 并以 0 退出，永远不会拦住你的工具调用。
 - **对讲机不在时什么都不收集。** `deckd` 的 `device.link` 连续十分钟表示没有对讲机连接之后，桥接程序停止更新 Omarchy 页，也不再查看会话：不读 Kimi Code 日志、不检查进程，也不向 `deckd` 发送任何会话信息。这期间 hook 报告的内容只更新桥接程序自己的会话表。对讲机一连上，它就按每个会话当时的状态重新注册（静默期间打开的对话框重新显示为提问，结束的会话被释放，新开的会话出现，结束了一轮的 Kimi Code 会话会读取它的回复），并发送页面。`deckd` 对自己的采集程序也是这样（`docs/host-service.md` §5.8）。
@@ -161,7 +164,8 @@ python3 -m unittest discover -s host/omarchy -p 'test_*.py'
 - 权限提示不能在对讲机上回答，只能在终端里答。
 - 一个工作区最多显示 6 个窗口；工作区格子最多 9 个，Omarchy 的第 10 个工作区在对讲机上不显示。
 - 会话只能通过 hook 发现，hook 安装之前就开着的会话不会出现，要重开。
-- 只有 Kimi Code 的回复摘要会推到对讲机；Claude / Codex 的回复文字不转发，只有状态。
+- 之前装好的 Claude / Codex hook 不用重装也会转发回复：回复取自现有 hook 已经收到的 Stop 数据。
+- Omarchy 会话在阅读器里没有历史、计划和工具行：只发每轮最后的回复。
 - 装 hook 时，Claude / Codex 需要重新运行一次 `install`，才会带上 `PostToolUse`（否则授权后状态会一直停在 question，直到本轮结束）。
 - 隧道断开期间，Omarchy 页和名册会停在最后的状态，恢复后自动同步。
 

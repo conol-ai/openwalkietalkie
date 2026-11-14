@@ -35,6 +35,8 @@ from omarchy_sessions import CLI_NAMES, cli_process, control_socket_path  # noqa
 MARKER = 'omarchy_hook.py'
 STDIN_MAX = 1024 * 1024
 CONNECT_TIMEOUT = 0.3
+# The most of a reply sent to the bridge, which keeps 600 characters of it (REPLY_MAX).
+REPLY_SEND = 4000
 EVENTS = {
     'claude': [('SessionStart', 5), ('UserPromptSubmit', 5), ('PreToolUse', 5), ('PostToolUse', 5),
                ('PermissionRequest', 5), ('Notification', 5), ('Stop', 5), ('StopFailure', 5), ('SessionEnd', 5)],
@@ -83,6 +85,9 @@ def build_message(cli: str, payload: dict, start_pid: int, proc: str = '/proc') 
     if event == 'Notification':
         message['ntype'] = payload.get('notification_type')
         message['message'] = str(payload.get('message') or '')[:200]
+    # Claude Code and Codex end a turn with its reply: the deck shows it (clipped) and speaks it.
+    if event == 'Stop' and isinstance(payload.get('last_assistant_message'), str):
+        message['reply'] = payload['last_assistant_message'][:REPLY_SEND]
     return message
 
 

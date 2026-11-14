@@ -213,6 +213,7 @@ def valid_hook(msg) -> bool:
             and isinstance(msg.get('event'), str) and 0 < len(msg['event']) <= 64
             and isinstance(msg.get('session_id'), str) and 0 < len(msg['session_id']) <= 256
             and isinstance(msg.get('cwd', ''), str) and len(msg.get('cwd', '')) <= 4096
+            and isinstance(msg.get('reply', ''), str) and len(msg.get('reply', '')) <= 8000
             and isinstance(msg.get('pid'), int) and msg['pid'] > 1)
 
 
@@ -274,6 +275,9 @@ class Bridge:
                     session.reply_due = True
                 else:
                     self.read_reply(session)
+            elif msg['event'] == 'Stop' and msg.get('reply', '').strip():
+                # Claude Code and Codex carry the reply in the hook itself (`last_assistant_message`).
+                session.reply = clip(msg['reply'], REPLY_MAX)
             state = state_for(msg['event'], msg.get('ntype'))
             if state:
                 session.state = state
