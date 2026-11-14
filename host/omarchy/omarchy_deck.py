@@ -55,7 +55,8 @@ from omarchy_hypr import Hypr, dispatch, ensure_instance, focus_slot, focus_wind
 from omarchy_kimi import KimiWatcher, hooks_installed  # noqa: E402
 from omarchy_sessions import Bridge, ControlServer, control_socket_path  # noqa: E402
 
-EVENTS = ['device.ws', 'device.key', 'device.link', 'agent.order', 'focus.changed']
+EVENTS = ['device.ws', 'device.key', 'device.link', 'agent.order', 'focus.changed',
+          'device.macro', 'device.macros', 'device.profile']
 MAX_WINDOWS = 6
 MAX_CHIPS = 9
 TITLE_MAX = 48
@@ -93,6 +94,46 @@ KEYMAP = {
 # LEFT / RIGHT step through the monitor's workspace slots 1-10 (and wrap), as
 # Super+<n> would: Hyprland's own `m+1` only visits workspaces that have windows.
 WORKSPACE_STEP = {'left': -1, 'right': 1}
+
+# Macropad keys (`MacroKey.keys`, deck_proto's KEYSTROKE_KEYS) as wtype names them. deckd types
+# them itself only on macOS; on Linux it has no desktop, so the bridge types them. The modifiers
+# go by where they sit on the keyboard: `cmd` is the key a Mac has there, Super (Omarchy's own
+# modifier), and `opt` / `alt` is Alt.
+MACRO_MODIFIERS = {'ctrl': 'ctrl', 'shift': 'shift', 'opt': 'alt', 'alt': 'alt', 'cmd': 'logo'}
+MACRO_KEYSYMS = {
+    'enter': 'Return', 'esc': 'Escape', 'tab': 'Tab', 'space': 'space', 'backspace': 'BackSpace',
+    'delete': 'Delete', 'home': 'Home', 'end': 'End', 'pageup': 'Prior', 'pagedown': 'Next',
+    'up': 'Up', 'down': 'Down', 'left': 'Left', 'right': 'Right', 'minus': 'minus', 'equal': 'equal',
+    'lbracket': 'bracketleft', 'rbracket': 'bracketright', 'backslash': 'backslash',
+    'semicolon': 'semicolon', 'quote': 'apostrophe', 'comma': 'comma', 'period': 'period',
+    'slash': 'slash', 'grave': 'grave',
+    **{c: c for c in 'abcdefghijklmnopqrstuvwxyz0123456789'},
+    **{f'f{n}': f'F{n}' for n in range(1, 13)},
+}
+
+
+def wtype_args(combo: str) -> list[str] | None:
+    """`cmd+shift+4` -> wtype's arguments (modifiers held around one key), else None: the same
+    grammar as deckd's `keystroke_valid`, modifiers in any order and exactly one key."""
+    held: list[str] = []
+    key = None
+    for part in str(combo).split('+'):
+        if part in MACRO_MODIFIERS:
+            if MACRO_MODIFIERS[part] not in held:
+                held.append(MACRO_MODIFIERS[part])
+        elif key is None and part in MACRO_KEYSYMS:
+            key = MACRO_KEYSYMS[part]
+        else:
+            return None
+    if key is None:
+        return None
+    args = ['wtype']
+    for m in held:
+        args += ['-M', m]
+    args += ['-k', key]
+    for m in reversed(held):
+        args += ['-m', m]
+    return args
 
 
 def _absolute_env(name: str) -> Path | None:
@@ -278,6 +319,11 @@ class Remote:
         # Since when deckd has said no deck is linked (monotonic); None while one is.
         self.away_since: float | None = None
         self.quiet = False  # whether the bridge has gone quiet (`tick_quiet`)
+        # Macropad keys by face id, as deckd holds them (`snapshot.macros`); typed here only when
+        # deckd is on Linux: a Mac's deckd, through the tunnel, types them on the Mac itself.
+        self.macros: dict[int, list] = {}
+        self.types_macros = False
+        self.run = subprocess.run
 
     # deck away -------------------------------------------------------------
     def dormant(self, now: float) -> bool:
@@ -299,6 +345,8 @@ class Remote:
             info = self.rpc.call('service.info')
         except RpcError:
             info = {}
+        self.types_macros = info.get('platform') == 'linux'
+        self.load_macros()
         if info.get('session') in LINKED_SESSIONS:
             self.away_since = None
             return
@@ -312,8 +360,9 @@ class Remote:
         if quiet != self.quiet:
             self.quiet = quiet
             if quiet:
-                print('no deck linked for ten minutes: the face and the sessions wait for it',
-                      file=sys.stderr)
+                # Not "for ten minutes": at the hello, a deckd that has gone quiet itself makes the
+                # bridge quiet at once (`link_at_hello`), however long the bridge has been up.
+                print('no deck linked: the face and the sessions wait for it', file=sys.stderr)
             else:
                 print('the deck linked: feeding the face and the roster again', file=sys.stderr)
                 self.last = None
@@ -374,6 +423,59 @@ class Remote:
         self.rpc.call('device.ws.set', line)
         self.last, self.last_push = line, now
 
+    # Macropad -------------------------------------------------------------
+    def load_macros(self) -> None:
+        """Every Macropad face's keys, from deckd's snapshot; the events keep them current."""
+        if not self.types_macros:
+            self.macros = {}
+            return
+        try:
+            state = self.rpc.call('state.get')
+        except RpcError:
+            return
+        snapshot = state.get('snapshot', state) if isinstance(state, dict) else {}
+        self.set_macros(snapshot.get('macros'))
+
+    def set_macros(self, macros) -> None:
+        self.macros = {}
+        for f, layout in (macros or {}).items():
+            keys = layout.get('keys') if isinstance(layout, dict) else None
+            if isinstance(keys, list):
+                self.set_face_macros(f, keys)
+
+    def set_face_macros(self, f, keys: list) -> None:
+        """One face's keys. A face id that is not a number is passed over, as the other handlers
+        pass over bad data: one odd event must not end the connection to deckd."""
+        try:
+            self.macros[int(f)] = keys
+        except (TypeError, ValueError):
+            pass
+
+    def on_macro(self, data: dict) -> None:
+        """A Macropad key pressed (or a wheel step on one): type its keystroke. A release types
+        nothing, as on the Mac: the keystroke is a down-up pair already."""
+        if not self.types_macros or not data.get('act'):
+            return
+        try:
+            key = self.macros.get(int(data.get('f')), [])[int(data.get('i'))]
+        except (IndexError, TypeError, ValueError):
+            return
+        combo = key.get('keys') if isinstance(key, dict) else None
+        if not combo:
+            return  # an event-only key
+        args = wtype_args(combo)
+        if args is None:
+            print(f'macropad: {combo!r} is not a keystroke wtype can type', file=sys.stderr)
+            return
+        try:
+            ensure_instance()  # wtype needs WAYLAND_DISPLAY, which a service does not inherit
+            done = self.run(args, capture_output=True, timeout=5)
+        except (OSError, subprocess.SubprocessError) as error:
+            print(f'macropad: wtype: {error}', file=sys.stderr)
+            return
+        if done.returncode != 0:
+            print(f'macropad: wtype failed for {combo!r}', file=sys.stderr)
+
     # deck side -------------------------------------------------------------
     def on_key(self, data: dict) -> None:
         k, act, shift = data.get('k'), data.get('act'), int(bool(data.get('shift')))
@@ -413,6 +515,14 @@ class Remote:
             self.on_key(data)
         elif kind == 'device.ws':
             self.on_ws(data)
+        elif kind == 'device.macro':
+            self.on_macro(data)
+        elif kind == 'device.macros':
+            if self.types_macros and isinstance(data.get('keys'), list):
+                self.set_face_macros(data.get('f'), data['keys'])
+        elif kind == 'device.profile':
+            if self.types_macros:
+                self.set_macros(data.get('macros'))
         elif kind == 'device.link':
             self.last = None
             self.on_link(data, time.monotonic())

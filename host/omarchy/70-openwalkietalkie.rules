@@ -1,0 +1,5 @@
+# The deck's HID interface, for the user at the seat (deckd runs as that user).
+# Matched on the HID id (bus:vendor:product.instance), not on ATTRS{idVendor}: over
+# Bluetooth the deck is a uhid device with no USB parent, so idVendor is never there.
+# 1209:5754 is the deck's pid.codes id, on USB (0003) and on Bluetooth (0005).
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", KERNELS=="*:1209:5754.*", MODE="0660", TAG+="uaccess"
