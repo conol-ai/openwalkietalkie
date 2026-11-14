@@ -49,8 +49,8 @@ and assigned Macropad bindings use physical wheel direction.
 | Swipe down from the top edge | A touch starting in the top 48 px never reaches the face. 40 px down, more down than sideways, opens the notification drawer. |
 | PTT | See [PTT sessions](#ptt-sessions). |
 
-Programmatic jumps (home, a toast tap, idle-home, auto-jump) cut instead of
-sliding. Overlays capture every face control and nothing is sent to the host
+Programmatic jumps (home, a toast tap or ENTER, idle-home, auto-jump) cut
+instead of sliding. Overlays capture every face control and nothing is sent to the host
 while one is open, except PTT, which still works over the drawer and the
 manager. Precedence: naming > remove confirm > manager/gallery > drawer > face.
 
@@ -306,9 +306,15 @@ faces, Settings, and "+" (hidden at eight faces), four at a time.
 A notice is created by a new card (Question or Ready), keyed by agent and card.
 
 - **Toast.** Slides down from the top for 4 s, counted from the frame that shows
-  it; tapping it jumps to the card. Touches in its rect are swallowed for
-  300 ms after it expires. Message toasts ("no channel", "not delivered") last
-  2 s and belong to no notice.
+  it; tapping it jumps to the card. So does ENTER, when the toast arrived with
+  nothing it could interrupt (the auto-jump conditions below: nothing held, no
+  PTT session, no overlay, no card on screen, the strip at rest, no input in
+  the last 2 s) and ENTER is the first thing pressed, turned or touched since.
+  Otherwise ENTER keeps its meaning on the face, and it always does on Omarchy
+  and the Macropad, whose keys go to the computer, and as SHIFT+ENTER. The
+  card then answers the next ENTER, not within 0.5 s of opening. Touches in its
+  rect are swallowed for 300 ms after it expires. Message toasts ("no channel",
+  "not delivered") last 2 s and belong to no notice.
 - **Drawer.** A notice is filed when its toast times out or is displaced, when
   its card is snoozed, and when it arrives under an opaque overlay (drawer,
   manager, gallery, naming, LISTENING) or during a host resync; those get no

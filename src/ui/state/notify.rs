@@ -5,10 +5,13 @@
 //! shows it; it enters the drawer (`in_drawer`) when the toast times out or is
 //! displaced, when it is raised under an opaque overlay, during a resync, for
 //! a snoozed card, and when the user snoozes (`file`); a tapped toast is
-//! dismissed, not filed. It is removed on answer / acknowledge (`remove`), on
-//! a host clear, replace or gone (`prune`) and on a drawer dismiss (the card
-//! stays). A full ring drops the oldest Ready first. The indicator shows iff
-//! the drawer is non-empty (`Deck::notice_count`), red for a Question.
+//! dismissed, not filed, and so is one opened by ENTER (`claims_enter`: a
+//! card toast raised with nothing to interrupt takes the next ENTER if
+//! nothing else is pressed first). It is removed on answer / acknowledge
+//! (`remove`), on a host clear, replace or gone (`prune`) and on a drawer
+//! dismiss (the card stays). A full ring drops the oldest Ready first. The
+//! indicator shows iff the drawer is non-empty (`Deck::notice_count`), red
+//! for a Question.
 //!
 //! Drawer rows are the filed notices in RING order (what `overlay::notify`
 //! draws), `drawer_top` first; the selection is an identity, so a notice
@@ -28,7 +31,7 @@
 //! "demo notices never wake" rule is NOT implemented here: `UiState` clears
 //! `wake` while `deck.demo_active()` at the end of every entry point.
 use super::{global, Target, TouchAct, UiState, Update};
-use crate::control::{Button, Control, Edge};
+use crate::control::{Button, Control, Edge, TouchPhase};
 use crate::deck::model::{Effects, Notice, MAX_NOTICES};
 use crate::deck::msg::{CardKind, HostMsg, Template};
 use crate::ui::kit::list::Viewport;
@@ -95,6 +98,10 @@ pub struct Toast {
     pub shown_ms: u32,
     /// ...and is gone here.
     pub until_ms: u32,
+    /// The toast may take the next ENTER (`claims_enter`): it was raised
+    /// with nothing to interrupt (`undisturbed`) and nothing has been
+    /// pressed, turned or touched since. Only `raise` sets it.
+    pub takes_enter: bool,
 }
 
 impl Toast {
@@ -105,6 +112,7 @@ impl Toast {
             kind,
             shown_ms,
             until_ms,
+            takes_enter: false,
         }
     }
 
@@ -437,28 +445,76 @@ pub(super) fn raise(ui: &mut UiState, notice: Notice, at_ms: u32, out: &mut Upda
         ui.deck.notices[slot].in_drawer = true;
         return;
     }
-    if notice.kind == CardKind::Question && auto_jump_allowed(ui, at_ms) {
+    let undisturbed = undisturbed(ui, at_ms);
+    if notice.kind == CardKind::Question && undisturbed && auto_jump_on(ui) {
         jump(ui, notice.agent, notice.card, at_ms, out);
         return;
     }
     displace(ui);
-    ui.notify.toast = Some(Toast::card(notice.agent, notice.card, notice.kind, at_ms));
+    let mut toast = Toast::card(notice.agent, notice.card, notice.kind, at_ms);
+    // With nothing it could interrupt, the next ENTER may open the card, as
+    // a tap does.
+    toast.takes_enter = undisturbed;
+    ui.notify.toast = Some(toast);
     ui.notify.toast_pressed = false;
 }
 
 /// The auto-jump setting takes the user to a new Question only when nothing
-/// they are doing could be interrupted by it; otherwise it is a toast.
-fn auto_jump_allowed(ui: &UiState, at_ms: u32) -> bool {
-    ui.deck.settings.auto_jump
-        && (ui.deck.host_present || ui.deck.demo_active())
-        && !global::anything_held(ui)
+/// they are doing could be interrupted by it (`undisturbed`); otherwise it is
+/// a toast.
+fn auto_jump_on(ui: &UiState) -> bool {
+    ui.deck.settings.auto_jump && (ui.deck.host_present || ui.deck.demo_active())
+}
+
+/// Nothing the user is doing could be interrupted by a new notice: nothing
+/// held or touched, no PTT session, no overlay, no card on screen, the strip
+/// at rest and 2 s without input. Only then does auto-jump take a Question,
+/// and only then does a card's toast take the next ENTER.
+fn undisturbed(ui: &UiState, at_ms: u32) -> bool {
+    !global::anything_held(ui)
         && !ui.touch.active()
         && ui.global.ptt.is_none() && ui.global.ptt_pending.is_none()
         && ui.global.overlay == global::Overlay::None
-        && !(ui.agents.view == super::agents::AgentsView::Card
-            && ui.current_face().template == Template::Agents)
+        && !card_on_screen(ui)
         && ui.strip_at_rest()
         && global::quiet_for(ui, at_ms, AUTO_JUMP_QUIET_MS)
+}
+
+/// A card is on screen on the Agents face, where ENTER answers it.
+fn card_on_screen(ui: &UiState) -> bool {
+    ui.agents.view == super::agents::AgentsView::Card
+        && ui.current_face().template == Template::Agents
+}
+
+/// The face's keys go to the computer (Omarchy, Macropad), often pressed
+/// without a look at the deck: a notice never eats one of them.
+fn keys_go_to_the_computer(ui: &UiState) -> bool {
+    matches!(ui.current_face().template, Template::Omarchy | Template::Macropad)
+}
+
+/// Every control, before global sees it. A press, a detent or a new touch
+/// ends a card toast's claim on ENTER (`Toast::takes_enter`): whatever the
+/// user turned to first, ENTER keeps its own meaning there. True when the
+/// control is the plain ENTER the claim was waiting for and ENTER is the
+/// deck's own where it lands (no SHIFT chord, no overlay up, no card on
+/// screen, not a face whose keys go to the computer); the caller then opens
+/// the toast (`toast_tapped`) unless global took the press.
+pub(super) fn claims_enter(ui: &mut UiState, control: Control) -> bool {
+    let fresh = match control {
+        Control::Button(_, edge) => edge == Edge::Press,
+        Control::Wheel(_) => true,
+        Control::Touch(touch) => touch.phase == TouchPhase::Down,
+    };
+    let claimed = match ui.notify.toast.as_mut() {
+        Some(toast) if fresh => core::mem::take(&mut toast.takes_enter) && toast.notice().is_some(),
+        _ => false,
+    };
+    claimed
+        && control == Control::Button(Button::Enter, Edge::Press)
+        && !ui.global.shift
+        && ui.global.overlay == global::Overlay::None
+        && !card_on_screen(ui)
+        && !keys_go_to_the_computer(ui)
 }
 
 /// The card toast on the glass, if any, goes to the drawer.
@@ -579,7 +635,8 @@ pub(super) fn prune(ui: &mut UiState, out: &mut Update) {
     fix_selection(ui, None, out);
 }
 
-/// The toast was tapped: to its card (or channel), the toast dismissed.
+/// The toast was tapped, or a card toast took ENTER (`claims_enter`): to its
+/// card (or channel), the toast dismissed.
 pub(super) fn toast_tapped(ui: &mut UiState, at_ms: u32, out: &mut Update) {
     let Some(toast) = ui.notify.toast.take() else {
         return;
@@ -709,11 +766,32 @@ mod tests {
         }
     }
 
+    /// A question with one choice, recommended: the shape of the card deckd
+    /// puts on the deck before a firmware install.
+    fn question(agent: u8, id: u16) -> HostMsg {
+        let mut choices = [Text::new(); 4];
+        choices[0] = Text::from_str("Install");
+        HostMsg::Card {
+            agent,
+            id,
+            clear: false,
+            kind: CardKind::Question,
+            text: Text::from_str("Install firmware 0.14.0? Press ENTER."),
+            choices,
+            choice_count: 1,
+            recommended: Some(0),
+        }
+    }
+
     fn press(ui: &mut UiState, button: Button, at: u32) -> Update {
         let mut out = Update::new();
         ui.apply(Control::Button(button, Edge::Press), at, &mut out);
         ui.apply(Control::Button(button, Edge::Release), at + 1, &mut Update::new());
         out
+    }
+
+    fn events(out: &Update) -> std::vec::Vec<crate::deck::msg::Event> {
+        out.deck_events().collect()
     }
 
     fn wheel(ui: &mut UiState, wheel: Wheel, at: u32) {
@@ -1121,5 +1199,129 @@ mod tests {
         assert_eq!(ui.current_face().template, Template::Agents);
         assert_eq!((ui.agents.view, ui.agents.agent), (AgentsView::Card, 3));
         assert!(ui.notify.toast.is_none());
+    }
+
+    /// Auto-jump is off by default, so a question raised while the deck sits
+    /// on the roster is a toast. With nothing it could interrupt, the next
+    /// ENTER opens its card (not the highlighted session's channel), and the
+    /// card answers the ENTER after that under its own guard.
+    #[test]
+    fn enter_opens_a_card_toast_that_arrived_with_nothing_to_interrupt() {
+        use crate::deck::msg::Event;
+        let mut ui = roster();
+        assert!(!ui.deck.settings.auto_jump);
+        assert_eq!((ui.agents.view, ui.current_face().template), (AgentsView::Roster, Template::Agents));
+        assert_ne!(ui.agents.highlight, 3);
+        ui.host(&question(3, 30), 5000, &mut Update::new());
+        assert!(ui.notify.toast.is_some_and(|t| t.takes_enter));
+        let out = press(&mut ui, Button::Enter, 5600);
+        assert_eq!((ui.agents.view, ui.agents.agent, ui.agents.choice), (AgentsView::Card, 3, Some(0)));
+        assert!(ui.notify.toast.is_none());
+        assert_eq!(ui.deck.notice_count(), 0, "opened, not filed");
+        assert_eq!(events(&out), [], "a jump: no channel, and no answer yet");
+        assert!(press(&mut ui, Button::Enter, 5900).deck_events().next().is_none(), "within 0.5 s of opening");
+        let out = press(&mut ui, Button::Enter, 6200);
+        assert_eq!(events(&out), [Event::Answer { agent: 3, card: 30, choice: 0 }]);
+        // From another face it is the same jump a tap makes.
+        let mut ui = roster();
+        ui.on_face(Template::Usage);
+        ui.host(&card(4, 40, CardKind::Ready), 5000, &mut Update::new());
+        let out = press(&mut ui, Button::Enter, 5600);
+        assert_eq!(ui.current_face().template, Template::Agents);
+        assert_eq!((ui.agents.view, ui.agents.agent), (AgentsView::Card, 4));
+        assert!(out.deck_events().all(|e| !matches!(e, Event::Refresh | Event::Channel { .. })));
+    }
+
+    /// Whoever was using the deck keeps ENTER: input in the 2 s before the
+    /// toast, anything pressed, turned or touched after it, a SHIFT chord, an
+    /// overlay, a card on screen. The toast is still tappable throughout.
+    #[test]
+    fn a_card_toast_never_takes_an_enter_that_means_something_else() {
+        use crate::deck::msg::Event;
+        // Input 1 s before: ENTER opens the highlighted channel, as ever.
+        let mut ui = roster();
+        wheel(&mut ui, Wheel::Cw, 4000);
+        let highlight = ui.agents.highlight;
+        assert_ne!(highlight, 3);
+        ui.host(&question(3, 30), 5000, &mut Update::new());
+        assert!(ui.notify.toast.is_some_and(|t| !t.takes_enter));
+        press(&mut ui, Button::Enter, 5600);
+        assert_eq!((ui.agents.view, ui.agents.agent), (AgentsView::Channel, highlight));
+        assert!(ui.notify.toast.is_some() && toast_tappable(&ui));
+        // A detent first: the user turned to something else.
+        let mut ui = roster();
+        ui.host(&question(3, 30), 5000, &mut Update::new());
+        wheel(&mut ui, Wheel::Cw, 5200);
+        let highlight = ui.agents.highlight;
+        press(&mut ui, Button::Enter, 5400);
+        assert_eq!((ui.agents.view, ui.agents.agent), (AgentsView::Channel, highlight));
+        // A new touch ends the claim too; a release of an earlier press does not.
+        let mut ui = roster();
+        ui.host(&question(3, 30), 5000, &mut Update::new());
+        assert!(!claims_enter(&mut ui, Control::Button(Button::Left, Edge::Release)));
+        assert!(ui.notify.toast.is_some_and(|t| t.takes_enter));
+        let down = Control::Touch(Touch { phase: TouchPhase::Down, x: 240, y: 300 });
+        assert!(!claims_enter(&mut ui, down));
+        assert!(ui.notify.toast.is_some_and(|t| !t.takes_enter));
+        // SHIFT already down when the toast came: SHIFT+ENTER stays a chord.
+        let mut ui = roster();
+        ui.apply(Control::Button(Button::Shift, Edge::Press), 1000, &mut Update::new());
+        ui.host(&question(3, 30), 5000, &mut Update::new());
+        assert!(ui.notify.toast.is_some_and(|t| t.takes_enter));
+        press(&mut ui, Button::Enter, 5600);
+        assert_eq!(ui.agents.view, AgentsView::Roster);
+        assert!(ui.notify.toast.is_some_and(|t| !t.takes_enter));
+        // Omarchy and the Macropad send their keys to the computer, the deck
+        // looked at or not: ENTER stays the key.
+        for (template, is_key) in [
+            (Template::Omarchy, (|e: &Event| matches!(e, Event::Key { key: crate::deck::msg::KeyId::Enter, act: 1, .. })) as fn(&Event) -> bool),
+            (Template::Macropad, |e: &Event| matches!(e, Event::Macro { act: 1, .. })),
+        ] {
+            let mut ui = roster();
+            ui.on_face(template);
+            ui.host(&question(3, 30), 5000, &mut Update::new());
+            let out = press(&mut ui, Button::Enter, 5600);
+            assert_eq!(ui.current_face().template, template);
+            assert!(out.deck_events().any(|e| is_key(&e)), "{template:?}: {:?}", events(&out));
+            assert!(ui.notify.toast.is_some_and(|t| !t.takes_enter) && toast_tappable(&ui));
+        }
+        // The remove dialog shows the toast above it, but ENTER is the dialog's.
+        let mut ui = roster();
+        ui.host(&question(3, 30), 5000, &mut Update::new());
+        ui.global.overlay = Overlay::ConfirmRemove;
+        assert!(!claims_enter(&mut ui, Control::Button(Button::Enter, Edge::Press)));
+        // A card on screen when the toast came: its ENTER answers it.
+        let mut ui = roster();
+        super::super::agents::show_card(&mut ui, 1, 100);
+        ui.host(&question(3, 30), 5000, &mut Update::new());
+        assert!(ui.notify.toast.is_some_and(|t| !t.takes_enter));
+        press(&mut ui, Button::Enter, 5600);
+        assert_ne!(ui.agents.agent, 3);
+        // A card that came on screen by itself since then (auto-jump took a
+        // question; a Ready card never jumps, so its toast stayed up).
+        let mut ui = roster();
+        ui.deck.settings.auto_jump = true;
+        ui.host(&card(4, 40, CardKind::Ready), 5000, &mut Update::new());
+        assert!(ui.notify.toast.is_some_and(|t| t.takes_enter));
+        ui.host(&question(3, 30), 5100, &mut Update::new());
+        assert_eq!((ui.agents.view, ui.agents.agent), (AgentsView::Card, 3));
+        assert_eq!(ui.notify.toast.and_then(|t| t.notice()), Some((4, 40)));
+        let out = press(&mut ui, Button::Enter, 5700);
+        assert_eq!(events(&out), [Event::Answer { agent: 3, card: 30, choice: 0 }]);
+    }
+
+    /// Message and clock toasts have no card to open: ENTER is the face's.
+    #[test]
+    fn only_a_card_toast_takes_enter() {
+        use crate::deck::msg::Event;
+        let mut ui = roster();
+        ui.on_face(Template::Usage);
+        raise_message(&mut ui, ToastKind::NotDelivered, 3, 30, 5000, &mut Update::new());
+        assert!(ui.notify.toast.is_some_and(|t| !t.takes_enter));
+        let out = press(&mut ui, Button::Enter, 5600);
+        assert_eq!(ui.current_face().template, Template::Usage);
+        assert!(out.deck_events().any(|e| matches!(e, Event::Refresh)));
+        raise_timer(&mut ui, 1, 9000, &mut Update::new());
+        assert!(ui.notify.toast.is_some_and(|t| !t.takes_enter));
     }
 }
