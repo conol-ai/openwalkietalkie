@@ -180,7 +180,28 @@ fn open_b(app: &str) -> Result<(), String> {
     }
 }
 
-/// No app is ever raised off macOS.
+/// Windows: the app is a program's executable name, and its front-most
+/// window is brought forward (`crate::winwin`). Never launches anything.
+#[cfg(windows)]
+#[derive(Debug, Default)]
+pub struct WinRaiser;
+
+#[cfg(windows)]
+impl Raiser for WinRaiser {
+    fn running(&self, app: &str) -> bool {
+        crate::winwin::running(app)
+    }
+
+    fn raise(&self, app: &str) -> Result<(), String> {
+        crate::winwin::raise(app)
+    }
+
+    fn name(&self) -> &'static str {
+        "windows"
+    }
+}
+
+/// No app is ever raised where there is no desktop to raise it on.
 #[derive(Debug, Default)]
 pub struct NoRaiser;
 
@@ -205,7 +226,11 @@ pub fn default_raiser() -> Arc<dyn Raiser> {
     {
         Arc::new(MacRaiser)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    {
+        Arc::new(WinRaiser)
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
     {
         Arc::new(NoRaiser)
     }
