@@ -21,11 +21,17 @@ The deck can also stay with a Mac: see [The deck on a Mac](#the-deck-on-a-mac) b
 cd host && cargo build --release --target x86_64-unknown-linux-gnu -p deckd
 sh omarchy/install.sh target/x86_64-unknown-linux-gnu/release/deckd
 python3 omarchy/omarchy_hook.py install kimi     # Kimi Code; claude and codex the same way
+
+# Once, as root: let deckd (your user) open the deck's /dev/hidraw*
+sudo install -m 644 omarchy/70-openwalkietalkie.rules /etc/udev/rules.d/
+sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw
 ```
 
-The build needs `pkg-config`, the development files of libudev (hidapi), ALSA (cpal) and D-Bus (bluer), and CMake and libclang for whisper.cpp. The CI job installs them on Ubuntu as `pkg-config libudev-dev libasound2-dev libdbus-1-dev cmake libclang-dev` (`.github/workflows/ci.yml`).
+The build needs `pkg-config`, the development files of libudev (hidapi), ALSA (cpal) and D-Bus (bluer), and CMake and libclang for whisper.cpp. The CI job installs them on Ubuntu as `pkg-config libudev-dev libasound2-dev libdbus-1-dev cmake libclang-dev` (`.github/workflows/ci.yml`); on Omarchy (Arch) they are `sudo pacman -S --needed cmake clang`, the rest being there already.
 
-`install.sh` copies the bridge to `~/.local/share/openwalkietalkie/omarchy/`, installs `deckd` to `~/.local/bin/deckd` when it is given the binary, and enables and starts the two units in `systemd/` (it is idempotent; `systemctl --user disable --now deckd omarchy-deck` undoes it). `deckd.service` runs `deckd run` with `DECKD_DATA_DIR=~/.local/share/openwalkietalkie`, so its config, socket and caches are all under that directory; `omarchy-deck.service` starts the bridge on that socket. (A `deckd` started without `DECKD_DATA_DIR` uses the XDG directories instead, and its socket is `$XDG_RUNTIME_DIR/openwalkietalkie/deckd.sock`, or `${XDG_CACHE_HOME:-~/.cache}/openwalkietalkie/deckd.sock` when `XDG_RUNTIME_DIR` is unset, which is where the bridge looks when it is started without `--socket`.) `omarchy_hook.py install` writes into each CLI's settings a hook command that points at the copy, and that command lets the call through when the script is missing, so moving the repository never blocks a session. The bridge finds the running Hyprland instance and Wayland display by itself, with no environment variables to set.
+**The udev rule.** Without it, `/dev/hidraw*` belongs to root and `deckd` logs `cannot open HID device`: the deck shows as present (`deckd probe`) and its voice links over BLE, but the HID link never comes up. `70-openwalkietalkie.rules` gives the user at the seat the deck's node, on USB and on Bluetooth alike: it matches the HID id (`KERNELS=="*:1209:5754.*"`), because over Bluetooth the deck is a uhid device with no USB parent, so a rule on `ATTRS{idVendor}` never matches it. `install.sh` cannot write `/etc` and prints these two commands while the rule is missing; once it is in, `deckd` opens the deck by itself, with no restart.
+
+`install.sh` copies the bridge to `~/.local/share/openwalkietalkie/omarchy/`, installs `deckd` to `~/.local/bin/deckd` when it is given the binary, and enables and starts the two units in `systemd/` (it is idempotent; `systemctl --user disable --now deckd omarchy-deck` undoes it). `deckd.service` runs `deckd run` with `DECKD_DATA_DIR=~/.local/share/openwalkietalkie`, so its config, socket and caches are all under that directory; `omarchy-deck.service` starts the bridge on that socket. (A `deckd` started without `DECKD_DATA_DIR` uses the XDG directories instead, and its socket is `$XDG_RUNTIME_DIR/openwalkietalkie/deckd.sock`, or `${XDG_CACHE_HOME:-~/.cache}/openwalkietalkie/deckd.sock` when `XDG_RUNTIME_DIR` is unset, which is where the bridge looks when it is started without `--socket`.) `omarchy_hook.py install` writes into each CLI's settings a hook command that points at the copy, and that command lets the call through when the script is missing, so moving the repository never blocks a session. `install.sh` also switches off `deckd`'s own sources of the same sessions (`deckd config set sources.claude=false codex.daemon=false`): its Claude hooks and `claude agents` roster seed, and its Codex app-server connection, would put every session on the roster a second time, under another key, beside the bridge's. The bridge finds the running Hyprland instance and Wayland display by itself, with no environment variables to set.
 
 A `deckd` command meant for that service needs the same directory, or it looks for the XDG socket and finds none: `DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd care checks` checks the setup, and the same prefix goes before every care verb (`deckd care sources|pause|resume|test …`, `deckd config get|set`, `deckd device get|set`, `deckd firmware status`; the table is §10.7 of [the host service design](../../docs/host-service.md)). With no ancestry cap on Linux (above), they work from any terminal.
 
@@ -61,15 +67,18 @@ Kimi Code has hooks (`[[hooks]]` in its `config.toml`). `omarchy_hook.py install
 | Fullscreen | ENTER = toggle fullscreen |
 | Scratchpad | SHIFT+CANCEL = show / hide the scratchpad; SHIFT+ENTER = move the current window to the scratchpad (Super+S and Super+Alt+S) |
 | **Omarchy sessions on the roster** | Every Claude Code / Codex / Kimi Code session on Omarchy appears on the Agents roster, as working / ready / question / error |
-| Select a session | Selecting a session on the deck brings its terminal window to the front on Omarchy |
+| Select a session | Selecting a session on the deck, or `op.focus` from a client, brings its terminal window to the front on Omarchy |
 | **Voice orders** | Press PTT on a selected Omarchy session and speak: the recognised text is typed into its terminal, followed by Enter (with `wtype`) |
+| Replies | When a turn ends, its reply (600 characters at most) goes to the session's Ready card and is spoken, for Claude Code and Codex from their Stop hook, for Kimi Code from its log |
+| **Macropad** | A Macropad key with a keystroke (`cmd+shift+4`) types it on Omarchy with `wtype`: `cmd` is Super, `opt` / `alt` is Alt. Only with the Linux `deckd`: a Mac's `deckd` types them on the Mac |
+| **System face** | The Linux `deckd` fills it: CPU (`/proc/stat`), memory in use (`MemTotal - MemAvailable`), free space on `/`, and the busiest GPU whose driver reports its load (`gpu_busy_percent`: amdgpu; Intel and NVIDIA's driver show none) |
 
 The key map is `KEYMAP` at the top of `omarchy_deck.py`; that is the one place to change it.
 
 ## What it deliberately does not do
 
 - **Permission prompts are not answered on the deck.** The dialog stays in the terminal. While a session is in the `question` state, voice orders to it are refused (`dialog_open`), so nothing you say can be taken as the answer to a prompt.
-- **Little leaves Omarchy.** Only event names, states, project names and the notification line Claude itself shows (the question's title). Prompts and tool inputs stay on Omarchy; for Kimi Code, only a summary of each reply (600 characters at most) goes to the deck.
+- **Little leaves Omarchy.** Only event names, states, project names and the notification line Claude itself shows (the question's title). Prompts and tool inputs stay on Omarchy; of each turn's reply, at most its first 600 characters go to the deck.
 - **No pid or terminal is sent to `deckd`.** `deckd` checks a pid as a process on its own machine, so a session is registered with its name, its project directory and its capabilities only.
 - **A hook never blocks.** Whether the bridge is there or not, and whatever the data, the hook prints `{}` and exits 0: it never stops your tool call.
 - **Nothing is collected while the deck is away.** After ten minutes in which `deckd` reports no deck linked (`device.link`), the bridge stops feeding the Omarchy face and stops looking at sessions: no Kimi Code log reads, no process checks, and nothing about a session goes to `deckd`. What the hooks report meanwhile only moves each session's entry in the bridge's own table. The moment the deck links it registers every session as it is then (a dialog opened meanwhile is a question again, a session that ended meanwhile is released, a session that started meanwhile appears, and a Kimi Code turn that ended meanwhile has its reply read) and sends the face. `deckd` does the same for its own collectors (`docs/host-service.md` §5.8).
@@ -146,7 +155,7 @@ CI runs them from the repository root, on Ubuntu 24.04's Python 3.12, after the 
 python3 -m unittest discover -s host/omarchy -p 'test_*.py'
 ```
 
-They cover turning Hyprland's data into the face's `ws` line, the key map, the process tree and window matching, registering and releasing sessions, reconnecting after the daemon goes away, every reason a voice order is refused, hooks letting calls through, install and uninstall, going quiet after ten minutes without a deck and waking when it links, and end-to-end runs against a fake `deckd`. Three of them (the Kimi Code install) need `tomllib`, so on a Python older than 3.11 they fail with `ModuleNotFoundError: No module named 'tomllib'`. **They all run against a faked `/proc` and Hyprland: none of them has run on a real Omarchy.**
+They cover turning Hyprland's data into the face's `ws` line, the key map, the process tree and window matching, registering and releasing sessions, reconnecting after the daemon goes away, every reason a voice order is refused, hooks letting calls through, install and uninstall, going quiet after ten minutes without a deck and waking when it links, and end-to-end runs against a fake `deckd`. Three of them (the Kimi Code install) need `tomllib`, so on a Python older than 3.11 they fail with `ModuleNotFoundError: No module named 'tomllib'`. **They all run against a faked `/proc` and Hyprland.** What has been checked on a real Omarchy (Hyprland 0.56.2, a Rev B deck on firmware 0.13.0 over Bluetooth) is under [Verified on Omarchy](#verified-on-omarchy).
 
 ---
 
@@ -155,10 +164,19 @@ They cover turning Hyprland's data into the face's `ws` line, the key map, the p
 - Permission prompts can be answered only in the terminal, never on the deck.
 - A workspace shows at most 6 windows, and there are at most 9 workspace chips, so Omarchy's 10th workspace does not show on the deck.
 - Sessions are found only through their hooks: one that was open before the hooks were installed does not appear until it is reopened.
-- Only Kimi Code's reply summaries reach the deck; for Claude and Codex, only the state does, never the reply's text.
+- Claude and Codex hooks installed before replies were forwarded still send them: the reply is read from the Stop payload the existing hook already receives.
+- The Reader's history, plans and tool rows stay empty for Omarchy sessions: only the closing reply is sent.
 - Claude and Codex hooks installed by an older version need `install` once more to gain `PostToolUse`; without it, a session stays in `question` after an approval until its turn ends.
 - While the tunnel is down, the Omarchy face and the roster keep their last state, and catch up when it is back.
 
+## Verified on Omarchy
+
+On 2026-11-14, with Hyprland 0.56.2 and a Rev B deck on firmware 0.13.0 over Bluetooth, `install.sh` and the units as they are here:
+
+- `deckd` links the deck over Bluetooth HID (with the udev rule) and its voice over BLE, and loads the Whisper model.
+- Every key of `KEYMAP`, LEFT / RIGHT, a workspace chip and a window row, fed to the bridge as `device.key` and `device.ws` events, do what the table above says. Hyprland 0.56 takes only the Lua form of each dispatch: the legacy one is refused.
+- A real Claude Code session: its hooks register it, it goes `idle`, `working`, `ready`; an `op.order` is typed into its terminal with `wtype` and answered; `op.focus` brings its window forward.
+
 ## Not yet verified
 
-See issue ZhangHanDong/openwalkietalkie#1: speech actually played on the deck, real Claude and Codex sessions, USB, and a real Mac.
+See issue ZhangHanDong/openwalkietalkie#1: speech actually heard from the deck, PTT end to end (the order above was sent with `op.order`, not dictated), real Codex and Kimi Code sessions, USB, and a real Mac.

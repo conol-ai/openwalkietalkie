@@ -1698,7 +1698,7 @@ The API, envelope, adapters, card model, session state machine and outbox are pl
 
 | Area | macOS v1 | Linux (v2) |
 |---|---|---|
-| HID | hidapi IOKit, non-exclusive | hidapi `linux-native` (hidraw) + udev rule `KERNEL=="hidraw*", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="5754", MODE="0660", TAG+="uaccess"`; same thread/outbox code |
+| HID | hidapi IOKit, non-exclusive | hidapi `linux-native` (hidraw) + udev rule `KERNEL=="hidraw*", SUBSYSTEM=="hidraw", KERNELS=="*:1209:5754.*", MODE="0660", TAG+="uaccess"` (`host/omarchy/70-openwalkietalkie.rules`; the HID id, because over Bluetooth the deck is a uhid device with no USB `idVendor`); same thread/outbox code |
 | Service | SMAppService / launchd | `systemd --user` unit `openwalkietalkie-deckd.service` (`Restart=on-failure`, `RestartSec=2`, `WantedBy=graphical-session.target`); no TCC |
 | Paths | `~/Library/Application Support/OpenWalkieTalkie/` | `$XDG_CONFIG_HOME/openwalkietalkie/config.toml`, `$XDG_STATE_HOME/openwalkietalkie/{state.json,logs}`, `$XDG_RUNTIME_DIR/openwalkietalkie/{deckd.sock,deckd.lock,port}`, else `${XDG_CACHE_HOME:-~/.cache}/openwalkietalkie/` for those three (as built, `config::Paths::detect`); peer creds via `SO_PEERCRED` (same tokio API) |
 | Audio | CoreAudio HAL by UID | PipeWire (`pipewire-rs`): select nodes by `api.bluez5.address`; HFP via the BlueZ/WirePlumber profile switch (`headset-head-unit` ↔ `a2dp-sink`) driven **explicitly** around PTT instead of implicitly by IO start; mixer unchanged (f32 lanes); mSBC capture must be verified first |

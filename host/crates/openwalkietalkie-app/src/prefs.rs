@@ -17,7 +17,7 @@
 //!   the file the Footprint page names and `deckd uninstall --purge` removes);
 //! * an installed copy anywhere else:
 //!   `$XDG_CONFIG_HOME/openwalkietalkie/app-prefs.json`, or under
-//!   `~/.config` when that is unset;
+//!   `~/.config` when that is unset (on Windows, under `%LOCALAPPDATA%`);
 //! * any other run — a `target/` build, a test, a harness walk — memory only:
 //!   nothing is written anywhere, and the values last as long as the process.
 //!
@@ -250,6 +250,7 @@ impl Prefs {
 
 /// The user's configuration directory as XDG names it: `$XDG_CONFIG_HOME`
 /// when that is an absolute path, else `~/.config`.
+#[cfg(not(windows))]
 fn config_dir() -> Option<PathBuf> {
     std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
@@ -259,6 +260,17 @@ fn config_dir() -> Option<PathBuf> {
                 .filter(|home| !home.is_empty())
                 .map(|home| PathBuf::from(home).join(".config"))
         })
+}
+
+/// Windows: `%LOCALAPPDATA%`, where the service keeps its own folder too
+/// (`%LOCALAPPDATA%\OpenWalkieTalkie`, which the file names case-blind), so
+/// the install guide's "delete it to remove everything" holds. Windows sets
+/// no `HOME`: read as on Unix, the installed app kept nothing between runs.
+#[cfg(windows)]
+fn config_dir() -> Option<PathBuf> {
+    std::env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .filter(|dir| dir.is_absolute())
 }
 
 /// A file store's object. Missing is the ordinary first start and says
