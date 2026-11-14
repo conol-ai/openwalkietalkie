@@ -36,3 +36,16 @@ test('the Download section keeps both versioned Mac downloads', () => {
   assert.deepEqual(downloads.map(([, , arch]) => arch).sort(), ['aarch64', 'x86_64']);
   assert.equal(new Set(downloads.map(([, version]) => version)).size, 1, 'both downloads name the same release');
 });
+
+test('the Download section offers the Windows preview through its install guide', () => {
+  // The preview is unsigned: the guide, with its SmartScreen steps, comes before the zip.
+  const windows = links(section('download')).filter(link => link.href === '/docs/windows/');
+  assert.ok(windows.some(link => /windows/i.test(link.text)), 'a button names Windows');
+  assert.ok(!links(section('hero')).some(link => link.href === '/docs/windows/'), 'the hero stays waitlist-only');
+  const guide = readFileSync(new URL('../public/docs/windows/index.html', import.meta.url), 'utf8');
+  assert.ok(guide.includes('href="https://github.com/conol-ai/openwalkietalkie/releases/latest"'), 'the guide links the latest release');
+  assert.match(guide, /OpenWalkieTalkie-&lt;version&gt;-windows-x86_64\.zip/, 'the guide names the release asset');
+  for (const step of ['More info', 'Run anyway', 'Smart App Control', 'Start']) {
+    assert.ok(guide.includes(step), `the guide covers ${step}`);
+  }
+});

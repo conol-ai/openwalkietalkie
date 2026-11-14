@@ -3,14 +3,15 @@
 OpenWalkieTalkie uses the same release model as
 [OpenMicroKbd](https://github.com/conol-ai/openmicrokbd): a GitHub Release
 contains the Mac app, signed Sparkle feeds, firmware, a release manifest,
-checksums, and artifact attestations.
+checksums, and artifact attestations, and the unsigned Windows preview.
 
 ## CI
 
 `.github/workflows/ci.yml` runs on pull requests and pushes to `main`, and
 can be started manually. It tests the shared firmware and renderer for
 LilyGo, Rev A, and Rev B; builds all three firmware configurations; tests
-the Mac host and app; and compiles the Sparkle bridge. Rev A and Rev B
+the Mac host and app and the Linux host; builds and packages the Windows host
+and app; and compiles the Sparkle bridge. Rev A and Rev B
 application images, temporary migration images, debug ELFs, and board-specific
 recovery bootloaders are kept as workflow artifacts. Recovery uses the pinned
 SiFli SDK; the build checks its SRAM vectors, board marker, and 64 KiB limit.
@@ -62,8 +63,26 @@ manifest and SHA-256 checksums, and attests the assets. It uploads a draft
 before making the complete release public. Published versions are immutable;
 use a new tag to change a published release.
 
-Windows packaging is not included: this project's companion app and voice
-engines currently target macOS 13 or later.
+### The Windows preview
+
+The same workflow builds the Windows host on `windows-2025`: release builds
+of `deckd.exe` and the app, packaged by `tools/package-windows.py` as
+`OpenWalkieTalkie-<version>-windows-x86_64.zip` with its `.sha256`. The zip
+holds one folder with `bin\OpenWalkieTalkie.exe`, `bin\deckd.exe` (the app
+installs firmware only from a folder named `bin` and starts the `deckd.exe`
+beside it), install notes and the licence. The packager refuses an app that
+is not a GUI-subsystem program, a `deckd` that is not a console program, or
+either built for another machine; CI packages its own build the same way on
+every pull request.
+
+The Windows binaries are **not code-signed**, by decision: SmartScreen warns
+on first run ("More info" → "Run anyway"), and Smart App Control blocks them.
+The website's Download section offers the preview through its install guide,
+`site/public/docs/windows/`, which covers both and links the latest release.
+From v0.14.0, `tools/release.py validate` requires that button, the guide and
+its sitemap entry, and `release-manifest.json` lists the zip as
+`app.windows.x86_64`. There are no automatic updates on Windows yet; the
+preview's limits are in [host/README.md](host/README.md#windows-experimental).
 
 ## App updates
 

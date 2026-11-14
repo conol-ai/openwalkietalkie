@@ -26,6 +26,9 @@ build of the service and the app, below.
 `deckd` and the companion app build for `x86_64-pc-windows-msvc` and have
 been run against a Rev A on USB: the deck links, the app connects, and the
 USB firmware updater has installed a release (0.9.0 → 0.13.0, 2026-11-14).
+Releases from 0.14.0 include an unsigned preview zip; the website's
+[install guide](https://openwalkietalkie.org/docs/windows/) covers it, and
+[RELEASING.md](../RELEASING.md#the-windows-preview) how it is built.
 
 - **The local door is a named pipe**, `\\.\pipe\openwalkietalkie-deckd-<hash>`,
   the hash being the data directory's (`deck_client::windows::pipe_name_for`),

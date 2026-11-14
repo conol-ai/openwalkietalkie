@@ -15,6 +15,14 @@ APP_BASE = 0x12020000
 APP_SIZE = 16 * 1024 * 1024 - 128 * 1024  # span includes protected FF padding
 BONDS_START, BONDS_END = 0x12700000, 0x12720000
 REPOSITORY = "conol-ai/openwalkietalkie"
+# The first release whose website offers the Windows preview. The zip itself
+# is built for every release from the workflow that adds it on.
+WINDOWS_SITE_SINCE = (0, 14, 0)
+WINDOWS_GUIDE = "/docs/windows/"
+
+
+def windows_zip(version):
+    return f"OpenWalkieTalkie-{version}-windows-x86_64.zip"
 
 
 def versions():
@@ -59,6 +67,30 @@ def validate_site(tag, public=None):
             raise ValueError(f"website {arch} download must point to {tag}")
     if tuple(map(int, tag.removeprefix("v").split("."))) >= (0, 11, 0):
         validate_companion_docs(public)
+    if tuple(map(int, tag.removeprefix("v").split("."))) >= WINDOWS_SITE_SINCE:
+        validate_windows_guide(public)
+
+
+def validate_windows_guide(public):
+    """The Windows preview is offered from the Download section through its
+    install guide (it is unsigned, so the guide's SmartScreen steps come
+    first), and the guide sends people to the latest release's zip."""
+    download = re.search(r'<section\b[^>]*\bid="download"[^>]*>(.*?)</section>',
+                         (public / "index.html").read_text(), re.S)
+    if not download or f'href="{WINDOWS_GUIDE}"' not in download[1]:
+        raise ValueError(f"website Download section must link to {WINDOWS_GUIDE}")
+    guide = public / WINDOWS_GUIDE.strip("/") / "index.html"
+    if not guide.is_file():
+        raise ValueError(f"website Windows guide missing: {WINDOWS_GUIDE}")
+    text = guide.read_text()
+    for marker in [f"https://github.com/{REPOSITORY}/releases/latest", "-windows-x86_64.zip",
+                   "Run anyway", "Smart App Control"]:
+        if marker not in text:
+            raise ValueError(f"website Windows guide must contain {marker}")
+    sitemap = ET.parse(public / "sitemap.xml")
+    urls = [loc.text for loc in sitemap.findall(".//{http://www.sitemaps.org/schemas/sitemap/0.9}loc")]
+    if "https://openwalkietalkie.org" + WINDOWS_GUIDE not in urls:
+        raise ValueError(f"website sitemap must include {WINDOWS_GUIDE}")
 
 
 def validate_companion_docs(public):
@@ -181,7 +213,10 @@ def manifest(directory, tag):
         raise ValueError("tag does not match host workspace version")
     value = firmware_manifest(directory, tag, firmware)
     value["app"] = {"version": app, "macos": {arch: asset(directory, f"OpenWalkieTalkie-{app}-macos-{arch}.dmg", tag)
-                                               for arch in ("aarch64", "x86_64")}}
+                                               for arch in ("aarch64", "x86_64")},
+                    # The unsigned Windows preview (tools/package-windows.py).
+                    # deckd reads only `app.version` from this section.
+                    "windows": {"x86_64": asset(directory, windows_zip(app), tag)}}
     return value
 
 

@@ -172,3 +172,11 @@ jobs:
       - name: Test the client on Windows
         run: |
           cargo test --manifest-path host/Cargo.toml -p deck-client --lib --locked --target x86_64-pc-windows-msvc --target-dir target/host
+      # The release packages these binaries the same way (release.yml); doing
+      # it here too means a broken package shows on the pull request, not on
+      # the tag. The packager also refuses a console-subsystem app.
+      - name: Package the Windows preview
+        run: |
+          built=target/host/x86_64-pc-windows-msvc/debug
+          python tools/package-windows.py --version 0.0.0-ci --deckd "$built/deckd.exe" --app "$built/openwalkietalkie-app.exe" --output dist/windows
+          python -c "import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); print(*z.namelist(), sep='\n'); assert z.testzip() is None" dist/windows/OpenWalkieTalkie-0.0.0-ci-windows-x86_64.zip
