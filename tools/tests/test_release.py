@@ -42,24 +42,25 @@ class ReleaseSiteTests(unittest.TestCase):
             "blog/index.html": '<a href="/blog/new-release/">Read the release</a>',
             "sitemap.xml": f'''<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
                 <url><loc>{url}</loc></url></urlset>''',
-            "index.html": '\n'.join(
+            "index.html": '<section class="section" id="download">' + '\n'.join(
                 f'<a href="{release_url}/download/v1.2.3/OpenWalkieTalkie-1.2.3-macos-{arch}.dmg">Mac</a>'
-                for arch in ("aarch64", "x86_64")),
+                for arch in ("aarch64", "x86_64")) + '<a href="/docs/windows/">Windows</a></section>',
         }
         # Reuse the published assets so the release fixture checks their contract too.
         for name in ["docs/index.html", "docs/native-companions/index.html",
-                     "docs/deckd-api.md", "examples/native_companion.py"]:
-            files[name] = (release.ROOT / "site/public" / name).read_text()
+                     "docs/deckd-api.md", "examples/native_companion.py", "docs/windows/index.html"]:
+            files[name] = (release.ROOT / "site/public" / name).read_text(encoding="utf-8")
         files["index.html"] += '<a href="/docs/">Docs</a>'
         files["sitemap.xml"] = files["sitemap.xml"].replace("</urlset>",
             '<url><loc>https://openwalkietalkie.org/docs/</loc></url>'
-            '<url><loc>https://openwalkietalkie.org/docs/native-companions/</loc></url></urlset>')
+            '<url><loc>https://openwalkietalkie.org/docs/native-companions/</loc></url>'
+            '<url><loc>https://openwalkietalkie.org/docs/windows/</loc></url></urlset>')
         with tempfile.TemporaryDirectory() as directory:
             public = Path(directory)
             for name, content in files.items():
                 path = public / name
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(content)
+                path.write_text(content, encoding="utf-8")
             release.validate_site("v1.2.3", public)
 
             # Reproduce each way a release can ship while its website stays stale.
@@ -79,6 +80,13 @@ class ReleaseSiteTests(unittest.TestCase):
                 ("sitemap.xml", files["sitemap.xml"].replace("https://openwalkietalkie.org/docs/native-companions/", "https://example.com/"), "sitemap"),
                 ("examples/native_companion.py", "# stale example", "download must match"),
                 ("docs/deckd-api.md", "# stale reference", "download must match"),
+                # The Windows preview: offered in Download, through its guide.
+                ("index.html", files["index.html"].replace('href="/docs/windows/"', 'href="/docs/"'), "Download section must link"),
+                ("index.html", files["index.html"].replace('<a href="/docs/windows/">Windows</a></section>', '</section><a href="/docs/windows/">Windows</a>'), "Download section must link"),
+                ("docs/windows/index.html", None, "Windows guide missing"),
+                ("docs/windows/index.html", files["docs/windows/index.html"].replace("Run anyway", "Open"), "guide must contain Run anyway"),
+                ("docs/windows/index.html", files["docs/windows/index.html"].replace("releases/latest", "releases"), "guide must contain"),
+                ("sitemap.xml", files["sitemap.xml"].replace("https://openwalkietalkie.org/docs/windows/", "https://example.com/"), "sitemap must include /docs/windows/"),
             ])
             for arch in ("aarch64", "x86_64"):
                 cases.append(("index.html", files["index.html"].replace(f"1.2.3-macos-{arch}", f"1.2.2-macos-{arch}"), arch))
@@ -88,19 +96,20 @@ class ReleaseSiteTests(unittest.TestCase):
                     if content is None:
                         path.unlink()
                     else:
-                        path.write_text(content)
+                        path.write_text(content, encoding="utf-8")
                     try:
                         with self.assertRaisesRegex(ValueError, message):
                             release.validate_site("v1.2.3", public)
                     finally:
-                        path.write_text(files[name])
+                        path.write_text(files[name], encoding="utf-8")
 
-            # Earlier releases do not retroactively require the companion pages.
+            # Earlier releases do not retroactively require the companion pages,
+            # or the Windows preview (0.14.0 on).
             for name, content in files.items():
                 if name.startswith(("docs/", "examples/")):
                     (public / name).unlink()
                 else:
-                    (public / name).write_text(content.replace("1.2.3", "0.10.0"))
+                    (public / name).write_text(content.replace("1.2.3", "0.10.0"), encoding="utf-8")
             release.validate_site("v0.10.0", public)
 
 
@@ -145,7 +154,12 @@ class ReleaseTests(unittest.TestCase):
                 (directory / f"OpenWalkieTalkie-{firmware}-recovery-hw-{board}.bin").write_bytes(recovery(board.upper()))
             for arch in ("aarch64", "x86_64"):
                 (directory / f"OpenWalkieTalkie-{app}-macos-{arch}.dmg").write_bytes(b"fixture")
+            (directory / release.windows_zip(app)).write_bytes(b"windows fixture")
             manifest = release.manifest(directory, f"v{app}")
+            windows = manifest["app"]["windows"]["x86_64"]
+            self.assertEqual(windows["name"], f"OpenWalkieTalkie-{app}-windows-x86_64.zip")
+            self.assertEqual(windows["size"], len(b"windows fixture"))
+            self.assertTrue(windows["url"].endswith(f"/releases/download/v{app}/{windows['name']}"))
             for board, asset in manifest["firmware"]["variants"].items():
                 self.assertIn(board, asset["name"])
                 self.assertEqual(len(asset["sha256"]), 64)
@@ -155,6 +169,11 @@ class ReleaseTests(unittest.TestCase):
                 self.assertIn(f"recovery-{board}", migration["bootloader"]["name"])
             with self.assertRaises(ValueError):
                 release.manifest(directory, "v999.0.0")
+            # A release without its Windows preview is not published.
+            (directory / release.windows_zip(app)).unlink()
+            with self.assertRaises(FileNotFoundError):
+                release.manifest(directory, f"v{app}")
+            (directory / release.windows_zip(app)).write_bytes(b"windows fixture")
             (directory / f"OpenWalkieTalkie-{firmware}-recovery-hw-b.bin").unlink()
             with self.assertRaises(FileNotFoundError):
                 release.manifest(directory, f"v{app}")

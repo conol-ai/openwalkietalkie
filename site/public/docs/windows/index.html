@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie for Windows (preview) · OpenWalkieTalkie</title>
+<meta name="description" content="Install the unsigned Windows preview of the OpenWalkieTalkie app and service, get past SmartScreen, and update your deck's firmware over USB." />
+<link rel="canonical" href="https://openwalkietalkie.org/docs/windows/" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie for Windows (preview) · OpenWalkieTalkie" />
+<meta property="og:description" content="Install the unsigned Windows preview of the OpenWalkieTalkie app and service." />
+<meta property="og:url" content="https://openwalkietalkie.org/docs/windows/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie Blog" href="/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<link rel="stylesheet" href="/css/docs.css" />
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">Skip to content</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/" aria-label="OpenWalkieTalkie — home">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="Sections">
+      <a href="/#pile">The Pile</a>
+      <a href="/#features">Features</a>
+      <a href="/#demo">Try It</a>
+      <a href="/#faces">Faces</a>
+      <a href="/#blueprint">Blueprint</a>
+      <a href="/docs/" aria-current="true">Docs</a>
+      <a href="/blog/">Blog</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle day and night theme" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">DAY</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="Open menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main docs-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">PREVIEW · UNSIGNED · 0.14.0+</p>
+  <h1>OpenWalkieTalkie for Windows</h1>
+  <p class="post-meta">The app and service for Windows 10 and 11 on x64</p>
+</header>
+<article class="post-body">
+
+<p>The Windows preview runs the same service and app as the Mac: your deck links over USB-C, the app shows it, and the app updates the deck’s firmware. It is a preview because several Mac features are not built for Windows yet (below), and it is <strong>not code-signed</strong>, so Windows warns before it runs it the first time.</p>
+
+<h2>Download</h2>
+<p>Open the <a href="https://github.com/conol-ai/openwalkietalkie/releases/latest">latest release</a> and download <code>OpenWalkieTalkie-&lt;version&gt;-windows-x86_64.zip</code>. Windows builds are published with every release from 0.14.0 on. The release also lists the zip’s SHA-256 checksum; to compare it, run this in PowerShell in your Downloads folder:</p>
+<pre><code>Get-FileHash .\OpenWalkieTalkie-*-windows-x86_64.zip -Algorithm SHA256</code></pre>
+
+<h2>Install</h2>
+<ol>
+  <li><strong>Unzip it</strong> somewhere you keep programs, for example <code>%LOCALAPPDATA%\Programs\OpenWalkieTalkie</code>. Keep the <code>bin</code> folder as it is: the app installs firmware only when it runs from a folder named <code>bin</code>, and it starts the <code>deckd.exe</code> beside it.</li>
+  <li><strong>Open <code>bin\OpenWalkieTalkie.exe</code>.</strong> Windows SmartScreen shows <em>Windows protected your PC</em>, because the program is not signed. Choose <strong>More info</strong>, then <strong>Run anyway</strong>. Windows remembers the choice for this copy.</li>
+  <li><strong>Start the service.</strong> In the app, open <strong>Service</strong> and press <strong>Start</strong>. It runs <code>deckd.exe</code>, the service that talks to the deck, in the background with no window.</li>
+  <li><strong>Connect the deck</strong> with USB-C. The app’s Deck page shows it once the service has linked.</li>
+</ol>
+
+<h3>If Windows does not offer “Run anyway”</h3>
+<p><strong>Smart App Control</strong>, on some new Windows 11 installations, blocks unsigned programs and gives no way past it. You can see its setting in <em>Windows Security → App &amp; browser control → Smart App Control</em>. The preview cannot run while it is on, and on many Windows versions it cannot be turned back on without reinstalling Windows once it is off, so decide whether that is worth it for you. Antivirus software may also hold back a new unsigned download for a while; the checksum above tells you it is the file the release published.</p>
+
+<h2>Update the deck’s firmware</h2>
+<p>With one deck connected by USB-C, open <strong>Service</strong>, click <strong>Check</strong> on <strong>Deck firmware</strong>, then <strong>Review…</strong> and <strong>Install</strong>, exactly as on the Mac. Keep the cable connected until the deck is back. On Windows the transfer uses the deck’s HID connection rather than its faster USB interface, which Windows has no driver for, so it takes a few minutes (about five for 0.13.0 on Rev A). If you run Windows in a virtual machine, make sure the deck is passed through again after it restarts: it reconnects twice during an update.</p>
+
+<h2>Not in the preview yet</h2>
+<ul>
+  <li>Voice: push-to-talk dictation and spoken replies.</li>
+  <li>Starting with Windows: start the service from the app after you sign in.</li>
+  <li>Claude Code and Codex on the deck, and focusing their windows.</li>
+  <li>Automatic app updates: download each new version from the <a href="https://github.com/conol-ai/openwalkietalkie/releases/latest">latest release</a>, quit the app and end <code>deckd.exe</code>, then replace the old version’s folder with the new one. Each version unzips to a folder of its own name, so a shortcut to the old <code>bin\OpenWalkieTalkie.exe</code> needs pointing at the new one. Your settings stay in <code>%LOCALAPPDATA%\OpenWalkieTalkie</code>.</li>
+</ul>
+
+<h2>Uninstall</h2>
+<p>Quit the app, end <code>deckd.exe</code> in Task Manager, and delete the folder you unzipped. Settings, logs and downloaded firmware live in <code>%LOCALAPPDATA%\OpenWalkieTalkie</code>; delete it too to remove everything.</p>
+
+<p>Something not working? <a href="https://github.com/conol-ai/openwalkietalkie/issues">Open an issue</a> with the log from <code>%LOCALAPPDATA%\OpenWalkieTalkie\logs</code>.</p>
+
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · A COHDL project · MIT software · CERN-OHL-P hardware</span>
+    <nav aria-label="Footer">
+      <a href="/#waitlist">Join the waitlist</a>
+      <a href="/privacy/">Privacy Policy</a>
+      <a href="/cookies/">Cookie information</a>
+      <a href="/cookies/" data-privacy-open>Privacy notice</a>
+      <a href="/">Home</a>
+      <a href="/#demo">Try It</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Join the CoHDL and OpenWalkieTalkie community on Discord">Discord</a>
+      <a href="/blog/feed.xml">Feed</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>
