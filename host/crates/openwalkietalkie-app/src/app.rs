@@ -611,11 +611,23 @@ pub fn show(cx: &mut App) {
 /// The launchd log path, honouring `DECKD_DATA_DIR` exactly as `deckd` does
 /// (§9): a gate or a test run on a throwaway data dir must point the window
 /// at that run's log and not at the operator's.
+///
+/// On Windows the service's data folder is `%LOCALAPPDATA%\OpenWalkieTalkie`
+/// and its log is in `logs` there (`config::Paths::detect`); there is no
+/// `HOME` and no `~/Library`.
 pub fn launchd_log() -> PathBuf {
+    let data_dir = std::env::var_os("DECKD_DATA_DIR");
+    if cfg!(windows) {
+        let local = std::env::var_os("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_default();
+        let data_dir = data_dir.unwrap_or_else(|| local.join("OpenWalkieTalkie").into_os_string());
+        return log_path(Some(data_dir), Path::new(""));
+    }
     let home = std::env::var_os("HOME")
         .map(PathBuf::from)
         .unwrap_or_default();
-    log_path(std::env::var_os("DECKD_DATA_DIR"), &home)
+    log_path(data_dir, &home)
 }
 
 /// [`launchd_log`] without the environment, so it can be tested without
