@@ -312,8 +312,9 @@ class Remote:
         if quiet != self.quiet:
             self.quiet = quiet
             if quiet:
-                print('no deck linked for ten minutes: the face and the sessions wait for it',
-                      file=sys.stderr)
+                # Not "for ten minutes": at the hello, a deckd that has gone quiet itself makes the
+                # bridge quiet at once (`link_at_hello`), however long the bridge has been up.
+                print('no deck linked: the face and the sessions wait for it', file=sys.stderr)
             else:
                 print('the deck linked: feeding the face and the roster again', file=sys.stderr)
                 self.last = None

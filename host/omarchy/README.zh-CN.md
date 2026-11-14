@@ -21,11 +21,17 @@
 cd host && cargo build --release --target x86_64-unknown-linux-gnu -p deckd
 sh omarchy/install.sh target/x86_64-unknown-linux-gnu/release/deckd
 python3 omarchy/omarchy_hook.py install kimi     # Kimi Code；claude / codex 同理
+
+# 一次性，用 root：让 deckd（以你的用户运行）能打开对讲机的 /dev/hidraw*
+sudo install -m 644 omarchy/70-openwalkietalkie.rules /etc/udev/rules.d/
+sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw
 ```
 
-构建需要 `pkg-config`、libudev（hidapi）、ALSA（cpal）和 D-Bus（bluer）的开发文件，以及 whisper.cpp 要用的 CMake 和 libclang。CI 在 Ubuntu 上装的是 `pkg-config libudev-dev libasound2-dev libdbus-1-dev cmake libclang-dev`（`.github/workflows/ci.yml`）。
+构建需要 `pkg-config`、libudev（hidapi）、ALSA（cpal）和 D-Bus（bluer）的开发文件，以及 whisper.cpp 要用的 CMake 和 libclang。CI 在 Ubuntu 上装的是 `pkg-config libudev-dev libasound2-dev libdbus-1-dev cmake libclang-dev`（`.github/workflows/ci.yml`）；在 Omarchy（Arch）上是 `sudo pacman -S --needed cmake clang`，其余已经自带。
 
-`install.sh` 会把适配器复制到 `~/.local/share/openwalkietalkie/omarchy/`；给了二进制文件时，把 `deckd` 装到 `~/.local/bin/deckd`；再启用并启动 `systemd/` 里的两个单元（可以重复执行；`systemctl --user disable --now deckd omarchy-deck` 撤销）。`deckd.service` 以 `DECKD_DATA_DIR=~/.local/share/openwalkietalkie` 运行 `deckd run`，所以它的配置、socket 和缓存都在这个目录下；`omarchy-deck.service` 在这个 socket 上启动适配器。（不设 `DECKD_DATA_DIR` 启动的 `deckd` 改用 XDG 目录，socket 在 `$XDG_RUNTIME_DIR/openwalkietalkie/deckd.sock`，没有 `XDG_RUNTIME_DIR` 时在 `${XDG_CACHE_HOME:-~/.cache}/openwalkietalkie/deckd.sock`；不带 `--socket` 启动的适配器也去这里找。）`omarchy_hook.py install` 写进各 CLI 设置的 hook 命令指向这份副本，并且脚本不存在时放行（不会因为挪了仓库而拦住你的会话）。适配器自动找到正在运行的 Hyprland 实例和 Wayland 显示，不用写环境变量。
+**udev 规则。** 没有它，`/dev/hidraw*` 属于 root，`deckd` 日志里是 `cannot open HID device`：`deckd probe` 能看到对讲机，语音也能通过 BLE 连上，但 HID 链路始终起不来。`70-openwalkietalkie.rules` 把对讲机的节点交给坐在这台机器前的用户，USB 和蓝牙都适用：它按 HID id 匹配（`KERNELS=="*:1209:5754.*"`），因为走蓝牙时对讲机是一个没有 USB 父设备的 uhid 设备，按 `ATTRS{idVendor}` 写的规则永远匹配不上。`install.sh` 写不了 `/etc`，规则缺失时会打印上面两条命令；装好之后 `deckd` 会自己打开对讲机，不用重启。
+
+`install.sh` 会把适配器复制到 `~/.local/share/openwalkietalkie/omarchy/`；给了二进制文件时，把 `deckd` 装到 `~/.local/bin/deckd`；再启用并启动 `systemd/` 里的两个单元（可以重复执行；`systemctl --user disable --now deckd omarchy-deck` 撤销）。`deckd.service` 以 `DECKD_DATA_DIR=~/.local/share/openwalkietalkie` 运行 `deckd run`，所以它的配置、socket 和缓存都在这个目录下；`omarchy-deck.service` 在这个 socket 上启动适配器。（不设 `DECKD_DATA_DIR` 启动的 `deckd` 改用 XDG 目录，socket 在 `$XDG_RUNTIME_DIR/openwalkietalkie/deckd.sock`，没有 `XDG_RUNTIME_DIR` 时在 `${XDG_CACHE_HOME:-~/.cache}/openwalkietalkie/deckd.sock`；不带 `--socket` 启动的适配器也去这里找。）`omarchy_hook.py install` 写进各 CLI 设置的 hook 命令指向这份副本，并且脚本不存在时放行（不会因为挪了仓库而拦住你的会话）。`install.sh` 还会关掉 `deckd` 自己对同一批会话的来源（`deckd config set sources.claude=false codex.daemon=false`）：它的 Claude hook 和 `claude agents` 名册种子，以及它的 Codex app-server 连接，会让每个会话换一个键在名册上再出现一次，和适配器注册的并列。适配器自动找到正在运行的 Hyprland 实例和 Wayland 显示，不用写环境变量。
 
 给这个服务用的 `deckd` 命令也要指向同一个目录，否则它会去找 XDG 的 socket，找不到：`DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd care checks` 检查安装，每条维护命令前面都加同样的前缀（`deckd care sources|pause|resume|test …`、`deckd config get|set`、`deckd device get|set`、`deckd firmware status`；对照表见[主机服务设计](../../docs/host-service.md)第 10.7 节）。Linux 上没有祖先进程上限（见上文），在任何终端里都能用。
 
@@ -61,7 +67,7 @@ Kimi Code 有 hook（`config.toml` 里的 `[[hooks]]`），`omarchy_hook.py inst
 | 全屏 | ENTER = 切换全屏 |
 | scratchpad | SHIFT+CANCEL = 打开 / 收起 scratchpad；SHIFT+ENTER = 把当前窗口收进 scratchpad（相当于 Super+S / Super+Alt+S） |
 | **名册里的 Omarchy 会话** | Omarchy 上每个 Claude Code / Codex / Kimi Code 会话出现在 Agents 名册，状态是 working / ready / question / error |
-| 选中会话 | 在对讲机上选中某个会话，Omarchy 上它所在的终端窗口会被拉到前台 |
+| 选中会话 | 在对讲机上选中某个会话，或客户端发 `op.focus`，Omarchy 上它所在的终端窗口会被拉到前台 |
 | **语音指令** | 对选中的 Omarchy 会话按 PTT 说话，识别出的文字会被输入到它的终端并回车（用 `wtype`） |
 
 按键映射在 `omarchy_deck.py` 顶部的 `KEYMAP`，想改只改那一处。
@@ -146,7 +152,7 @@ CI 在仓库根目录、Ubuntu 24.04 的 Python 3.12 上运行它们，排在 Li
 python3 -m unittest discover -s host/omarchy -p 'test_*.py'
 ```
 
-覆盖：Hyprland 数据到 `ws` 行的转换、按键映射、进程树和窗口匹配、会话注册和释放、守护进程离线重连、语音指令的各种拒绝条件、hook 放行、安装和卸载、没有对讲机十分钟后静默及对讲机连上后恢复，以及对假 `deckd` 的端到端流程。其中三个（Kimi Code 的安装）需要 `tomllib`，在 3.11 以前的 Python 上会报 `ModuleNotFoundError: No module named 'tomllib'`。**这些都是在伪造的 `/proc` 和 Hyprland 上跑的，没有在真实 Omarchy 上跑过。**
+覆盖：Hyprland 数据到 `ws` 行的转换、按键映射、进程树和窗口匹配、会话注册和释放、守护进程离线重连、语音指令的各种拒绝条件、hook 放行、安装和卸载、没有对讲机十分钟后静默及对讲机连上后恢复，以及对假 `deckd` 的端到端流程。其中三个（Kimi Code 的安装）需要 `tomllib`，在 3.11 以前的 Python 上会报 `ModuleNotFoundError: No module named 'tomllib'`。**这些都是在伪造的 `/proc` 和 Hyprland 上跑的。** 在真实 Omarchy 上验证过的内容（Hyprland 0.56.2，Rev B 对讲机，固件 0.13.0，蓝牙）见“在 Omarchy 上验证过的”。
 
 ---
 
@@ -159,6 +165,14 @@ python3 -m unittest discover -s host/omarchy -p 'test_*.py'
 - 装 hook 时，Claude / Codex 需要重新运行一次 `install`，才会带上 `PostToolUse`（否则授权后状态会一直停在 question，直到本轮结束）。
 - 隧道断开期间，Omarchy 页和名册会停在最后的状态，恢复后自动同步。
 
+## 在 Omarchy 上验证过的
+
+2026-11-14，Hyprland 0.56.2，Rev B 对讲机，固件 0.13.0，蓝牙连接，`install.sh` 和单元文件与这里一致：
+
+- `deckd` 通过蓝牙 HID（装了 udev 规则后）和 BLE 语音连上对讲机，并加载 Whisper 模型。
+- `KEYMAP` 的每个按键、LEFT / RIGHT、工作区标签和窗口行，以 `device.key` 和 `device.ws` 事件交给适配器，效果和上表一致。Hyprland 0.56 只接受每个调度的 Lua 写法，旧写法会被拒绝。
+- 真实的 Claude Code 会话：hook 注册它，状态依次为 `idle`、`working`、`ready`；`op.order` 用 `wtype` 输入它的终端并得到回答；`op.focus` 把它的窗口拉到前台。
+
 ## 还没验证的
 
-见 issue ZhangHanDong/openwalkietalkie#1：对讲机上的实际播报、Claude / Codex 真实会话、USB、macOS 真机。
+见 issue ZhangHanDong/openwalkietalkie#1：对讲机上实际听到的播报、端到端的 PTT（上面的指令是用 `op.order` 发的，不是口述的）、Codex 和 Kimi Code 真实会话、USB、macOS 真机。

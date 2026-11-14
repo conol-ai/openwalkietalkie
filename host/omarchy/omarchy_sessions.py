@@ -406,7 +406,10 @@ class Bridge:
             if why:
                 log(f'{session.name}: order not delivered ({why})')
                 self.report_failed_order(session, data.get('order'), why)
-        elif kind == 'focus.changed' and data.get('source') == 'device':
+        # `device`: a session selected on the deck. `api`: `op.focus`, which deckd leaves to the app
+        # that registered the session (it raises only a hook session's app itself). `desktop` is a
+        # tracker reporting what is already in front: nothing to raise.
+        elif kind == 'focus.changed' and data.get('source') in ('device', 'api'):
             window = window_for(session.pid, self.hypr.clients(), session.cwd, self.proc)
             if window:
                 self.hypr.focus(window['address'])

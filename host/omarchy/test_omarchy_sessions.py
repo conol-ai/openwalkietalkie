@@ -430,6 +430,13 @@ class BridgeOrders(unittest.TestCase):
         bridge.on_event({'type': 'focus.changed', 'data': {'agent': 'ag_1', 'source': 'desktop'}})
         self.assertEqual(hypr.focused, ['0xb'])
 
+    def test_op_focus_raises_its_window(self):
+        """deckd raises only a hook session's app on `op.focus`; the bridge's sessions are its own."""
+        hypr = FakeHypr()
+        bridge, session = self.bridge(hypr)
+        bridge.on_event({'type': 'focus.changed', 'data': {'agent': 'ag_1', 'source': 'api'}})
+        self.assertEqual(hypr.focused, ['0xb'])
+
     def test_orders_for_other_agents_are_ignored(self):
         bridge, _ = self.bridge()
         bridge.on_event({'type': 'agent.order', 'data': {'agent': 'ag_other', 'text': 'x'}})
