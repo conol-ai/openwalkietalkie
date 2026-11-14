@@ -4,8 +4,14 @@ use crate::core::handle::{CoreHandle, CoreMsg};
 use deck_proto::SystemStatus;
 use std::time::Duration;
 
+#[cfg(target_os = "linux")]
+mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(target_os = "linux")]
+use linux as os;
+#[cfg(target_os = "macos")]
+use macos as os;
 
 #[derive(Default)]
 pub struct Sampler {
@@ -15,7 +21,8 @@ pub struct Sampler {
 fn cpu_percent(previous: [u32; 4], current: [u32; 4]) -> Option<u8> {
     let delta = std::array::from_fn::<_, 4, _>(|i| u64::from(current[i].wrapping_sub(previous[i])));
     let total: u64 = delta.iter().sum();
-    // Mach CPU_STATE_IDLE is slot 2; normalize across all cores to 0..100.
+    // Slot 2 is idle (Mach's CPU_STATE_IDLE; `linux::parse_cpu` lays /proc/stat
+    // out the same way); normalize across all cores to 0..100.
     (total > 0).then(|| ((total - delta[2]) * 100 / total).min(100) as u8)
 }
 fn mib(bytes: u64) -> u32 {
@@ -35,23 +42,23 @@ impl Sampler {
             sample: self.sequence,
             ..SystemStatus::EMPTY
         };
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         {
-            let cpu = macos::cpu_ticks();
+            let cpu = os::cpu_ticks();
             status.cpu = self
                 .previous_cpu
                 .zip(cpu)
                 .and_then(|(old, new)| cpu_percent(old, new));
             self.previous_cpu = cpu;
-            if let Some((used, total)) = macos::memory() {
+            if let Some((used, total)) = os::memory() {
                 status.memory_used_mib = mib(used.min(total));
                 status.memory_total_mib = mib(total);
             }
-            if let Some((free, total)) = macos::disk() {
+            if let Some((free, total)) = os::disk() {
                 status.disk_free_mib = mib(free.min(total));
                 status.disk_total_mib = mib(total);
             }
-            status.gpu = macos::gpu();
+            status.gpu = os::gpu();
         }
         status
     }

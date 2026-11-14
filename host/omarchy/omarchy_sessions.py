@@ -213,6 +213,7 @@ def valid_hook(msg) -> bool:
             and isinstance(msg.get('event'), str) and 0 < len(msg['event']) <= 64
             and isinstance(msg.get('session_id'), str) and 0 < len(msg['session_id']) <= 256
             and isinstance(msg.get('cwd', ''), str) and len(msg.get('cwd', '')) <= 4096
+            and isinstance(msg.get('reply', ''), str) and len(msg.get('reply', '')) <= 8000
             and isinstance(msg.get('pid'), int) and msg['pid'] > 1)
 
 
@@ -274,6 +275,11 @@ class Bridge:
                     session.reply_due = True
                 else:
                     self.read_reply(session)
+            elif msg['event'] == 'Stop' and msg.get('reply', '').strip():
+                # Claude Code and Codex carry the reply in the hook itself (`last_assistant_message`).
+                # It is this turn's, so it goes to deckd even when it reads like the last turn's:
+                # deckd speaks a `ready` only with a reply stored since the turn began.
+                session.reply, session.replied = clip(msg['reply'], REPLY_MAX), ''
             state = state_for(msg['event'], msg.get('ntype'))
             if state:
                 session.state = state
@@ -406,7 +412,10 @@ class Bridge:
             if why:
                 log(f'{session.name}: order not delivered ({why})')
                 self.report_failed_order(session, data.get('order'), why)
-        elif kind == 'focus.changed' and data.get('source') == 'device':
+        # `device`: a session selected on the deck. `api`: `op.focus`, which deckd leaves to the app
+        # that registered the session (it raises only a hook session's app itself). `desktop` is a
+        # tracker reporting what is already in front: nothing to raise.
+        elif kind == 'focus.changed' and data.get('source') in ('device', 'api'):
             window = window_for(session.pid, self.hypr.clients(), session.cwd, self.proc)
             if window:
                 self.hypr.focus(window['address'])
