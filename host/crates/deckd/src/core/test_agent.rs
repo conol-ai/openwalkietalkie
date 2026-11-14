@@ -25,16 +25,44 @@ const QUIET_WITHIN: Duration = Duration::from_secs(test::ANSWER_WITHIN_S as u64)
 /// ([`Core::install_gate`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum InstallGate {
-    /// The deck has a session with the service: it runs its firmware and
-    /// can show a card, so it is asked ([`Core::install_after_press`]).
+    /// The deck has a session with the service and its firmware answers the
+    /// install's card with ENTER ([`can_confirm`]), so it is asked
+    /// ([`Core::install_after_press`]).
     AskTheDeck,
+    /// The deck has a session, but its firmware predates the card's ENTER
+    /// ([`CONFIRMS_SINCE`]): asked, it could never answer, and the install
+    /// would time out with nothing installed. The app's own Review → Install
+    /// is the confirmation, and the install starts as it did before the
+    /// card existed.
+    AppConfirmed,
     /// The deck on the cable is in recovery, as the last check found it,
     /// and has no session: it cannot show a card, and installs as it always
-    /// has. The only deck that installs without a press.
+    /// has, without a press, like [`InstallGate::AppConfirmed`].
     Recovery,
     /// Neither: a deck that runs its firmware but has not linked, which
     /// cannot be asked yet. Refused with [`firmware::WAIT_FOR_LINK`].
     NotLinked,
+}
+
+/// The first deck firmware whose install card ENTER answers. Every release
+/// before it shows no answerable card, so a deck that runs one is not
+/// asked ([`InstallGate::AppConfirmed`]).
+pub(crate) const CONFIRMS_SINCE: (u64, u64, u64) = (0, 14, 0);
+
+/// Whether the firmware a deck named in its hello (`0.14.0`, or with the
+/// build's suffix, `0.14.0-openwalkietalkie`) answers the install's card.
+/// Only major.minor.patch counts: semver would rank the suffixed release
+/// below the bare one, as a pre-release. A version that does not parse is
+/// firmware nobody can say answers, so it is not asked.
+pub(crate) fn can_confirm(fw: &str) -> bool {
+    let release = fw.split(['-', '+']).next().unwrap_or_default();
+    let mut parts = release.split('.').map(str::parse::<u64>);
+    match (parts.next(), parts.next(), parts.next(), parts.next()) {
+        (Some(Ok(major)), Some(Ok(minor)), Some(Ok(patch)), None) => {
+            (major, minor, patch) >= CONFIRMS_SINCE
+        }
+        _ => false,
+    }
 }
 
 impl Core {
@@ -109,15 +137,21 @@ impl Core {
 
     /// How `firmware.install` treats the press on the deck. A session with
     /// the service — the deck's firmware said hello on this link — means it
-    /// can show a card, so it is asked, whatever the last check found: a
-    /// deck in recovery never says hello, so a session proves the recovery
-    /// flag stale (the deck restarted into its firmware since), and a stale
-    /// flag never skips the card. With no session, only a deck the last
-    /// check found in recovery installs without a press, as it always has;
-    /// any other is refused until it links.
+    /// runs its firmware; one recent enough to answer the card
+    /// ([`can_confirm`]) is asked, whatever the last check found, and an
+    /// older one installs on the app's confirmation. A deck in recovery
+    /// never says hello, so a session proves the recovery flag stale (the
+    /// deck restarted into its firmware since), and a stale flag never skips
+    /// the card. With no session, only a deck the last check found in
+    /// recovery installs without a press, as it always has; any other is
+    /// refused until it links.
     pub(crate) fn install_gate(&self) -> InstallGate {
-        if self.store.snapshot().device.fw.is_some() {
-            return InstallGate::AskTheDeck;
+        if let Some(fw) = self.store.snapshot().device.fw.as_deref() {
+            return if can_confirm(fw) {
+                InstallGate::AskTheDeck
+            } else {
+                InstallGate::AppConfirmed
+            };
         }
         let in_recovery = self
             .firmware
@@ -355,6 +389,24 @@ impl Core {
                     reason: None,
                 }),
             });
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::can_confirm;
+
+    /// The cutoff is the release, whatever the build's suffix: 0.14.0 and
+    /// later answer the install's card, earlier ones and versions that do
+    /// not parse do not.
+    #[test]
+    fn the_first_firmware_that_confirms_on_the_deck_is_0_14_0() {
+        for fw in ["0.14.0", "0.14.0-openwalkietalkie", "0.14.1", "0.15.0+build", "1.0.0"] {
+            assert!(can_confirm(fw), "{fw}");
+        }
+        for fw in ["0.13.0", "0.13.99-openwalkietalkie", "0.9.0", "", "0.14", "next", "0.14.0.1"] {
+            assert!(!can_confirm(fw), "{fw}");
         }
     }
 }

@@ -136,14 +136,18 @@ programming and cold-boot test.
 With one deck connected by **USB**, open **Service** in the Mac app and click
 **Check** on the **Deck firmware** row under **Updates**. A newer release also
 produces a notification after the automatic check. Click **Review…**, check
-the version, then **Install**. On a linked deck the service does not start yet:
+the version, then **Install**. On a linked deck running firmware 0.14.0 or later
+the service does not start yet:
 the deck shows **Install firmware {version}? Press ENTER.** in its own
 language, and only ENTER pressed on the deck itself starts the install. The
 dialog says **Press ENTER on the deck to start the install.** meanwhile.
 CANCEL, a minute without an answer, or any other answer leaves nothing
 installed (**Not confirmed on the deck. Nothing was installed.**). After the
 press, an install that finds the deck talking waits up to a minute for it to
-finish (**Starting the install when the deck stops talking…**). A deck already
+finish (**Starting the install when the deck stops talking…**). Firmware before
+0.14.0 cannot answer that card, so a linked deck running it is not asked: the
+app's **Install** is the confirmation and the install starts at once, as it did
+before the card existed. A deck already
 in recovery cannot show the card and installs at once. A deck that runs its
 firmware but has not linked yet is refused with **Wait for the deck to link,
 then install again.** The dialog then shows download, installation,
