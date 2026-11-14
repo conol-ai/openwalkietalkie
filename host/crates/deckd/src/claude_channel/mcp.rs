@@ -169,9 +169,19 @@ impl ExeWatch {
         Self { path, start }
     }
 
+    #[cfg(unix)]
     fn file_id(path: &Path) -> Option<(u64, u64)> {
         use std::os::unix::fs::MetadataExt;
         std::fs::metadata(path).ok().map(|m| (m.dev(), m.ino()))
+    }
+
+    /// Windows has no inode to compare: a replaced executable is told by
+    /// its size and last write instead (a running one cannot be overwritten
+    /// in place, only renamed away and a new one put there).
+    #[cfg(windows)]
+    fn file_id(path: &Path) -> Option<(u64, u64)> {
+        use std::os::windows::fs::MetadataExt;
+        std::fs::metadata(path).ok().map(|m| (m.file_size(), m.last_write_time()))
     }
 
     /// Replaced or unlinked since launch. Unknown at launch means never.
@@ -255,7 +265,7 @@ pub(super) fn run(data: &Path) -> Result<i32, String> {
         let mut refusals = Refusals::default();
         let mut linked_since: Option<Instant> = None;
         let mut next_attempt = Instant::now();
-        let mut link: Option<(Reader<tokio::net::unix::OwnedReadHalf>, tokio::net::unix::OwnedWriteHalf)> = None;
+        let mut link: Option<(Reader<link::Read>, link::Write)> = None;
         loop {
             tokio::select! {
                 request = stdin.recv() => {
@@ -269,8 +279,8 @@ pub(super) fn run(data: &Path) -> Result<i32, String> {
                 _ = tick.tick() => {
                     protocol.identify(current_identity(&config, pid));
                     if link.is_none() && Instant::now() >= next_attempt {
-                        match tokio::time::timeout(Duration::from_millis(250), UnixStream::connect(socket(data))).await {
-                            Ok(Ok(mut stream)) => match peer(&stream) {
+                        match tokio::time::timeout(Duration::from_millis(250), link::connect(&socket(data))).await {
+                            Ok(Ok(mut stream)) => match link::server_peer(&stream) {
                                 Err(PeerError::OtherExecutable { .. }) => {
                                     refusals.refused += 1;
                                     if refusals.refused == BACKOFF_AFTER {
@@ -283,7 +293,7 @@ pub(super) fn run(data: &Path) -> Result<i32, String> {
                                     refusals.refused = 0;
                                     next_attempt = Instant::now();
                                     linked_since = Some(Instant::now());
-                                    let (input, output) = stream.into_split();
+                                    let (input, output) = link::split(stream);
                                     link = Some((Reader::new(input), output));
                                 } else {
                                     refusals.reset();
