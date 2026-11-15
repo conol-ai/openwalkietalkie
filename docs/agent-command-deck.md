@@ -306,13 +306,16 @@ faces, Settings, and "+" (hidden at eight faces), four at a time.
 A notice is created by a new card (Question or Ready), keyed by agent and card.
 
 - **Toast.** Slides down from the top for 4 s, counted from the frame that shows
-  it; tapping it jumps to the card. So does ENTER, when the toast arrived with
-  nothing it could interrupt (the auto-jump conditions below: nothing held, no
-  PTT session, no overlay, no card on screen, the strip at rest, no input in
-  the last 2 s) and ENTER is the first thing pressed, turned or touched since.
-  Otherwise ENTER keeps its meaning on the face, and it always does on Omarchy
-  and the Macropad, whose keys go to the computer, and as SHIFT+ENTER. The
-  card then answers the next ENTER, not within 0.5 s of opening. Touches in its
+  it; tapping it jumps to the card. So does ENTER on a question's toast, when
+  it arrived with nothing it could interrupt (the auto-jump conditions below:
+  nothing held, SHIFT included, no PTT session, no overlay or session menu, no
+  card on screen, no running clock on the Timer face, ringing alarm or live
+  game, the strip at rest, no input in the last 2 s, unlocking included) and
+  ENTER is the first thing pressed, turned or touched since. Otherwise ENTER
+  keeps its meaning on the face, and it always does on a Ready card's toast,
+  on Omarchy and the Macropad, whose keys go to the computer, and as
+  SHIFT+ENTER. The question then answers the next ENTER, not within 0.5 s of
+  opening. Touches in its
   rect are swallowed for 300 ms after it expires. Message toasts ("no channel",
   "not delivered") last 2 s and belong to no notice.
 - **Drawer.** A notice is filed when its toast times out or is displaced, when

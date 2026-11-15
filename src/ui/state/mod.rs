@@ -6,7 +6,7 @@
 //!
 //! `apply(control, at_ms, out)`
 //!   0. `notify::claims_enter` consumes nothing: any press, detent or new
-//!      touch ends a card toast's claim on ENTER, and it says whether this
+//!      touch ends a question toast's claim on ENTER, and it says whether this
 //!      control is the plain ENTER that claim was waiting for.
 //!   1. `global::on_control` sees EVERY control first (SHIFT, double-SHIFT,
 //!      SHIFT+SCROLL, PTT session, release routing to the latched owner,
@@ -450,6 +450,11 @@ impl UiState {
         if self.screen_lock == progress {
             return false;
         }
+        // Engaging is the panel going to sleep; a lock that moves or opens
+        // moved under the user's hand, which counts as input.
+        if self.screen_lock.is_some() {
+            global::lock_moved(self);
+        }
         self.screen_lock = progress;
         self.invalidate();
         true
@@ -460,7 +465,7 @@ impl UiState {
         // The firmware hushes before it decides whether to deliver (a
         // waking press is not); here for every other driver of the state.
         timer::hush(self, control);
-        // Any fresh input ends a card toast's claim on ENTER; this may be
+        // Any fresh input ends a question toast's claim on ENTER; this may be
         // the ENTER it was waiting for.
         let opens_toast = notify::claims_enter(self, control);
         let mut consumed = global::on_control(self, control, at_ms, out);
@@ -735,6 +740,7 @@ impl UiState {
         if at_ms.wrapping_sub(self.now_ms) < u32::MAX / 2 {
             self.now_ms = at_ms;
         }
+        global::on_advance(self, self.now_ms);
     }
 
     fn finish(&mut self, out: &mut Update) {

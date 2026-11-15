@@ -96,10 +96,12 @@ Omarchy, Macropad, Usage, Settings:
 
 - [ ] A toast slides down for 4 s, then the indicator pill appears (red while
       a question waits).
-- [ ] Leave the deck alone on the roster until a question toasts: ● opens its
-      card, not the highlighted agent's channel, and ● again (after 0.5 s)
-      answers it. Press ▼ before ● instead and ● opens the highlighted
-      channel; the toast stays until it times out.
+- [ ] Leave the deck alone on the roster, awake (touched in the last two
+      minutes, so not locked), until a question toasts: ● opens its card, not
+      the highlighted agent's channel, and ● again (after 0.5 s) answers it.
+      Press ▼ before ● instead and ● opens the highlighted channel; the toast
+      stays until it times out. A Ready toast never takes ●. A locked deck
+      files the question in the drawer with no toast.
 - [ ] Swipe down from the top edge opens the drawer: ▼ selects, ● jumps to the
       card, `1` or a sideways swipe dismisses, ESC closes.
 - [ ] While the drawer or manager is open a new notice goes straight to the
