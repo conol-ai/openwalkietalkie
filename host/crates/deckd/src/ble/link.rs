@@ -622,7 +622,9 @@ pub(crate) struct Shared {
     stream_port: Mutex<Option<Transport>>,
     tx: Mutex<Tx>,
     mic_overflow: AtomicU64,
-    /// A drain is already on its way to the platform's queue.
+    /// A drain is already on its way to the platform's queue (CoreBluetooth's
+    /// serial queue; the other backends drain on their own thread).
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) drain_posted: AtomicBool,
     /// The hid thread's wake-up: a frame was queued for the cable.
     usb_wake: (Sender<()>, Receiver<()>),

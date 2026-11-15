@@ -426,6 +426,9 @@ fn stage(
         .parent()
         .ok_or_else(|| format!("{} has no parent", snapshot.path().display()))?;
     let fresh = !parent.exists();
+    // File modes are Unix's: on Windows a new file takes its folder's ACL.
+    #[cfg(not(unix))]
+    let _ = (fresh, new_mode);
     std::fs::create_dir_all(parent)
         .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
     #[cfg(unix)]
