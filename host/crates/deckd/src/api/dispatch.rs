@@ -165,6 +165,16 @@ pub const METHODS: &[MethodSpec] = &[
     // reply is written before the supervisor on `main` may act on it.
     m("service.restart", Some(Scope::Admin), false),
     m("service.stop", Some(Scope::Admin), false),
+    // Grok Bot (`crate::grokbot`). The three a bot runs on this Mac are
+    // `agent`, the scope a process an agent started still has (§4.2); the
+    // ones that set a bot up write `config.toml` and the key store.
+    m("grokbot.say", Some(Scope::Agent), false),
+    m("grokbot.ask", Some(Scope::Agent), false),
+    m("grokbot.state", Some(Scope::Agent), false),
+    m("grokbot.status", Some(Scope::Admin), false),
+    m("grokbot.add", Some(Scope::Admin), false),
+    m("grokbot.remove", Some(Scope::Admin), false),
+    m("grokbot.test", Some(Scope::Admin), false),
     m("hooks.claude", Some(Scope::HooksIngest), false),
     m("hooks.codex", Some(Scope::HooksIngest), false),
     m("hooks.gemini", Some(Scope::HooksIngest), false),
@@ -385,6 +395,15 @@ pub async fn dispatch(ctx: &ConnCtx, method: &str, params: serde_json::Value) ->
         }
         return Reply {
             result,
+            after_write: None,
+        };
+    }
+    // `grokbot.*` is answered by the Grok Bot module on the tokio side: an
+    // ask waits for the operator for minutes, and setting a bot up writes
+    // files, neither of which may hold the core thread.
+    if let Some(verb) = method.strip_prefix("grokbot.") {
+        return Reply {
+            result: crate::grokbot::api_dispatch(ctx, verb, params).await,
             after_write: None,
         };
     }
@@ -635,7 +654,7 @@ mod tests {
         assert_eq!(reply["other"], 0);
         let rows = reply["sources"].as_array().unwrap();
         let ids: Vec<&str> = rows.iter().map(|row| row["id"].as_str().unwrap()).collect();
-        assert_eq!(ids, ["claude", "claude_channels", "codex"]);
+        assert_eq!(ids, ["claude", "claude_channels", "codex", "grokbot"]);
         ctx.scopes.clear();
         let err = dispatch(&ctx, "sources.list", serde_json::json!({}))
             .await

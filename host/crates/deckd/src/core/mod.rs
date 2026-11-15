@@ -3097,6 +3097,8 @@ pub fn run(mut opts: RunOptions) -> Result<i32, CoreError> {
     // doors do not.
     let mut voice_key =
         crate::secrets::VoiceKey::open(crate::secrets::home_for(&opts.paths, opts.no_device));
+    // The Grok Bot webhooks' keys, kept by the same rule as the voice key.
+    let grokbot_keys = crate::grokbot::keys::home(&opts.paths, opts.no_device);
     opts.config = voice_key.adopt(&opts.paths, opts.config);
     let in_force = voice_key.overlay(Arc::new(opts.config.clone()));
     // The TCP door, decided once: `[api] tcp` when the file names it, else
@@ -3338,6 +3340,13 @@ pub fn run(mut opts: RunOptions) -> Result<i32, CoreError> {
         // approvals and orders of every Codex thread on the shared daemon,
         // sessions that started before this daemon included.
         let codexd = tokio::spawn(crate::codexd::run(api.clone(), codexd_rx));
+        // Grok Bot (`crate::grokbot`): the bots set up in `[grokbot]` on the
+        // deck, their orders posted to their routines' webhooks.
+        let grokbot = tokio::spawn(crate::grokbot::run(
+            api.clone(),
+            grokbot_keys,
+            stop_liveness.subscribe(),
+        ));
         // The Claude usage probe (`crate::usage::claude`): the account's
         // rate-limit windows for the Usage face, polled; Codex's come
         // through the app-server client above.
@@ -3377,7 +3386,7 @@ pub fn run(mut opts: RunOptions) -> Result<i32, CoreError> {
         (
             served,
             stop_liveness,
-            (liveness, codexd, usage, channels, system, follower, reader),
+            (liveness, codexd, grokbot, usage, channels, system, follower, reader),
         )
     });
     // **B10.** §2.3 requires a CFRunLoop on the main thread, and V13 makes
@@ -3405,9 +3414,10 @@ pub fn run(mut opts: RunOptions) -> Result<i32, CoreError> {
     }
     runtime.block_on(async {
         let _ = stop_liveness.send(true);
-        let (liveness, codexd, usage, channels, system, follower, reader) = liveness;
+        let (liveness, codexd, grokbot, usage, channels, system, follower, reader) = liveness;
         let _ = tokio::time::timeout(Duration::from_secs(2), liveness).await;
         let _ = tokio::time::timeout(Duration::from_secs(2), codexd).await;
+        let _ = tokio::time::timeout(Duration::from_secs(2), grokbot).await;
         let _ = tokio::time::timeout(Duration::from_secs(2), usage).await;
         let _ = tokio::time::timeout(Duration::from_secs(2), channels).await;
         let _ = tokio::time::timeout(Duration::from_secs(2), system).await;
@@ -4721,6 +4731,7 @@ mod tests {
                 agents: None,
                 lang: None,
                 lang_rev: None,
+                kinds: None,
                 faces,
             })
         };
@@ -6072,6 +6083,7 @@ mod tests {
                 agents: None,
                 lang: Some(0),
                 lang_rev: Some(1),
+                kinds: None,
                 faces: Vec::new(),
             },
             now,
@@ -6951,6 +6963,7 @@ mod tests {
                 agents: None,
                 lang: Some(0),
                 lang_rev: Some(1),
+                kinds: None,
                 faces: strip.clone(),
             },
             t0,

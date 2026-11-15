@@ -158,6 +158,10 @@ pub const MANAGED: &[&str] = &[
     "api.port",
     "api.tcp",
     "codex.daemon",
+    // The Integrations page's Grok Bot switch. The bots themselves are
+    // written by `grokbot.add` and `grokbot.remove`, which check what they
+    // write: a URL, a name, and an id of the shape a table may have.
+    "grokbot.enabled",
     "hooks.enabled",
     "sources.apps_paused",
     "sources.claude",
@@ -2037,6 +2041,9 @@ pub fn config_json(c: &Config) -> serde_json::Value {
         },
         "agents": {"grace_s": c.agents.grace_s, "evict": c.agents.evict, "pins": pins},
         "codex": {"daemon": c.codex.daemon, "daemon_socket": c.codex.daemon_socket},
+        // The switch only: the bots, their webhooks and whether each has its
+        // key are `grokbot.status`'s, which an `admin` asks for by name.
+        "grokbot": {"enabled": c.grokbot.enabled},
         "hooks": {
             "enabled": c.hooks.enabled,
             "claude.hold_s": c.hooks.claude.hold_s,

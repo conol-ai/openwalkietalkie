@@ -14,6 +14,9 @@ pub enum AdapterKind {
     Mcp,
     /// The API surface for virtual agents.
     Virtual,
+    /// Grok Bot, through deckd's `grokbot` module: its routines' webhooks
+    /// and the commands the bots run on this Mac.
+    Grok,
 }
 
 /// `"device"`, `"uid:501"`, `"token:hooks"`, `"adapter:claude"`.
@@ -49,6 +52,7 @@ impl fmt::Display for Principal {
                     AdapterKind::Gemini => "gemini",
                     AdapterKind::Mcp => "mcp",
                     AdapterKind::Virtual => "virtual",
+                    AdapterKind::Grok => "grok",
                 }
             ),
         }
@@ -75,6 +79,7 @@ impl std::str::FromStr for Principal {
                 "gemini" => Ok(Principal::Adapter(AdapterKind::Gemini)),
                 "mcp" => Ok(Principal::Adapter(AdapterKind::Mcp)),
                 "virtual" => Ok(Principal::Adapter(AdapterKind::Virtual)),
+                "grok" => Ok(Principal::Adapter(AdapterKind::Grok)),
                 _ => Err(()),
             };
         }
@@ -104,7 +109,7 @@ impl JsonSchema for Principal {
     fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
         schemars::json_schema!({
             "type": "string",
-            "pattern": "^(device|uid:[0-9]+|token:.+|adapter:(claude|codex|gemini|mcp|virtual))$"
+            "pattern": "^(device|uid:[0-9]+|token:.+|adapter:(claude|codex|gemini|mcp|virtual|grok))$"
         })
     }
 }

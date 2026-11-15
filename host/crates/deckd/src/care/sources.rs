@@ -50,6 +50,8 @@ pub enum Source {
     Claude,
     /// Codex: the Codex adapter's internal session.
     Codex,
+    /// Grok Bot: the Grok Bot module's internal session (`crate::grokbot`).
+    GrokBot,
     /// A Gemini or MCP adapter: counted, never named.
     Other,
     /// A connected app, by the name it is listed and paused under.
@@ -66,6 +68,7 @@ impl Source {
                 Some(Source::Claude)
             }
             (SessionKind::Internal, Principal::Adapter(AdapterKind::Codex)) => Some(Source::Codex),
+            (SessionKind::Internal, Principal::Adapter(AdapterKind::Grok)) => Some(Source::GrokBot),
             (SessionKind::Internal, Principal::Adapter(AdapterKind::Gemini | AdapterKind::Mcp)) => {
                 Some(Source::Other)
             }
@@ -82,6 +85,7 @@ impl Source {
         match self {
             Source::Claude => "claude",
             Source::Codex => "codex",
+            Source::GrokBot => "grokbot",
             Source::Other => "other",
             Source::App(_) => "app",
         }
@@ -96,8 +100,9 @@ impl Source {
                 Source::App(name) => switches.app_paused(name),
                 // The Codex switch (`[codex] daemon`) ends the app-server
                 // connection instead, and its documented "off leaves Codex
-                // to the hooks alone" still holds.
-                Source::Codex | Source::Other => false,
+                // to the hooks alone" still holds. Grok Bot's
+                // (`[grokbot] enabled`) takes its bots off the deck.
+                Source::Codex | Source::GrokBot | Source::Other => false,
             }
     }
 }
@@ -306,6 +311,7 @@ impl Ledger {
             self.claude_row(config, tally.get(&Source::Claude)),
             channels_row(around, channels_on_deck),
             self.codex_row(config, around, tally.get(&Source::Codex)),
+            self.grokbot_row(config, tally.get(&Source::GrokBot)),
         ];
         rows.extend(self.app_rows(sessions, config, &tally));
         serde_json::json!({
@@ -362,6 +368,34 @@ impl Ledger {
             unit: "threads",
             last_event_at: self.last_event(&Source::Codex),
             // An app-server thread has no terminal this daemon knows of.
+            handoff: Some("none"),
+            hooks: None,
+            stale: None,
+            does: None,
+        }
+    }
+
+    /// Grok Bot: its switch, and whether any bot is set up. Its bots have
+    /// no app or terminal on this Mac a press could raise.
+    fn grokbot_row(&self, config: &Config, tally: Option<&Tally>) -> Row {
+        let (on_deck, sessions) = Tally::counts(tally);
+        let state = if !config.grokbot.enabled {
+            "off"
+        } else if config.grokbot.bots.is_empty() {
+            "setup"
+        } else {
+            "ready"
+        };
+        Row {
+            id: "grokbot".into(),
+            kind: "tool",
+            name: "Grok Bot".into(),
+            enabled: config.grokbot.enabled,
+            state: Some(state),
+            on_deck,
+            sessions,
+            unit: "bots",
+            last_event_at: self.last_event(&Source::GrokBot),
             handoff: Some("none"),
             hooks: None,
             stale: None,
@@ -491,7 +525,7 @@ impl Tally {
 /// does not apply, so a client reads one shape for every kind of source.
 #[derive(Debug, Serialize)]
 struct Row {
-    /// `claude`, `claude_channels`, `codex`, or `app:<name>`.
+    /// `claude`, `claude_channels`, `codex`, `grokbot`, or `app:<name>`.
     id: String,
     /// `tool`, `channel` or `app`.
     kind: &'static str,
@@ -499,14 +533,16 @@ struct Row {
     /// The source's own switch; the global pause is `paused` beside the
     /// list.
     enabled: bool,
-    /// `connected`, `waiting` or `off`; `null` for Claude Code, whose state
-    /// is its installer's (`integrations.status`).
+    /// `connected`, `waiting` or `off` (Grok Bot: `ready`, `setup` — no
+    /// bot set up yet — or `off`); `null` for Claude Code, whose state is
+    /// its installer's (`integrations.status`).
     state: Option<&'static str>,
     /// Its agents that hold a deck slot.
     on_deck: usize,
     /// All its agents.
     sessions: usize,
-    /// What the counts count: `sessions`, `threads` (Codex) or `chats`.
+    /// What the counts count: `sessions`, `threads` (Codex), `bots` (Grok
+    /// Bot) or `chats`.
     unit: &'static str,
     last_event_at: Option<Ts>,
     /// What a press on the deck does to bring a session forward: `app`
@@ -638,16 +674,17 @@ mod tests {
         c.store.snapshot().agents[id].slot
     }
 
-    /// A freshly started daemon lists the three tools, nothing counted, and
+    /// A freshly started daemon lists the four tools, nothing counted, and
     /// no app: Claude Code and Codex on, Claude Channels off until the owner
-    /// opts in (a new install's plugin has no helper).
+    /// opts in (a new install's plugin has no helper), Grok Bot on with no
+    /// bot set up yet.
     #[test]
-    fn an_empty_daemon_lists_the_three_tools_and_nothing_else() {
+    fn an_empty_daemon_lists_the_four_tools_and_nothing_else() {
         let (mut c, _ops, _lines, _debug, dir) = detached_core("sources-empty");
         let reply = list(&mut c, Instant::now());
         assert_eq!(reply["paused"], false);
         assert_eq!(reply["other"], 0);
-        assert_eq!(ids(&reply), ["claude", "claude_channels", "codex"]);
+        assert_eq!(ids(&reply), ["claude", "claude_channels", "codex", "grokbot"]);
         let claude = row(&reply, "claude");
         assert_eq!(
             *claude,
@@ -715,7 +752,7 @@ mod tests {
         assert_eq!(reply["other"], 1, "the Gemini agent, under no row");
         assert_eq!(
             ids(&reply),
-            ["claude", "claude_channels", "codex"],
+            ["claude", "claude_channels", "codex", "grokbot"],
             "{reply}"
         );
         std::fs::remove_dir_all(dir).unwrap();
@@ -833,6 +870,7 @@ mod tests {
                 "claude",
                 "claude_channels",
                 "codex",
+                "grokbot",
                 "app:Acme",
                 "app:Conol",
                 "app:Omarchy remote"
@@ -886,7 +924,7 @@ mod tests {
         let reply = list(&mut c, t0);
         assert_eq!(
             ids(&reply),
-            ["claude", "claude_channels", "codex"],
+            ["claude", "claude_channels", "codex", "grokbot"],
             "{reply}"
         );
         assert_eq!(
@@ -904,7 +942,7 @@ mod tests {
         let reply = list(&mut c, t0);
         assert_eq!(
             ids(&reply),
-            ["claude", "claude_channels", "codex", "app:uid:501"]
+            ["claude", "claude_channels", "codex", "grokbot", "app:uid:501"]
         );
         let unnamed = row(&reply, "app:uid:501");
         assert_eq!(
@@ -1317,6 +1355,8 @@ mod tests {
         agent(&mut c, claude, "api", Kind::Claude, t0);
         let codex = adapter(&mut c, AdapterKind::Codex, t0);
         agent(&mut c, codex, "thread", Kind::Codex, t0);
+        let grok = adapter(&mut c, AdapterKind::Grok, t0);
+        agent(&mut c, grok, "research", Kind::Grok, t0);
         let conol = app(&mut c, "Conol", &[Scope::Agent, Scope::Observe], t0);
         agent(&mut c, conol, "chat", Kind::Conol, t0);
         let omarchy = app(

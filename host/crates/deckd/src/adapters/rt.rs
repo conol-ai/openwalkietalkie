@@ -237,6 +237,9 @@ pub struct Adapters {
     hold_s: HoldBudgets,
     pub codex: codex::Codex,
     pub claude_channels: std::sync::Arc<crate::claude_channel::Hub>,
+    /// The Grok Bot module's mailbox (`crate::grokbot`): the doors hand it
+    /// `grokbot.*` here, and it is attached while the module runs.
+    pub grokbot: std::sync::Arc<crate::grokbot::Hub>,
     /// Agent → the Claude session's message inbox (`crate::inbox`): the
     /// socket path and the per-session **token**. The token is why this
     /// lives here and not on the agent: a snapshot is redacted per scope

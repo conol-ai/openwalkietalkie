@@ -3,7 +3,7 @@ use crate::testkit::{Sim, UID};
 
 fn hello(language: Option<(u8, u32)>, boot: bool) -> DeviceLine {
     DeviceLine::Hello { v: 1, fw: "sync".into(), sid: 314159, boot, rx: 1024,
-        agents: None, lang: language.map(|v| v.0), lang_rev: language.map(|v| v.1), faces: vec![] }
+        agents: None, lang: language.map(|v| v.0), lang_rev: language.map(|v| v.1), kinds: None, faces: vec![] }
 }
 
 fn set(sim: &mut Sim, value: u16) {

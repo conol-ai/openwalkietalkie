@@ -14,6 +14,10 @@ pub enum AgentKind {
     Gemini,
     Other,
     Conol,
+    /// Grok Bot (xAI's teammate app), bridged by the host's `grokbot`
+    /// module. A host sends it only to a deck whose hello counts it among
+    /// its `kinds`, so an older deck sees the same agent as `Other`.
+    Grok,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

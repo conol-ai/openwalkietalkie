@@ -621,6 +621,38 @@ reading them from `codex app-server`'s `hooks/list` (deckd cannot compute
 them), but it is deliberately not the default: it skips a review that exists
 so a user knows what runs outside their sandbox.
 
+## Grok Bot
+
+Grok Bot (xAI's teammate app) has no public API, so deckd reaches a bot the
+two ways Grok Bot documents (design §5.10):
+
+- **Deck to bot: a routine's webhook.** In Grok Bot, give the bot a routine
+  with a **Webhook** trigger. Then set the bot up here with the routine's URL
+  and key, from the Integrations page's **Bots…** or from a terminal:
+
+  ```sh
+  deckd grokbot add "Research" --webhook "https://…"   # asks for the key, without echo
+  deckd grokbot routine research                       # the instruction to give the routine
+  deckd grokbot test research                          # one test call
+  deckd grokbot list                                   # hosts, keys, last calls
+  ```
+
+  The bot is now on the deck, on a roster page of its own. A press on it is
+  posted to the webhook. The key goes to the Keychain, never `config.toml`.
+- **Bot to deck: commands it runs on this Mac.** Allow the bot to run
+  commands in Grok Bot's Settings → Computer. Every webhook call's body says
+  how to answer (`reply_with`, `ask_with`), and the routine's instruction
+  says to use them:
+
+  ```sh
+  deckd grokbot say --bot research "Three flights; the cheapest leaves at 9."
+  deckd grokbot ask --bot research --choice Yes --choice No "Book the 9am?"   # prints the answer
+  deckd grokbot state --bot research working --title "Comparing fares"
+  ```
+
+  A command a bot runs counts as an agent's (the §4.2 cap): it may report to
+  the deck, and it may not answer for you or change a setting.
+
 ## Historical week-3 gaps
 
 This table records the week-3 slice, before voice and the GUI were built;

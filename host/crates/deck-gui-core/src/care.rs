@@ -69,6 +69,10 @@ words! {
         /// Switched on, and nothing has connected through it.
         Waiting = "waiting",
         Off = "off",
+        /// Grok Bot: on, with a bot set up.
+        Ready = "ready",
+        /// Grok Bot: on, and no bot is set up yet.
+        Setup = "setup",
     }
 }
 
@@ -80,6 +84,8 @@ words! {
         Threads = "threads",
         /// A connected app whose agents are chats.
         Chats = "chats",
+        /// Grok Bot.
+        Bots = "bots",
     }
 }
 
@@ -137,6 +143,7 @@ impl Source {
     pub const CLAUDE: &'static str = "claude";
     pub const CLAUDE_CHANNELS: &'static str = "claude_channels";
     pub const CODEX: &'static str = "codex";
+    pub const GROKBOT: &'static str = "grokbot";
     /// The prefix of a connected app's id.
     pub const APP_PREFIX: &'static str = "app:";
 
@@ -426,8 +433,109 @@ pub mod keys {
     pub const APPS_PAUSED: &str = "sources.apps_paused";
     /// The Codex CLI switch.
     pub const CODEX_DAEMON: &str = "codex.daemon";
+    /// Grok Bot's switch.
+    pub const GROKBOT: &str = "grokbot.enabled";
     /// The older pause, for the hooks alone.
     pub const HOOKS_ENABLED: &str = "hooks.enabled";
+}
+
+/// A Grok Bot routine's webhook key on its way to the service: shown to no
+/// `Debug`, kept in no string a page draws.
+#[derive(Clone, PartialEq, Eq)]
+pub struct BotKey(String);
+
+impl BotKey {
+    #[must_use]
+    pub fn new(key: &str) -> BotKey {
+        BotKey(key.trim().to_string())
+    }
+
+    /// The key, for the one request that carries it.
+    #[must_use]
+    pub fn reveal(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for BotKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("BotKey(…)")
+    }
+}
+
+/// One bot of `grokbot.status`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Bot {
+    pub id: String,
+    pub name: String,
+    /// Set up here, rather than put on the deck by its own command.
+    pub set_up: bool,
+    /// The webhook's host (no path: a routine's URL carries its identity).
+    pub host: Option<String>,
+    pub has_key: bool,
+    pub on_deck: bool,
+    /// The last call's status, `None` before the first and for no answer.
+    pub last_status: Option<u16>,
+    /// Whether the last call was taken; `None` before the first.
+    pub last_ok: Option<bool>,
+    /// The instruction for the bot's routine.
+    pub routine: Option<String>,
+}
+
+/// `grokbot.status`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct GrokBot {
+    pub enabled: bool,
+    /// On, and a deck to show the bots on.
+    pub live: bool,
+    /// Where the keys are kept: `keychain`, `file`.
+    pub key_store: String,
+    /// Whether Grok Bot's app is on this Mac.
+    pub app_installed: bool,
+    pub bots: Vec<Bot>,
+}
+
+impl GrokBot {
+    pub fn parse(result: &Value) -> GrokBot {
+        let bots = result
+            .get("bots")
+            .and_then(Value::as_array)
+            .map(|rows| {
+                rows.iter()
+                    .filter_map(|row| {
+                        let id = text(row.get("id"))?;
+                        let last = row.get("last").filter(|last| last.is_object());
+                        Some(Bot {
+                            name: text(row.get("name")).unwrap_or_else(|| id.clone()),
+                            set_up: row.get("set_up").and_then(Value::as_bool).unwrap_or(true),
+                            host: text(row.get("webhook_host")),
+                            has_key: row.get("has_key").and_then(Value::as_bool).unwrap_or(false),
+                            on_deck: row.get("on_deck").and_then(Value::as_bool).unwrap_or(false),
+                            last_status: last
+                                .and_then(|last| last.get("status"))
+                                .and_then(Value::as_u64)
+                                .and_then(|status| u16::try_from(status).ok()),
+                            last_ok: last.and_then(|last| last.get("ok")).and_then(Value::as_bool),
+                            routine: text(row.get("routine")),
+                            id,
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        GrokBot {
+            enabled: result.get("enabled").and_then(Value::as_bool).unwrap_or(true),
+            live: result.get("live").and_then(Value::as_bool).unwrap_or(false),
+            key_store: text(result.get("key_store")).unwrap_or_default(),
+            app_installed: result.get("app_installed").and_then(Value::as_bool).unwrap_or(false),
+            bots,
+        }
+    }
+
+    /// The bots set up here, in the service's order.
+    pub fn set_up(&self) -> impl Iterator<Item = &Bot> {
+        self.bots.iter().filter(|bot| bot.set_up)
+    }
 }
 
 /// The switches of `config.get` the Integrations page and the menu read:
@@ -453,6 +561,8 @@ pub struct SourcesConfig {
     /// recognised on this Mac. `None` from a service that has no such
     /// switch, whose apps' own recognisers always hear them.
     pub stt_companion: Option<bool>,
+    /// `grokbot.enabled`: Grok Bot's own switch.
+    pub grokbot: Option<bool>,
 }
 
 impl SourcesConfig {
@@ -465,6 +575,7 @@ impl SourcesConfig {
             claude_channels: flag("sources", "claude_channels"),
             apps_paused: strings(table("sources").get("apps_paused")),
             codex_daemon: flag("codex", "daemon"),
+            grokbot: flag("grokbot", "enabled"),
             hooks_enabled: flag("hooks", "enabled"),
             // `[voice]` is published flat, its subtables' keys dotted.
             stt_companion: flag("voice", "stt.companion"),

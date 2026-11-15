@@ -208,6 +208,12 @@ pub struct DeviceState {
     /// deck has said, and a deck that predates the field holds 8.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sessions: Option<u8>,
+    /// How many of the protocol's agent kinds the linked deck draws (its
+    /// `hello`'s `kinds`); `None` while unlinked and from a deck that
+    /// predates the field. An agent whose kind the deck does not draw is
+    /// sent to it as `other` (`Kind::for_deck`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kinds: Option<u8>,
     // What the deck says about itself while it is linked. All of it is
     // optional on the wire, so a reader built before these fields and a
     // service that predates them both keep working.

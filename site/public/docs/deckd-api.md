@@ -112,6 +112,13 @@ answers out of band. `params` links the type the request carries.
 | `device.sync` | `admin` | core | — (not in the `Request` enum) |
 | `service.restart` | `admin` | core | — (not in the `Request` enum) |
 | `service.stop` | `admin` | core | — (not in the `Request` enum) |
+| `grokbot.say` | `agent` | core | — (not in the `Request` enum) |
+| `grokbot.ask` | `agent` | core | — (not in the `Request` enum) |
+| `grokbot.state` | `agent` | core | — (not in the `Request` enum) |
+| `grokbot.status` | `admin` | core | — (not in the `Request` enum) |
+| `grokbot.add` | `admin` | core | — (not in the `Request` enum) |
+| `grokbot.remove` | `admin` | core | — (not in the `Request` enum) |
+| `grokbot.test` | `admin` | core | — (not in the `Request` enum) |
 | `hooks.claude` | `hooks:ingest` | core | — (not in the `Request` enum) |
 | `hooks.codex` | `hooks:ingest` | core | — (not in the `Request` enum) |
 | `hooks.gemini` | `hooks:ingest` | core | — (not in the `Request` enum) |
@@ -430,6 +437,7 @@ One of: `session`, `launcher`.
 | `faces` | [`FaceEntry`](#faceentry)[] | yes |  | The strip as the device reports it. |
 | `fw` | string? | no |  |  |
 | `host_online` | boolean | yes |  |  |
+| `kinds` | uint8? | no |  | How many of the protocol's agent kinds the linked deck draws (its `hello`'s `kinds`); `None` while unlinked and from a deck that predates the field. An agent whose kind the deck does not draw is sent to it as `other` (`Kind::for_deck`). |
 | `language_supported` | boolean | no | `false` |  |
 | `last` | [`LastLinked`](#lastlinked)? | no |  | The last deck that went live here (the linked one, while it is linked); kept across restarts. |
 | `link` | [`Link`](#link) | yes |  |  |
@@ -511,7 +519,7 @@ One of: `device`, `desktop`, `api`.
 
 ### `Kind`
 
-One of: `claude`, `codex`, `gemini`, `other`, `conol`.
+One of: `claude`, `codex`, `gemini`, `other`, `conol`, `grok`.
 
 
 ### `LastLinked`

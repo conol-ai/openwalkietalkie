@@ -27,11 +27,14 @@ pub const WATCH_DEBOUNCE: Duration = Duration::from_millis(300);
 const WATCH_POLL: Duration = Duration::from_millis(25);
 /// The keys a reload applies without a restart (`<table>.<key>`, or
 /// `<table>.*`); everything else is logged "restart needed".
-pub const HOT_KEYS: [&str; 21] = [
+pub const HOT_KEYS: [&str; 22] = [
     "api.allowed_origins",
     // `deckd::codexd` reads `[codex]` on every connect attempt, and a live
     // connection ends when `daemon` is switched off.
     "codex.*",
+    // `deckd::grokbot` reads `[grokbot]` on every turn of its loop: a bot
+    // added, renamed or removed is on the deck or off it within a second.
+    "grokbot.*",
     "api.uds_default_scope",
     "api.uds_max_scope",
     "api.mailbox_ttl_s",
@@ -1366,6 +1369,43 @@ impl Default for Codex {
     }
 }
 
+/// `[grokbot]`: Grok Bot (xAI's teammate app) on the deck, through
+/// `crate::grokbot`. Each bot set up here is a row on the deck; a press
+/// addressed to it is posted to its routine's webhook, and the bot answers
+/// by running `deckd grokbot say|ask|state` on this Mac. Every key is hot:
+/// the module reads the table on every turn of its loop.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(default)]
+pub struct GrokBot {
+    /// The Integrations page's switch. Off takes the bots off the deck and
+    /// refuses their commands.
+    pub enabled: bool,
+    /// The bots, by a short id of their own (`[grokbot.bots.research]`):
+    /// `deckd grokbot add` and the Integrations page write them. The
+    /// webhook's key is not here on a Mac's own install (the Keychain keeps
+    /// it, `crate::grokbot::keys`).
+    pub bots: BTreeMap<String, GrokBotEntry>,
+}
+
+impl Default for GrokBot {
+    fn default() -> Self {
+        GrokBot {
+            enabled: true,
+            bots: BTreeMap::new(),
+        }
+    }
+}
+
+/// One bot of `[grokbot.bots.<id>]`.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(default)]
+pub struct GrokBotEntry {
+    /// The name the deck shows: the bot's own name in Grok Bot.
+    pub name: String,
+    /// The routine's webhook ("POST to" in the routine's Webhook section).
+    pub webhook: String,
+}
+
 /// `[sources]`: what may put sessions on the deck, as the owner switched it
 /// (`care::sources`, the Integrations page, the menu's "Pause
 /// Integrations").
@@ -1445,6 +1485,7 @@ impl Sources {
 pub struct Config {
     pub api: Api,
     pub codex: Codex,
+    pub grokbot: GrokBot,
     pub trust: Trust,
     pub privacy: Privacy,
     pub agents: Agents,

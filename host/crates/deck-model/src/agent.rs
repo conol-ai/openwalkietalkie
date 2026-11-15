@@ -5,6 +5,9 @@ use crate::{AgentId, AgentState, CardId, CardKind, Kind, Principal, SessionId, S
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+/// The roster page Grok Bots share ([`Agent::project`]).
+pub const GROK_BOT_PROJECT: &str = "Grok Bot";
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum TitleSource {
@@ -493,6 +496,11 @@ impl Agent {
         if let Some(profile) = &self.companion { return Some(profile.group_label.clone()); }
         // Legacy registrations retain the Conol brand grouping.
         if self.kind == Kind::Conol { return Some("Conol".into()); }
+        // A Grok Bot lives in Grok Bot's cloud, not in a directory: the bots
+        // share one page. A Grok session that runs somewhere does not.
+        if self.kind == Kind::Grok && self.session.cwd.is_none() {
+            return Some(GROK_BOT_PROJECT.into());
+        }
         self.session
             .cwd
             .as_deref()

@@ -105,6 +105,33 @@ fn a_config_set_reply_tells_a_live_change_from_one_that_wants_a_restart() {
     );
 }
 
+/// `grokbot.status`: the bots, whether each has its key and how its last
+/// call went, and nothing of a key or a URL's path.
+#[test]
+fn the_grok_bot_status_reads_into_bots_without_a_key() {
+    let status = deck_gui_core::care::GrokBot::parse(&serde_json::json!({
+        "enabled": true, "live": true, "key_store": "keychain", "app_installed": true,
+        "deckd": "/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd",
+        "bots": [
+            {"id": "research", "name": "Research", "set_up": true, "webhook_host": "api.cursor.com",
+             "has_key": true, "on_deck": true, "last": {"at_ms": 1, "ok": false, "status": 401, "reason": "webhook_401"},
+             "routine": "Each run of this routine is…"},
+            {"id": "travel-desk", "name": "Travel Desk", "set_up": false, "webhook_host": null,
+             "has_key": false, "on_deck": true, "last": null, "routine": null},
+        ]
+    }));
+    assert!(status.enabled && status.live && status.app_installed);
+    assert_eq!(status.key_store, "keychain");
+    let research = &status.bots[0];
+    assert_eq!((research.id.as_str(), research.host.as_deref()), ("research", Some("api.cursor.com")));
+    assert_eq!((research.last_ok, research.last_status), (Some(false), Some(401)));
+    assert_eq!(status.set_up().count(), 1);
+    assert_eq!((status.bots[1].last_ok, status.bots[1].routine.clone()), (None, None));
+    let key = deck_gui_core::care::BotKey::new(" sk-123 ");
+    assert_eq!(key.reveal(), "sk-123");
+    assert_eq!(format!("{key:?}"), "BotKey(…)");
+}
+
 #[test]
 fn the_sources_list_reads_into_one_row_per_source_with_counts_and_never_a_session() {
     let sources = Sources::parse(&fixture("sources_list"));
@@ -113,7 +140,12 @@ fn the_sources_list_reads_into_one_row_per_source_with_counts_and_never_a_sessio
     let ids: Vec<&str> = sources.sources.iter().map(|s| s.id.as_str()).collect();
     assert_eq!(
         ids,
-        vec!["claude", "claude_channels", "codex", "app:Conol", "app:Omarchy remote"]
+        vec!["claude", "claude_channels", "codex", "grokbot", "app:Conol", "app:Omarchy remote"]
+    );
+    let grokbot = sources.get("grokbot").expect("the grok bot row");
+    assert_eq!(
+        (grokbot.unit.clone(), grokbot.state.clone(), grokbot.handoff.clone()),
+        (Unit::Bots, Some(SourceState::Ready), Some(Handoff::NotYet))
     );
     let claude = sources.get("claude").expect("the claude row");
     assert_eq!(claude.kind, SourceKind::Tool);

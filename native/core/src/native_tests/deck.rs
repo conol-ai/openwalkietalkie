@@ -66,7 +66,7 @@ fn hello_gets_a_hello_reply_without_any_channel2_request() {
     assert_eq!(reply.len(), 1);
     assert!(reply[0].starts_with(r#"{"m":"hello","v":1,"fw":""#), "{}", reply[0]);
     let agents = core.ui.deck.agents.len();
-    assert!(reply[0].contains(&format!(r#""boot":1,"rx":1024,"agents":{agents},"lang":0,"lang_rev":0,"faces":[{{"f":1,"t":"agents","n":"Agents"}}"#)), "{}", reply[0]);
+    assert!(reply[0].contains(&format!(r#""boot":1,"rx":1024,"agents":{agents},"lang":0,"lang_rev":0,"kinds":6,"faces":[{{"f":1,"t":"agents","n":"Agents"}}"#)), "{}", reply[0]);
     assert!(core.ui.deck.host_present && !core.ui.deck.demo_active());
     assert_eq!(core.ui.deck.sid, 7);
     assert!(core.ui.deck.clock_valid);

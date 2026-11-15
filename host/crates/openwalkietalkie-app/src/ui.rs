@@ -100,6 +100,7 @@ pub mod ic {
     pub const EYE_CLOSED: &str = "icons/eye-closed.svg";
     pub const FOLDER: &str = "icons/folder.svg";
     pub const GEMINI: &str = "icons/gemini-mark.svg";
+    pub const GROK: &str = "icons/grok-mark.svg";
     pub const GLOBAL: &str = "icons/global.svg";
     pub const INFO: &str = "icons/info-circle.svg";
     pub const KEY: &str = "icons/key-minimalistic.svg";

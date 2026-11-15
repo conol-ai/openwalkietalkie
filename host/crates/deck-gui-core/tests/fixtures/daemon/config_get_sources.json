@@ -13,6 +13,9 @@
     "daemon": true,
     "daemon_socket": null
   },
+  "grokbot": {
+    "enabled": true
+  },
   "hooks": {
     "enabled": true,
     "claude.hold_s": 120,

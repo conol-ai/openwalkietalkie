@@ -251,6 +251,7 @@ impl Sim {
             agents: None,
             lang,
             lang_rev: lang.map(|_| 1_000),
+            kinds: None,
             faces: Vec::new(),
         }));
         self.apply(Command::Link(crate::LinkEvent::Live { sid }));

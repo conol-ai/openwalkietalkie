@@ -64,6 +64,7 @@ impl Marks {
             AgentKind::Gemini => "gemini",
             AgentKind::Conol => "conol",
             AgentKind::Other => "other",
+            AgentKind::Grok => "grok",
         };
         let mask = std::fs::read(self.dir.join(size.to_string()).join(format!("{name}.alpha"))).expect("mark");
         let tint = ui::marks::tint(kind);

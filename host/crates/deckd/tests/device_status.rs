@@ -42,6 +42,7 @@ async fn a_linked_decks_status_reaches_a_subscriber_whole_and_the_snapshot_agree
         agents: Some(255),
         lang: None,
         lang_rev: None,
+        kinds: None,
         faces: vec![],
     });
     daemon.hid(FromHid::Link(LinkEvent::Live { sid: 7 }));

@@ -670,6 +670,7 @@ mod tests {
                 agents: None,
                 lang: language,
                 lang_rev: language.map(|_| 1),
+                kinds: None,
                 faces: Vec::new(),
             },
             now,

@@ -251,6 +251,7 @@ pub enum Scene {
     IntegrationsPaused,
     IntegrationsRepair,
     IntegrationsPlan,
+    IntegrationsBots,
     VoiceDownloading,
     VoiceKey,
     ServiceStop,
@@ -298,6 +299,7 @@ impl Scene {
             | Scene::IntegrationsPaused
             | Scene::IntegrationsRepair
             | Scene::IntegrationsPlan
+            | Scene::IntegrationsBots
             | Scene::LiveIntegrations => Screen::Integrations,
             Scene::Voice | Scene::VoiceDownloading | Scene::VoiceKey | Scene::LiveVoice => {
                 Screen::Voice
@@ -418,7 +420,7 @@ pub struct Fixture {
 }
 
 /// Every scene, with the name its file gets.
-pub const SCENES: [(Scene, &str); 40] = [
+pub const SCENES: [(Scene, &str); 41] = [
     (Scene::Main, "main"),
     (Scene::DeckQuiet, "deck-quiet"),
     (Scene::DeckZh, "deck-zh"),
@@ -444,6 +446,7 @@ pub const SCENES: [(Scene, &str); 40] = [
     (Scene::IntegrationsPaused, "integrations-paused"),
     (Scene::IntegrationsRepair, "integrations-repair"),
     (Scene::IntegrationsPlan, "integrations-plan"),
+    (Scene::IntegrationsBots, "integrations-bots"),
     (Scene::VoiceDownloading, "voice-downloading"),
     (Scene::VoiceKey, "voice-key"),
     (Scene::ServiceStop, "service-stop"),
@@ -1020,6 +1023,7 @@ mod tests {
                 "integrations-paused",
                 "integrations-repair",
                 "integrations-plan",
+                "integrations-bots",
                 "voice-downloading",
                 "voice-key",
                 "service-stop",
@@ -1111,7 +1115,7 @@ mod tests {
     #[test]
     fn a_walk_takes_every_scene_it_draws_or_the_ones_named_and_says_why_it_left_one_out() {
         let (boards, refused) = Walk::Boards.scenes(None);
-        assert_eq!(boards.len(), 33);
+        assert_eq!(boards.len(), 34);
         assert!(refused.is_empty());
         assert!(boards.iter().all(|(scene, _)| scene.fixture().is_some()));
         let (live, refused) = Walk::Live.scenes(None);

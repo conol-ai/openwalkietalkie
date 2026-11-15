@@ -258,6 +258,7 @@ pub fn parse_device_line(bytes: &[u8]) -> Result<DeviceLine, DecodeError> {
             agents: o.u8("agents", u8::MAX)?,
             lang: o.u8("lang", 3)?,
             lang_rev: o.uint("lang_rev", u32::MAX as u64)?.map(|revision| revision as u32),
+            kinds: o.u8("kinds", u8::MAX)?,
             faces: faces(o.array("faces")?.map_or(&[][..], |a| a.as_slice()))?,
         },
         "key" => DeviceLine::Key {
@@ -688,6 +689,7 @@ mod tests {
                 agents: None,
                 lang: None,
                 lang_rev: None,
+                kinds: None,
                 faces: vec![
                     FaceEntry { f: 1, t: Template::Agents, n: "Agents".into() },
                     FaceEntry { f: 6, t: Template::Settings, n: "Settings".into() },
@@ -708,6 +710,7 @@ mod tests {
                 agents: None,
                 lang: None,
                 lang_rev: None,
+                kinds: None,
                 faces: vec![]
             }
         );

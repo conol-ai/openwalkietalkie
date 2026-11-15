@@ -289,7 +289,7 @@ Subcommands of `deckd`: `run [--foreground]`, `status [--json]`, `ctl <method> [
 
 | Door | Address | Who | Auth |
 |---|---|---|---|
-| UDS | `~/Library/Application Support/OpenWalkieTalkie/deckd.sock` (dir 0700, socket 0600; 67 bytes, under macOS's 104-byte `sun_path`, `host-research/rust-service-stack.md:45`). Linux: `$XDG_RUNTIME_DIR/openwalkietalkie/deckd.sock`, else `${XDG_CACHE_HOME:-~/.cache}/openwalkietalkie/deckd.sock` (`config::Paths::detect`). On either, `$DECKD_DATA_DIR/deckd.sock` when `DECKD_DATA_DIR` is set, as the Omarchy unit sets it (§13) | GUI, `deckd ctl/hook/events` (and `deckd mcp` in v1.1), local scripts written against `deck-client` | **Raw newline-delimited JSON-RPC, not HTTP.** `UnixStream::peer_cred()` uid must equal the daemon's uid (`host-research/rust-service-stack.md:53`); pid recorded for audit; default scope for a UDS peer is **`observe`** (`[api] uds_default_scope`); a peer may ask for more in `session.hello` up to `[api] uds_max_scope` (default `admin`) **unless its process ancestry contains `claude`/`codex`/`gemini`/`node`** (by a process name or by the executable's path, which is what names a natively installed Claude Code: its names are a bare version, its path `…/claude/versions/<v>`) (macOS; then it is capped at `observe,agent,voice,hooks:ingest`; asking for `operate`/`admin` → `-32002 {need, reason:"agent_ancestry"}`); the GUI is recognised as the **trusted principal** by code signature (§4.2; macOS), never by pid or path alone. On Linux there is neither the cap nor a trusted principal (§13) |
+| UDS | `~/Library/Application Support/OpenWalkieTalkie/deckd.sock` (dir 0700, socket 0600; 67 bytes, under macOS's 104-byte `sun_path`, `host-research/rust-service-stack.md:45`). Linux: `$XDG_RUNTIME_DIR/openwalkietalkie/deckd.sock`, else `${XDG_CACHE_HOME:-~/.cache}/openwalkietalkie/deckd.sock` (`config::Paths::detect`). On either, `$DECKD_DATA_DIR/deckd.sock` when `DECKD_DATA_DIR` is set, as the Omarchy unit sets it (§13) | GUI, `deckd ctl/hook/events` (and `deckd mcp` in v1.1), local scripts written against `deck-client` | **Raw newline-delimited JSON-RPC, not HTTP.** `UnixStream::peer_cred()` uid must equal the daemon's uid (`host-research/rust-service-stack.md:53`); pid recorded for audit; default scope for a UDS peer is **`observe`** (`[api] uds_default_scope`); a peer may ask for more in `session.hello` up to `[api] uds_max_scope` (default `admin`) **unless its process ancestry contains `claude`/`codex`/`gemini`/`node`, or a process inside `Grok Bot.app` (§5.10)** (by a process name or by the executable's path, which is what names a natively installed Claude Code: its names are a bare version, its path `…/claude/versions/<v>`) (macOS; then it is capped at `observe,agent,voice,hooks:ingest`; asking for `operate`/`admin` → `-32002 {need, reason:"agent_ancestry"}`); the GUI is recognised as the **trusted principal** by code signature (§4.2; macOS), never by pid or path alone. On Linux there is neither the cap nor a trusted principal (§13) |
 | HTTP/WS/SSE (**off by default** since 2026-11-12, below) | `http://127.0.0.1:47201` (`[api] port`), never `0.0.0.0`; served by axum, the only thing axum serves | Claude Code `http` hooks, MCP streamable-HTTP clients (v1.1), browsers, non-Rust tools, `curl`, a future phone relay behind Tailscale `serve` | `Authorization: Bearer <token>` or `token` in `session.hello`; `Host` must be `127.0.0.1:47201` or `localhost:47201`; any `Origin` header not in `[api] allowed_origins` → 403 (`host-research/rust-service-stack.md:57,61`); body cap 1 MiB; 64 concurrent held hooks |
 | MCP (v1.1) | `POST /mcp` (rmcp 3.4 `StreamableHttpService`, dual-era 2026-07-28 / 2025-11-25, `host-research/rust-service-stack.md:16,66`) and `deckd mcp --stdio` (proxies to the UDS) | Claude Code / Codex / Gemini as MCP clients; Claude Desktop (stdio only, registered in `claude_desktop_config.json` by bundle path, §4.16) | HTTP: bearer token with scope `agent`; stdio: inherits the UDS peer cred and asks for `agent`+`voice` (its ancestry is Claude, so it can never get `operate`; `deck_focus` therefore uses `agent.focus` on its own agent, §4.6) |
 
@@ -709,6 +709,70 @@ Until 2026-11-13 this section specified the Ghostty tab path: an OSC 2 title bea
 **What the deck sees.** For a session nobody reads, the roster card's latest message is the last turn's reply rather than following tool rows during a turn. A Claude session's workflow runs are polled by its transcript watcher, so they go when the deck stops reading the session (`Command::ReaderLeft` once the linger runs out, for the Claude and Codex adapters' agents only, published as `agent.changed{fields:{workflow_runs:[]}}`) and `subs` counts its subagents alone until it is read again; a connected app's runs are its own and stay. `image.get` finds only images of sessions that were read.
 
 **`--no-device` has none**, as it has no dormancy: its reader is every session, which is how every door test, the gate's `api` and `adapters` steps and the companion's test service run. The tests that switch it on: `deckd`'s `tests/reader_feed.rs` (two Claude sessions through the hook door, neither read: no tool row, no transcript; a `channel` line fills the session it opens, in order and with nothing of the other; a permission card fills the other; the session the deck turned from is still read for the linger; a follower that starts after the deck opened a quiet session fills it at once), the lazy test in `tests/codexd.rs` (an unread thread keeps only its turn's reply; opened, it is read again newest first and replaced in order), the core's linger, owner check and a connected app's own runs, the watcher's decision, the Codex model's refill (a delta during it, a read that failed), and the store's reader set and replacement.
+
+### 5.10 Grok Bot (`deckd::grokbot`, built 2026-11-15)
+
+**What Grok Bot offers.** Grok Bot is xAI's teammate app: its bots work on a cloud computer, and its desktop app is `/Applications/Grok Bot.app` (bundle `com.anysphere.sand`). It has **no public API**; Cursor's staff said so on its forum on 2026-10-26. It documents three ways in:
+- A routine's **webhook trigger**: a `POST` with `Authorization: Bearer <key>` and an optional JSON body, which reaches the bot with the routine's instruction. A `200` means a run started.
+- A `grokbot://app/v1/prompt?id=&text=` link, which only fills in the chat box.
+- **Execution on this computer**: a bot runs shell commands on the Mac. Grok Bot asks each time by default.
+
+The module uses the first and the third. The webhook carries the deck to a bot, and the bot's own commands carry it back. The link is not used, because it needs the keyboard.
+
+**On the deck.** Each bot set up in `[grokbot.bots.<id>]` is a `poll`/`poll` agent with these properties:
+- kind `grok`, keyed `grokbot:<id>`, named as the bot is;
+- owned by the module's internal session (principal `adapter:grok`);
+- on a roster page of its own, "Grok Bot": a `grok` agent with no cwd (`Agent::project`).
+
+A deck whose hello does not count `grok` among its `kinds` (`docs/deck-protocol.md`) is sent `other` (`Kind::for_deck`). An older deck refuses an unknown kind and would drop the whole `agent` line.
+
+A bot that reports before it is set up (`deckd grokbot say --bot "Travel Desk" …`) is put on the deck by its name, as a bot that can talk to the deck. An order to it fails as `no_webhook`.
+
+**Orders.** A press addressed to a bot reaches the module through `agent.wait`, as for any poll agent. It becomes a `POST` to the bot's webhook through `/usr/bin/curl`:
+- The body is `{source:"openwalkietalkie", bot, bot_id, text, order, test:false, sent_at, reply_with, ask_with}`. The last two are the commands the bot answers with.
+- The URL, the key and the body travel in a config on curl's stdin, never on its command line.
+- Only HTTPS is spoken (plain HTTP to loopback, for the tests), no redirect is followed, and a call gives up after 15 s.
+
+A `2xx` shows the bot as `working`, with the order as its title. It stays so for at most 15 minutes unless the bot reports. Anything else is `agent.order.result{ok:false, reason}`, which the deck shows as not delivered. The reasons are `webhook_<status>`, `webhook_timeout`, `webhook_unreachable`, `no_webhook` and `no_key`.
+
+**The bot's commands.** These need `agent`, which a process an agent started keeps. A process inside `Grok Bot.app` is an agent's for the §4.2 cap, so a bot cannot answer for the operator.
+- `deckd grokbot say --bot <id|name> <reply>` → `grokbot.say{bot, text, speak?}`. It sets the bot's reply (`agent.reply`, the `ready` lane, spoken unless `--quiet`) and `ready`.
+- `deckd grokbot ask --bot … [--choice X]… [--timeout S] <question>` → `grokbot.ask{bot, question, choices, free_text, timeout_s}`:
+  - The card is a custom `q` card (`» ` on the deck, §4.6), delivered by `poll`: at most four choices of at most 32 B, and at most 600 s.
+  - The call returns `{answer:{choice, label, text}}`, `{snoozed:true}` or `{timeout:true}`. The CLI prints the answer, or exits 1.
+  - A caller that goes away takes its card off the deck. A bot has one question on the deck at a time.
+- `deckd grokbot state --bot … working|idle|ready|error [--title T]` → `grokbot.state`.
+
+**Setting a bot up** (`admin`):
+- `grokbot.add{name, webhook, key?, id?}` writes the bot's table into `config.toml` through `config::edit`, which keeps every other byte, and the key into the store. It puts the file in force for the doors, the core and the roster before it answers. A bot added again keeps its key unless a new one is given.
+- `grokbot.remove{bot}` takes both away.
+- `grokbot.test{bot}` posts `{test:true, …}` and returns `{ok, status, reason}`.
+- `grokbot.status` lists the bots, each with:
+  - `webhook_host`, never the URL's path;
+  - `has_key` and `on_deck`;
+  - the last call;
+  - the routine's instruction (`grokbot::routine_text`), which tells the bot to treat the body's `text` as a message from its owner and to answer with `reply_with` and `ask_with`.
+
+`config.get` publishes `grokbot.enabled` alone, and `config.set` writes only that key, which is the Integrations page's switch. The CLI is `deckd grokbot add|remove|list|test|routine`; `add` reads the key without echo, never from the command line.
+
+**Keys.** They follow the voice key's rule (`secrets::home_for`):
+- On a Mac's own install, the Keychain: one generic password per bot, service `ai.cohdl.openwalkietalkie`, account `grokbot.bots.<id>.key`.
+- Anywhere else, `grokbot-keys.toml` in the data directory, mode 0600.
+
+A key is never in `config.toml`, a reply, the bus or a log line.
+
+**Quiet.** Switched off (`[grokbot] enabled = false`) or dormant (§5.8), the bots leave the deck (`released`, `dormant`) and their commands are refused (`grokbot_off`, `no_deck`).
+
+**In the app.** The Integrations page has a Grok Bot row, from `sources.list`'s `grokbot`: `ready`, `setup` or `off`, counted in `bots`, and amber while a bot that is set up has no key. It carries the switch and **Bots…**, a dialog with:
+- each bot's host, key and last call;
+- **Copy Instruction**, **Test** and **Remove**;
+- the three fields that add a bot.
+
+**Not verified against a real bot by this change.** No routine was created from here, so two points are open:
+- whether a bot acts on a webhook body as its owner's message under Grok Bot's Auto Review;
+- how long a command a bot runs may take before Grok Bot gives up on it (`ask` waits up to 10 minutes).
+
+The owner's checks in `docs/deck-device-checklist.md` §12 cover both.
 
 ## 6. The device link (`deckd::hid`, `deckd::device`)
 
@@ -1300,6 +1364,12 @@ max_held_hooks = 64               # parked hooks at once, across every CLI and b
 [codex]
 daemon = true                     # the client of Codex's shared app-server daemon (§5.2); off leaves Codex to the hooks
 # daemon_socket = "…"             # default: $CODEX_HOME/app-server-control/app-server-control.sock, else ~/.codex/…
+
+[grokbot]                         # Grok Bot through its routines' webhooks (§5.10); every key is hot
+enabled = true                    # the Integrations page's switch: off takes the bots off the deck
+# [grokbot.bots.research]         # one table per bot, by its id; `deckd grokbot add` and the page write them
+# name = "Research"               # the name the deck shows
+# webhook = "https://…"           # the routine's webhook ("POST to"); its key is in the Keychain, never here
 
 [sources]                         # what may put sessions on the deck (the Integrations page); every key is hot
 paused = false                    # every source at once: its sessions stay registered but hold no slot, a parked

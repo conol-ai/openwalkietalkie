@@ -11,6 +11,8 @@ mod command;
 mod devapi;
 #[cfg(test)]
 mod language_tests;
+#[cfg(test)]
+mod grok_tests;
 mod device;
 mod device_status;
 mod effect;
@@ -52,7 +54,7 @@ pub use agent::{
     ChatImage, ChatMessage, ChatRole, MessageMeta,
     Agent, Answer, AnswerCap, AnswerSource, Caps, Card, CardStatus, Choice, Deliver, Group, Order,
     OrderCap, OrderSource, Origin, OriginKind, Owner, Page, PidKind, Reply, SessionInfo, Source,
-    Terminal, TitleSource, TranscribeCap,
+    Terminal, TitleSource, TranscribeCap, GROK_BOT_PROJECT,
 };
 pub use command::{
     AgentRegister, AgentUpdate, CardClear, CardSet, Command, DeviceReport, DeviceSet, FocusReport,
