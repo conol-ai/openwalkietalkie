@@ -252,7 +252,10 @@ fn load(dir: &std::path::Path, threads: i32) -> Option<OfflineTts> {
     let config = OfflineTtsConfig {
         model: OfflineTtsModelConfig {
             kokoro: OfflineTtsKokoroModelConfig {
-                model: Some(p("model.onnx")),
+                // The package's directory is named after it.
+                model: Some(p(crate::kokoro::model_file(
+                    &dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+                ))),
                 voices: Some(p("voices.bin")),
                 tokens: Some(p("tokens.txt")),
                 data_dir: Some(p("espeak-ng-data")),
@@ -310,7 +313,7 @@ impl TtsEngine for KokoroTts {
         let settings = self.settings.load_full();
         if let Some(why) = self.idle_reason(&settings) {
             if !self.said_idle.swap(true, Ordering::SeqCst) {
-                tracing::info!(why, "kokoro tts: Apple's synthesiser speaks");
+                tracing::info!(why, "kokoro tts: the system's synthesiser speaks");
             }
             return self.fallback.synthesize(req);
         }
