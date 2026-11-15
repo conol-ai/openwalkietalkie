@@ -111,15 +111,16 @@ fn prefs_file(home: &Path) -> PathBuf {
     home.join("Library/Preferences/ai.cohdl.openwalkietalkie.plist")
 }
 
-/// The app's preferences on Windows: the JSON file it keeps under the roaming
-/// `%APPDATA%` (the app's `prefs.rs`), which is `<home>\AppData\Roaming`
-/// unless something moved it.
+/// The app's preferences on Windows: the JSON file it keeps under
+/// `%LOCALAPPDATA%` (the app's `prefs.rs`), which is `<home>\AppData\Local`
+/// unless something moved it. Its folder is the service's own, by name
+/// (case-blind), so a purge of the data folder takes it too.
 #[cfg(windows)]
-pub(crate) fn prefs_file(home: &Path) -> PathBuf {
-    std::env::var_os("APPDATA")
+fn prefs_file(home: &Path) -> PathBuf {
+    std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
         .filter(|dir| dir.is_absolute())
-        .unwrap_or_else(|| home.join(r"AppData\Roaming"))
+        .unwrap_or_else(|| home.join(r"AppData\Local"))
         .join(r"openwalkietalkie\app-prefs.json")
 }
 

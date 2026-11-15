@@ -195,17 +195,8 @@ pub fn run(env: &integrations::Env, paths: &Paths, opts: Options, keys: &KeyHome
                 .push(format!("purged {} (was absent)", paths.data.display())),
             Err(e) => outcome.problems.push(e),
         }
-        // The app's preferences, under the uninstalled account's home (a
-        // test's home is its own directory, never the operator's).
-        let prefs = env.home.join(r"AppData\Roaming\openwalkietalkie\app-prefs.json");
-        if prefs.exists() {
-            match std::fs::remove_file(&prefs) {
-                Ok(()) => outcome.steps.push(format!("purged {}", prefs.display())),
-                Err(e) => outcome
-                    .problems
-                    .push(format!("cannot remove {}: {e}", prefs.display())),
-            }
-        }
+        // The app's preferences are in that folder too
+        // (`%LOCALAPPDATA%\openwalkietalkie\app-prefs.json`), and went with it.
     }
     if opts.purge && cfg!(not(windows)) {
         for dir in [&paths.data, &paths.caches] {
