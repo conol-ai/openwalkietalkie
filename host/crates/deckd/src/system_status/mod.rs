@@ -160,7 +160,9 @@ mod tests {
         let mut sampler = Sampler {
             previous_cpu: Some([1, 2, 3, 4]),
             sequence: 7,
-            ..Sampler::default()
+            // Windows' sampler has a field more: its GPU query.
+            #[cfg(windows)]
+            gpu: None,
         };
         sampler.pause();
         assert_eq!(sampler.previous_cpu, None);
