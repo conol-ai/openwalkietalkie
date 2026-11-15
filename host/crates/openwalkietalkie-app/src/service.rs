@@ -1643,6 +1643,7 @@ mod tests {
     /// prints starts at `~`, and the board's sizes come out as the board
     /// writes them. The Keychain item is no path and has no size, and the
     /// count is the board's ten.
+    #[cfg(not(windows))] // the boards are a Mac's, re-homed under its HOME
     #[test]
     fn the_boards_footprint_is_the_fixtures_under_this_macs_home() {
         let footprint = board_footprint();

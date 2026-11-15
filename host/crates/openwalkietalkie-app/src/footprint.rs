@@ -611,7 +611,10 @@ mod tests {
     #[test]
     fn the_codex_desktop_launcher_has_a_row_the_installer_removes_and_is_counted() {
         crate::i18n::install();
-        let home = std::env::var("HOME").expect("a home to print paths from");
+        // Windows sets no HOME: its home is USERPROFILE (`present::home_short`).
+        let home = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .expect("a home to print paths from");
         let footprint = |launcher: bool| {
             Footprint::parse(&serde_json::json!({"items": [
                 {"id": "codex_hooks", "path": format!("{home}/.codex/hooks.json"),

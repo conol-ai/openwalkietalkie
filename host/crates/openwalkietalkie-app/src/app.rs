@@ -503,17 +503,30 @@ pub fn page_action(screen: Screen) -> Option<Box<dyn Action>> {
 /// order; ⌘M and ⌘W for the window. They hold wherever the keyboard is in
 /// the window, a text field included, as a menu's keys do. Edit's keys are
 /// the text field's own (gpui-component binds them in the field).
+///
+/// Off a Mac the same keys are Ctrl's: gpui's `cmd` is the Windows key
+/// there, whose combinations Windows keeps for itself (Win+Q is search).
 pub fn key_bindings() -> Vec<KeyBinding> {
+    let key = |k: &str| format!("{}-{k}", app_modifier());
     vec![
-        KeyBinding::new("cmd-q", Quit, None),
-        KeyBinding::new("cmd-1", ShowDeck, None),
-        KeyBinding::new("cmd-2", ShowFacesKeys, None),
-        KeyBinding::new("cmd-3", ShowIntegrations, None),
-        KeyBinding::new("cmd-4", ShowVoice, None),
-        KeyBinding::new("cmd-5", ShowService, None),
-        KeyBinding::new("cmd-m", Minimize, None),
-        KeyBinding::new("cmd-w", CloseWindow, None),
+        KeyBinding::new(&key("q"), Quit, None),
+        KeyBinding::new(&key("1"), ShowDeck, None),
+        KeyBinding::new(&key("2"), ShowFacesKeys, None),
+        KeyBinding::new(&key("3"), ShowIntegrations, None),
+        KeyBinding::new(&key("4"), ShowVoice, None),
+        KeyBinding::new(&key("5"), ShowService, None),
+        KeyBinding::new(&key("m"), Minimize, None),
+        KeyBinding::new(&key("w"), CloseWindow, None),
     ]
+}
+
+/// The modifier of the app's own keys, as gpui spells it.
+pub const fn app_modifier() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "cmd"
+    } else {
+        "ctrl"
+    }
 }
 
 /// What the window's close button does, and Window ▸ Close: the app hides.
@@ -932,18 +945,19 @@ mod tests {
                 (strokes.join(" "), binding.action().name())
             })
             .collect();
-        let key = |stroke: &str, action: &'static str| (stroke.to_string(), action);
+        // ⌘ on a Mac, Ctrl elsewhere.
+        let key = |stroke: &str, action: &'static str| (format!("{}-{stroke}", app_modifier()), action);
         assert_eq!(
             keys,
             [
-                key("cmd-q", "openwalkietalkie::Quit"),
-                key("cmd-1", "openwalkietalkie::ShowDeck"),
-                key("cmd-2", "openwalkietalkie::ShowFacesKeys"),
-                key("cmd-3", "openwalkietalkie::ShowIntegrations"),
-                key("cmd-4", "openwalkietalkie::ShowVoice"),
-                key("cmd-5", "openwalkietalkie::ShowService"),
-                key("cmd-m", "openwalkietalkie::Minimize"),
-                key("cmd-w", "openwalkietalkie::CloseWindow"),
+                key("q", "openwalkietalkie::Quit"),
+                key("1", "openwalkietalkie::ShowDeck"),
+                key("2", "openwalkietalkie::ShowFacesKeys"),
+                key("3", "openwalkietalkie::ShowIntegrations"),
+                key("4", "openwalkietalkie::ShowVoice"),
+                key("5", "openwalkietalkie::ShowService"),
+                key("m", "openwalkietalkie::Minimize"),
+                key("w", "openwalkietalkie::CloseWindow"),
             ]
         );
         // None is bound in a context: a menu's key holds wherever the
@@ -1155,7 +1169,8 @@ mod tests {
     fn deckd_is_the_file_beside_the_executable_or_none() {
         let scratch = Scratch::new("deckd");
         let exe = scratch.0.join("OpenWalkieTalkie");
-        let deckd = scratch.0.join("deckd");
+        // `deckd`, or `deckd.exe` on Windows.
+        let deckd = scratch.0.join(format!("deckd{}", std::env::consts::EXE_SUFFIX));
         assert_eq!(deckd_beside(&exe), None);
         std::fs::create_dir(&deckd).unwrap();
         assert_eq!(deckd_beside(&exe), None, "a directory is not a deckd");

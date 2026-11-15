@@ -2450,7 +2450,12 @@ mod tests {
         // Beside a switch that is on, or a button, the state is said.
         assert_eq!(word(&rows[0]).as_deref(), Some("Connected"));
         assert_eq!(word(&rows[2]).as_deref(), Some("Codex is not running"));
-        assert_eq!(word(&rows[3]).as_deref(), Some("Not set up"));
+        // Codex Desktop's launcher, a Mac's only.
+        if cfg!(windows) {
+            assert_eq!(rows.len(), 3);
+        } else {
+            assert_eq!(word(&rows[3]).as_deref(), Some("Not set up"));
+        }
         // Codex switched off reads Off once too.
         if let Some(config) = &mut pane.facts.config {
             config.codex_daemon = Some(false);
