@@ -450,9 +450,11 @@ impl UiState {
         if self.screen_lock == progress {
             return false;
         }
-        // Engaging is the panel going to sleep; a lock that moves or opens
-        // moved under the user's hand, which counts as input.
-        if self.screen_lock.is_some() {
+        // A step of the unlock gesture, or the unlock itself, is the user's
+        // hand and counts as input. Engaging, or falling back to the first
+        // step (the panel re-locking after an abandoned unlock, a clockwise
+        // reset), is not: the unlock still needs every step after it.
+        if self.screen_lock.is_some() && progress != Some(0) {
             global::lock_moved(self);
         }
         self.screen_lock = progress;

@@ -1434,7 +1434,8 @@ mod tests {
 
     /// Unlocking is input although the power policy swallows its detents: a
     /// question 0.3 s after an unlock takes no ENTER; 2 s after, it does.
-    /// The lock engaging (the panel asleep) is not input.
+    /// The lock engaging, or falling back to its first step when the panel
+    /// re-locks after an abandoned unlock, is not input.
     #[test]
     fn an_unlock_counts_as_input() {
         // The firmware's order (app.rs): the lock state, then a tick.
@@ -1453,5 +1454,12 @@ mod tests {
         ui.set_screen_lock(Some(0));
         ui.tick(10_000, 10_000, false, &mut Update::new());
         assert!(super::super::global::quiet_for(&ui, 10_000, 10_000), "the lock engaging is not input");
+        let mut ui = roster();
+        ui.set_screen_lock(Some(0));
+        ui.set_screen_lock(Some(2));
+        ui.tick(1_000, 0, false, &mut Update::new());
+        ui.set_screen_lock(Some(0));
+        ui.tick(9_000, 8_000, false, &mut Update::new());
+        assert!(super::super::global::quiet_for(&ui, 9_000, 8_000), "re-locking is not input");
     }
 }

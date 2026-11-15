@@ -329,10 +329,12 @@ A notice is created by a new card (Question or Ready), keyed by agent and card.
   any Question waits, else green.
 - A notice goes away when its card is answered or acknowledged, when the host
   clears or replaces the card, or when the agent is gone.
-- **Auto-jump** (Settings → Alerts, off by default) jumps to a new card
-  instead of toasting, unless something is held, a PTT session is live, an
-  overlay is open, a card is on screen on the Agents face, the strip is sliding,
-  or there was input in the last 2 s; then it toasts.
+- **Auto-jump** (Settings → Alerts, off by default) jumps to a new question
+  instead of toasting, unless something is held (SHIFT included), a PTT
+  session is live, an overlay or a channel's session menu is open, a card is on
+  screen on the Agents face, a clock runs on the Timer face, an alarm rings, a
+  game is live, the strip is sliding, or there was input in the last 2 s
+  (unlocking included); then it toasts.
 
 ## PTT sessions
 

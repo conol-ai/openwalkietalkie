@@ -681,8 +681,8 @@ pub(super) fn quiet_for(ui: &UiState, now_ms: u32, ms: u32) -> bool {
     elapsed(now_ms, ui.global.last_input_ms) >= ms
 }
 
-/// The screen lock moved under the user's hand: an unlock detent, a reset of
-/// the gesture, or the unlock itself. The power policy swallows that input
+/// The screen lock moved under the user's hand: a step of the unlock gesture
+/// or the unlock itself. The power policy swallows that input
 /// before `on_control` sees it, so the next clock advance stamps it
 /// (`on_advance`) and `quiet_for` counts it.
 pub(super) fn lock_moved(ui: &mut UiState) {
