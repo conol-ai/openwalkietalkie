@@ -87,8 +87,12 @@ Releases from 0.14.0 include an unsigned preview zip; the website's
   machine took 176 s). Windows binds no driver to recovery's bulk interface,
   so the transfer uses the HID path (4 min 46 s for 0.13.0 on Rev A).
 - **Not on Windows:** the MLX voice (Apple's MLX runs on Apple silicon only)
-  and the Codex Desktop launcher (a macOS app bundle; the Codex CLI's
-  sessions are followed as everywhere). Bluetooth voice is built but has not
+  and the Codex Desktop launcher. Codex Desktop has a Windows app (Microsoft
+  Store, 2026-03), but the Mac launcher leans on its undocumented
+  environment (`CODEX_APP_SERVER_WS_URL` over the daemon's socket), which has
+  not been looked at on Windows: its daemon refuses an elevated session, and
+  the test machine runs elevated. The Codex CLI's sessions are followed as
+  everywhere. Bluetooth voice is built but has not
   been tried against a deck: the test machine has no radio. CI builds the
   Windows host and app and runs the client's and the daemon's unit tests
   (those that need a Unix socket, `fork` or a shell-script fake are
