@@ -37,6 +37,21 @@ test('the Download section keeps both versioned Mac downloads', () => {
   assert.equal(new Set(downloads.map(([, version]) => version)).size, 1, 'both downloads name the same release');
 });
 
+test('the Download section offers the Omarchy guide, which walks through the whole install', () => {
+  const omarchy = links(section('download')).filter(link => link.href === '/docs/omarchy/');
+  assert.ok(omarchy.some(link => /omarchy/i.test(link.text)), 'a button names Omarchy');
+  const guide = readFileSync(new URL('../public/docs/omarchy/index.html', import.meta.url), 'utf8');
+  for (const step of ['pacman -S', 'cargo build --release --target x86_64-unknown-linux-gnu -p deckd',
+    'omarchy/install.sh', '70-openwalkietalkie.rules', 'omarchy_hook.py install claude', 'superwhisper',
+    '71-openwalkietalkie-uinput.rules', 'usage.providers', 'uninstall all']) {
+    assert.ok(guide.includes(step), `the guide covers ${step}`);
+  }
+  const docs = readFileSync(new URL('../public/docs/index.html', import.meta.url), 'utf8');
+  assert.ok(docs.includes('href="/docs/omarchy/"'), 'the docs index links the guide');
+  const sitemap = readFileSync(new URL('../public/sitemap.xml', import.meta.url), 'utf8');
+  assert.ok(sitemap.includes('https://openwalkietalkie.org/docs/omarchy/'), 'the sitemap lists the guide');
+});
+
 test('the Download section offers the Windows preview through its install guide', () => {
   // The preview is unsigned: the guide, with its SmartScreen steps, comes before the zip.
   const windows = links(section('download')).filter(link => link.href === '/docs/windows/');

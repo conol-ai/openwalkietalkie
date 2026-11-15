@@ -54,6 +54,8 @@ from omarchy_hypr import Hypr, dispatch, ensure_instance, focus_slot, focus_wind
 
 from omarchy_kimi import KimiWatcher, hooks_installed  # noqa: E402
 from omarchy_sessions import Bridge, ControlServer, control_socket_path  # noqa: E402
+from omarchy_transcribe import Transcriber, fetch_wav  # noqa: E402
+from omarchy_input import UinputKeyboard  # noqa: E402
 
 EVENTS = ['device.ws', 'device.key', 'device.link', 'agent.order', 'focus.changed',
           'device.macro', 'device.macros', 'device.profile']
@@ -311,6 +313,9 @@ class Remote:
         self.dirty = threading.Event()
         self.hooks: queue.Queue = queue.Queue()
         self.bridge = Bridge(self.call, Hypr())
+        # Omarchy's dictation (Superwhisper) transcribes presses to these sessions, when installed.
+        self.transcriber = Transcriber()
+        self.bridge.transcribe = self.transcriber.available
         self.kimi = KimiWatcher()
         self.kimi_polled = 0.0
         self.last_hypr_error = -HYPR_ERROR_LOG_S
@@ -324,6 +329,10 @@ class Remote:
         self.macros: dict[int, list] = {}
         self.types_macros = False
         self.run = subprocess.run
+        # Macropad keystrokes go through uinput, which Hyprland's own binds see; wtype (apps only)
+        # when /dev/uinput is not ours (71-openwalkietalkie-uinput.rules).
+        self.keyboard = UinputKeyboard()
+        self.uinput_failed = False
 
     # deck away -------------------------------------------------------------
     def dormant(self, now: float) -> bool:
@@ -463,6 +472,16 @@ class Remote:
         combo = key.get('keys') if isinstance(key, dict) else None
         if not combo:
             return  # an event-only key
+        if not self.uinput_failed:
+            try:
+                if self.keyboard.press(combo):
+                    return
+            except OSError as error:
+                # Said once: until the bridge restarts, the keys go by wtype, which reaches the
+                # focused app but none of Hyprland's binds (Omarchy's Super shortcuts).
+                self.uinput_failed = True
+                print(f'macropad: /dev/uinput: {error}; typing with wtype, which Omarchy\'s own '
+                      'shortcuts do not see (install 71-openwalkietalkie-uinput.rules)', file=sys.stderr)
         args = wtype_args(combo)
         if args is None:
             print(f'macropad: {combo!r} is not a keystroke wtype can type', file=sys.stderr)
@@ -475,6 +494,33 @@ class Remote:
             return
         if done.returncode != 0:
             print(f'macropad: wtype failed for {combo!r}', file=sys.stderr)
+
+    # transcription ----------------------------------------------------------
+    def on_transcribe(self, data: dict) -> None:
+        """A press to one of our sessions, offered for transcription: fetch it here (only this
+        connection may) and let Superwhisper make text of it on a worker thread."""
+        transcription = data.get('transcription')
+        if not isinstance(transcription, str):
+            return
+        try:
+            wav = fetch_wav(self.call, transcription)
+        except RpcError as error:
+            print(f'transcription {transcription}: audio: {error}', file=sys.stderr)
+            self.answer_transcription({'transcription': transcription, 'error': 'audio_unavailable'})
+            return
+        if not self.transcriber.available or not wav:
+            self.answer_transcription({'transcription': transcription, 'error': 'no_recogniser' if wav else 'no_audio'})
+            return
+        self.transcriber.submit(transcription, wav)
+
+    def answer_transcription(self, params: dict) -> None:
+        if 'error' in params:
+            print(f"transcription {params['transcription']}: {params['error']}; deckd's recogniser answers",
+                  file=sys.stderr)
+        try:
+            self.call('agent.transcribe.result', params)
+        except RpcError as error:  # too late, or answered already: deckd's own final stands
+            print(f"transcription {params['transcription']}: {error}", file=sys.stderr)
 
     # deck side -------------------------------------------------------------
     def on_key(self, data: dict) -> None:
@@ -515,6 +561,8 @@ class Remote:
             self.on_key(data)
         elif kind == 'device.ws':
             self.on_ws(data)
+        elif kind == 'agent.transcribe':
+            self.on_transcribe(data)
         elif kind == 'device.macro':
             self.on_macro(data)
         elif kind == 'device.macros':
@@ -547,6 +595,8 @@ class Remote:
                     self.handle(message['params'])
                 while self.rpc.events:
                     self.handle(self.rpc.events.popleft())
+                for params in self.transcriber.answers():
+                    self.answer_transcription(params)
                 now = time.monotonic()
                 # No deck for ten minutes: no face, no session looked at, until one links. The hooks
                 # still move the bridge's own table, so the wake shows each session as it is.

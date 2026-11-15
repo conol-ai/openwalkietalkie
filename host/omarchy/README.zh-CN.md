@@ -1,6 +1,6 @@
 # Omarchy 适配器
 
-让对讲机遥控 Omarchy（Hyprland）笔记本：窗口和工作区、scratchpad、Claude Code / Codex / Kimi Code 会话、语音指令。[English](README.md)
+让对讲机遥控 Omarchy（Hyprland）笔记本：窗口和工作区、scratchpad、Claude Code / Codex / Kimi Code 会话、语音指令。[English](README.md) · 分步安装指南：[openwalkietalkie.org/docs/omarchy](https://openwalkietalkie.org/docs/omarchy/)
 
 **Linux 加上本适配器是正式支持的平台。** 每个 pull request 和每次推送到 `main`，CI 的 “Linux host” 任务都会在 Ubuntu 24.04 上为 Linux 构建 host 工作区并运行它的测试（除 Mac 应用以外的所有 crate：`deckd`、`deck-proto`、`deck-model`、`deck-client`、`deck-gui-core` 和 `deck-wrap`），再运行本目录的 Python 测试（见[测试](#测试)）。窗口应用只有 macOS 版，Linux 上暂时没有窗口。适配器通过页面数据接口（`device.ws.set`，以及 `device.ws`、`device.key`、`device.link` 事件）和 `deckd` 通信，这是公开接口，写在 [native companion API 文档](https://openwalkietalkie.org/docs/native-companions/#feed-the-omarchy-face)里。
 
@@ -29,6 +29,17 @@ sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw
 
 构建需要 `pkg-config`、libudev（hidapi）、ALSA（cpal）和 D-Bus（bluer）的开发文件，以及 whisper.cpp 要用的 CMake 和 libclang。CI 在 Ubuntu 上装的是 `pkg-config libudev-dev libasound2-dev libdbus-1-dev cmake libclang-dev`（`.github/workflows/ci.yml`）；在 Omarchy（Arch）上是 `sudo pacman -S --needed cmake clang`，其余已经自带。
 
+**Macropad 按键（可选）。** Hyprland 不为 `wtype` 这类虚拟键盘执行它的快捷键，所以为了让 Macropad 键能触发 Omarchy 的快捷键，适配器会创建一个 uinput 键盘。这需要 `/dev/uinput`，它默认只属于 root：`71-openwalkietalkie-uinput.rules` 把它交给坐在这台机器前的用户，而且必须加载 `uinput` 模块，udev 才会应用这条规则。缺任何一项时 `install.sh` 都会打印这些步骤：
+
+```sh
+sudo install -m 644 omarchy/71-openwalkietalkie-uinput.rules /etc/udev/rules.d/
+echo uinput | sudo tee /etc/modules-load.d/openwalkietalkie-uinput.conf
+sudo udevadm control --reload && sudo modprobe uinput
+systemctl --user restart omarchy-deck
+```
+
+之后你这个用户的任何进程都能创建输入设备，和 ydotool 的要求一样。
+
 **udev 规则。** 没有它，`/dev/hidraw*` 属于 root，`deckd` 日志里是 `cannot open HID device`：`deckd probe` 能看到对讲机，语音也能通过 BLE 连上，但 HID 链路始终起不来。`70-openwalkietalkie.rules` 把对讲机的节点交给坐在这台机器前的用户，USB 和蓝牙都适用：它按 HID id 匹配（`KERNELS=="*:1209:5754.*"`），因为走蓝牙时对讲机是一个没有 USB 父设备的 uhid 设备，按 `ATTRS{idVendor}` 写的规则永远匹配不上。`install.sh` 写不了 `/etc`，规则缺失时会打印上面两条命令；装好之后 `deckd` 会自己打开对讲机，不用重启。
 
 `install.sh` 会把适配器复制到 `~/.local/share/openwalkietalkie/omarchy/`；给了二进制文件时，把 `deckd` 装到 `~/.local/bin/deckd`；再启用并启动 `systemd/` 里的两个单元（可以重复执行；`systemctl --user disable --now deckd omarchy-deck` 撤销）。`deckd.service` 以 `DECKD_DATA_DIR=~/.local/share/openwalkietalkie` 运行 `deckd run`，所以它的配置、socket 和缓存都在这个目录下；`omarchy-deck.service` 在这个 socket 上启动适配器。（不设 `DECKD_DATA_DIR` 启动的 `deckd` 改用 XDG 目录，socket 在 `$XDG_RUNTIME_DIR/openwalkietalkie/deckd.sock`，没有 `XDG_RUNTIME_DIR` 时在 `${XDG_CACHE_HOME:-~/.cache}/openwalkietalkie/deckd.sock`；不带 `--socket` 启动的适配器也去这里找。）`omarchy_hook.py install` 写进各 CLI 设置的 hook 命令指向这份副本，并且脚本不存在时放行（不会因为挪了仓库而拦住你的会话）。`install.sh` 还会关掉 `deckd` 自己对同一批会话的来源（`deckd config set sources.claude=false codex.daemon=false`）：它的 Claude hook 和 `claude agents` 名册种子，以及它的 Codex app-server 连接，会让每个会话换一个键在名册上再出现一次，和适配器注册的并列。适配器自动找到正在运行的 Hyprland 实例和 Wayland 显示，不用写环境变量。
@@ -37,7 +48,8 @@ sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw
 
 ### 语音（PTT）
 
-- **识别**：本机 Whisper，没有本地麦克风（对讲机的麦克风是唯一输入）。先下载模型再用。CPU 上 `large-v3-turbo` 每次约 20 秒，建议用 `small`（约 2–4 秒）：
+- **识别（有 Superwhisper 时）**：装了 `superwhisper`（Omarchy 自带的听写）时，对 Omarchy 会话的按键说话由它识别，使用它的处理模式（离线、离线精简或云端）、语言、词汇和替换规则，和本机其他听写一样。适配器给每个会话注册 `caps.transcribe: "push"`，`deckd` 把这次按键的 WAV 交给它（`agent.transcribe`），由 `superwhisper transcribe` 转成文字（`omarchy_transcribe.py`），不会自动粘贴。识别失败（出错、空文字、超过 15 秒）时回落到 `deckd` 自己的识别器；`deckd config set voice.stt.companion=false` 可以关掉这一转交。
+- **识别（没有它时）**：本机 Whisper，没有本地麦克风（对讲机的麦克风是唯一输入）。先下载模型再用。CPU 上 `large-v3-turbo` 每次约 20 秒，建议用 `small`（约 2–4 秒）：
 
 ```sh
 echo '[voice.stt]
@@ -68,9 +80,10 @@ Kimi Code 有 hook（`config.toml` 里的 `[[hooks]]`），`omarchy_hook.py inst
 | scratchpad | SHIFT+CANCEL = 打开 / 收起 scratchpad；SHIFT+ENTER = 把当前窗口收进 scratchpad（相当于 Super+S / Super+Alt+S） |
 | **名册里的 Omarchy 会话** | Omarchy 上每个 Claude Code / Codex / Kimi Code 会话出现在 Agents 名册，状态是 working / ready / question / error |
 | 选中会话 | 在对讲机上选中某个会话，或客户端发 `op.focus`，Omarchy 上它所在的终端窗口会被拉到前台 |
-| **语音指令** | 对选中的 Omarchy 会话按 PTT 说话，识别出的文字会被输入到它的终端并回车（用 `wtype`） |
+| **语音指令** | 对选中的 Omarchy 会话按 PTT 说话，由 Superwhisper（否则 Whisper）识别，文字被输入到它的终端并回车（用 `wtype`）。在 Omarchy 上没有终端窗口的会话（由某个应用托管的）无法输入，对讲机会显示指令未送达 |
 | 回复 | 一轮结束时，它的回复（最多 600 字）显示在会话的 Ready 卡片上并播报；Claude Code 和 Codex 取自 Stop hook，Kimi Code 取自它的日志 |
-| **Macropad** | 带按键组合（如 `cmd+shift+4`）的 Macropad 键，在 Omarchy 上用 `wtype` 输入：`cmd` 是 Super，`opt` / `alt` 是 Alt。仅限 Linux 版 `deckd`：连着 Mac 的 `deckd` 会在 Mac 上输入 |
+| **Macropad** | 带按键组合（如 `cmd+shift+4`）的 Macropad 键，在 Omarchy 上以一个独立键盘（uinput，`omarchy_input.py`）输入，所以 Omarchy 的 Super 快捷键和当前应用的快捷键都能触发：`cmd` 是 Super，`opt` / `alt` 是 Alt。需要 `/dev/uinput`（见下）；没有时改用 `wtype`，只能送到当前应用，触发不了 Hyprland 的快捷键。仅限 Linux 版 `deckd`：连着 Mac 的 `deckd` 会在 Mac 上输入 |
+| **Usage 页** | Claude 的用量窗口，用 Claude Code 的登录（`~/.claude/.credentials.json`）每 5 分钟读取一次，需要先打开：`DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd config set 'usage.providers=["codex","claude"]'`。Codex 的用量来自它的 app-server 守护进程，`install.sh` 没有连接它（否则 Codex 会话会在名册上出现两次），所以 Codex 栏是空的 |
 | **System 页** | 由 Linux 版 `deckd` 填写：CPU（`/proc/stat`）、已用内存（`MemTotal - MemAvailable`）、`/` 的剩余空间，以及驱动报告负载的 GPU 中最忙的一块（`gpu_busy_percent`：amdgpu 有；Intel 和 NVIDIA 闭源驱动没有） |
 
 按键映射在 `omarchy_deck.py` 顶部的 `KEYMAP`，想改只改那一处。
@@ -177,6 +190,8 @@ python3 -m unittest discover -s host/omarchy -p 'test_*.py'
 - `KEYMAP` 的每个按键、LEFT / RIGHT、工作区标签和窗口行，以 `device.key` 和 `device.ws` 事件交给适配器，效果和上表一致。Hyprland 0.56 只接受每个调度的 Lua 写法，旧写法会被拒绝。
 - 真实的 Claude Code 会话：hook 注册它，状态依次为 `idle`、`working`、`ready`；`op.order` 用 `wtype` 输入它的终端并得到回答；`op.focus` 把它的窗口拉到前台。
 
+2026-11-15，同一台机器、另一台 Rev B 对讲机（官方 0.13.0，蓝牙），手动逐项测试：Omarchy 页及其全部按键、滚轮、工作区标签和窗口行；名册，以及选中会话时拉起它的窗口；口述指令（PTT，Superwhisper 云端模式，约 0.7 秒）输入 Claude Code 终端并得到回答，回复显示在 Ready 卡片上并由对讲机播报；Macropad 通过 uinput 触发 Super+S 和 Super+2；System 页；Usage 页的 Claude 栏。
+
 ## 还没验证的
 
-见 issue ZhangHanDong/openwalkietalkie#1：对讲机上实际听到的播报、端到端的 PTT（上面的指令是用 `op.order` 发的，不是口述的）、Codex 和 Kimi Code 真实会话、USB、macOS 真机。
+见 issue ZhangHanDong/openwalkietalkie#1：Codex 和 Kimi Code 真实会话、Codex 用量栏、macOS 真机。
