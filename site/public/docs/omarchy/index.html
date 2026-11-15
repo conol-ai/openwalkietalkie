@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie on Omarchy · OpenWalkieTalkie</title>
+<meta name="description" content="Install the OpenWalkieTalkie service and the Omarchy bridge on an Omarchy (Hyprland) laptop: the deck as a remote for your desktop, your Claude Code, Codex and Kimi Code sessions, and voice orders." />
+<link rel="canonical" href="https://openwalkietalkie.org/docs/omarchy/" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie on Omarchy · OpenWalkieTalkie" />
+<meta property="og:description" content="Install the OpenWalkieTalkie service and the Omarchy bridge on an Omarchy laptop." />
+<meta property="og:url" content="https://openwalkietalkie.org/docs/omarchy/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie Blog" href="/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<link rel="stylesheet" href="/css/docs.css" />
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">Skip to content</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/" aria-label="OpenWalkieTalkie — home">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="Sections">
+      <a href="/#pile">The Pile</a>
+      <a href="/#features">Features</a>
+      <a href="/#demo">Try It</a>
+      <a href="/#faces">Faces</a>
+      <a href="/#blueprint">Blueprint</a>
+      <a href="/docs/" aria-current="true">Docs</a>
+      <a href="/blog/">Blog</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle day and night theme" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">DAY</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="Open menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main docs-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">LINUX · OMARCHY · BUILD FROM SOURCE · 0.13.0+</p>
+  <h1>OpenWalkieTalkie on Omarchy</h1>
+  <p class="post-meta">The deck as a remote for an Omarchy (Hyprland) laptop</p>
+</header>
+<article class="post-body">
+
+<p>On <a href="https://omarchy.org/">Omarchy</a> the deck drives your desktop and your coding agents, with no Mac involved. Two small services run on the laptop: <code>deckd</code>, the same service the Mac app runs, built for Linux, and the <strong>Omarchy bridge</strong>, which connects it to Hyprland and to your Claude Code, Codex and Kimi Code sessions.</p>
+<ul>
+  <li><strong>The Omarchy face:</strong> your workspaces and windows. The wheel switches windows, LEFT / RIGHT switch workspaces, ENTER toggles fullscreen and SHIFT+CANCEL the scratchpad.</li>
+  <li><strong>Your sessions on the roster</strong> as working, ready or asking. Selecting one brings its terminal to the front.</li>
+  <li><strong>Voice orders:</strong> hold PTT on a session and speak. The words are typed into its terminal, and the reply is shown and spoken when the turn ends.</li>
+  <li><strong>The Macropad, System and Usage faces</strong>, filled from this laptop.</li>
+</ul>
+<p>There is no Linux download yet: you build <code>deckd</code> from the source, which takes about ten minutes the first time. Every command below runs in a terminal on the Omarchy laptop.</p>
+
+<h2>1. Install the tools</h2>
+<pre><code>sudo pacman -S --needed base-devel git rustup cmake clang espeak-ng wtype
+rustup default stable</code></pre>
+<p><code>cmake</code> and <code>clang</code> build the local speech recogniser, <code>espeak-ng</code> speaks replies on the deck, and <code>wtype</code> types orders into terminals. The other libraries the build needs (udev, ALSA, D-Bus) come with Omarchy.</p>
+
+<h2>2. Build and install</h2>
+<pre><code>git clone https://github.com/conol-ai/openwalkietalkie.git
+cd openwalkietalkie/host
+cargo build --release --target x86_64-unknown-linux-gnu -p deckd
+sh omarchy/install.sh target/x86_64-unknown-linux-gnu/release/deckd</code></pre>
+<p><code>install.sh</code> puts <code>deckd</code> in <code>~/.local/bin</code>, copies the bridge to <code>~/.local/share/openwalkietalkie/omarchy</code>, and starts both as systemd user services, <code>deckd</code> and <code>omarchy-deck</code>. They start again at every login. At the end it prints the steps that need root, which are the next section.</p>
+
+<h2>3. Let the service open the deck</h2>
+<p>The deck’s HID device belongs to root until a udev rule hands it to you. Run the two commands <code>install.sh</code> printed:</p>
+<pre><code>sudo install -m 644 omarchy/70-openwalkietalkie.rules /etc/udev/rules.d/
+sudo udevadm control --reload &amp;&amp; sudo udevadm trigger --subsystem-match=hidraw</code></pre>
+<p>The rule matches the deck over USB-C and over Bluetooth alike.</p>
+
+<h2>4. Connect the deck</h2>
+<ul>
+  <li><strong>USB-C:</strong> plug it in. Nothing else is needed.</li>
+  <li><strong>Bluetooth:</strong> pair <strong>OpenWalkieTalkie</strong> from Omarchy’s Bluetooth menu (or with <code>bluetoothctl</code>). The deck keeps one pairing at a time: if it was paired with a Mac, remove it there first.</li>
+</ul>
+<p>The service links by itself, within seconds. Check it:</p>
+<pre><code>DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd status</code></pre>
+<p>The <code>link:</code> line should say <code>Connected, session Live</code>.</p>
+
+<h2>5. Put your sessions on the deck</h2>
+<p>Install the hooks for the agents you use. Each install backs up the agent’s settings file first, and adds to it rather than replacing it:</p>
+<pre><code>python3 omarchy/omarchy_hook.py install claude
+python3 omarchy/omarchy_hook.py install codex
+python3 omarchy/omarchy_hook.py install kimi</code></pre>
+<p>Sessions that were already open load no new hooks: start them again, and they appear on the Agents face.</p>
+
+<h2>6. Voice</h2>
+<p>Hold PTT on a selected session, speak, and release. The text is typed into that session’s terminal, followed by Enter.</p>
+<ul>
+  <li><strong>With Superwhisper</strong> (Omarchy’s dictation, if you use it), there is nothing to set up. It recognises the presses in its own mode, language and vocabulary, in under a second in its Cloud mode. Check that it is ready with <code>superwhisper status</code>.</li>
+  <li><strong>Without it</strong>, download the local Whisper model once (about 465 MB):
+<pre><code>printf '[voice.stt]\nengine = "whisper"\nmodel = "small"\nlanguage = "auto"\n' &gt;&gt; ~/.local/share/openwalkietalkie/config.toml
+DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd stt install --model small</code></pre>
+  Whisper runs on the laptop’s CPU, so a press takes a few seconds or more, depending on the processor.</li>
+</ul>
+<p>Voice reaches sessions that run in a terminal window. A session hosted inside another app has no terminal to type into, and the deck shows the order as not delivered.</p>
+
+<h2>7. Optional: Macropad shortcuts</h2>
+<p>A Macropad key with a keystroke types it on the laptop. To have keys trigger Omarchy’s own shortcuts (Super+…) as well as the focused app’s, the bridge needs to act as a keyboard, which needs <code>/dev/uinput</code>:</p>
+<pre><code>sudo install -m 644 omarchy/71-openwalkietalkie-uinput.rules /etc/udev/rules.d/
+echo uinput | sudo tee /etc/modules-load.d/openwalkietalkie-uinput.conf
+sudo udevadm control --reload &amp;&amp; sudo modprobe uinput
+systemctl --user restart omarchy-deck</code></pre>
+<p>Any program you run can then create an input device, as with ydotool. Without this step, Macropad keys still reach the focused app, but not Omarchy’s shortcuts.</p>
+
+<h2>8. Optional: Claude usage bars</h2>
+<p>The Usage face can show your Claude rate-limit windows, read every five minutes with your Claude Code login:</p>
+<pre><code>DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd config set 'usage.providers=["codex","claude"]'</code></pre>
+
+<h2>Check the setup</h2>
+<pre><code>DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd care checks
+python3 omarchy/omarchy_hook.py status
+journalctl --user -u deckd -u omarchy-deck -f</code></pre>
+<p>Every <code>deckd</code> command needs the <code>DECKD_DATA_DIR=…</code> prefix shown here, because the services keep their files in <code>~/.local/share/openwalkietalkie</code>.</p>
+
+<h2>Update</h2>
+<pre><code>cd openwalkietalkie/host
+git pull
+cargo build --release --target x86_64-unknown-linux-gnu -p deckd
+sh omarchy/install.sh target/x86_64-unknown-linux-gnu/release/deckd</code></pre>
+<p>Running <code>install.sh</code> again restarts both services with the new code. To update the deck’s firmware, connect it with USB-C and run <code>deckd firmware check</code>, then <code>deckd firmware install</code> (with the same prefix). The deck asks you to press ENTER before it installs. This is the same USB path the Mac uses, but it has not yet been tried on Omarchy.</p>
+
+<h2>Not on Omarchy yet</h2>
+<ul>
+  <li>Answering permission prompts on the deck: they stay in the terminal.</li>
+  <li>Codex’s usage bars, and the Reader’s history and tool rows for Omarchy sessions.</li>
+  <li>A desktop app: everything is set up from the terminal, as above.</li>
+</ul>
+
+<h2>Uninstall</h2>
+<pre><code>python3 omarchy/omarchy_hook.py uninstall all
+systemctl --user disable --now deckd omarchy-deck
+rm -f ~/.config/systemd/user/deckd.service ~/.config/systemd/user/omarchy-deck.service ~/.local/bin/deckd
+rm -rf ~/.local/share/openwalkietalkie
+sudo rm -f /etc/udev/rules.d/70-openwalkietalkie.rules /etc/udev/rules.d/71-openwalkietalkie-uinput.rules /etc/modules-load.d/openwalkietalkie-uinput.conf</code></pre>
+<p>The hook uninstall removes only what it added to each agent’s settings.</p>
+
+<p>Something not working? <a href="https://github.com/conol-ai/openwalkietalkie/issues">Open an issue</a> with the output of <code>deckd care checks</code> and the last lines of <code>journalctl --user -u deckd -u omarchy-deck</code>. The full reference is the <a href="https://github.com/conol-ai/openwalkietalkie/blob/main/host/omarchy/README.md">Omarchy bridge README</a>.</p>
+
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · A COHDL project · MIT software · CERN-OHL-P hardware</span>
+    <nav aria-label="Footer">
+      <a href="/#waitlist">Join the waitlist</a>
+      <a href="/privacy/">Privacy Policy</a>
+      <a href="/cookies/">Cookie information</a>
+      <a href="/cookies/" data-privacy-open>Privacy notice</a>
+      <a href="/">Home</a>
+      <a href="/#demo">Try It</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Join the CoHDL and OpenWalkieTalkie community on Discord">Discord</a>
+      <a href="/blog/feed.xml">Feed</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

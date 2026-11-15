@@ -1,6 +1,6 @@
 # Omarchy bridge
 
-The deck as a remote for an Omarchy (Hyprland) laptop: windows and workspaces, the scratchpad, Claude Code / Codex / Kimi Code sessions, and voice orders. [简体中文](README.zh-CN.md)
+The deck as a remote for an Omarchy (Hyprland) laptop: windows and workspaces, the scratchpad, Claude Code / Codex / Kimi Code sessions, and voice orders. [简体中文](README.zh-CN.md) · Step-by-step install guide: [openwalkietalkie.org/docs/omarchy](https://openwalkietalkie.org/docs/omarchy/)
 
 **Linux with this bridge is a supported target.** For every pull request and every push to `main`, the CI job "Linux host" on Ubuntu 24.04 builds the host workspace for Linux and runs its tests (every crate but the Mac app: `deckd`, `deck-proto`, `deck-model`, `deck-client`, `deck-gui-core` and `deck-wrap`), then runs this directory's Python tests (see [Tests](#tests)). The window is macOS only; there is no Linux window yet. The bridge talks to `deckd` through the face feed (`device.ws.set` and the `device.ws`, `device.key` and `device.link` events), which is a public interface documented in the [native companion API](https://openwalkietalkie.org/docs/native-companions/#feed-the-omarchy-face).
 

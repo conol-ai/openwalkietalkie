@@ -1,6 +1,6 @@
 # Omarchy 适配器
 
-让对讲机遥控 Omarchy（Hyprland）笔记本：窗口和工作区、scratchpad、Claude Code / Codex / Kimi Code 会话、语音指令。[English](README.md)
+让对讲机遥控 Omarchy（Hyprland）笔记本：窗口和工作区、scratchpad、Claude Code / Codex / Kimi Code 会话、语音指令。[English](README.md) · 分步安装指南：[openwalkietalkie.org/docs/omarchy](https://openwalkietalkie.org/docs/omarchy/)
 
 **Linux 加上本适配器是正式支持的平台。** 每个 pull request 和每次推送到 `main`，CI 的 “Linux host” 任务都会在 Ubuntu 24.04 上为 Linux 构建 host 工作区并运行它的测试（除 Mac 应用以外的所有 crate：`deckd`、`deck-proto`、`deck-model`、`deck-client`、`deck-gui-core` 和 `deck-wrap`），再运行本目录的 Python 测试（见[测试](#测试)）。窗口应用只有 macOS 版，Linux 上暂时没有窗口。适配器通过页面数据接口（`device.ws.set`，以及 `device.ws`、`device.key`、`device.link` 事件）和 `deckd` 通信，这是公开接口，写在 [native companion API 文档](https://openwalkietalkie.org/docs/native-companions/#feed-the-omarchy-face)里。
 

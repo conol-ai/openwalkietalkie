@@ -92,6 +92,48 @@ app: Agent Command Deck ready
 keypad: TCA8418 ready (5x4 matrix), PA11 interrupt + 50ms fallback
 ```
 
+## Install on Omarchy (Linux)
+
+On an [Omarchy](https://omarchy.org/) (Hyprland) laptop, the deck drives the
+desktop and your coding agents with no Mac involved. It shows your
+workspaces and windows on the Omarchy face, and your Claude Code, Codex and
+Kimi Code sessions on the roster. A PTT press on a session types the
+recognised words into its terminal. Two systemd user services do it:
+`deckd`, built for Linux, and the Omarchy bridge in
+[`host/omarchy/`](host/omarchy/README.md). There is no Linux download yet:
+build from source (about ten minutes the first time). The step-by-step guide
+is at [openwalkietalkie.org/docs/omarchy](https://openwalkietalkie.org/docs/omarchy/).
+
+```sh
+sudo pacman -S --needed base-devel git rustup cmake clang espeak-ng wtype
+rustup default stable
+git clone https://github.com/conol-ai/openwalkietalkie.git
+cd openwalkietalkie/host
+cargo build --release --target x86_64-unknown-linux-gnu -p deckd
+sh omarchy/install.sh target/x86_64-unknown-linux-gnu/release/deckd
+
+# Once, as root: let deckd open the deck (USB-C and Bluetooth alike)
+sudo install -m 644 omarchy/70-openwalkietalkie.rules /etc/udev/rules.d/
+sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw
+
+# Put your sessions on the deck (sessions already open need a restart)
+python3 omarchy/omarchy_hook.py install claude   # and codex, kimi
+```
+
+Then connect the deck with USB-C, or pair **OpenWalkieTalkie** over
+Bluetooth, and check that the `link:` line says `Connected, session Live`
+when you run `DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd status`.
+
+- **Voice:** if Superwhisper (Omarchy's dictation) is set up, it recognises
+  presses with no extra setup. Otherwise download the local Whisper model:
+  see [Voice](host/omarchy/README.md#voice-ptt).
+- **Macropad keys that trigger Omarchy's Super shortcuts** need
+  `/dev/uinput`. `install.sh` prints the optional root steps.
+- **Claude usage bars** on the Usage face:
+  `DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd config set 'usage.providers=["codex","claude"]'`.
+
+To update: `git pull`, build, and run `install.sh` again.
+
 ## Faces
 
 The screen is a strip of faces, one on screen at a time. The default strip,
