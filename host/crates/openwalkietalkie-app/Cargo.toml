@@ -45,6 +45,9 @@ raw-window-handle = "0.6"
 chrono = { version = "=0.4.45", default-features = false, features = ["std", "clock"] }
 # The window's handle, to hide it to the tray (`win_window`): gpui cannot.
 raw-window-handle = "0.6"
+# The app's own update checks the preview zip against the release's
+# SHA256SUMS (`win_update`); already in this lock, through deckd.
+sha2 = "=0.10.9"
 
 [build-dependencies]
 cc = "=1.4.7"

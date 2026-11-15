@@ -102,11 +102,14 @@
 <h2>Update the deck’s firmware</h2>
 <p>With one deck connected by USB-C, open <strong>Service</strong>, click <strong>Check</strong> on <strong>Deck firmware</strong>, then <strong>Review…</strong> and <strong>Install</strong>, exactly as on the Mac. Keep the cable connected until the deck is back. On Windows the transfer uses the deck’s HID connection rather than its faster USB interface, which Windows has no driver for, so it takes a few minutes (about five for 0.13.0 on Rev A). If you run Windows in a virtual machine, make sure the deck is passed through again after it restarts: it reconnects twice during an update.</p>
 
-<h2>Not in the preview</h2>
+<h2>Update the app</h2>
+<p>Open <strong>Service</strong> and click <strong>Check</strong> beside the app, or choose <strong>Check for Updates…</strong> from the icon’s menu. When the latest release has a newer version, click <strong>Update</strong>: the app downloads the release’s zip, checks it against the checksums the release publishes, puts the new <code>OpenWalkieTalkie.exe</code> and <code>deckd.exe</code> in your <code>bin</code> folder, and starts again. Your settings stay in <code>%LOCALAPPDATA%\OpenWalkieTalkie</code>. To update by hand instead, download the zip from the <a href="https://github.com/conol-ai/openwalkietalkie/releases/latest">latest release</a>, quit the app from its icon, and replace the old version’s folder with the new one.</p>
+
+<h2>Different from the Mac</h2>
 <ul>
-  <li>Automatic app updates. <strong>Service › Check</strong> finds a newer version, and <strong>Download…</strong> brings you here: download it from the <a href="https://github.com/conol-ai/openwalkietalkie/releases/latest">latest release</a>, quit the app from its icon, then replace the old version’s folder with the new one. Each version unzips to a folder of its own name, so a shortcut to the old <code>bin\OpenWalkieTalkie.exe</code> needs pointing at the new one. Your settings stay in <code>%LOCALAPPDATA%\OpenWalkieTalkie</code>.</li>
-  <li>The cloud voice’s key is kept in the service’s settings in <code>%LOCALAPPDATA%\OpenWalkieTalkie</code>, not in a credential store.</li>
-  <li>Allowing a permission card from the app while <code>[trust] require_trusted_for_allow</code> is on: the app is unsigned, so the service cannot verify it. Allow on the deck instead.</li>
+  <li>The cloud voice’s key is kept in Windows Credential Manager, where the Mac keeps it in the Keychain.</li>
+  <li>The app is unsigned, so the service trusts it by where it is: the <code>OpenWalkieTalkie.exe</code> beside <code>deckd.exe</code>. A Mac checks the app’s signature instead.</li>
+  <li>Not on Windows: the MLX voice, which needs Apple silicon, and the Codex Desktop launcher, which is a Mac app. Codex in the terminal works as on the Mac.</li>
 </ul>
 
 <h2>Uninstall</h2>

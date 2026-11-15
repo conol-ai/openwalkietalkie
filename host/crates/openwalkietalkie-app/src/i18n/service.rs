@@ -78,6 +78,20 @@ pub const STRINGS: &[Entry] = &[
     // Windows: the app's button once a newer preview is out, which opens
     // the page its zip is downloaded from.
     ("Download…", "下载…", "下載…", "ダウンロード…"),
+    // Windows: the app updating itself from the release the service found.
+    ("Updating…", "正在更新…", "正在更新…", "更新中…"),
+    (
+        "Downloading OpenWalkieTalkie {0}…",
+        "正在下载 OpenWalkieTalkie {0}…",
+        "正在下載 OpenWalkieTalkie {0}…",
+        "OpenWalkieTalkie {0} をダウンロードしています…",
+    ),
+    (
+        "The update did not install: {0}",
+        "更新未能安装：{0}",
+        "更新未能安裝：{0}",
+        "アップデートをインストールできませんでした: {0}",
+    ),
     // In its place once the service's look found a newer app (R8), in the
     // words of the shipped "Deck firmware {0} is available".
     (
