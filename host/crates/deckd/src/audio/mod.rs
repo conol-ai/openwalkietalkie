@@ -32,9 +32,9 @@
 //! and speaker over its BLE audio service — `[voice] transport = "ble"`, the
 //! default since the Rev A firmware stopped being a Classic audio device —
 //! behind the same two seams the CoreAudio devices sit behind.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", windows))]
 pub mod linux;
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 pub mod ble;
 pub mod fakes;
 // The engine's own modules are macOS-gated exactly like the crates they are
@@ -49,30 +49,32 @@ pub mod apple;
 mod apple_transcript;
 #[cfg(target_os = "macos")]
 pub mod coreaudio;
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 pub mod engine;
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 pub mod lanes;
 #[cfg(target_os = "macos")]
 pub mod mainloop;
 pub mod companion;
 pub mod route;
 pub mod cloud;
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", windows, test))]
 pub mod command;
 pub mod sidecar;
-#[cfg(any(target_os = "macos", target_os = "linux", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows, test))]
 mod speaker_eq;
-#[cfg(any(target_os = "macos", target_os = "linux", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows, test))]
 mod adpcm;
-#[cfg(any(target_os = "macos", target_os = "linux", test))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows, test))]
 mod speech_level;
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 pub mod whisper;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 pub mod kokoro;
+#[cfg(windows)]
+mod system_mic;
 pub mod traits;
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "linux", windows))]
 pub mod tts;
 
 use crossbeam_channel::{Receiver, Sender, TrySendError};

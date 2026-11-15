@@ -64,6 +64,14 @@ fn read(subkey: &str, name: &str, flags: u32) -> Option<Vec<u8>> {
     })
 }
 
+/// A DWORD value under any `HKCU` key (the taskbar's theme, for the tray
+/// icon's colour).
+pub fn dword(subkey: &str, name: &str) -> Option<u32> {
+    const RRF_RT_REG_DWORD: u32 = 0x0000_0010;
+    let data = read(subkey, name, RRF_RT_REG_DWORD)?;
+    Some(u32::from_le_bytes(data.get(..4)?.try_into().ok()?))
+}
+
 /// The command a Run value holds.
 pub fn command(name: &str) -> Option<String> {
     let data = read(RUN, name, RRF_RT_REG_SZ)?;

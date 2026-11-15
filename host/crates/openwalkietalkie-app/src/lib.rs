@@ -45,6 +45,8 @@ pub mod present;
 pub(crate) mod run_key;
 #[cfg(windows)]
 pub mod service_host;
+#[cfg(windows)]
+mod win_window;
 pub mod shell;
 pub mod shots;
 #[cfg(target_os = "macos")]

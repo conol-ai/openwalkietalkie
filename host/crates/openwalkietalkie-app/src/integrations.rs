@@ -452,8 +452,11 @@ pub fn tools(facts: &Facts, now: Ts, language: Language) -> Vec<Line> {
         claude_line(facts, now, language),
         channels_line(facts, language),
         codex_line(facts, now, language),
-        desktop_line(facts, language),
     ];
+    // The Codex Desktop launcher is only available on macOS.
+    if cfg!(not(windows)) {
+        lines.push(desktop_line(facts, language));
+    }
     if facts.source(Source::GROKBOT).is_some() {
         lines.push(grokbot_line(facts, now, language));
     }

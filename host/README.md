@@ -18,8 +18,8 @@ week-3 snapshot of the eight-week plan (design §15): the device link
 of week 1, the open API of week 2, and the agent adapters of week 3 — Claude
 Code and Codex hooks become cards on the deck. The LaunchAgent runs
 `deckd run`, which owns the deck link. macOS is the supported platform;
-Linux runs the service (see `host/omarchy/`), and Windows runs a minimal
-build of the service and the app, below.
+Linux runs the service (see `host/omarchy/`), and Windows runs the service
+and the app as a preview, below.
 
 ## Windows (experimental)
 
@@ -40,23 +40,50 @@ Releases from 0.14.0 include an unsigned preview zip; the website's
   is no code-signature check yet), so allowing a permission card from the app
   is refused while `[trust] require_trusted_for_allow` holds.
 - **Data** lives in `%LOCALAPPDATA%\OpenWalkieTalkie` (config, state, `logs\`,
-  `caches\`). The single-instance lock is `LockFileEx` on `deckd.lock`.
-- **Nothing starts it at login yet.** Run `deckd run`, or press **Start** in
-  the app, which starts the `deckd.exe` beside it with no window. The app
-  allows `firmware.check`/`install` only when it runs from a folder named
-  `bin`, as on Linux.
+  `caches\`, the voice models). The single-instance lock is `LockFileEx` on
+  `deckd.lock`. The cloud voice's key stays in that folder's `config.toml`,
+  as on Linux.
+- **The service host** is `OpenWalkieTalkie.exe --service`: it runs
+  `deckd.exe run` with no window and restarts it the way launchd's
+  `KeepAlive` does (exit 0 stays down, anything else comes back with
+  backoff). It and the app start at sign-in from per-user `Run` values
+  (`OpenWalkieTalkie Service`, `OpenWalkieTalkie`), which Settings › Apps ›
+  Startup can switch off; the app reads that switch. Closing the window
+  hides it to the tray icon, whose menu quits. The app allows
+  `firmware.check`/`install` only when it runs from a folder named `bin`, as
+  on Linux.
+- **Agents.** The roster, Bash approvals and the ancestry cap read the
+  process table (Toolhelp, `NtQueryInformationProcess` for command lines).
+  The Claude inbox and Claude Channels use named pipes beside the API's;
+  Codex is reached through `codex app-server proxy` over stdio. The Macropad
+  keys post keystrokes with `SendInput` (⌘ maps to Ctrl), and the hand-off
+  brings a session's app forward with `SetForegroundWindow`.
+- **Voice** runs the engine Linux runs: the deck's microphone and speaker
+  over Bluetooth (WinRT's GATT client, `ble::winrt`; it never pairs or scans,
+  so pair the deck in Settings first) or over the cable, Whisper on the CPU
+  for recognition (Windows has no recogniser of its own, so any
+  `[voice.stt] engine` is Whisper), and for replies the cloud voice, Kokoro
+  (sherpa-onnx, the C runtime linked statically for it) or Windows' own
+  SAPI voices through `[voice.tts] command`. A press on a computer without
+  the Whisper model says so. `voice.listen{input:"mac"}` opens the
+  computer's default input through WASAPI (cpal).
+- **System status** reads CPU, memory and disk from Win32 and the GPU from
+  the PDH "GPU Engine" counters.
 - **Firmware updates** download with `%SystemRoot%\System32\curl.exe`, keep
   the computer awake while flashing, and wait up to three minutes for the
   deck to come back after each restart (a deck passed through to a virtual
   machine took 176 s). Windows binds no driver to recovery's bulk interface,
   so the transfer uses the HID path (4 min 46 s for 0.13.0 on Rev A).
-- **Not built for Windows yet:** voice (BLE audio, recognisers, speech), the
-  Claude channel door and the Claude inbox, the Codex app-server client,
-  desktop focus and injection, launch at login, and the trusted-GUI check.
-  The Claude and Codex paths log that they are unavailable and leave the
-  rest of the service running; voice has not been tried. The test suite does
-  not compile on Windows (several tests are Unix-only), so CI builds the
-  Windows host and runs the client crate's tests only.
+- **Not on Windows:** the trusted-GUI check (the binaries are not signed),
+  the MLX voice, the Keychain's counterpart for the cloud voice's key, the
+  Codex Desktop launcher (a macOS app bundle; the Codex CLI's sessions are
+  followed as everywhere), and
+  the app's self-update: the Service page's **Check** asks the service to
+  look, and a newer preview's **Download…** opens the install guide.
+  Bluetooth voice is built but has not been tried against a deck: the test
+  machine has no radio. The daemon's test suite does not compile on Windows
+  (several tests are Unix-only), so CI builds the Windows host and runs the
+  client crate's tests only.
 
 ## Voice over BLE
 

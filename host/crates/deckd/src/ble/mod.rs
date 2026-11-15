@@ -26,7 +26,8 @@
 //!   drives the same handle without a radio.
 //! * `cb` and `central` (macOS only) are the hand-written CoreBluetooth
 //!   bindings and the engine that runs them on a private serial queue, plus
-//!   `look`, which only looks (it never connects).
+//!   `look`, which only looks (it never connects). `bluez` (Linux) and
+//!   `winrt` (Windows) do the same attach with the system's GATT client.
 //! * [`signal`] and [`probe`] are `deckd ble probe` and `deckd ble scan`,
 //!   the bench tools.
 
@@ -47,6 +48,8 @@ mod bluez;
 mod cb;
 #[cfg(target_os = "macos")]
 mod central;
+#[cfg(windows)]
+mod winrt;
 pub mod link;
 pub mod mic;
 pub mod probe;

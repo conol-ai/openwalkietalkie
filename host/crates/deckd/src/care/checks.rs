@@ -72,14 +72,22 @@ pub fn run(context: &Context, homes: &Homes) -> serde_json::Value {
         None => crate::cli::device_check().into(),
         Some(why) => Check::new(DEVICE, None, format!("not looked for: {why}")),
     });
-    match not_asking_launchd(cfg!(test), launchd_job()) {
-        None => {
+    // Windows has no launchd and never had the renamed agent: its row is
+    // the service host's start at sign-in, a Run value read as it stands.
+    if cfg!(windows) {
+        if !cfg!(test) {
             checks.extend(crate::cli::launchd_checks().into_iter().map(Check::from));
-            checks.push(legacy_launch_agent(&homes.home));
         }
-        Some(why) => {
-            for name in [LAUNCHD, LEGACY_LAUNCH_AGENT] {
-                checks.push(Check::new(name, None, format!("not looked at: {why}")));
+    } else {
+        match not_asking_launchd(cfg!(test), launchd_job()) {
+            None => {
+                checks.extend(crate::cli::launchd_checks().into_iter().map(Check::from));
+                checks.push(legacy_launch_agent(&homes.home));
+            }
+            Some(why) => {
+                for name in [LAUNCHD, LEGACY_LAUNCH_AGENT] {
+                    checks.push(Check::new(name, None, format!("not looked at: {why}")));
+                }
             }
         }
     }
