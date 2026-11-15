@@ -49,8 +49,8 @@ and assigned Macropad bindings use physical wheel direction.
 | Swipe down from the top edge | A touch starting in the top 48 px never reaches the face. 40 px down, more down than sideways, opens the notification drawer. |
 | PTT | See [PTT sessions](#ptt-sessions). |
 
-Programmatic jumps (home, a toast tap, idle-home, auto-jump) cut instead of
-sliding. Overlays capture every face control and nothing is sent to the host
+Programmatic jumps (home, a toast tap or ENTER, idle-home, auto-jump) cut
+instead of sliding. Overlays capture every face control and nothing is sent to the host
 while one is open, except PTT, which still works over the drawer and the
 manager. Precedence: naming > remove confirm > manager/gallery > drawer > face.
 
@@ -306,9 +306,18 @@ faces, Settings, and "+" (hidden at eight faces), four at a time.
 A notice is created by a new card (Question or Ready), keyed by agent and card.
 
 - **Toast.** Slides down from the top for 4 s, counted from the frame that shows
-  it; tapping it jumps to the card. Touches in its rect are swallowed for
-  300 ms after it expires. Message toasts ("no channel", "not delivered") last
-  2 s and belong to no notice.
+  it; tapping it jumps to the card. So does ENTER on a question's toast, when
+  it arrived with nothing it could interrupt (the auto-jump conditions below:
+  nothing held, SHIFT included, no PTT session, no overlay or session menu, no
+  card on screen, no running clock on the Timer face, ringing alarm or live
+  game, the strip at rest, no input in the last 2 s, unlocking included) and
+  ENTER is the first thing pressed, turned or touched since. Otherwise ENTER
+  keeps its meaning on the face, and it always does on a Ready card's toast,
+  on Omarchy and the Macropad, whose keys go to the computer, and as
+  SHIFT+ENTER. The question then answers the next ENTER, not within 0.5 s of
+  opening. Touches in its
+  rect are swallowed for 300 ms after it expires. Message toasts ("no channel",
+  "not delivered") last 2 s and belong to no notice.
 - **Drawer.** A notice is filed when its toast times out or is displaced, when
   its card is snoozed, and when it arrives under an opaque overlay (drawer,
   manager, gallery, naming, LISTENING) or during a host resync; those get no
@@ -320,10 +329,12 @@ A notice is created by a new card (Question or Ready), keyed by agent and card.
   any Question waits, else green.
 - A notice goes away when its card is answered or acknowledged, when the host
   clears or replaces the card, or when the agent is gone.
-- **Auto-jump** (Settings → Alerts, off by default) jumps to a new card
-  instead of toasting, unless something is held, a PTT session is live, an
-  overlay is open, a card is on screen on the Agents face, the strip is sliding,
-  or there was input in the last 2 s; then it toasts.
+- **Auto-jump** (Settings → Alerts, off by default) jumps to a new question
+  instead of toasting, unless something is held (SHIFT included), a PTT
+  session is live, an overlay or a channel's session menu is open, a card is on
+  screen on the Agents face, a clock runs on the Timer face, an alarm rings, a
+  game is live, the strip is sliding, or there was input in the last 2 s
+  (unlocking included); then it toasts.
 
 ## PTT sessions
 

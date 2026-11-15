@@ -109,6 +109,9 @@ pub struct Global {
     held: [Option<Owner>; 7],
     channel_seq: u16,
     last_input_ms: u32,
+    /// The screen lock moved under the user's hand (`lock_moved`): input the
+    /// power policy swallowed, stamped at the next clock advance.
+    lock_moved: bool,
     guard_at_ms: u32,
     /// The last `err` sent, for the 1/s limit.
     err_at_ms: Option<u32>,
@@ -165,6 +168,7 @@ impl Global {
             held: [None; 7],
             channel_seq: 0,
             last_input_ms: 0,
+            lock_moved: false,
             guard_at_ms: 0,
             err_at_ms: None,
             slide_from_x: 0,
@@ -675,6 +679,21 @@ pub(super) fn emit_face(ui: &mut UiState, out: &mut Update) {
 /// No control for at least `ms`.
 pub(super) fn quiet_for(ui: &UiState, now_ms: u32, ms: u32) -> bool {
     elapsed(now_ms, ui.global.last_input_ms) >= ms
+}
+
+/// The screen lock moved under the user's hand: a step of the unlock gesture
+/// or the unlock itself. The power policy swallows that input
+/// before `on_control` sees it, so the next clock advance stamps it
+/// (`on_advance`) and `quiet_for` counts it.
+pub(super) fn lock_moved(ui: &mut UiState) {
+    ui.global.lock_moved = true;
+}
+
+/// Every clock advance, before anything reads the clock.
+pub(super) fn on_advance(ui: &mut UiState, now_ms: u32) {
+    if core::mem::take(&mut ui.global.lock_moved) {
+        ui.global.last_input_ms = now_ms;
+    }
 }
 
 // ---- private -------------------------------------------------------------------------
