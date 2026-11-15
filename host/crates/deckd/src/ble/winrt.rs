@@ -16,7 +16,7 @@ use super::link::{LinkState, Peer, Shared, Transport};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
-use windows::core::{GUID, HSTRING};
+use windows::core::GUID;
 use windows::Devices::Bluetooth::GenericAttributeProfile::{
     GattCharacteristic, GattClientCharacteristicConfigurationDescriptorValue,
     GattCommunicationStatus, GattSession, GattValueChangedEventArgs, GattWriteOption,
@@ -134,7 +134,7 @@ fn find(name: &str) -> Result<Option<BluetoothLEDevice>, String> {
             _ => format!("Bluetooth: {}", e.message()),
         })?;
     for info in found {
-        if info.Name().is_ok_and(|got| got == HSTRING::from(name)) {
+        if info.Name().is_ok_and(|got| got == name) {
             let device = BluetoothLEDevice::FromIdAsync(&info.Id().map_err(err("device id"))?)
                 .and_then(|op| op.get())
                 .map_err(err("opening the deck"))?;

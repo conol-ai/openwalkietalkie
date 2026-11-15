@@ -175,6 +175,10 @@ jobs:
       - name: Test the client, the daemon and the app on Windows
         run: |
           cargo test --manifest-path host/Cargo.toml -p deck-client -p deck-model -p deck-gui-core -p deckd -p openwalkietalkie-app --lib --locked --target x86_64-pc-windows-msvc --target-dir target/host
+      # The Windows-only code the macOS lint never compiles.
+      - name: Lint the Windows host and app
+        run: |
+          cargo clippy --manifest-path host/Cargo.toml -p deck-client -p deck-gui-core -p deckd -p openwalkietalkie-app --lib --bins --locked --target x86_64-pc-windows-msvc --target-dir target/host -- -D warnings
       # The release packages these binaries the same way (release.yml); doing
       # it here too means a broken package shows on the pull request, not on
       # the tag. The packager also refuses a console-subsystem app.

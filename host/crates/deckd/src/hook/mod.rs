@@ -291,6 +291,8 @@ fn passthrough(rest: &[String], stdin: &[u8], out: &mut impl Write, err: &mut im
     };
     #[cfg(windows)]
     let (program, args) = windows_shell(program, args);
+    #[cfg(not(windows))]
+    let program = std::borrow::Cow::Borrowed(program);
     let mut child = match std::process::Command::new(&*program)
         .args(args)
         .stdin(std::process::Stdio::piped())

@@ -107,7 +107,8 @@ fn args(_pid: u32) -> Option<String> {
 
 /// `KERN_PROCARGS2`: `argc` (a native `int`), the executable path, NUL
 /// padding, then `argc` NUL-terminated arguments (the environment follows
-/// and is never read).
+/// and is never read). macOS's only; its test runs everywhere.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn parse_procargs(buf: &[u8]) -> Option<String> {
     let argc = i32::from_ne_bytes(buf.get(..4)?.try_into().ok()?);
     let mut rest = buf.get(4..)?;
