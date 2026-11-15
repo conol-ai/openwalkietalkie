@@ -266,12 +266,21 @@ mod tests {
 
     #[test]
     fn a_child_is_found_and_its_command_line_read() {
+        // `cmd /k` reads its stdin, a pipe held open here, so the child
+        // lives until it is killed whatever the machine (a ping can end at
+        // once on a CI runner).
         let mut child = std::process::Command::new("cmd.exe")
-            .args(["/d", "/c", "ping -n 3 127.0.0.1 > nul && echo deck-marker"])
+            .args(["/d", "/q", "/k", "rem deck-marker"])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
             .spawn()
             .unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(300));
-        let found = children(std::process::id());
+        let since = std::time::Instant::now();
+        let mut found = children(std::process::id());
+        while !found.contains(&child.id()) && since.elapsed() < std::time::Duration::from_secs(5) {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            found = children(std::process::id());
+        }
         assert!(found.contains(&child.id()), "{found:?}");
         let line = command_line(child.id()).unwrap_or_default();
         assert!(line.contains("deck-marker"), "{line}");
