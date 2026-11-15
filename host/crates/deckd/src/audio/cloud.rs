@@ -928,6 +928,9 @@ impl TtsEngine for CloudTts {
 
 #[cfg(test)]
 mod tests {
+    // Most of these run curl through a shell-script fake: Unix-only, and
+    // with them the helpers and imports only they use.
+    #![cfg_attr(not(unix), allow(unused_imports, dead_code))]
     use super::*;
     use crate::audio::fakes::FakeTts;
     use std::sync::atomic::{AtomicUsize, Ordering};

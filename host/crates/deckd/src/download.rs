@@ -411,7 +411,8 @@ pub fn fetch(job: &Job, mut on_progress: impl FnMut(u64, u64)) -> Result<PathBuf
     }
 }
 
-#[cfg(test)]
+// Every test here runs curl through a shell-script fake.
+#[cfg(all(test, unix))]
 pub(crate) mod tests {
     use super::*;
 
@@ -466,6 +467,7 @@ with open(out, "ab") as f:
         curl
     }
 
+    #[cfg(unix)] // for the fake-curl tests
     fn wait(installer: &Installer) -> Progress {
         loop {
             std::thread::sleep(Duration::from_millis(50));
