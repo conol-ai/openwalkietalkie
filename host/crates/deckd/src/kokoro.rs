@@ -25,18 +25,19 @@ pub struct Package {
     pub about: &'static str,
 }
 
-/// The catalogue (archive sizes read from the hub 2026-10-11). Both are
-/// Kokoro v1.1 with sherpa-onnx's Chinese and English text front ends and
-/// 103 speakers.
+/// The catalogue (archive sizes read from the hub 2026-11-14: sherpa-onnx
+/// published both archives again on 2026-10-26, and the sizes read on
+/// 2026-10-11 refused every download after it). Both are Kokoro v1.1 with
+/// sherpa-onnx's Chinese and English text front ends and 103 speakers.
 pub const PACKAGES: [Package; 2] = [
     Package {
         name: "kokoro-multi-lang-v1_1",
-        bytes: 364_816_464,
+        bytes: 364_855_331,
         about: "Chinese and English, 103 voices, full precision",
     },
     Package {
         name: "kokoro-int8-multi-lang-v1_1",
-        bytes: 147_031_220,
+        bytes: 147_052_523,
         about: "the same in 8-bit: less than half the download",
     },
 ];
@@ -92,6 +93,17 @@ pub fn dir(root: &Path, name: &str) -> PathBuf {
     root.join(name)
 }
 
+/// The network's file in package `name`: sherpa-onnx names the 8-bit one
+/// `model.int8.onnx`, the full one `model.onnx`.
+#[must_use]
+pub fn model_file(name: &str) -> &'static str {
+    if model_name(name).contains("-int8-") {
+        "model.int8.onnx"
+    } else {
+        "model.onnx"
+    }
+}
+
 /// The job that fetches and unpacks `name` under `root`.
 #[must_use]
 pub fn job(root: &Path, name: &str) -> Job {
@@ -102,7 +114,7 @@ pub fn job(root: &Path, name: &str) -> Job {
         part: part_path(&root.join(format!("{name}.tar.bz2"))),
         total: package(&name).map_or(0, |p| p.bytes),
         finish: Finish::Extract {
-            marker: into.join("model.onnx"),
+            marker: into.join(model_file(&name)),
             into,
         },
         name,
@@ -113,7 +125,7 @@ pub fn job(root: &Path, name: &str) -> Job {
 #[must_use]
 pub fn present(root: &Path, name: &str) -> bool {
     let d = dir(root, model_name(name));
-    ["model.onnx", "voices.bin", "tokens.txt"].iter().all(|f| d.join(f).is_file())
+    [model_file(name), "voices.bin", "tokens.txt"].iter().all(|f| d.join(f).is_file())
 }
 
 /// A speaker id from a configured voice: its name in [`SPEAKERS`], or a
@@ -202,9 +214,16 @@ mod tests {
         let root = PathBuf::from("/tmp/x");
         let job = job(&root, "");
         assert_eq!(job.name, DEFAULT_MODEL);
-        assert_eq!(job.total, 364_816_464);
+        assert_eq!(job.total, 364_855_331);
         assert_eq!(job.part, PathBuf::from("/tmp/x/kokoro-multi-lang-v1_1.tar.bz2.part"));
         assert_eq!(job.path(), Path::new("/tmp/x/kokoro-multi-lang-v1_1"));
+        // Each package's network goes by the name its archive gives it.
+        assert_eq!(model_file("kokoro-multi-lang-v1_1"), "model.onnx");
+        assert_eq!(model_file("kokoro-int8-multi-lang-v1_1"), "model.int8.onnx");
+        assert!(matches!(
+            &super::job(&root, "kokoro-int8-multi-lang-v1_1").finish,
+            Finish::Extract { marker, .. } if marker.ends_with("model.int8.onnx")
+        ));
         assert_eq!(SPEAKERS.len(), 103);
         let mut unique = SPEAKERS.to_vec();
         unique.sort_unstable();
