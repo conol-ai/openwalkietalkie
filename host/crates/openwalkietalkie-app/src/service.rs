@@ -1220,11 +1220,26 @@ impl Shell {
             .on_click(cx.listener(|this, _, window, cx| this.check_app_update(window, cx)));
         // Windows has no Sparkle: **Check** asks the service to look (the
         // release manifest names the app's version too), and once it found
-        // a newer app the button opens the page its zip is downloaded from.
+        // a newer app **Update** fetches and installs it (`win_update`).
+        // A copy that is not the installed one (a build, a walk) offers the
+        // page its zip is downloaded from instead.
         #[cfg(windows)]
         let check_app = {
             let _ = signed;
-            if updates::app_update_line(&self.service.firmware.status, self.language()).is_some() {
+            let newer = updates::app_update_line(&self.service.firmware.status, self.language())
+                .is_some()
+                .then(|| updates::app_version(&self.service.firmware.status));
+            if let Some(version) = newer.clone().filter(|_| crate::app::launch().installed()) {
+                let updating = crate::win_update::busy();
+                Btn::new(
+                    "service-app-check",
+                    if updating { self.tr("Updating\u{2026}") } else { self.tr("Update") },
+                )
+                .disabled(updating)
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    this.update_app(version.clone(), window, cx);
+                }))
+            } else if newer.is_some() {
                 Btn::new("service-app-check", self.tr("Download\u{2026}"))
                     .on_click(|_, _, cx: &mut App| cx.open_url(WINDOWS_DOWNLOAD))
             } else {

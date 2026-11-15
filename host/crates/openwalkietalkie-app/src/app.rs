@@ -355,6 +355,11 @@ fn boot(
             eprintln!("openwalkietalkie-app: background service repair: {error}");
         }
     }
+    // Windows: what an earlier update set aside, now that nothing runs it.
+    #[cfg(windows)]
+    if launch.installed() {
+        crate::win_update::clean();
+    }
     style::register_fonts(cx);
     // Pinned before the window exists, so it opens in the right appearance
     // and the traffic lights match the palette.

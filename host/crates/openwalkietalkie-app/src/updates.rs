@@ -141,6 +141,13 @@ pub fn firmware_request(force: bool) -> UiAction {
 /// until it restarts, so the release must be newer than this app too. It
 /// says so in every build: Sparkle installs it in a signed release
 /// (**Check**), and any other build says why it cannot.
+/// The app version the release feed named (`app.version`), as it was given:
+/// what Windows' **Update** fetches.
+#[cfg(windows)]
+pub fn app_version(status: &Value) -> String {
+    text(&status["app"], "version").to_string()
+}
+
 pub fn app_update_line(status: &Value, language: Language) -> Option<String> {
     let app = &status["app"];
     let version = text(app, "version");
@@ -451,6 +458,38 @@ impl Shell {
             self.check_app_update(window, cx);
         }
         self.refresh_firmware(true, window, cx);
+    }
+
+    /// Windows: fetch, check and install `version` off the UI thread
+    /// (`win_update::run`), then quit: the new copy is already starting.
+    /// A failure is said and changes nothing that runs.
+    #[cfg(windows)]
+    pub(crate) fn update_app(&mut self, version: String, window: &mut Window, cx: &mut Context<Self>) {
+        if crate::win_update::busy() {
+            return;
+        }
+        self.toast(
+            self.fmt("Downloading OpenWalkieTalkie {0}\u{2026}", &[&version]),
+            window,
+            cx,
+        );
+        let (tx, rx) = async_channel::bounded(1);
+        std::thread::spawn(move || {
+            let _ = tx.send_blocking(crate::win_update::run(&version));
+        });
+        cx.notify();
+        cx.spawn_in(window, async move |this, cx| {
+            let answer = rx.recv().await.unwrap_or_else(|e| Err(e.to_string()));
+            this.update_in(cx, |this, window, cx| match answer {
+                Ok(()) => cx.quit(),
+                Err(why) => {
+                    this.toast(this.fmt("The update did not install: {0}", &[&why]), window, cx);
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
     }
 
     /// The app's own update, which Sparkle checks for, downloads, installs
