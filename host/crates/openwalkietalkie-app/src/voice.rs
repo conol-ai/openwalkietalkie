@@ -108,10 +108,27 @@ impl Recogniser {
     }
 }
 
+/// The system's own voice, by its maker's name (never translated): what
+/// speaks when nothing else is chosen.
+pub const SYSTEM_VOICE: &str = if cfg!(windows) { "Windows" } else { "Apple" };
+
+/// One of a sentence's two forms by where the app runs: `mac`'s, or on
+/// Windows `pc`'s (a page's words that are about macOS itself, not only its
+/// name, which `Language::text` already says as "PC" there).
+pub(crate) const fn here(mac: &'static str, pc: &'static str) -> &'static str {
+    if cfg!(windows) {
+        pc
+    } else {
+        mac
+    }
+}
+
 /// The Recognition radio that is on: the engine `config.get` names. `None`
-/// for a word this window does not know, which no radio claims.
+/// for a word this window does not know, which no radio claims. Windows has
+/// no recogniser of its own: there, the default word is Whisper too.
 pub fn recogniser(config: &SttConfig) -> Option<Recogniser> {
     match config.engine.as_str() {
+        "apple" if cfg!(windows) => Some(Recogniser::Whisper),
         "apple" => Some(Recogniser::Apple),
         "whisper" => Some(Recogniser::Whisper),
         _ => None,
@@ -328,7 +345,7 @@ pub fn speaks(tts: &TtsConfig, status: Option<&TtsStatus>) -> Stop {
         }
         Some(Synthesiser::Cloud) => Stop::Cloud(provider_name(&tts.provider).to_string()),
         Some(Synthesiser::Mlx) => Stop::OnMac("Qwen3-TTS"),
-        Some(_) => Stop::OnMac("Apple"),
+        Some(_) => Stop::OnMac(SYSTEM_VOICE),
         None => Stop::Other(tts.engine.clone()),
     }
 }
@@ -345,6 +362,8 @@ pub fn signal_path(
 ) -> Vec<(Route, Vec<Stop>)> {
     let hears = match recognises(stt, stt_status) {
         Some(Recogniser::Whisper) => Stop::OnMac("Whisper"),
+        // Nothing stands in for Whisper on Windows until its model is whole.
+        Some(Recogniser::Apple) if cfg!(windows) => Stop::Other(String::new()),
         Some(Recogniser::Apple) => Stop::OnMac("Apple"),
         None => Stop::Other(stt.engine.clone()),
     };
@@ -630,7 +649,10 @@ pub fn key_kept(tts: Option<&TtsConfig>, language: Language) -> &'static str {
     if tts.is_some_and(TtsConfig::in_keychain) {
         language.text("The key is kept in your Keychain on this Mac.")
     } else {
-        language.text("The key is kept in the service's settings on this Mac.")
+        language.text(here(
+            "The key is kept in the service's settings on this Mac.",
+            "The key is kept in the service's settings on this PC.",
+        ))
     }
 }
 
@@ -679,7 +701,7 @@ const BOARD_TEST: &str =
 /// The Whisper model and the Kokoro voice the service catalogues by
 /// default, by name and size: what `stt.status` and `tts.status` report.
 const WHISPER: (&str, u64) = ("large-v3-turbo", 1_624_555_275);
-const KOKORO: (&str, u64) = ("kokoro-multi-lang-v1_1", 364_816_464);
+const KOKORO: (&str, u64) = ("kokoro-multi-lang-v1_1", 364_855_331);
 
 /// The sixteen locales Whisper reports.
 const WHISPER_LOCALES: [&str; 16] = [
@@ -1004,7 +1026,10 @@ impl Shell {
                 .child(self.speech_language_card(dim, &p, cx))
                 .child(self.voice_engine_cards(dim, true, &p, cx))
                 .child(self.signal_path_section(dim, &p, cx))
-                .child(self.permissions_section(dim, &p, cx))
+                // macOS's grants; Windows asks for neither.
+                .when(cfg!(not(windows)), |page| {
+                    page.child(self.permissions_section(dim, &p, cx))
+                })
         };
         let body = v_flex()
             .gap(px(GAP))
@@ -1098,7 +1123,10 @@ impl Shell {
     fn speech_language_card(&self, dim: bool, p: &Palette, cx: &Context<Self>) -> Div {
         let row = Row::new()
             .title(self.tr("Speech language"))
-            .sub(self.tr("Whisper detects the language. Apple's recogniser needs one chosen here."))
+            .sub(self.tr(here(
+                "Whisper detects the language. Apple's recogniser needs one chosen here.",
+                "Whisper detects the language, or keeps to the one chosen here.",
+            )))
             .right(self.speech_language_popup(dim, cx));
         ui::card(vec![row.into_any_element()], p)
     }
@@ -1247,12 +1275,13 @@ impl Shell {
                 cx,
                 choose(Recogniser::Whisper),
             )
-            .title(self.tr("Whisper, on this Mac"));
+            .title(self.tr(here("Whisper, on this Mac", "Whisper, on this PC")));
         let whisper = self.model_row(whisper, Model::Whisper, dim, p, cx);
         let companion = config.is_some_and(|config| config.companion);
-        let conol_sub = self.tr(
+        let conol_sub = self.tr(here(
             "Audio of those presses goes to Conol's service.\nOff keeps all recognition on this Mac.",
-        );
+            "Audio of those presses goes to Conol's service.\nOff keeps all recognition on this PC.",
+        ));
         let conol = Row::new()
             .lead(ui::bare(div()))
             .title(self.tr("Conol's cloud, for Conol chats only"))
@@ -1265,14 +1294,20 @@ impl Shell {
                     })),
             )
             .grow();
+        // Windows has no recogniser of its own: Whisper is the card's one.
+        let members = if cfg!(windows) {
+            vec![whisper]
+        } else {
+            vec![apple, whisper]
+        };
         let at = chosen.map(|engine| match engine {
             Recogniser::Apple => 0,
-            Recogniser::Whisper => 1,
+            Recogniser::Whisper => members.len() - 1,
         });
         ui::Group::new("voice-recognition", Layout::Column)
             .card(p)
             .selected(at)
-            .members([apple, whisper])
+            .members(members)
             .after(conol)
     }
 
@@ -1299,7 +1334,7 @@ impl Shell {
                 cx,
                 choose(Synthesiser::Apple),
             )
-            .title(self.tr("Apple voice"))
+            .title(self.tr(here("Apple voice", "Windows voice")))
             .sub(self.tr("Built in."));
         let kokoro = self
             .choice(
@@ -1310,7 +1345,7 @@ impl Shell {
                 cx,
                 choose(Synthesiser::Kokoro),
             )
-            .title(self.tr("Kokoro, on this Mac"));
+            .title(self.tr(here("Kokoro, on this Mac", "Kokoro, on this PC")));
         let kokoro = self.model_row(kokoro, Model::Kokoro, dim, p, cx);
         // Without a key the cloud voice cannot be chosen: its row asks for
         // one, and saving it chooses the voice.

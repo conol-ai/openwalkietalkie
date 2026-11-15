@@ -43,6 +43,8 @@ raw-window-handle = "0.6"
 # `localtime_r`/`mktime` (`present::local_clock`); already in this lock.
 [target.'cfg(windows)'.dependencies]
 chrono = { version = "=0.4.45", default-features = false, features = ["std", "clock"] }
+# The window's handle, to hide it to the tray (`win_window`): gpui cannot.
+raw-window-handle = "0.6"
 
 [build-dependencies]
 cc = "=1.4.7"

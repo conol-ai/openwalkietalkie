@@ -163,7 +163,9 @@ jobs:
         with:
           toolchain: 1.98.1
       # The service and the window build for Windows (named-pipe door,
-      # LockFileEx, the app as a GUI program); the daemon's own tests do
+      # LockFileEx, the app as a GUI program, voice: whisper.cpp through the
+      # runner's CMake and LLVM, sherpa-onnx's static library, the C runtime
+      # linked statically per .cargo/config.toml); the daemon's own tests do
       # not compile there yet (several are Unix-only), so only the client's
       # run, which cover the pipe's name and its same-user descriptor.
       - name: Build the Windows host and app

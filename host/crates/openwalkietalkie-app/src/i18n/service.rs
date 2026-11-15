@@ -75,6 +75,9 @@ pub const STRINGS: &[Entry] = &[
         "應用程式和服務會一起更新。",
         "アプリとサービスは一緒に更新されます。",
     ),
+    // Windows: the app's button once a newer preview is out, which opens
+    // the page its zip is downloaded from.
+    ("Download…", "下载…", "下載…", "ダウンロード…"),
     // In its place once the service's look found a newer app (R8), in the
     // words of the shipped "Deck firmware {0} is available".
     (
@@ -246,6 +249,12 @@ pub const STRINGS: &[Entry] = &[
         "deckd，位於「系統設定」的「登入項目」中",
         "deckd（「システム設定」の「ログイン項目」内）",
     ),
+    (
+        "deckd, under Startup apps in Settings",
+        "deckd，位于“设置”的“启动应用”中",
+        "deckd，位於「設定」的「啟動應用程式」中",
+        "deckd（「設定」の「スタートアップ アプリ」内）",
+    ),
     // Japanese: the 104 px action cell holds eight full-width characters,
     // and アンインストール時 is nine; 削除対象 pairs with 保持 (Kept), and
     // the page's head already says these are what Uninstall does.
@@ -314,6 +323,25 @@ pub const STRINGS: &[Entry] = &[
         "“卸载”会移除以上所有内容（日志和你的 macOS 权限除外），\n并还原你的命令行工具设置。请自行将应用移到废纸篓。",
         "「解除安裝」會移除以上所有內容（記錄和你的 macOS 權限除外），\n並還原你的命令列工具設定。請自行將應用程式丟到垃圾桶。",
         "「アンインストール」は、ログと macOS の権限を除くこれらすべてを削除し、\nCLI の設定を元に戻します。アプリはご自身でゴミ箱に入れてください。",
+    ),
+    // Windows: the same, without macOS's permissions or its Trash.
+    (
+        "Uninstall removes all of these except the logs,\nand puts your CLI settings back. Delete the app's folder yourself.",
+        "“卸载”会移除以上所有内容（日志除外），\n并还原你的命令行工具设置。请自行删除应用所在的文件夹。",
+        "「解除安裝」會移除以上所有內容（記錄除外），\n並還原你的命令列工具設定。請自行刪除應用程式所在的資料夾。",
+        "「アンインストール」は、ログを除くこれらすべてを削除し、\nCLI の設定を元に戻します。アプリのフォルダはご自身で削除してください。",
+    ),
+    (
+        "Removes everything in this list except the logs, and puts your CLI settings back. Then delete the app's folder.",
+        "将移除此列表中除日志以外的所有内容，\n并还原你的命令行工具设置。之后请删除应用所在的文件夹。",
+        "將移除此清單中除記錄以外的所有內容，\n並還原你的命令列工具設定。之後請刪除應用程式所在的資料夾。",
+        "ログを除き、この一覧のすべてを削除し、\nCLI の設定を元に戻します。\nその後、アプリのフォルダを削除してください。",
+    ),
+    (
+        "OpenWalkieTalkie is uninstalled. Delete the app's folder.",
+        "OpenWalkieTalkie 已卸载。请删除应用所在的文件夹。",
+        "OpenWalkieTalkie 已解除安裝。請刪除應用程式所在的資料夾。",
+        "OpenWalkieTalkie をアンインストールしました。アプリのフォルダを削除してください。",
     ),
     ("Uninstall…", "卸载…", "解除安裝…", "アンインストール…"),
     (

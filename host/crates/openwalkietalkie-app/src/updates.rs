@@ -442,7 +442,14 @@ impl Shell {
 
     /// **Check for Updates…**: the app's, then the deck's firmware.
     pub(crate) fn check_updates(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.check_app_update(window, cx);
+        if cfg!(windows) {
+            // No Sparkle: the service's look names the app's version too, and
+            // the Service page offers a newer one's download.
+            crate::app::show(cx);
+            self.go(crate::shell::Screen::Service, window, cx);
+        } else {
+            self.check_app_update(window, cx);
+        }
         self.refresh_firmware(true, window, cx);
     }
 

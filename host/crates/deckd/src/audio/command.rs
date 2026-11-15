@@ -28,6 +28,44 @@ use super::traits::{
 /// The default program: espeak-ng, which speaks Chinese and English.
 pub const DEFAULT_COMMAND: &str = "espeak-ng --stdout -v {voice}";
 
+/// What Windows speaks with by default: its own SAPI voices, through
+/// PowerShell and `System.Speech`, so nothing has to be installed. The text
+/// is read as UTF-8, an installed Chinese voice speaks Chinese text (the
+/// `cmn`/`en-us` choice espeak gets from `{voice}`), and the WAV SAPI writes
+/// (16-bit mono) goes to stdout. The script travels as `-EncodedCommand`,
+/// one word, because the command is split on whitespace.
+const WINDOWS_SCRIPT: &str = r#"$ErrorActionPreference = 'Stop'
+[Console]::InputEncoding = [Text.Encoding]::UTF8
+Add-Type -AssemblyName System.Speech
+$text = [Console]::In.ReadToEnd()
+$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+if ($text -match '[一-鿿]') {
+  $zh = $synth.GetInstalledVoices() | Where-Object { $_.Enabled -and $_.VoiceInfo.Culture.Name -like 'zh*' } | Select-Object -First 1
+  if ($zh) { $synth.SelectVoice($zh.VoiceInfo.Name) }
+}
+$wav = New-Object System.IO.MemoryStream
+$synth.SetOutputToWaveStream($wav)
+$synth.Speak($text)
+$out = [Console]::OpenStandardOutput()
+$wav.WriteTo($out)
+$out.Flush()
+"#;
+
+/// The program an empty `[voice.tts] command` means on this platform.
+#[must_use]
+pub fn default_command() -> String {
+    if cfg!(windows) {
+        use base64::Engine as _;
+        let utf16: Vec<u8> = WINDOWS_SCRIPT.encode_utf16().flat_map(u16::to_le_bytes).collect();
+        format!(
+            "powershell.exe -NoProfile -NonInteractive -EncodedCommand {}",
+            base64::engine::general_purpose::STANDARD.encode(utf16)
+        )
+    } else {
+        DEFAULT_COMMAND.to_string()
+    }
+}
+
 /// The most WAV one utterance may hand back (about 90 s at 22.05 kHz).
 const MAX_WAV: usize = 8 * 1024 * 1024;
 
@@ -45,7 +83,8 @@ pub struct CommandTts {
 impl CommandTts {
     #[must_use]
     pub fn new(command: &str, voices: &[String]) -> Self {
-        let command = if command.trim().is_empty() { DEFAULT_COMMAND } else { command };
+        let default = default_command();
+        let command = if command.trim().is_empty() { default.as_str() } else { command };
         CommandTts {
             command: command.split_whitespace().map(str::to_string).collect(),
             voices: voices.to_vec(),
@@ -168,11 +207,20 @@ impl TtsEngine for CommandTts {
     fn synthesize(&self, req: &TtsRequest) -> Result<Box<dyn TtsJob>, AudioError> {
         let voice = self.voice(req);
         let (program, args) = self.command.split_first().ok_or(AudioError::NoEngine("synthesiser"))?;
-        let mut child = Command::new(program)
+        let mut command = Command::new(program);
+        command
             .args(args.iter().map(|a| a.replace("{voice}", &voice)))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::null());
+        // The service has no console, so a console program would open a
+        // window of its own for every utterance.
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        }
+        let mut child = command
             .spawn()
             .map_err(|e| AudioError::Engine(format!("{program}: {e} (install it, or set [voice.tts] command)")))?;
         let mut stdin = child.stdin.take().ok_or_else(|| AudioError::Engine("no stdin".into()))?;

@@ -243,7 +243,7 @@ pub const ANCESTRY_HINT: &str =
 #[derive(Parser, Debug)]
 #[command(name = "deckd", version, about = "OpenWalkieTalkie host service")]
 pub struct Cli {
-    /// Data directory (default: ~/Library/Application Support/OpenWalkieTalkie, or $DECKD_DATA_DIR).
+    /// Data directory (default: $DECKD_DATA_DIR, else ~/Library/Application Support/OpenWalkieTalkie on a Mac, %LOCALAPPDATA%\OpenWalkieTalkie on Windows).
     #[arg(long, global = true)]
     pub data_dir: Option<PathBuf>,
     #[command(subcommand)]
@@ -2514,6 +2514,7 @@ pub struct Doctor {
 /// A stray `~/Library/LaunchAgents/<label>.plist`: what `deckd install
 /// --dev` writes, and what an SMAppService registration leaves behind only
 /// as a file when the bundle is gone.
+#[cfg(not(windows))]
 fn user_launch_agent(label: &str) -> Option<PathBuf> {
     let path = std::env::var_os("HOME")
         .map(PathBuf::from)?
@@ -2530,6 +2531,41 @@ fn user_launch_agent(label: &str) -> Option<PathBuf> {
 /// The exit and dangling rows are `crate::launchd`'s: they are text and
 /// filesystem, so they are unit-tested there, and this only decides which
 /// rows to print and whether each is a failure.
+/// Windows' row in place of launchd's: whether the service starts at
+/// sign-in, which the app sets as a Run value (`login_item`). Reading only.
+#[cfg(windows)]
+pub fn launchd_checks() -> Vec<(String, bool, String)> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let reg = std::env::var_os("SystemRoot")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| "C:\\Windows".into())
+        .join(r"System32\reg.exe");
+    let query = std::process::Command::new(reg)
+        .args([
+            "query",
+            r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
+            "/v",
+            "OpenWalkieTalkie Service",
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output();
+    let registered = query.ok().filter(|out| out.status.success()).and_then(|out| {
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .find_map(|line| line.split_once("REG_SZ").map(|(_, command)| command.trim().to_string()))
+    });
+    vec![(
+        "startup".into(),
+        true,
+        match registered {
+            Some(command) => format!("the service starts at sign-in: {command}"),
+            None => "the service does not start at sign-in (the app's Service page sets it)".into(),
+        },
+    )]
+}
+
+#[cfg(not(windows))]
 pub fn launchd_checks() -> Vec<(String, bool, String)> {
     let mut checks = Vec::new();
     match crate::launchd::Agent::load(DECKD_LABEL) {
@@ -2833,12 +2869,19 @@ pub fn setup_checks(
                     use std::os::unix::fs::PermissionsExt;
                     meta.permissions().mode() & 0o777
                 };
-                #[cfg(not(unix))]
-                let mode = 0o600;
                 let count = crate::tokens::Tokens::load(&paths.tokens)
                     .map(|t| t.list().len())
                     .map_err(|e| e.to_string());
-                match (mode, count) {
+                // Windows has no mode bits: the file is private because the
+                // data directory (%LOCALAPPDATA%) is the user's own, which
+                // is what is said, rather than a mode nothing checked.
+                #[cfg(not(unix))]
+                let row = {
+                    let _ = meta;
+                    count.map(|n| format!("{n} token(s), in this user's own data folder"))
+                };
+                #[cfg(unix)]
+                let row = match (mode, count) {
                     (0o600, Ok(n)) => Ok(format!("mode 0600, {n} token(s)")),
                     (0o600, Err(e)) => Err(e),
                     (mode, _) => Err(format!(
@@ -2849,7 +2892,8 @@ pub fn setup_checks(
                             &paths.tokens.display().to_string(),
                         ])
                     )),
-                }
+                };
+                row
             }
         },
     );

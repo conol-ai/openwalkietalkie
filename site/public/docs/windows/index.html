@@ -79,7 +79,7 @@
 </header>
 <article class="post-body">
 
-<p>The Windows preview runs the same service and app as the Mac: your deck links over USB-C, the app shows it, and the app updates the deck’s firmware. It is a preview because several Mac features are not built for Windows yet (below), and it is <strong>not code-signed</strong>, so Windows warns before it runs it the first time.</p>
+<p>The Windows preview runs the same service and app as the Mac: your deck links over USB-C or Bluetooth, shows your Claude Code and Codex sessions, answers their approvals, takes push-to-talk dictation and speaks replies, and the app updates the deck’s firmware. It is a preview because a few Mac features are not on Windows (below), and it is <strong>not code-signed</strong>, so Windows warns before it runs it the first time.</p>
 
 <h2>Download</h2>
 <p>Open the <a href="https://github.com/conol-ai/openwalkietalkie/releases/latest">latest release</a> and download <code>OpenWalkieTalkie-&lt;version&gt;-windows-x86_64.zip</code>. Windows builds are published with every release from 0.14.0 on. The release also lists the zip’s SHA-256 checksum; to compare it, run this in PowerShell in your Downloads folder:</p>
@@ -89,9 +89,12 @@
 <ol>
   <li><strong>Unzip it</strong> somewhere you keep programs, for example <code>%LOCALAPPDATA%\Programs\OpenWalkieTalkie</code>. Keep the <code>bin</code> folder as it is: the app installs firmware only when it runs from a folder named <code>bin</code>, and it starts the <code>deckd.exe</code> beside it.</li>
   <li><strong>Open <code>bin\OpenWalkieTalkie.exe</code>.</strong> Windows SmartScreen shows <em>Windows protected your PC</em>, because the program is not signed. Choose <strong>More info</strong>, then <strong>Run anyway</strong>. Windows remembers the choice for this copy.</li>
-  <li><strong>Start the service.</strong> In the app, open <strong>Service</strong> and press <strong>Start</strong>. It runs <code>deckd.exe</code>, the service that talks to the deck, in the background with no window.</li>
-  <li><strong>Connect the deck</strong> with USB-C. The app’s Deck page shows it once the service has linked.</li>
+  <li><strong>Follow the first-run steps.</strong> They start <code>deckd.exe</code>, the service that talks to the deck, in the background with no window, and set it to start whenever you sign in (<em>Settings › Apps › Startup</em> lists it). <strong>Service › Start at login</strong> does the same for the app. Closing the window keeps the app in the notification area; its icon’s menu quits it.</li>
+  <li><strong>Connect the deck</strong> with USB-C, or pair it in <em>Settings › Bluetooth &amp; devices</em>. The app’s Deck page shows it once the service has linked.</li>
 </ol>
+
+<h2>Voice</h2>
+<p>Push to talk on the deck is heard by <strong>Whisper</strong>, on this PC: download its model on the app’s <strong>Voice</strong> page (Windows has no recogniser of its own, so a press says so until the model is in). Replies are spoken by Windows’ own voice unless you choose <strong>Kokoro</strong> (downloaded the same way) or a cloud voice with your own OpenAI or ElevenLabs key. The deck’s microphone and speaker work over the cable and over Bluetooth.</p>
 
 <h3>If Windows does not offer “Run anyway”</h3>
 <p><strong>Smart App Control</strong>, on some new Windows 11 installations, blocks unsigned programs and gives no way past it. You can see its setting in <em>Windows Security → App &amp; browser control → Smart App Control</em>. The preview cannot run while it is on, and on many Windows versions it cannot be turned back on without reinstalling Windows once it is off, so decide whether that is worth it for you. Antivirus software may also hold back a new unsigned download for a while; the checksum above tells you it is the file the release published.</p>
@@ -99,16 +102,15 @@
 <h2>Update the deck’s firmware</h2>
 <p>With one deck connected by USB-C, open <strong>Service</strong>, click <strong>Check</strong> on <strong>Deck firmware</strong>, then <strong>Review…</strong> and <strong>Install</strong>, exactly as on the Mac. Keep the cable connected until the deck is back. On Windows the transfer uses the deck’s HID connection rather than its faster USB interface, which Windows has no driver for, so it takes a few minutes (about five for 0.13.0 on Rev A). If you run Windows in a virtual machine, make sure the deck is passed through again after it restarts: it reconnects twice during an update.</p>
 
-<h2>Not in the preview yet</h2>
+<h2>Not in the preview</h2>
 <ul>
-  <li>Voice: push-to-talk dictation and spoken replies.</li>
-  <li>Starting with Windows: start the service from the app after you sign in.</li>
-  <li>Claude Code and Codex on the deck, and focusing their windows.</li>
-  <li>Automatic app updates: download each new version from the <a href="https://github.com/conol-ai/openwalkietalkie/releases/latest">latest release</a>, quit the app and end <code>deckd.exe</code>, then replace the old version’s folder with the new one. Each version unzips to a folder of its own name, so a shortcut to the old <code>bin\OpenWalkieTalkie.exe</code> needs pointing at the new one. Your settings stay in <code>%LOCALAPPDATA%\OpenWalkieTalkie</code>.</li>
+  <li>Automatic app updates. <strong>Service › Check</strong> finds a newer version, and <strong>Download…</strong> brings you here: download it from the <a href="https://github.com/conol-ai/openwalkietalkie/releases/latest">latest release</a>, quit the app from its icon, then replace the old version’s folder with the new one. Each version unzips to a folder of its own name, so a shortcut to the old <code>bin\OpenWalkieTalkie.exe</code> needs pointing at the new one. Your settings stay in <code>%LOCALAPPDATA%\OpenWalkieTalkie</code>.</li>
+  <li>The cloud voice’s key is kept in the service’s settings in <code>%LOCALAPPDATA%\OpenWalkieTalkie</code>, not in a credential store.</li>
+  <li>Allowing a permission card from the app while <code>[trust] require_trusted_for_allow</code> is on: the app is unsigned, so the service cannot verify it. Allow on the deck instead.</li>
 </ul>
 
 <h2>Uninstall</h2>
-<p>Quit the app, end <code>deckd.exe</code> in Task Manager, and delete the folder you unzipped. Settings, logs and downloaded firmware live in <code>%LOCALAPPDATA%\OpenWalkieTalkie</code>; delete it too to remove everything.</p>
+<p>Run <code>bin\deckd.exe uninstall</code> to stop the service, remove the start-at-sign-in entries and the Claude Code and Codex integrations; add <code>--purge</code> to delete what is in <code>%LOCALAPPDATA%\OpenWalkieTalkie</code> too (settings, voice models, downloaded firmware), all but its <code>logs</code> folder, which you can delete yourself. Then quit the app from its icon and delete the folder you unzipped.</p>
 
 <p>Something not working? <a href="https://github.com/conol-ai/openwalkietalkie/issues">Open an issue</a> with the log from <code>%LOCALAPPDATA%\OpenWalkieTalkie\logs</code>.</p>
 

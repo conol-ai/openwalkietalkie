@@ -23,7 +23,7 @@ pub struct NoCapture;
 
 impl CaptureSource for NoCapture {
     fn open(&mut self, _: &CaptureOpen, _: CaptureSink) -> Result<CaptureOpened, AudioError> {
-        Err(AudioError::NoDevice("the deck's microphone is the only input on Linux".into()))
+        Err(AudioError::NoDevice("the deck's microphone is the only input here".into()))
     }
 
     fn close(&mut self) {}
@@ -67,6 +67,19 @@ impl TtsEngine for NoTts {
     }
 }
 
+/// What `voice.listen{input:"mac"}` opens: the computer's default input on
+/// Windows, nothing on Linux.
+fn system_mic() -> Box<dyn CaptureSource> {
+    #[cfg(windows)]
+    {
+        Box::new(super::system_mic::SystemMic::default())
+    }
+    #[cfg(not(windows))]
+    {
+        Box::new(NoCapture)
+    }
+}
+
 /// The engine, the deck's link and Whisper, on their threads. Same handle as
 /// macOS returns, so the core installs it with the same `set_audio`.
 #[must_use]
@@ -77,14 +90,21 @@ pub fn spawn(cfg: &AudioConfig) -> AudioHandle {
     let (reports_tx, reports_rx) = unbounded::<tts::TtsReport>();
 
     let lanes = lanes::Lanes::new();
-    let synth: Arc<dyn TtsEngine> = cfg.local_tts.clone().unwrap_or_else(|| Arc::new(NoTts));
+    let local: Arc<dyn TtsEngine> = cfg.local_tts.clone().unwrap_or_else(|| Arc::new(NoTts));
+    // The cloud voice over the local one, as on macOS, where the core hands
+    // in its `[voice.tts]` cell (Windows); without a key, or with a local
+    // engine selected, the local one speaks.
+    let synth: Arc<dyn TtsEngine> = match cfg.cloud.clone() {
+        Some(settings) => Arc::new(super::cloud::CloudTts::new(settings, local)),
+        None => local,
+    };
     let tts_info = synth.info();
     let speaker = tts::spawn(synth, lanes.clone(), reports_tx);
 
     let link = cfg.link.clone().unwrap_or_else(crate::ble::BleAudio::spawn);
     let mut engine = engine::Engine::new(
         lanes,
-        Box::new(ble::BleCapture::new(link.clone(), Box::new(NoCapture))),
+        Box::new(ble::BleCapture::new(link.clone(), system_mic())),
         Box::new(ble::BleOutput::new(link.clone())),
         events_tx.clone(),
     );

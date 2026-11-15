@@ -515,16 +515,33 @@ pub fn key_bindings() -> Vec<KeyBinding> {
 /// The service keeps running and the deck keeps working, and the status
 /// item (or the dock icon) opens the window again.
 ///
-/// Elsewhere it quits the window: gpui cannot hide an app there (its
-/// Windows `hide` is an empty todo), so a close that only hid would do
-/// nothing at all. The service is its own process and keeps the deck
-/// working either way.
+/// On Windows the window hides to the tray, the status item's equivalent
+/// there, whose Open brings it back (gpui's own `hide` is an empty todo, so
+/// the window itself is hidden). Without a tray icon, and elsewhere, it
+/// quits, since a close that only hid would leave no way back. The service
+/// is its own process and keeps the deck working either way.
 pub fn close_window(cx: &mut App) {
     if cfg!(target_os = "macos") {
         cx.hide();
-    } else {
-        cx.quit();
+        return;
     }
+    #[cfg(windows)]
+    if cx.has_global::<crate::menu::Menu>() {
+        // Deferred: a close arrives while gpui is updating that very window
+        // (its close button, ⌘W), and a window cannot be updated inside its
+        // own update.
+        cx.defer(|cx| {
+            for window in cx.windows() {
+                if let Err(e) = window
+                    .update(cx, |_, window, _| crate::win_window::set_visible(window, false))
+                {
+                    eprintln!("openwalkietalkie-app: cannot hide the window to the tray: {e}");
+                }
+            }
+        });
+        return;
+    }
+    cx.quit();
 }
 
 /// The window's title bar. On macOS the content runs under a transparent one
@@ -601,6 +618,21 @@ fn open(state: HostState, receiver: EventReceiver, first_run: bool, cx: &mut App
 /// Bring the window back (the dock icon, the status item's **Open**).
 pub fn show(cx: &mut App) {
     cx.activate(true);
+    // Windows: a window hidden to the tray is shown again first, deferred
+    // like the hiding (`close_window`): the tray menu's commands run inside
+    // the window's own update.
+    #[cfg(windows)]
+    cx.defer(|cx| {
+        for window in cx.windows() {
+            window
+                .update(cx, |_, window, _| {
+                    crate::win_window::set_visible(window, true);
+                    window.activate_window();
+                })
+                .ok();
+        }
+    });
+    #[cfg(not(windows))]
     for window in cx.windows() {
         window
             .update(cx, |_, window, _| window.activate_window())

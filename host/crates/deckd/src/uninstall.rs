@@ -132,6 +132,11 @@ pub fn run(env: &integrations::Env, paths: &Paths, opts: Options, keys: &KeyHome
     //    the other.
     //    The agent under the project's old name goes the same way, quietly
     //    when it was never there.
+    //    Windows has no launchd: the service stops through its own door and
+    //    its sign-in starts are Run values (`windows_service`).
+    #[cfg(windows)]
+    windows_service(env, paths, &mut outcome);
+    #[cfg(not(windows))]
     for label in [
         crate::launchd::DECKD_LABEL,
         crate::launchd::LEGACY_DECKD_LABEL,
@@ -163,15 +168,46 @@ pub fn run(env: &integrations::Env, paths: &Paths, opts: Options, keys: &KeyHome
             }
         }
     }
+    #[cfg(not(windows))]
     outcome.next_steps.push(
         "the app itself: quit OpenWalkieTalkie and drag it to the Trash. Its SMAppService \
          registration and the `mainApp` login item are unregistered by the app (Settings → \
          Uninstall…), not by this command."
             .into(),
     );
+    #[cfg(windows)]
+    outcome.next_steps.push(
+        "the app itself: quit OpenWalkieTalkie (its tray icon's Quit) and delete the folder it \
+         was unzipped to."
+            .into(),
+    );
 
-    // 3. The data, last, and only when asked.
+    // 3. The data, last, and only when asked. On Windows the logs live in
+    //    the data directory, and they are kept there.
+    #[cfg(windows)]
     if opts.purge {
+        match remove_dir_except(&paths.data, &paths.logs) {
+            Ok(true) => outcome
+                .steps
+                .push(format!("purged {} (its logs kept)", paths.data.display())),
+            Ok(false) => outcome
+                .steps
+                .push(format!("purged {} (was absent)", paths.data.display())),
+            Err(e) => outcome.problems.push(e),
+        }
+        // The app's preferences, under the uninstalled account's home (a
+        // test's home is its own directory, never the operator's).
+        let prefs = env.home.join(r"AppData\Roaming\openwalkietalkie\app-prefs.json");
+        if prefs.exists() {
+            match std::fs::remove_file(&prefs) {
+                Ok(()) => outcome.steps.push(format!("purged {}", prefs.display())),
+                Err(e) => outcome
+                    .problems
+                    .push(format!("cannot remove {}: {e}", prefs.display())),
+            }
+        }
+    }
+    if opts.purge && cfg!(not(windows)) {
         for dir in [&paths.data, &paths.caches] {
             match remove_dir(dir) {
                 Ok(true) => outcome.steps.push(format!("purged {}", dir.display())),
@@ -204,13 +240,15 @@ pub fn run(env: &integrations::Env, paths: &Paths, opts: Options, keys: &KeyHome
                 )),
             }
         }
-        outcome.next_steps.push(
-            "to give back the TCC grants as well, run `tccutil reset All \
-             ai.cohdl.openwalkietalkie` — our own bundle id and nothing else. This command does \
-             not run it for you."
-                .into(),
-        );
-    } else {
+        if cfg!(target_os = "macos") {
+            outcome.next_steps.push(
+                "to give back the TCC grants as well, run `tccutil reset All \
+                 ai.cohdl.openwalkietalkie` — our own bundle id and nothing else. This command \
+                 does not run it for you."
+                    .into(),
+            );
+        }
+    } else if !opts.purge {
         outcome.kept.push(format!(
             "{} — settings, tokens and the deck's remembered slots. `deckd uninstall --purge` \
              deletes them.",
@@ -230,6 +268,92 @@ pub fn run(env: &integrations::Env, paths: &Paths, opts: Options, keys: &KeyHome
     outcome
 }
 
+/// Windows: stop the running service (`service.stop` through its own door:
+/// a clean exit, which its host does not restart) and remove the sign-in
+/// starts of the service and the app (their Run values). Skipped in a test
+/// environment, as `launchctl` is: it would stop the operator's own service.
+#[cfg(windows)]
+fn windows_service(env: &integrations::Env, paths: &Paths, outcome: &mut Outcome) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    if env.launchctl == Launchctl::Disabled {
+        return;
+    }
+    let stopped = std::env::current_exe().ok().and_then(|exe| {
+        std::process::Command::new(exe)
+            .arg("--data-dir")
+            .arg(&paths.data)
+            .args(["ctl", "--scopes", "admin", "--timeout", "5", "service.stop"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .ok()
+    });
+    match stopped {
+        Some(out) if out.status.success() => outcome.steps.push("stopped the running service".into()),
+        // 2: no service answered, so none was running.
+        Some(out) if out.status.code() == Some(2) => outcome.steps.push("the service was not running".into()),
+        Some(out) => outcome.problems.push(format!(
+            "the service did not stop: {}; end deckd.exe in Task Manager",
+            String::from_utf8_lossy(&out.stderr).trim()
+        )),
+        None => outcome
+            .problems
+            .push("cannot ask the service to stop; end deckd.exe in Task Manager".into()),
+    }
+    let reg = std::env::var_os("SystemRoot")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| "C:\\Windows".into())
+        .join(r"System32\reg.exe");
+    for value in ["OpenWalkieTalkie Service", "OpenWalkieTalkie"] {
+        let removed = std::process::Command::new(&reg)
+            .args(["delete", r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run", "/v", value, "/f"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output();
+        match removed {
+            Ok(out) if out.status.success() => {
+                outcome.steps.push(format!("startup: removed {value}"));
+            }
+            // reg exits 1 when there was no such value.
+            Ok(_) => {}
+            Err(e) => outcome.problems.push(format!("cannot run reg.exe: {e}")),
+        }
+    }
+}
+
+/// Remove everything in `dir` but `keep` (the logs); `Ok(false)` when `dir`
+/// was not there. A service that is still letting go of its files gets a
+/// few moments.
+#[cfg(windows)]
+fn remove_dir_except(dir: &Path, keep: &Path) -> Result<bool, String> {
+    if !dir.exists() {
+        return Ok(false);
+    }
+    let mut last = None;
+    for _ in 0..10 {
+        last = None;
+        let entries = std::fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path == keep {
+                continue;
+            }
+            let removed = if path.is_dir() {
+                std::fs::remove_dir_all(&path)
+            } else {
+                std::fs::remove_file(&path)
+            };
+            if let Err(e) = removed {
+                last = Some(format!("cannot remove {}: {e}", path.display()));
+            }
+        }
+        if last.is_none() {
+            return Ok(true);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(400));
+    }
+    Err(last.unwrap_or_default())
+}
+
 /// Remove a directory tree; `Ok(false)` when it was not there.
 fn remove_dir(dir: &Path) -> Result<bool, String> {
     if !dir.exists() {
@@ -243,6 +367,7 @@ fn remove_dir(dir: &Path) -> Result<bool, String> {
 /// `launchctl bootout gui/<uid>/<label>`, guarded by a `print` so an absent
 /// job is not an error, and disabled outright in a test environment — a
 /// `bootout` from a unit test would stop the operator's own running service.
+#[cfg(not(windows))]
 fn bootout(env: &integrations::Env, label: &str) -> Result<bool, String> {
     if env.launchctl == Launchctl::Disabled {
         return Ok(false);

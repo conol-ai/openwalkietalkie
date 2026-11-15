@@ -143,7 +143,9 @@ impl Settings {
     #[must_use]
     pub fn from_stt(stt: &crate::config::Stt) -> Settings {
         Settings {
-            enabled: stt.engine == ENGINE,
+            // Windows has no recogniser of its own to choose instead: Whisper
+            // is the one, whatever the word (the default is macOS's "apple").
+            enabled: stt.engine == ENGINE || cfg!(windows),
             model: model_name(&stt.model).to_string(),
             language: stt.language.trim().to_ascii_lowercase(),
             threads: stt.threads,
@@ -239,6 +241,6 @@ mod tests {
         s.threads = 3;
         assert_eq!(s.thread_count(), 3);
         let apple = Settings::from_stt(&crate::config::Stt::default());
-        assert!(!apple.enabled);
+        assert_eq!(apple.enabled, cfg!(windows), "Apple's recogniser, where there is one");
     }
 }

@@ -205,7 +205,7 @@ pub struct Core {
     pub firmware: crate::firmware::Updater,
     /// The local recogniser, when this build has one, for `stt.status`
     /// and for loading a model the moment it is on disk.
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[cfg(any(target_os = "macos", target_os = "linux", windows))]
     pub whisper: Option<Arc<crate::audio::whisper::WhisperStt>>,
     /// `[voice.tts]` as the local voice reads it at every utterance
     /// (`audio::kokoro`), refreshed the same way as the others.
@@ -214,7 +214,7 @@ pub struct Core {
     pub tts_install: crate::download::Installer,
     /// The local voice, when this build has one, for `tts.status` and for
     /// loading a package the moment it is on disk.
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", windows))]
     pub kokoro: Option<Arc<crate::audio::kokoro::KokoroTts>>,
     /// Recordings offered to `caps.transcribe` companions, shared with the
     /// audio engine (`audio::companion`).
@@ -387,11 +387,11 @@ impl Core {
             stt_install,
             firmware,
             executable: std::env::current_exe().ok(),
-            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            #[cfg(any(target_os = "macos", target_os = "linux", windows))]
             whisper: None,
             kokoro_settings: Arc::new(arc_swap::ArcSwap::from_pointee(crate::kokoro::Settings::default())),
             tts_install,
-            #[cfg(target_os = "macos")]
+            #[cfg(any(target_os = "macos", windows))]
             kokoro: None,
             transcribe: crate::audio::companion::CompanionHub::new(),
             desktop: DesktopHandle::none(),
@@ -524,7 +524,7 @@ impl Core {
         if let Some(whisper) = &self.whisper {
             whisper.ensure_loaded();
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", windows))]
         {
             if let Some(whisper) = &self.whisper {
                 whisper.ensure_loaded();
@@ -3129,11 +3129,13 @@ pub fn run(mut opts: RunOptions) -> Result<i32, CoreError> {
     // connected); its cable port is the hid thread's, driven whenever the
     // instance it opened is the USB one. Only with the BLE transport, and
     // never for `--no-device`: a door test may not touch the radio.
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    // Bluetooth through CoreBluetooth, BlueZ or WinRT; the link's cable port
+    // carries the deck's audio over USB on every platform.
+    #[cfg(any(target_os = "macos", target_os = "linux", windows))]
     let voice_link = (!opts.no_device
         && opts.config.voice.transport == crate::config::VoiceTransport::Ble)
         .then(crate::ble::BleAudio::spawn);
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
     let voice_link: Option<crate::ble::BleAudio> = None;
     // `--no-device`: the hid thread runs without hardware (never enumerates),
     // so the link's metrics and debug controls keep answering.
@@ -3230,6 +3232,50 @@ pub fn run(mut opts: RunOptions) -> Result<i32, CoreError> {
                 &opts.config.voice.tts.command,
                 &opts.config.voice.tts.voices,
             ))),
+            companion: Some(core.transcribe.clone()),
+        }));
+    }
+    // Windows: the engine Linux runs, over the deck's link (Bluetooth through
+    // WinRT, or its cable port), the local Whisper model on the CPU, and
+    // replies spoken by the cloud voice, Kokoro or a program, by default
+    // Windows' own SAPI voices (`audio::command::default_command`).
+    #[cfg(windows)]
+    if !opts.no_device {
+        core.tts_settings
+            .store(Arc::new(crate::audio::cloud::Settings::from_config(&in_force)));
+        core.stt_settings
+            .store(Arc::new(crate::stt::Settings::from_config(&opts.config)));
+        let whisper = Arc::new(crate::audio::whisper::WhisperStt::new(
+            core.stt_settings.clone(),
+            opts.paths.stt.clone(),
+            Arc::new(crate::audio::linux::NoStt),
+        ));
+        whisper.ensure_loaded();
+        core.whisper = Some(whisper.clone());
+        // The local voice over Windows' own, as Kokoro stands over Apple's on
+        // a Mac: a pass-through until its package is on disk.
+        core.kokoro_settings
+            .store(Arc::new(crate::kokoro::Settings::from_config(&opts.config)));
+        let kokoro = Arc::new(crate::audio::kokoro::KokoroTts::new(
+            core.kokoro_settings.clone(),
+            opts.paths.kokoro.clone(),
+            Arc::new(crate::audio::command::CommandTts::new(
+                &opts.config.voice.tts.command,
+                &opts.config.voice.tts.voices,
+            )),
+        ));
+        kokoro.ensure_loaded();
+        core.kokoro = Some(kokoro.clone());
+        core.set_audio(crate::audio::linux::spawn(&crate::audio::AudioConfig {
+            transport: opts.config.voice.transport,
+            device_uid: opts.config.voice.device_uid.clone(),
+            fallback_output: opts.config.voice.fallback_output.clone(),
+            link: voice_link,
+            tts_engine: opts.config.voice.tts.engine.clone(),
+            sidecar: None,
+            cloud: Some(core.tts_settings.clone()),
+            stt: Some(whisper),
+            local_tts: Some(kokoro),
             companion: Some(core.transcribe.clone()),
         }));
     }

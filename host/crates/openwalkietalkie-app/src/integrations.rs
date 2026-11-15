@@ -428,12 +428,16 @@ pub fn card_state(line: &Line) -> Option<&State> {
 /// The Agent tools card's rows, in the board's order: Claude Code, Claude
 /// Channels, Codex CLI, Codex Desktop.
 pub fn tools(facts: &Facts, now: Ts, language: Language) -> Vec<Line> {
-    vec![
+    let mut lines = vec![
         claude_line(facts, now, language),
         channels_line(facts, language),
         codex_line(facts, now, language),
-        desktop_line(facts, language),
-    ]
+    ];
+    // The Codex Desktop launcher is a macOS app bundle; Windows has none.
+    if cfg!(not(windows)) {
+        lines.push(desktop_line(facts, language));
+    }
+    lines
 }
 
 /// Claude Code: the plugin's state from the installer, its sessions from

@@ -111,9 +111,21 @@ fn prefs_file(home: &Path) -> PathBuf {
     home.join("Library/Preferences/ai.cohdl.openwalkietalkie.plist")
 }
 
+/// The app's preferences on Windows: the JSON file it keeps under the roaming
+/// `%APPDATA%` (the app's `prefs.rs`), which is `<home>\AppData\Roaming`
+/// unless something moved it.
+#[cfg(windows)]
+pub(crate) fn prefs_file(home: &Path) -> PathBuf {
+    std::env::var_os("APPDATA")
+        .map(PathBuf::from)
+        .filter(|dir| dir.is_absolute())
+        .unwrap_or_else(|| home.join(r"AppData\Roaming"))
+        .join(r"openwalkietalkie\app-prefs.json")
+}
+
 /// The app's preferences: the JSON file it keeps under `$XDG_CONFIG_HOME`
 /// when that is absolute, else `~/.config` (the app's `prefs.rs`).
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 fn prefs_file(home: &Path) -> PathBuf {
     std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
