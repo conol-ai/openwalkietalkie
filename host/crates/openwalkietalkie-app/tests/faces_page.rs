@@ -1176,8 +1176,9 @@ fn every_row_the_page_adds_is_the_only_row_of_its_key() {
         assert_eq!(rows, 1, "{english:?} is in another table too");
     }
     // The sheet's 52 rows, copied as written, the note of a service that
-    // asks only while a deck was linked, and the nine strip rules.
-    assert_eq!(i18n::faces::STRINGS.len(), 62);
+    // asks only while a deck was linked, and the nine strip rules; then the
+    // reserved-shortcuts line as Windows says it.
+    assert_eq!(i18n::faces::STRINGS.len(), 63);
 }
 
 #[test]
@@ -1188,8 +1189,23 @@ fn every_word_the_page_says_has_a_row() {
     );
     assert_eq!(i18n::missing_rows(source), Vec::<String>::new());
     // Pinned, so a lookup the scanner stopped seeing fails here rather than
-    // passing as a page with less to translate.
-    assert_eq!(i18n::literals(source).len(), 81);
+    // passing as a page with less to translate. (80: the reserved-shortcuts
+    // line is one of two by platform, `voice::here`, which the scanner does
+    // not read; `the_windows_words_have_rows` holds both.)
+    assert_eq!(i18n::literals(source).len(), 80);
+}
+
+/// The words the page says on Windows only (`voice::here`'s second form,
+/// which the literal scanner does not see) have rows of their own.
+#[test]
+fn the_windows_words_have_rows() {
+    i18n::install();
+    for english in [
+        "Pick by hand the shortcuts\nmacOS reserves.",
+        "Pick by hand the shortcuts\nWindows reserves.",
+    ] {
+        assert!(deck_gui_core::i18n::has_entry(english), "{english:?}");
+    }
 }
 
 /// A fresh test service's own replies (`deck-gui-core`'s recorded fixtures,

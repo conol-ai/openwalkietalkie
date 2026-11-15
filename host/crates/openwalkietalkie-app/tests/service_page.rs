@@ -1397,8 +1397,27 @@ fn every_row_the_page_adds_is_the_only_row_of_its_key() {
     // Code's older hooks still use it, what a pressed install waits for,
     // and why an install waits for the deck to link. Then the Footprint's
     // Keychain row: its name and its place. Then the app row's line once
-    // the service found a newer app.
-    assert_eq!(i18n::service::STRINGS.len(), 101);
+    // the service found a newer app. Then Windows' nine: the app's update
+    // (Download…, Updating…, the download and its failure), the Footprint's
+    // Startup row and Credential Manager row, and the Uninstall note, its
+    // question and its outcome without macOS's permissions or Trash.
+    assert_eq!(i18n::service::STRINGS.len(), 110);
+}
+
+/// The words the page says on Windows only (`voice::here`'s second form,
+/// which the literal scanner does not see) have rows of their own.
+#[test]
+fn the_windows_words_have_rows() {
+    i18n::install();
+    for english in [
+        "deckd, under Startup apps in Settings",
+        "Credential Manager entry",
+        "Uninstall removes all of these except the logs,\nand puts your CLI settings back. Delete the app's folder yourself.",
+        "Removes everything in this list except the logs, and puts your CLI settings back. Then delete the app's folder.",
+        "OpenWalkieTalkie is uninstalled. Delete the app's folder.",
+    ] {
+        assert!(deck_gui_core::i18n::has_entry(english), "{english:?}");
+    }
 }
 
 #[test]
@@ -1415,8 +1434,9 @@ fn every_word_the_page_says_has_a_row() {
     // questions moved into `service::api_question` whole, and gained the
     // sentence about Claude Code's older hooks and its Repair button; 187
     // with the Footprint's Keychain row; 188 with the app row's line for a
-    // newer app.)
-    assert_eq!(i18n::literals(source).len(), 188);
+    // newer app; 189 with Windows' update buttons and toasts, less the
+    // Footprint lines that became one of two by platform, `voice::here`.)
+    assert_eq!(i18n::literals(source).len(), 189);
 }
 
 /// A fresh test service's own replies (`deck-gui-core`'s recorded fixtures,
