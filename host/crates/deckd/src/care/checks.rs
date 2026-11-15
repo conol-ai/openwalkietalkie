@@ -203,6 +203,7 @@ mod tests {
     use serde_json::Value;
     use std::collections::BTreeSet;
 
+    #[cfg_attr(windows, allow(dead_code))] // its tests are a Mac's rows
     fn keys(value: &Value) -> BTreeSet<&str> {
         value
             .as_object()

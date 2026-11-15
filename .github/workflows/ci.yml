@@ -162,6 +162,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
         with:
           toolchain: 1.98.1
+          components: clippy
       # The service and the window build for Windows (named-pipe door,
       # LockFileEx, the app as a GUI program, voice: whisper.cpp through the
       # runner's CMake and LLVM, sherpa-onnx's static library, the C runtime
