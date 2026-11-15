@@ -866,7 +866,7 @@ fn the_harness_scenes_are_the_services_replies_parsed_as_the_page_reads_them() {
     assert_eq!(synthesiser(&downloading.tts), Some(Synthesiser::Apple));
     assert_eq!(
         tts_slot(&downloading.kokoro),
-        Slot::Download { bytes: 364_816_464 }
+        Slot::Download { bytes: 364_855_331 }
     );
     assert_eq!(
         speech_choice(&downloading.stt_config),
@@ -923,7 +923,7 @@ fn the_harness_scenes_are_the_services_replies_parsed_as_the_page_reads_them() {
     );
     assert_eq!(
         tts_slot(&fresh.kokoro),
-        Slot::Download { bytes: 364_816_464 }
+        Slot::Download { bytes: 364_855_331 }
     );
     assert!(fresh.stt_config.companion && !fresh.add_key);
     // Every other scene is another page's, live ones included.
