@@ -1,0 +1,7 @@
+# /dev/uinput for the user at the seat, so the Omarchy bridge can type the deck's Macropad
+# keystrokes as a keyboard Hyprland's own binds see (omarchy_input.py). Without it the bridge
+# types with wtype, which reaches the focused app but none of Omarchy's Super shortcuts.
+# The uinput module must be loaded for udev to see the device and apply this (install.sh prints
+# the line for /etc/modules-load.d). Any process of that user can then make an input device:
+# the same grant ydotool needs.
+KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", OPTIONS+="static_node=uinput"

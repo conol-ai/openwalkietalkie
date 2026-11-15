@@ -787,8 +787,15 @@ impl Shared {
     /// One mic frame, from the port it arrived on, decoded here and now.
     pub(crate) fn notify(&self, transport: Transport, value: &[u8]) {
         let mut decoder = lock(&self.decoder);
+        let before = decoder.live();
         decoder.push(value, |event| self.deliver(event));
-        *lock(&self.stream_port) = decoder.live().map(|_| transport);
+        let after = decoder.live();
+        // A stream starting or ending, with the totals so far: the one place that
+        // says whether the deck's microphone frames arrive and decode at all.
+        if before != after {
+            tracing::debug!(?transport, ?before, ?after, stats = ?decoder.stats(), "deck mic stream");
+        }
+        *lock(&self.stream_port) = after.map(|_| transport);
     }
 
     /// Write queued frames while `can_send` allows (see

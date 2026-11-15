@@ -8,6 +8,7 @@ data="$HOME/.local/share/openwalkietalkie"
 share="$data/omarchy"
 units="$HOME/.config/systemd/user"
 rule=/etc/udev/rules.d/70-openwalkietalkie.rules
+uinput_rule=/etc/udev/rules.d/71-openwalkietalkie-uinput.rules
 mkdir -p "$share" "$units" "$HOME/.local/bin"
 cp "$here"/omarchy_*.py "$share"/
 if [ "${1:-}" ]; then install -m 755 "$1" "$HOME/.local/bin/deckd"; fi
@@ -38,4 +39,14 @@ if ! grep -qs '1209:5754' "$rule"; then
     echo "One step needs root: let deckd open the deck (then it links by itself):"
     echo "  sudo install -m 644 $here/70-openwalkietalkie.rules $rule"
     echo "  sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw"
+fi
+
+# Optional: Macropad keystrokes as a real keyboard, so Omarchy's own Super shortcuts see them.
+if [ ! -e "$uinput_rule" ] || [ ! -e /sys/class/misc/uinput ]; then
+    echo
+    echo "Optional, for Macropad keys that trigger Omarchy's shortcuts (Super+...): /dev/uinput for you:"
+    echo "  sudo install -m 644 $here/71-openwalkietalkie-uinput.rules $uinput_rule"
+    echo "  echo uinput | sudo tee /etc/modules-load.d/openwalkietalkie-uinput.conf  # load it at boot"
+    echo "  sudo udevadm control --reload && sudo modprobe uinput"
+    echo "  systemctl --user restart omarchy-deck"
 fi

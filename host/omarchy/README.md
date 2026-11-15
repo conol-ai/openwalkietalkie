@@ -29,6 +29,17 @@ sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw
 
 The build needs `pkg-config`, the development files of libudev (hidapi), ALSA (cpal) and D-Bus (bluer), and CMake and libclang for whisper.cpp. The CI job installs them on Ubuntu as `pkg-config libudev-dev libasound2-dev libdbus-1-dev cmake libclang-dev` (`.github/workflows/ci.yml`); on Omarchy (Arch) they are `sudo pacman -S --needed cmake clang`, the rest being there already.
 
+**Macropad keystrokes, optional.** Hyprland runs none of its binds for a virtual keyboard such as `wtype`'s, so for Macropad keys that trigger Omarchy's shortcuts the bridge makes a uinput keyboard. That needs `/dev/uinput`, which is root's: `71-openwalkietalkie-uinput.rules` gives it to the user at the seat, and the `uinput` module has to be loaded for udev to apply it. `install.sh` prints the steps while either is missing:
+
+```sh
+sudo install -m 644 omarchy/71-openwalkietalkie-uinput.rules /etc/udev/rules.d/
+echo uinput | sudo tee /etc/modules-load.d/openwalkietalkie-uinput.conf
+sudo udevadm control --reload && sudo modprobe uinput
+systemctl --user restart omarchy-deck
+```
+
+Any process of your user can then make an input device, as with ydotool.
+
 **The udev rule.** Without it, `/dev/hidraw*` belongs to root and `deckd` logs `cannot open HID device`: the deck shows as present (`deckd probe`) and its voice links over BLE, but the HID link never comes up. `70-openwalkietalkie.rules` gives the user at the seat the deck's node, on USB and on Bluetooth alike: it matches the HID id (`KERNELS=="*:1209:5754.*"`), because over Bluetooth the deck is a uhid device with no USB parent, so a rule on `ATTRS{idVendor}` never matches it. `install.sh` cannot write `/etc` and prints these two commands while the rule is missing; once it is in, `deckd` opens the deck by itself, with no restart.
 
 `install.sh` copies the bridge to `~/.local/share/openwalkietalkie/omarchy/`, installs `deckd` to `~/.local/bin/deckd` when it is given the binary, and enables and starts the two units in `systemd/` (it is idempotent; `systemctl --user disable --now deckd omarchy-deck` undoes it). `deckd.service` runs `deckd run` with `DECKD_DATA_DIR=~/.local/share/openwalkietalkie`, so its config, socket and caches are all under that directory; `omarchy-deck.service` starts the bridge on that socket. (A `deckd` started without `DECKD_DATA_DIR` uses the XDG directories instead, and its socket is `$XDG_RUNTIME_DIR/openwalkietalkie/deckd.sock`, or `${XDG_CACHE_HOME:-~/.cache}/openwalkietalkie/deckd.sock` when `XDG_RUNTIME_DIR` is unset, which is where the bridge looks when it is started without `--socket`.) `omarchy_hook.py install` writes into each CLI's settings a hook command that points at the copy, and that command lets the call through when the script is missing, so moving the repository never blocks a session. `install.sh` also switches off `deckd`'s own sources of the same sessions (`deckd config set sources.claude=false codex.daemon=false`): its Claude hooks and `claude agents` roster seed, and its Codex app-server connection, would put every session on the roster a second time, under another key, beside the bridge's. The bridge finds the running Hyprland instance and Wayland display by itself, with no environment variables to set.
@@ -37,7 +48,8 @@ A `deckd` command meant for that service needs the same directory, or it looks f
 
 ### Voice (PTT)
 
-- **Recognition** is the local Whisper model. There is no local microphone: the deck's is the only input. Download a model before the first press. On a CPU, `large-v3-turbo` takes about 20 s per press; `small` (about 2 to 4 s) is the one to use:
+- **Recognition, with Superwhisper** (Omarchy's own dictation): when `superwhisper` is installed, a press to an Omarchy session is transcribed by it, in its processing mode (Offline, Offline Lite or Cloud), language, vocabulary and replacements, as every other dictation on the machine. The bridge registers each session with `caps.transcribe: "push"`, `deckd` hands it the press's WAV (`agent.transcribe`), and `superwhisper transcribe` makes the text (`omarchy_transcribe.py`); nothing is pasted. A press it cannot transcribe (an error, empty text, 15 s) falls back to `deckd`'s own recogniser, and `deckd config set voice.stt.companion=false` turns the hand-off off.
+- **Recognition, without it**, is the local Whisper model. There is no local microphone: the deck's is the only input. Download a model before the first press. On a CPU, `large-v3-turbo` takes about 20 s per press; `small` (about 2 to 4 s) is the one to use:
 
 ```sh
 echo '[voice.stt]
@@ -68,9 +80,10 @@ Kimi Code has hooks (`[[hooks]]` in its `config.toml`). `omarchy_hook.py install
 | Scratchpad | SHIFT+CANCEL = show / hide the scratchpad; SHIFT+ENTER = move the current window to the scratchpad (Super+S and Super+Alt+S) |
 | **Omarchy sessions on the roster** | Every Claude Code / Codex / Kimi Code session on Omarchy appears on the Agents roster, as working / ready / question / error |
 | Select a session | Selecting a session on the deck, or `op.focus` from a client, brings its terminal window to the front on Omarchy |
-| **Voice orders** | Press PTT on a selected Omarchy session and speak: the recognised text is typed into its terminal, followed by Enter (with `wtype`) |
+| **Voice orders** | Press PTT on a selected Omarchy session and speak: Superwhisper (else Whisper) recognises it, and the text is typed into its terminal, followed by Enter (with `wtype`). A session with no terminal window on Omarchy (one an app hosts) cannot be typed into: the deck shows the order as not delivered |
 | Replies | When a turn ends, its reply (600 characters at most) goes to the session's Ready card and is spoken, for Claude Code and Codex from their Stop hook, for Kimi Code from its log |
-| **Macropad** | A Macropad key with a keystroke (`cmd+shift+4`) types it on Omarchy with `wtype`: `cmd` is Super, `opt` / `alt` is Alt. Only with the Linux `deckd`: a Mac's `deckd` types them on the Mac |
+| **Macropad** | A Macropad key with a keystroke (`cmd+shift+4`) types it on Omarchy as a keyboard of its own (uinput, `omarchy_input.py`), so Omarchy's Super shortcuts fire as well as the focused app's: `cmd` is Super, `opt` / `alt` is Alt. Needs `/dev/uinput` (below); without it the keys go by `wtype`, which reaches the focused app but none of Hyprland's binds. Only with the Linux `deckd`: a Mac's `deckd` types them on the Mac |
+| **Usage face** | Claude's rate-limit windows, read with the Claude Code login (`~/.claude/.credentials.json`) every 5 minutes, once switched on: `DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd config set 'usage.providers=["codex","claude"]'`. Codex's bars come from its app-server daemon, which `install.sh` leaves unconnected (it would put Codex sessions on the roster twice), so they stay empty |
 | **System face** | The Linux `deckd` fills it: CPU (`/proc/stat`), memory in use (`MemTotal - MemAvailable`), free space on `/`, and the busiest GPU whose driver reports its load (`gpu_busy_percent`: amdgpu; Intel and NVIDIA's driver show none) |
 
 The key map is `KEYMAP` at the top of `omarchy_deck.py`; that is the one place to change it.
@@ -177,6 +190,8 @@ On 2026-11-14, with Hyprland 0.56.2 and a Rev B deck on firmware 0.13.0 over Blu
 - Every key of `KEYMAP`, LEFT / RIGHT, a workspace chip and a window row, fed to the bridge as `device.key` and `device.ws` events, do what the table above says. Hyprland 0.56 takes only the Lua form of each dispatch: the legacy one is refused.
 - A real Claude Code session: its hooks register it, it goes `idle`, `working`, `ready`; an `op.order` is typed into its terminal with `wtype` and answered; `op.focus` brings its window forward.
 
+On 2026-11-15, the same machine with another Rev B deck (official 0.13.0, Bluetooth), pressed by hand: the Omarchy face and all its keys, wheel, chips and window rows; the roster, and selecting a session raising its window; a dictated order (PTT, Superwhisper in Cloud mode, about 0.7 s) typed into a Claude Code terminal and answered, the reply on the Ready card and spoken by the deck; the Macropad's Super+S and Super+2 through uinput; the System face; the Usage face's Claude bars.
+
 ## Not yet verified
 
-See issue ZhangHanDong/openwalkietalkie#1: speech actually heard from the deck, PTT end to end (the order above was sent with `op.order`, not dictated), real Codex and Kimi Code sessions, USB, and a real Mac.
+See issue ZhangHanDong/openwalkietalkie#1: real Codex and Kimi Code sessions, the Codex usage bars, and a real Mac.

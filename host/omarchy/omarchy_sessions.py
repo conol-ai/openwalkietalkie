@@ -247,6 +247,9 @@ class Bridge:
         # Whether the daemon takes `agent.order.result`; an older one answers
         # -32601 once and is not asked again.
         self.order_results = True
+        # Whether presses to these sessions are transcribed here (Superwhisper,
+        # `omarchy_transcribe`): registered with `caps.transcribe: "push"`.
+        self.transcribe = False
 
     # hooks -------------------------------------------------------------------
     def on_hook(self, msg: dict, quiet: bool = False) -> None:
@@ -343,8 +346,11 @@ class Bridge:
             s.replied = s.reply
 
     def register(self, s: Session) -> None:
+        caps = {'answer': 'none', 'order': 'push', 'focus': True}
+        if self.transcribe:
+            caps['transcribe'] = 'push'
         params = {'kind': s.cli if s.cli in DECK_KINDS else 'other', 'name': s.name, 'key': s.key, 'cwd': s.cwd,
-                  'caps': {'answer': 'none', 'order': 'push', 'focus': True}, 'lease_ttl_s': 30}
+                  'caps': caps, 'lease_ttl_s': 30}
         try:
             result = self.call('agent.register', params)
         except Exception as error:

@@ -137,6 +137,8 @@ class Macropad(unittest.TestCase):
                  'state.get': {'agents': {}, 'macros': self.LAYOUT}}
         remote.rpc = mock.Mock(call=mock.Mock(side_effect=lambda method, params=None: calls[method]))
         remote.run = mock.Mock(return_value=SimpleNamespace(returncode=0))
+        # No real /dev/uinput in a test: as on a machine without the udev rule, wtype types.
+        remote.keyboard = mock.Mock(press=mock.Mock(side_effect=PermissionError(13, 'denied')))
         remote.link_at_hello(0.0)
         return remote
 
@@ -193,6 +195,61 @@ class Macropad(unittest.TestCase):
         remote = self.remote(platform='macos')
         self.press(remote, 3, 0)
         remote.run.assert_not_called()
+
+
+class Uinput(unittest.TestCase):
+    """Macropad keys as a real keyboard (uinput), which Hyprland's own binds see; wtype after."""
+
+    def test_combos_become_key_codes_and_events(self):
+        import omarchy_input as i
+        self.assertEqual(i.codes('cmd+2'), ([125], 3))
+        self.assertEqual(i.codes('ctrl+opt+pageup'), ([29, 56], 104))
+        self.assertIsNone(i.codes('cmd+nope'))
+        self.assertIsNone(i.codes('a+b'))
+        self.assertEqual(i.events('cmd+s'), [(1, 125, 1), (0, 0, 0), (1, 31, 1), (0, 0, 0),
+                                             (1, 31, 0), (0, 0, 0), (1, 125, 0), (0, 0, 0)])
+
+    def test_every_deck_key_has_a_code(self):
+        import omarchy_input as i
+        for key in ('a', 'z', '0', '9', 'f1', 'f12', 'up', 'enter', 'esc', 'tab', 'space', 'backspace',
+                    'delete', 'home', 'end', 'pageup', 'pagedown', 'minus', 'equal', 'lbracket', 'rbracket',
+                    'backslash', 'semicolon', 'quote', 'comma', 'period', 'slash', 'grave'):
+            self.assertIsNotNone(i.codes(key), key)
+
+    def test_the_device_is_made_once_and_written_event_by_event(self):
+        import omarchy_input as i
+        r, w = os.pipe()
+        self.addCleanup(os.close, r)
+        ioctls = []
+        with mock.patch.object(i.os, 'open', return_value=w), \
+                mock.patch.object(i.fcntl, 'ioctl', side_effect=lambda fd, req, arg=0: ioctls.append(req)):
+            keyboard = i.UinputKeyboard(sleep=lambda _: None)
+            self.assertTrue(keyboard.press('cmd+s'))
+            self.assertTrue(keyboard.press('x'))
+            self.assertFalse(keyboard.press('cmd+nope'))
+            keyboard.close()
+        self.assertEqual(ioctls.count(i.UI_DEV_CREATE), 1, 'one device for every keystroke')
+        self.assertEqual(ioctls[-1], i.UI_DEV_DESTROY)
+        data = os.read(r, 4096)
+        sent = [i.EVENT.unpack_from(data, n)[2:] for n in range(0, len(data), i.EVENT.size)]
+        self.assertEqual(sent, i.events('cmd+s') + i.events('x'))
+
+    def test_the_bridge_prefers_uinput_and_falls_back_to_wtype_once_it_fails(self):
+        remote = o.Remote()
+        remote.types_macros = True
+        remote.macros = {3: [{'label': 'S', 'keys': 'cmd+s'}]}
+        remote.keyboard = mock.Mock(press=mock.Mock(return_value=True))
+        remote.run = mock.Mock(return_value=SimpleNamespace(returncode=0))
+        press = {'type': 'device.macro', 'data': {'f': 3, 'i': 0, 'act': 1}}
+        remote.handle(press)
+        remote.keyboard.press.assert_called_once_with('cmd+s')
+        remote.run.assert_not_called()
+        remote.keyboard.press.side_effect = PermissionError(13, 'denied')
+        with mock.patch.object(o, 'ensure_instance'), mock.patch('sys.stderr'):
+            remote.handle(press)
+            remote.handle(press)
+        self.assertEqual(remote.keyboard.press.call_count, 2, 'not asked again after it failed')
+        self.assertEqual(remote.run.call_count, 2)
 
 
 class Resilience(unittest.TestCase):
