@@ -309,6 +309,14 @@ pub const STRINGS: &[Entry] = &[
     // The Keychain item that holds the cloud voice's key, in macOS's own
     // word for the Keychain in each language (as on the Usage panel).
     ("Keychain item", "钥匙串项目", "鑰匙圈項目", "キーチェーン項目"),
+    // Windows: the same key in Credential Manager, in Windows' own word for
+    // it in each language.
+    (
+        "Credential Manager entry",
+        "凭据管理器条目",
+        "認證管理員項目",
+        "資格情報マネージャーの項目",
+    ),
     (
         "Your cloud voice key",
         "你的云端语音密钥",

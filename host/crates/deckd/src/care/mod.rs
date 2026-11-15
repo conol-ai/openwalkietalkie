@@ -283,9 +283,10 @@ mod tests {
             Call::parse("care.support_file", json!({"to": "desktop"})),
             Ok(Call::SupportFile(export::Target::Desktop))
         );
+        let support = if cfg!(windows) { r"C:\tmp\support" } else { "/tmp/support" };
         assert_eq!(
-            Call::parse("care.support_file", json!({"to": "/tmp/support"})),
-            Ok(Call::SupportFile(export::Target::Dir("/tmp/support".into())))
+            Call::parse("care.support_file", json!({ "to": support })),
+            Ok(Call::SupportFile(export::Target::Dir(support.into())))
         );
         for to in ["", "Desktop", "support/here"] {
             let error = Call::parse("care.support_file", json!({ "to": to })).unwrap_err();

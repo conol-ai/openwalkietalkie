@@ -165,15 +165,16 @@ jobs:
       # The service and the window build for Windows (named-pipe door,
       # LockFileEx, the app as a GUI program, voice: whisper.cpp through the
       # runner's CMake and LLVM, sherpa-onnx's static library, the C runtime
-      # linked statically per .cargo/config.toml); the daemon's own tests do
-      # not compile there yet (several are Unix-only), so only the client's
-      # run, which cover the pipe's name and its same-user descriptor.
+      # linked statically per .cargo/config.toml), then the client's tests
+      # (the pipe's name and its same-user descriptor) and the daemon's unit
+      # tests (those that need a Unix socket, fork or a shell-script fake
+      # are Unix-only).
       - name: Build the Windows host and app
         run: |
           cargo build --manifest-path host/Cargo.toml -p deckd -p openwalkietalkie-app --locked --target x86_64-pc-windows-msvc --target-dir target/host
-      - name: Test the client on Windows
+      - name: Test the client and the daemon on Windows
         run: |
-          cargo test --manifest-path host/Cargo.toml -p deck-client --lib --locked --target x86_64-pc-windows-msvc --target-dir target/host
+          cargo test --manifest-path host/Cargo.toml -p deck-client -p deckd --lib --locked --target x86_64-pc-windows-msvc --target-dir target/host
       # The release packages these binaries the same way (release.yml); doing
       # it here too means a broken package shows on the pull request, not on
       # the tag. The packager also refuses a console-subsystem app.

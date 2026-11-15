@@ -1945,7 +1945,10 @@ fn voice_key_value(
 
 /// The store did not take the key: `-32009 invalid{keychain}`.
 fn keychain_refusal(why: &str) -> ApiError {
-    ApiError::invalid("keychain", &format!("the Keychain did not take the key: {why}"))
+    ApiError::invalid(
+        "keychain",
+        &format!("{} did not take the key: {why}", crate::secrets::STORE),
+    )
 }
 
 /// A `config.set` patch applied to `config.toml` in memory and checked
@@ -2414,7 +2417,12 @@ mod tests {
         assert_eq!(info["mcp"], serde_json::Value::Null);
         assert_eq!(info["degraded"], serde_json::Value::Null);
         assert_eq!(info["port"], 47201);
-        assert!(info["uds"].as_str().unwrap().ends_with("deckd.sock"));
+        let door = info["uds"].as_str().unwrap();
+        if cfg!(windows) {
+            assert!(door.starts_with(r"\\.\pipe\openwalkietalkie-deckd-"), "{door}");
+        } else {
+            assert!(door.ends_with("deckd.sock"), "{door}");
+        }
         assert_eq!(info["pid"], std::process::id());
         assert_eq!(info["metric"]["lines_sent"], 9);
         assert_eq!(info["sid"], 7);
@@ -4241,7 +4249,10 @@ mod tests {
         assert_eq!(err.data["field"], "keychain");
         let words = serde_json::to_string(&err).unwrap();
         assert!(
-            words.contains("the Keychain did not take the key: User interaction is not allowed."),
+            words.contains(&format!(
+                "{} did not take the key: User interaction is not allowed.",
+                crate::secrets::STORE
+            )),
             "{words}"
         );
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "[api]\nport = 47201\n");

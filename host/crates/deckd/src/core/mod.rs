@@ -3808,6 +3808,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)] // a Unix socket stands in for the inbox
     fn claude_inbox_orders_do_not_require_a_terminal_or_desktop_engine() {
         use crate::inbox::Inbox;
         use deck_model::{AdapterKind, Kind, OpOrder, OrderCap, OrderSource, Terminal};

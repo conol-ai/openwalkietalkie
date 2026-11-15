@@ -248,8 +248,15 @@ mod tests {
             assert_eq!(decode_shell_word(&quoted).as_deref(), Some(word), "{word}");
         }
         assert_eq!(shell_word("/usr/bin/deckd"), "/usr/bin/deckd");
-        assert_eq!(shell_word("a b"), "'a b'");
-        assert_eq!(shell_word("Tony's"), "'Tony'\"'\"'s'");
+        if cfg!(windows) {
+            // Double quotes, which cmd.exe, PowerShell and bash all strip.
+            assert_eq!(shell_word("a b"), "\"a b\"");
+            assert_eq!(shell_word("Tony's"), "\"Tony's\"");
+            assert_eq!(shell_word(r"C:\Program Files\deckd.exe"), "\"C:/Program Files/deckd.exe\"");
+        } else {
+            assert_eq!(shell_word("a b"), "'a b'");
+            assert_eq!(shell_word("Tony's"), "'Tony'\"'\"'s'");
+        }
         assert_eq!(decode_shell_word("echo hi"), None, "two words");
         assert_eq!(decode_shell_word("'unclosed"), None);
         assert_eq!(decode_shell_word("a\\ b"), None, "backslashes are not ours");
@@ -268,7 +275,14 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(binary, "/tmp/a b/deckd");
-        assert_eq!(rest, "hook claude-statusline -- 'npx ccstatusline@latest'");
+        assert_eq!(
+            rest,
+            if cfg!(windows) {
+                "hook claude-statusline -- \"npx ccstatusline@latest\""
+            } else {
+                "hook claude-statusline -- 'npx ccstatusline@latest'"
+            }
+        );
         assert_eq!(
             decode_shell_word("'npx ccstatusline@latest'").as_deref(),
             Some("npx ccstatusline@latest")
@@ -283,7 +297,9 @@ mod tests {
             "current_exe"
         );
         assert!(is_managed_binary(BUNDLE_BINARY, exe));
-        assert!(is_managed_binary("/opt/other/deckd", exe), "path_drift");
+        // An absolute path as this platform writes one.
+        let drifted = if cfg!(windows) { "C:/opt/other/deckd.exe" } else { "/opt/other/deckd" };
+        assert!(is_managed_binary(drifted, exe), "path_drift");
         // The openmicrokbd heuristics that would claim a sibling product's
         // live hooks on this very machine.
         assert!(!is_managed_binary(

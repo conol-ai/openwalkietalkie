@@ -857,7 +857,10 @@ mod tests {
         let hub = Arc::new(Hub::default());
         let (server, client) = UnixStream::pair().unwrap();
         let server_hub = hub.clone();
-        let server = tokio::spawn(async move { connection(server, 42, 1, &server_hub).await });
+        let server = tokio::spawn(async move {
+            let (read, write) = server.into_split();
+            connection(read, write, 42, 1, &server_hub).await
+        });
         let (input, mut output) = client.into_split();
         let mut input = Reader::new(input);
         write(&mut output, &json!({"config_dir":dir}))

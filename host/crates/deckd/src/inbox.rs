@@ -227,7 +227,7 @@ pub fn post_async(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))] // a Unix socket stands in for the inbox
 mod tests {
     use super::*;
     use std::io::Read;
