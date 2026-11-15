@@ -33,7 +33,7 @@
 //! operator is uninstalling is the wrong shape.
 use crate::config::Paths;
 use crate::integrations::{self, Launchctl, Status, Target, Verb};
-use crate::secrets::{KeyHome, SERVICE};
+use crate::secrets::{KeyHome, SERVICE, STORE, STORE_APP, STORE_ITEM};
 use std::path::{Path, PathBuf};
 
 /// Targets with managed files to remove before deleting receipts and backups.
@@ -187,9 +187,10 @@ pub fn run(env: &integrations::Env, paths: &Paths, opts: Options, keys: &KeyHome
     #[cfg(windows)]
     if opts.purge {
         match remove_dir_except(&paths.data, &paths.logs) {
-            Ok(true) => outcome
+            Ok(true) if paths.logs.starts_with(&paths.data) => outcome
                 .steps
                 .push(format!("purged {} (its logs kept)", paths.data.display())),
+            Ok(true) => outcome.steps.push(format!("purged {}", paths.data.display())),
             Ok(false) => outcome
                 .steps
                 .push(format!("purged {} (was absent)", paths.data.display())),
@@ -219,18 +220,6 @@ pub fn run(env: &integrations::Env, paths: &Paths, opts: Options, keys: &KeyHome
                     .push(format!("cannot remove {}: {e}", prefs.display())),
             }
         }
-        if let Some(store) = keys.store() {
-            match store.delete() {
-                Ok(true) => outcome.steps.push(format!(
-                    "removed the cloud voice key from the Keychain ({SERVICE})"
-                )),
-                Ok(false) => {}
-                Err(why) => outcome.problems.push(format!(
-                    "cannot remove the Keychain item {SERVICE}: {why}; remove it in Keychain \
-                     Access"
-                )),
-            }
-        }
         if cfg!(target_os = "macos") {
             outcome.next_steps.push(
                 "to give back the TCC grants as well, run `tccutil reset All \
@@ -247,9 +236,24 @@ pub fn run(env: &integrations::Env, paths: &Paths, opts: Options, keys: &KeyHome
         ));
         if keys.store().is_some_and(|store| store.exists() == Ok(true)) {
             outcome.kept.push(format!(
-                "the cloud voice key in the Keychain item {SERVICE} — `deckd uninstall --purge` \
+                "the cloud voice key in {STORE_ITEM} {SERVICE} — `deckd uninstall --purge` \
                  deletes it."
             ));
+        }
+    }
+    // The key's store item (the Keychain on a Mac, Credential Manager on
+    // Windows) goes with a purge on either.
+    if opts.purge {
+        if let Some(store) = keys.store() {
+            match store.delete() {
+                Ok(true) => outcome.steps.push(format!(
+                    "removed the cloud voice key from {STORE} ({SERVICE})"
+                )),
+                Ok(false) => {}
+                Err(why) => outcome.problems.push(format!(
+                    "cannot remove {STORE_ITEM} {SERVICE}: {why}; remove it in {STORE_APP}"
+                )),
+            }
         }
     }
     outcome.kept.push(format!(
@@ -338,6 +342,11 @@ fn remove_dir_except(dir: &Path, keep: &Path) -> Result<bool, String> {
             }
         }
         if last.is_none() {
+            // The folder itself goes too when the logs were not in it (a
+            // data folder of its own, `--data-dir`).
+            if !keep.starts_with(dir) {
+                std::fs::remove_dir(dir).map_err(|e| format!("cannot remove {}: {e}", dir.display()))?;
+            }
             return Ok(true);
         }
         std::thread::sleep(std::time::Duration::from_millis(400));
@@ -388,10 +397,28 @@ mod tests {
     /// A `Paths` whose data directory is the test environment's, so a purge
     /// deletes the throwaway tree and nothing else.
     fn paths_for(env: &integrations::Env, dir: &TestDir) -> Paths {
-        Paths::from_data_dir(env.data.clone(), dir.sub("logs"), dir.sub("caches"))
+        // Windows keeps the caches inside the data folder (`Paths::detect`),
+        // which is what its purge relies on.
+        let caches = if cfg!(windows) { env.data.join("caches") } else { dir.sub("caches") };
+        let _ = std::fs::create_dir_all(&caches);
+        Paths::from_data_dir(env.data.clone(), dir.sub("logs"), caches)
+    }
+
+    /// `lines` with the key's store named as on a Mac, so one expected line
+    /// holds for Credential Manager on Windows too.
+    fn mac_lines(lines: &[String]) -> Vec<String> {
+        lines
+            .iter()
+            .map(|line| {
+                line.replace(&format!("remove it in {STORE_APP}"), "remove it in Keychain Access")
+                    .replace(STORE_ITEM, "the Keychain item")
+                    .replace(STORE, "the Keychain")
+            })
+            .collect()
     }
 
     #[test]
+    #[cfg(not(windows))] // launchctl
     fn launchctl_is_never_run_from_a_test_environment() {
         let dir = TestDir::new("uninstall-launchctl");
         let env = integrations::test_env(&dir);
@@ -434,12 +461,14 @@ mod tests {
         assert!(!paths.data.exists(), "{:?}", outcome.steps);
         assert!(!paths.caches.exists(), "{:?}", outcome.steps);
         assert!(outcome.problems.is_empty(), "{:?}", outcome.problems);
-        // The thing a purge must *not* do quietly.
-        assert!(
+        // The thing a purge must *not* do quietly (macOS's grants; no other
+        // system has them).
+        assert_eq!(
             outcome
                 .next_steps
                 .iter()
                 .any(|s| s.contains("tccutil reset All")),
+            cfg!(target_os = "macos"),
             "{:?}",
             outcome.next_steps
         );
@@ -448,7 +477,7 @@ mod tests {
         let all = [&outcome.steps, &outcome.next_steps, &outcome.kept];
         assert!(
             !all.iter()
-                .any(|lines| lines.iter().any(|s| s.contains("Keychain"))),
+                .any(|lines| mac_lines(lines).iter().any(|s| s.contains("Keychain"))),
             "{outcome:?}"
         );
         // And the logs are still named as kept.
@@ -478,7 +507,7 @@ mod tests {
         );
         assert_eq!(store.current().as_deref(), Some("sk-test-0123456789abcd"));
         assert!(
-            keep.kept.contains(
+            mac_lines(&keep.kept).contains(
                 &"the cloud voice key in the Keychain item ai.cohdl.openwalkietalkie — `deckd \
                   uninstall --purge` deletes it."
                     .to_string()
@@ -495,7 +524,7 @@ mod tests {
         );
         assert_eq!(store.current(), None);
         assert!(
-            purged.steps.contains(&removed.to_string()),
+            mac_lines(&purged.steps).contains(&removed.to_string()),
             "{:?}",
             purged.steps
         );
@@ -515,7 +544,7 @@ mod tests {
             &KeyHome::Store(empty.clone()),
         );
         assert!(
-            !again.steps.iter().any(|s| s.contains("Keychain")),
+            !mac_lines(&again.steps).iter().any(|s| s.contains("Keychain")),
             "{:?}",
             again.steps
         );
@@ -527,7 +556,7 @@ mod tests {
             &KeyHome::Store(empty),
         );
         assert!(
-            !kept.kept.iter().any(|s| s.contains("Keychain")),
+            !mac_lines(&kept.kept).iter().any(|s| s.contains("Keychain")),
             "{:?}",
             kept.kept
         );
@@ -542,7 +571,7 @@ mod tests {
             &KeyHome::Store(locked.clone()),
         );
         assert_eq!(
-            refused.problems,
+            mac_lines(&refused.problems),
             [
                 "cannot remove the Keychain item ai.cohdl.openwalkietalkie: User interaction is \
                  not allowed. (-25308); remove it in Keychain Access"

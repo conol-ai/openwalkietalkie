@@ -203,7 +203,7 @@ pub fn items(footprint: &Footprint, language: Language) -> Vec<Item> {
                 // A Keychain item has no path to print and nothing to
                 // weigh: its place says whose it is.
                 "keychain" => (
-                    language.text("Keychain item"),
+                    language.text(crate::voice::here("Keychain item", "Credential Manager entry")),
                     Place::Words(language.text("Your cloud voice key")),
                     None,
                     Action::WithUninstall,

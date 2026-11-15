@@ -406,7 +406,7 @@ mod tests {
         // hold is that the real table answers, and answers about *us*.
         let procs = MacProcs;
         let me = procs.get(std::process::id());
-        if cfg!(target_os = "macos") {
+        if cfg!(any(target_os = "macos", windows)) {
             let me = me.expect("the kernel knows this process");
             assert_eq!(me.pid, std::process::id());
             assert!(me.ppid > 0, "{me:?}");

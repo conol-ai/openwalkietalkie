@@ -46,6 +46,18 @@ pub const ACCOUNT: &str = "voice.tts.api_key";
 #[cfg(target_os = "macos")]
 const NOT_FOUND: i32 = -25300;
 
+/// The store as messages name it: the Keychain on a Mac, Credential
+/// Manager on Windows (`CredentialStore`).
+pub const STORE: &str = if cfg!(windows) { "Credential Manager" } else { "the Keychain" };
+/// One item in it, as messages name it.
+pub const STORE_ITEM: &str = if cfg!(windows) {
+    "the Credential Manager entry"
+} else {
+    "the Keychain item"
+};
+/// The program an owner removes an item with by hand.
+pub const STORE_APP: &str = if cfg!(windows) { "Credential Manager" } else { "Keychain Access" };
+
 /// The store would not do what it was asked: its own words and code.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum StoreError {
@@ -142,6 +154,171 @@ impl KeyStore for Keychain {
             Err(e) if e.code() == NOT_FOUND => Ok(false),
             Err(e) => Err(refused(&e)),
         }
+    }
+}
+
+/// Windows Credential Manager: one generic credential, target
+/// `ai.cohdl.openwalkietalkie/voice.tts.api_key`, kept for this user on
+/// this computer (`CRED_PERSIST_LOCAL_MACHINE`, which never roams). Windows
+/// encrypts it with the user's logon (DPAPI); Control Panel › Credential
+/// Manager › Windows Credentials lists it.
+#[cfg(windows)]
+#[derive(Debug)]
+pub struct CredentialStore {
+    target: String,
+}
+
+#[cfg(windows)]
+impl Default for CredentialStore {
+    fn default() -> Self {
+        CredentialStore {
+            target: format!("{SERVICE}/{ACCOUNT}"),
+        }
+    }
+}
+
+#[cfg(windows)]
+mod credential {
+    use std::ffi::c_void;
+
+    pub const CRED_TYPE_GENERIC: u32 = 1;
+    pub const CRED_PERSIST_LOCAL_MACHINE: u32 = 2;
+    pub const ERROR_NOT_FOUND: i32 = 1168;
+
+    /// `CREDENTIALW`.
+    #[repr(C)]
+    pub struct Credential {
+        pub flags: u32,
+        pub kind: u32,
+        pub target_name: *mut u16,
+        pub comment: *mut u16,
+        pub last_written: [u32; 2],
+        pub blob_size: u32,
+        pub blob: *mut u8,
+        pub persist: u32,
+        pub attribute_count: u32,
+        pub attributes: *mut c_void,
+        pub target_alias: *mut u16,
+        pub user_name: *mut u16,
+    }
+
+    #[link(name = "advapi32")]
+    extern "system" {
+        pub fn CredReadW(target: *const u16, kind: u32, flags: u32, credential: *mut *mut Credential) -> i32;
+        pub fn CredWriteW(credential: *const Credential, flags: u32) -> i32;
+        pub fn CredDeleteW(target: *const u16, kind: u32, flags: u32) -> i32;
+        pub fn CredFree(buffer: *const c_void);
+    }
+
+    pub fn wide(text: &str) -> Vec<u16> {
+        text.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+
+    pub fn last_error() -> std::io::Error {
+        std::io::Error::last_os_error()
+    }
+}
+
+#[cfg(windows)]
+fn refused(e: &std::io::Error) -> StoreError {
+    StoreError::Refused(e.to_string())
+}
+
+#[cfg(windows)]
+impl CredentialStore {
+    /// A store under another target name: a test's own, never the key's.
+    #[cfg(test)]
+    fn named(target: &str) -> CredentialStore {
+        CredentialStore { target: target.to_string() }
+    }
+
+    /// The target name, wide and NUL-terminated.
+    fn target(&self) -> Vec<u16> {
+        credential::wide(&self.target)
+    }
+
+    /// The stored bytes, `None` when there is no such credential.
+    fn read(&self) -> Result<Option<Vec<u8>>, StoreError> {
+        use credential::*;
+        let target = self.target();
+        let mut found: *mut Credential = std::ptr::null_mut();
+        // SAFETY: a NUL-terminated target; on success `found` points at a
+        // buffer Windows allocated, freed below with `CredFree`.
+        if unsafe { CredReadW(target.as_ptr(), CRED_TYPE_GENERIC, 0, &mut found) } == 0 {
+            let e = last_error();
+            return if e.raw_os_error() == Some(ERROR_NOT_FOUND) { Ok(None) } else { Err(refused(&e)) };
+        }
+        // SAFETY: `found` is the credential CredReadW returned; its blob is
+        // `blob_size` bytes long (or null when empty).
+        let bytes = unsafe {
+            let credential = &*found;
+            let bytes = if credential.blob.is_null() {
+                Vec::new()
+            } else {
+                std::slice::from_raw_parts(credential.blob, credential.blob_size as usize).to_vec()
+            };
+            CredFree(found.cast());
+            bytes
+        };
+        Ok(Some(bytes))
+    }
+}
+
+#[cfg(windows)]
+impl KeyStore for CredentialStore {
+    fn get(&self) -> Result<Option<String>, StoreError> {
+        match self.read()? {
+            Some(bytes) => cleaned(&bytes),
+            None => Ok(None),
+        }
+    }
+
+    fn set(&self, key: &str) -> Result<(), StoreError> {
+        use credential::*;
+        let key = key.trim();
+        if key.is_empty() {
+            return self.delete().map(drop);
+        }
+        let mut target = self.target();
+        let mut user = wide(ACCOUNT);
+        let mut blob = key.as_bytes().to_vec();
+        let credential = Credential {
+            flags: 0,
+            kind: CRED_TYPE_GENERIC,
+            target_name: target.as_mut_ptr(),
+            comment: std::ptr::null_mut(),
+            last_written: [0, 0],
+            blob_size: u32::try_from(blob.len()).map_err(|_| StoreError::Refused("the key is too long".into()))?,
+            blob: blob.as_mut_ptr(),
+            persist: CRED_PERSIST_LOCAL_MACHINE,
+            attribute_count: 0,
+            attributes: std::ptr::null_mut(),
+            target_alias: std::ptr::null_mut(),
+            user_name: user.as_mut_ptr(),
+        };
+        // SAFETY: every pointer is to a live buffer of this frame; Windows
+        // copies the credential before returning.
+        if unsafe { CredWriteW(&credential, 0) } == 0 {
+            return Err(refused(&last_error()));
+        }
+        Ok(())
+    }
+
+    fn delete(&self) -> Result<bool, StoreError> {
+        use credential::*;
+        let target = self.target();
+        // SAFETY: a NUL-terminated target.
+        if unsafe { CredDeleteW(target.as_ptr(), CRED_TYPE_GENERIC, 0) } == 0 {
+            let e = last_error();
+            return if e.raw_os_error() == Some(ERROR_NOT_FOUND) { Ok(false) } else { Err(refused(&e)) };
+        }
+        Ok(true)
+    }
+
+    /// Credential Manager has no read of the attributes alone: the secret is
+    /// read and dropped at once.
+    fn exists(&self) -> Result<bool, StoreError> {
+        Ok(self.read()?.is_some_and(|bytes| !bytes.iter().all(u8::is_ascii_whitespace)))
     }
 }
 
@@ -324,9 +501,26 @@ pub fn home_for(paths: &Paths, no_device: bool) -> KeyHome {
     if !no_device && keychain_applies(paths, real_home().as_deref()) {
         return KeyHome::Store(Arc::new(Keychain));
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    if !no_device && credential_store_applies(paths, std::env::var_os("LOCALAPPDATA").as_deref().map(Path::new)) {
+        return KeyHome::Store(Arc::new(CredentialStore::default()));
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
     let _ = (paths, no_device);
     KeyHome::File
+}
+
+/// Windows' counterpart of [`keychain_applies`]: Credential Manager holds the
+/// key for the account's own install, `<%LOCALAPPDATA%>\OpenWalkieTalkie`
+/// (compared case-blind, as Windows names folders), and for no data folder
+/// of a test's or a `--data-dir` service's own.
+#[must_use]
+pub fn credential_store_applies(paths: &Paths, local_app_data: Option<&Path>) -> bool {
+    cfg!(windows)
+        && local_app_data.is_some_and(|local| {
+            paths.data.to_string_lossy().to_lowercase()
+                == local.join("OpenWalkieTalkie").to_string_lossy().to_lowercase()
+        })
 }
 
 /// The key as a running service holds it: where it lives and, for a store,
@@ -874,6 +1068,45 @@ mod tests {
         assert_eq!(home_for(&mine, false).word(), "config");
         assert_eq!(home_for(&mine, true).word(), "config");
         assert_eq!(home_for(&under, true).word(), "config");
+    }
+
+    /// Windows: Credential Manager is the home of the account's own install
+    /// (`%LOCALAPPDATA%\OpenWalkieTalkie`, case-blind) and of nothing else.
+    #[test]
+    fn credential_manager_is_only_for_the_accounts_own_install_on_windows() {
+        let local = Path::new(r"C:\Users\someone\AppData\Local");
+        let own = Paths::from_data_dir(
+            local.join("OpenWalkieTalkie"),
+            local.join(r"OpenWalkieTalkie\logs"),
+            local.join(r"OpenWalkieTalkie\caches"),
+        );
+        assert_eq!(credential_store_applies(&own, Some(local)), cfg!(windows));
+        let lower = Paths::from_data_dir(local.join("openwalkietalkie"), local.join("l"), local.join("c"));
+        assert_eq!(credential_store_applies(&lower, Some(local)), cfg!(windows), "case-blind");
+        assert!(!credential_store_applies(&own, None));
+        assert!(!credential_store_applies(&own, Some(Path::new(r"C:\Users\other\AppData\Local"))));
+        let dir = TestDir::new("secrets-credential-home");
+        assert!(!credential_store_applies(&paths_in(&dir), Some(local)));
+    }
+
+    /// The real Credential Manager, under a target of the test's own (never
+    /// the key's): written, read back trimmed, found, deleted, and a second
+    /// delete finds nothing.
+    #[cfg(windows)]
+    #[test]
+    fn credential_manager_keeps_the_key_and_lets_it_go() {
+        let store = CredentialStore::named(&format!("{SERVICE}/test-{}", std::process::id()));
+        let _ = store.delete();
+        assert_eq!(store.get(), Ok(None));
+        assert_eq!(store.exists(), Ok(false));
+        store.set("  sk-test-1234  ").unwrap();
+        assert_eq!(store.get(), Ok(Some("sk-test-1234".into())));
+        assert_eq!(store.exists(), Ok(true));
+        store.set("sk-test-5678").unwrap();
+        assert_eq!(store.get(), Ok(Some("sk-test-5678".into())), "replaced");
+        assert_eq!(store.delete(), Ok(true));
+        assert_eq!(store.delete(), Ok(false));
+        assert_eq!(store.get(), Ok(None));
     }
 
     /// The keeper writes in the order it was asked and hands each note back

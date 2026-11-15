@@ -271,6 +271,12 @@ pub const STRINGS: &[Entry] = &[
         "キーはこの PC のサービス設定に保存されます。",
     ),
     (
+        "The key is kept in Windows Credential Manager on this PC.",
+        "密钥保存在此电脑上的 Windows 凭据管理器中。",
+        "金鑰儲存在此電腦上的 Windows 認證管理員中。",
+        "キーはこの PC の Windows 資格情報マネージャーに保存されます。",
+    ),
+    (
         "The key is kept in your Keychain on this Mac.",
         "密钥保存在此 Mac 上的钥匙串中。",
         "金鑰儲存在此 Mac 上的鑰匙圈中。",

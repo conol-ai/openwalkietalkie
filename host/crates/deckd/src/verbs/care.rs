@@ -495,7 +495,11 @@ const FOOTPRINT: [(&str, &str, Goes); 11] = [
     ),
     ("data", "Settings and backups", Goes::WithUninstall),
     ("prefs", "Preferences", Goes::WithUninstall),
-    ("keychain", "Keychain item", Goes::WithUninstall),
+    (
+        "keychain",
+        if cfg!(windows) { "Credential Manager entry" } else { "Keychain item" },
+        Goes::WithUninstall,
+    ),
     ("logs", "Logs", Goes::Kept),
 ];
 
@@ -1153,10 +1157,11 @@ mod tests {
             "Firmware downloads (9 MB): /Users/you/Library/Caches/OpenWalkieTalkie/firmware\n  \
              delete: deckd care clear firmware (the bootloader backups are kept)\n"
         ));
-        assert!(words.contains(
-            "Keychain item: your cloud voice key, ai.cohdl.openwalkietalkie\n  goes with: deckd \
+        let item = if cfg!(windows) { "Credential Manager entry" } else { "Keychain item" };
+        assert!(words.contains(&format!(
+            "{item}: your cloud voice key, ai.cohdl.openwalkietalkie\n  goes with: deckd \
              uninstall --purge\n"
-        ));
+        )));
         assert!(
             !words.contains("Codex Desktop"),
             "absent, so not listed: {words}"

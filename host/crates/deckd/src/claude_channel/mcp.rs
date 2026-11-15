@@ -175,13 +175,42 @@ impl ExeWatch {
         std::fs::metadata(path).ok().map(|m| (m.dev(), m.ino()))
     }
 
-    /// Windows has no inode to compare: a replaced executable is told by
-    /// its size and last write instead (a running one cannot be overwritten
-    /// in place, only renamed away and a new one put there).
+    /// Windows' inode: the volume's serial number and the file's index on
+    /// it (`GetFileInformationByHandle`). A file put in another's place
+    /// (a running one can only be renamed away, not overwritten) has a new
+    /// index whatever its size and time.
     #[cfg(windows)]
     fn file_id(path: &Path) -> Option<(u64, u64)> {
-        use std::os::windows::fs::MetadataExt;
-        std::fs::metadata(path).ok().map(|m| (m.file_size(), m.last_write_time()))
+        use std::os::windows::io::AsRawHandle;
+        #[repr(C)]
+        #[derive(Default)]
+        struct ByHandleFileInformation {
+            attributes: u32,
+            creation: [u32; 2],
+            last_access: [u32; 2],
+            last_write: [u32; 2],
+            volume_serial: u32,
+            size_high: u32,
+            size_low: u32,
+            links: u32,
+            index_high: u32,
+            index_low: u32,
+        }
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn GetFileInformationByHandle(file: *mut std::ffi::c_void, info: *mut ByHandleFileInformation) -> i32;
+        }
+        let file = std::fs::File::open(path).ok()?;
+        let mut info = ByHandleFileInformation::default();
+        // SAFETY: an open file's handle and a struct of the documented
+        // layout, written by the call.
+        if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) } == 0 {
+            return None;
+        }
+        Some((
+            u64::from(info.volume_serial),
+            (u64::from(info.index_high) << 32) | u64::from(info.index_low),
+        ))
     }
 
     /// Replaced or unlinked since launch. Unknown at launch means never.

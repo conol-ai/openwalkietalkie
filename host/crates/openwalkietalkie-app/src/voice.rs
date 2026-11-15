@@ -647,7 +647,10 @@ pub fn key_tail(hint: &str) -> &str {
 /// a service on a data directory of its own, one from before the Keychain).
 pub fn key_kept(tts: Option<&TtsConfig>, language: Language) -> &'static str {
     if tts.is_some_and(TtsConfig::in_keychain) {
-        language.text("The key is kept in your Keychain on this Mac.")
+        language.text(here(
+            "The key is kept in your Keychain on this Mac.",
+            "The key is kept in Windows Credential Manager on this PC.",
+        ))
     } else {
         language.text(here(
             "The key is kept in the service's settings on this Mac.",

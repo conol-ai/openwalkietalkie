@@ -936,6 +936,7 @@ mod tests {
     /// for the key `bad`, the voice list for `/v2/voices`, else a header
     /// block and a few PCM chunks. Every config it sees is appended to the
     /// file `FAKE_CURL_LOG` names, so a test can read what was sent.
+    #[cfg(unix)]
     const FAKE: &str = r#"
 import sys, time
 cfg = sys.stdin.read()
@@ -969,13 +970,16 @@ for i in range(3):
         time.sleep(0.5)
 "#;
 
+    #[cfg(unix)]
     struct Rig {
         dir: std::path::PathBuf,
         log: std::path::PathBuf,
     }
 
+    #[cfg(unix)]
     static RIGS: AtomicUsize = AtomicUsize::new(0);
 
+    #[cfg(unix)]
     impl Rig {
         fn new() -> Rig {
             let n = RIGS.fetch_add(1, Ordering::SeqCst);
@@ -1018,6 +1022,7 @@ for i in range(3):
         }
     }
 
+    #[cfg(unix)]
     impl Drop for Rig {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.dir);
@@ -1125,6 +1130,7 @@ for i in range(3):
     }
 
     #[test]
+    #[cfg(unix)] // the fake curl is a shell script
     fn without_a_key_or_with_engine_apple_the_fallback_speaks_and_curl_never_runs() {
         let rig = Rig::new();
         let (engine, fallback, cell) = rig.engine(settings("openai", ""));
@@ -1143,6 +1149,7 @@ for i in range(3):
     }
 
     #[test]
+    #[cfg(unix)] // the fake curl is a shell script
     fn openai_streams_pcm_through_curl_in_the_jobs_format() {
         let rig = Rig::new();
         let (engine, fallback, _cell) = rig.engine(settings("openai", "sk-good"));
@@ -1167,6 +1174,7 @@ for i in range(3):
     }
 
     #[test]
+    #[cfg(unix)] // the fake curl is a shell script
     fn a_refusal_goes_to_the_fallback_and_cools_the_engine_down_until_the_key_changes() {
         let rig = Rig::new();
         let (engine, fallback, cell) = rig.engine(settings("openai", "bad"));
@@ -1189,6 +1197,7 @@ for i in range(3):
     }
 
     #[test]
+    #[cfg(unix)] // the fake curl is a shell script
     fn elevenlabs_resolves_names_through_the_voice_list_once() {
         let rig = Rig::new();
         let (engine, _fallback, _cell) = rig.engine(settings("elevenlabs", "xi-good"));
@@ -1214,6 +1223,7 @@ for i in range(3):
     }
 
     #[test]
+    #[cfg(unix)] // the fake curl is a shell script
     fn stop_ends_the_transfer() {
         let rig = Rig::new();
         let (engine, _fallback, _cell) = rig.engine(settings("openai", "sk-good"));

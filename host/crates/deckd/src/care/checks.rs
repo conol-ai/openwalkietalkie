@@ -230,6 +230,7 @@ mod tests {
     /// names, the two new ones among them. Three rows are not checked: this
     /// build never enumerates HID and never asks launchd.
     #[test]
+    #[cfg(not(windows))] // the fixture is a Mac's, with launchd's rows
     fn the_reply_has_the_shape_and_every_row_of_the_apps_fixture() {
         let fixture: Value = serde_json::from_str(include_str!(
             "../../../deck-gui-core/tests/fixtures/daemon/care_checks.json"
@@ -345,6 +346,7 @@ mod tests {
     /// launchd itself is not asked: the rows are built from what it would
     /// have said.
     #[test]
+    #[cfg(not(windows))] // the agent from before the rename is a Mac's
     fn a_legacy_plist_in_the_home_fails_its_row() {
         let dir = TestDir::new("care-legacy");
         let home = dir.sub("home");
