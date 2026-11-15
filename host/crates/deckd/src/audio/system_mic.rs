@@ -83,3 +83,50 @@ impl CaptureSource for SystemMic {
         self.stream.is_some()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::audio::traits::StreamFaults;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    fn open(input: VoiceInput) -> CaptureOpen {
+        CaptureOpen {
+            input,
+            device_uid: None,
+            ask_deck: None,
+        }
+    }
+
+    /// The computer's own input opens and delivers mono samples at its own
+    /// rate; a machine without one says so, and nothing is asserted of it.
+    /// The deck's input is never answered from here.
+    #[test]
+    fn the_computers_input_delivers_and_the_decks_is_not_opened_here() {
+        let mut mic = SystemMic::default();
+        let sink = || CaptureSink::new(Arc::new(StreamFaults::new()), |_, _| {});
+        assert!(matches!(mic.open(&open(VoiceInput::Deck), sink()), Err(AudioError::NoDevice(_))));
+        assert!(!mic.is_open());
+        let heard = Arc::new(AtomicUsize::new(0));
+        let counted = heard.clone();
+        let opened = mic.open(
+            &open(VoiceInput::Mac),
+            CaptureSink::new(Arc::new(StreamFaults::new()), move |rate, samples| {
+                assert!(rate > 0);
+                counted.fetch_add(samples.len(), Ordering::Relaxed);
+            }),
+        );
+        let opened = match opened {
+            Ok(opened) => opened,
+            Err(AudioError::NoDevice(_)) => return, // no microphone here
+            Err(e) => panic!("the default input would not open: {e:?}"),
+        };
+        assert!(mic.is_open());
+        assert!(opened.rate > 0 && opened.channels > 0, "{opened:?}");
+        std::thread::sleep(std::time::Duration::from_millis(600));
+        mic.close();
+        assert!(!mic.is_open());
+        assert!(heard.load(Ordering::Relaxed) > 0, "no samples in 600 ms");
+    }
+}
