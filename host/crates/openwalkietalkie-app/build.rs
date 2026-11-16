@@ -6,6 +6,16 @@ fn main() {
     println!("cargo:rerun-if-changed=macos/sparkle_bridge.m");
     println!("cargo:rerun-if-env-changed=OWT_SPARKLE_FRAMEWORK_DIR");
 
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        println!("cargo:rerun-if-changed=windows/app.rc");
+        println!("cargo:rerun-if-changed=../../../assets/branding/OpenWalkieTalkie.ico");
+        // GPUI loads icon resource 1 for the window and taskbar; Explorer
+        // reads the same group from the executable.
+        embed_resource::compile_for("windows/app.rc", ["openwalkietalkie-app"], embed_resource::NONE)
+            .manifest_required()
+            .expect("compile the Windows app icon");
+    }
+
     if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("macos") {
         return;
     }
