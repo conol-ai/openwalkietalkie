@@ -57,10 +57,11 @@ Install guide: https://openwalkietalkie.org/docs/windows/
    service that talks to the deck, with no window.
 4. Connect the deck with USB-C.
 
-Not in this preview: voice, starting with Windows, Claude Code and Codex
-integration, and automatic app updates. Firmware updates use the slower USB
-transfer. New versions are published on the latest release page:
-https://github.com/conol-ai/openwalkietalkie/releases/latest
+Voice, starting with Windows, Claude Code, Codex CLI, Grok Bot and app
+updates are supported. Not on Windows: the Apple-silicon MLX voice and the
+Codex Desktop launcher. Firmware updates use the slower USB transfer.
+New versions are published on the release page:
+https://github.com/conol-ai/openwalkietalkie/releases
 To update, quit the app, end deckd.exe, and replace this folder with the new
 version's (each version's folder has its own name). Settings stay in
 %LOCALAPPDATA%\\OpenWalkieTalkie.

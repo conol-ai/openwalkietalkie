@@ -52,8 +52,10 @@ test('the Download section offers the Omarchy guide, which walks through the who
   assert.ok(sitemap.includes('https://openwalkietalkie.org/docs/omarchy/'), 'the sitemap lists the guide');
 });
 
-test('the Download section offers the Windows preview through its install guide', () => {
-  // The preview is unsigned: the guide, with its SmartScreen steps, comes before the zip.
+test('the Download section offers the Windows ZIP and its unsigned-preview install guide', () => {
+  const zip = links(section('download')).find(link => /windows-x86_64\.zip$/.test(link.href));
+  assert.ok(zip && /windows/i.test(zip.text), 'a download button names Windows');
+  assert.match(zip.href, /^https:\/\/github\.com\/conol-ai\/openwalkietalkie\/releases\/download\//);
   const windows = links(section('download')).filter(link => link.href === '/docs/windows/');
   assert.ok(windows.some(link => /windows/i.test(link.text)), 'a button names Windows');
   assert.ok(!links(section('hero')).some(link => link.href === '/docs/windows/'), 'the hero stays waitlist-only');

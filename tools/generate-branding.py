@@ -2,7 +2,7 @@
 """Derive app, menu-bar and web branding from the existing website radio.
 
 Requires Pillow. Checked-in outputs are used by normal builds. The radio's
-pixel grid stays intact; only the macOS icon's background has rounded corners.
+pixel grid stays intact; the desktop app icons share the rounded background.
 """
 from pathlib import Path
 import xml.etree.ElementTree as ET
@@ -26,6 +26,7 @@ def main():
     app.alpha_composite(radio.resize((480, 560), Image.Resampling.NEAREST), (272, 232))
     app.save(OUT / "app-icon.png")
     app.save(OUT / "OpenWalkieTalkie.icns")
+    app.save(OUT / "OpenWalkieTalkie.ico", sizes=[(s, s) for s in (16, 24, 32, 48, 64, 128, 256)])
 
     # A monochrome version with the same antenna, screen and three keys.
     mask = Image.new("L", (36, 36))

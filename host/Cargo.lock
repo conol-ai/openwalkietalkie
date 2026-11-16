@@ -5481,6 +5481,7 @@ dependencies = [
  "deck-client",
  "deck-gui-core",
  "deck-model",
+ "embed-resource",
  "gpui",
  "gpui-component",
  "libc",
