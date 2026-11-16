@@ -1,7 +1,7 @@
 //! Where each Grok Bot routine's webhook key is kept.
 //!
 //! The rule is the cloud voice key's (`crate::secrets::home_for`): the
-//! Keychain only for a macOS service on the account's own data directory
+//! Keychain or Windows Credential Manager only for a service on the account's own data directory
 //! with a deck, a file everywhere else — every test service, the API gate,
 //! a daemon on a data directory of its own. One generic password per bot,
 //! service `ai.cohdl.openwalkietalkie`, account `grokbot.bots.<id>.key`; the
@@ -39,14 +39,21 @@ pub trait BotKeys: Send + Sync + std::fmt::Debug {
     /// Whether bot `id` has a key, read without the secret where the
     /// store allows it.
     fn exists(&self, id: &str) -> Result<bool, StoreError>;
-    /// How `grokbot.status` names the store: `keychain`, `file`, `memory`.
+    /// How status names the store: `keychain`, `credential_manager`, `file`, `memory`.
     fn word(&self) -> &'static str;
 }
 
-/// The keys of this service: the Keychain on a Mac's own install, the file
-/// in the data directory everywhere else (the voice key's rule).
+/// The keys of this service: the OS credential store on a Mac or Windows
+/// own install, the data directory's file elsewhere (the voice key's rule).
 #[must_use]
 pub fn home(paths: &Paths, no_device: bool) -> Arc<dyn BotKeys> {
+    #[cfg(windows)]
+    if !no_device && crate::secrets::credential_store_applies(
+        paths,
+        std::env::var_os("LOCALAPPDATA").as_deref().map(Path::new),
+    ) {
+        return Arc::new(CredentialKeys);
+    }
     #[cfg(target_os = "macos")]
     if !no_device && crate::secrets::keychain_applies(paths, crate::secrets::real_home().as_deref())
     {
@@ -55,6 +62,37 @@ pub fn home(paths: &Paths, no_device: bool) -> Arc<dyn BotKeys> {
     #[cfg(not(target_os = "macos"))]
     let _ = no_device;
     Arc::new(FileKeys::new(&paths.data))
+}
+
+/// One Windows generic credential per bot; isolated services still use files.
+#[cfg(windows)]
+#[derive(Debug, Default)]
+pub struct CredentialKeys;
+
+#[cfg(windows)]
+fn credential(id: &str) -> crate::secrets::CredentialStore {
+    crate::secrets::CredentialStore::named(&format!("{}/{}", crate::secrets::SERVICE, account(id)))
+}
+
+#[cfg(windows)]
+impl BotKeys for CredentialKeys {
+    fn get(&self, id: &str) -> Result<Option<String>, StoreError> {
+        use crate::secrets::KeyStore as _;
+        credential(id).get()
+    }
+    fn set(&self, id: &str, key: &str) -> Result<(), StoreError> {
+        use crate::secrets::KeyStore as _;
+        credential(id).set(key)
+    }
+    fn delete(&self, id: &str) -> Result<bool, StoreError> {
+        use crate::secrets::KeyStore as _;
+        credential(id).delete()
+    }
+    fn exists(&self, id: &str) -> Result<bool, StoreError> {
+        use crate::secrets::KeyStore as _;
+        credential(id).exists()
+    }
+    fn word(&self) -> &'static str { "credential_manager" }
 }
 
 /// The login Keychain: one generic password per bot.
@@ -281,6 +319,23 @@ impl BotKeys for MemoryKeys {
 mod tests {
     use super::*;
 
+    #[cfg(windows)]
+    #[test]
+    fn credentials_keep_each_bots_key_separate() {
+        let first = format!("test-{}-grok-first", std::process::id());
+        let second = format!("test-{}-grok-second", std::process::id());
+        let keys = CredentialKeys;
+        keys.set(&first, " key-one ").unwrap();
+        keys.set(&second, "key-two").unwrap();
+        let result = (keys.get(&first), keys.get(&second), keys.exists(&first));
+        keys.delete(&first).unwrap();
+        keys.delete(&second).unwrap();
+        assert_eq!(result.0.unwrap().as_deref(), Some("key-one"));
+        assert_eq!(result.1.unwrap().as_deref(), Some("key-two"));
+        assert!(result.2.unwrap());
+        assert!(!keys.exists(&first).unwrap());
+    }
+
     use crate::integrations::testdir::TestDir;
 
     #[test]
@@ -315,5 +370,15 @@ mod tests {
         assert_eq!(home(&paths, false).word(), "file");
         assert_eq!(home(&paths, true).word(), "file");
         assert_eq!(account("research"), "grokbot.bots.research.key");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn only_the_normal_windows_service_uses_credentials() {
+        let local = std::env::var_os("LOCALAPPDATA").expect("Windows local app data");
+        let data = PathBuf::from(local).join("OpenWalkieTalkie");
+        let paths = Paths::from_data_dir(data.clone(), data.join("logs"), data.join("caches"));
+        assert_eq!(home(&paths, false).word(), "credential_manager");
+        assert_eq!(home(&paths, true).word(), "file");
     }
 }

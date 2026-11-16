@@ -169,9 +169,48 @@ impl ExeWatch {
         Self { path, start }
     }
 
+    #[cfg(unix)]
     fn file_id(path: &Path) -> Option<(u64, u64)> {
         use std::os::unix::fs::MetadataExt;
         std::fs::metadata(path).ok().map(|m| (m.dev(), m.ino()))
+    }
+
+    /// Windows' inode: the volume's serial number and the file's index on
+    /// it (`GetFileInformationByHandle`). A file put in another's place
+    /// (a running one can only be renamed away, not overwritten) has a new
+    /// index whatever its size and time.
+    #[cfg(windows)]
+    fn file_id(path: &Path) -> Option<(u64, u64)> {
+        use std::os::windows::io::AsRawHandle;
+        #[repr(C)]
+        #[derive(Default)]
+        struct ByHandleFileInformation {
+            attributes: u32,
+            creation: [u32; 2],
+            last_access: [u32; 2],
+            last_write: [u32; 2],
+            volume_serial: u32,
+            size_high: u32,
+            size_low: u32,
+            links: u32,
+            index_high: u32,
+            index_low: u32,
+        }
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn GetFileInformationByHandle(file: *mut std::ffi::c_void, info: *mut ByHandleFileInformation) -> i32;
+        }
+        let file = std::fs::File::open(path).ok()?;
+        let mut info = ByHandleFileInformation::default();
+        // SAFETY: an open file's handle and a struct of the documented
+        // layout, written by the call.
+        if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) } == 0 {
+            return None;
+        }
+        Some((
+            u64::from(info.volume_serial),
+            (u64::from(info.index_high) << 32) | u64::from(info.index_low),
+        ))
     }
 
     /// Replaced or unlinked since launch. Unknown at launch means never.
@@ -216,7 +255,7 @@ pub(super) fn run(data: &Path) -> Result<i32, String> {
         .ok_or("the Claude channel must be launched by Claude Code")?;
     let config = std::env::var_os("CLAUDE_CONFIG_DIR")
         .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".claude")))
+        .or_else(|| crate::integrations::home_dir().ok().map(|h| h.join(".claude")))
         .ok_or("no Claude config directory")?;
     let (tx, mut stdin) = mpsc::channel(16);
     std::thread::Builder::new()
@@ -255,7 +294,7 @@ pub(super) fn run(data: &Path) -> Result<i32, String> {
         let mut refusals = Refusals::default();
         let mut linked_since: Option<Instant> = None;
         let mut next_attempt = Instant::now();
-        let mut link: Option<(Reader<tokio::net::unix::OwnedReadHalf>, tokio::net::unix::OwnedWriteHalf)> = None;
+        let mut link: Option<(Reader<link::Read>, link::Write)> = None;
         loop {
             tokio::select! {
                 request = stdin.recv() => {
@@ -269,8 +308,8 @@ pub(super) fn run(data: &Path) -> Result<i32, String> {
                 _ = tick.tick() => {
                     protocol.identify(current_identity(&config, pid));
                     if link.is_none() && Instant::now() >= next_attempt {
-                        match tokio::time::timeout(Duration::from_millis(250), UnixStream::connect(socket(data))).await {
-                            Ok(Ok(mut stream)) => match peer(&stream) {
+                        match tokio::time::timeout(Duration::from_millis(250), link::connect(&socket(data))).await {
+                            Ok(Ok(mut stream)) => match link::server_peer(&stream) {
                                 Err(PeerError::OtherExecutable { .. }) => {
                                     refusals.refused += 1;
                                     if refusals.refused == BACKOFF_AFTER {
@@ -283,7 +322,7 @@ pub(super) fn run(data: &Path) -> Result<i32, String> {
                                     refusals.refused = 0;
                                     next_attempt = Instant::now();
                                     linked_since = Some(Instant::now());
-                                    let (input, output) = stream.into_split();
+                                    let (input, output) = link::split(stream);
                                     link = Some((Reader::new(input), output));
                                 } else {
                                     refusals.reset();

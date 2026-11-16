@@ -1439,6 +1439,11 @@ pub fn grok_bot_places(home: Option<&Path>, path: Option<&std::ffi::OsStr>) -> V
         places.push(PathBuf::from("/opt/Grok Bot"));
         places.push(PathBuf::from("/usr/share/applications/grok-bot.desktop"));
         places.extend(home.map(|home| home.join(".local/share/applications/grok-bot.desktop")));
+    } else if cfg!(windows) {
+        places.extend(path.into_iter().flat_map(std::env::split_paths).flat_map(|dir| {
+            [dir.join("Grok Bot.exe"), dir.join("grok-bot.exe")]
+        }));
+        places.extend(home.map(|home| home.join("AppData/Local/Programs/Grok Bot/Grok Bot.exe")));
     }
     places
 }
@@ -1569,11 +1574,21 @@ mod tests {
         let own = crate::config::Paths::from_data_dir(dir.clone(), dir.join("logs"), dir.join("caches"));
         assert_eq!(
             bot_invocation(deckd, &own),
-            format!("'/usr/local/bin/deckd' --data-dir '{}'", dir.display())
+            invocation(deckd, Some(&dir))
         );
         // Where a bare `deckd` looks anyway: no flag.
         let bare = crate::config::Paths::platform_default().unwrap();
-        assert_eq!(bot_invocation(deckd, &bare), "'/usr/local/bin/deckd'");
+        assert_eq!(bot_invocation(deckd, &bare), invocation(deckd, None));
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn windows_looks_for_the_executable_on_path_and_in_the_user_install() {
+        let path = std::env::join_paths([r"C:\Tools", r"D:\Bots"]).unwrap();
+        let places = grok_bot_places(Some(Path::new(r"C:\Users\Owner")), Some(&path));
+        assert!(places.contains(&PathBuf::from(r"C:\Tools\Grok Bot.exe")));
+        assert!(places.contains(&PathBuf::from(r"D:\Bots\grok-bot.exe")));
+        assert!(places.contains(&PathBuf::from(r"C:\Users\Owner\AppData\Local\Programs\Grok Bot\Grok Bot.exe")));
     }
 
     #[test]
@@ -1614,7 +1629,7 @@ mod tests {
         assert_eq!(body["test"], false);
         assert_eq!(
             body["reply_with"],
-            "'/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd' grokbot say --bot 'research' '<your reply>'"
+            format!("{deckd} grokbot say --bot 'research' '<your reply>'")
         );
         assert!(body["ask_with"].as_str().unwrap().contains("grokbot ask --bot 'research' --choice 'Yes'"));
         assert!(body["sent_at"].as_str().unwrap().ends_with('Z'));

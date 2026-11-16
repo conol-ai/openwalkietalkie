@@ -359,6 +359,7 @@ mod tests {
     /// unlocks first, so the next `lock()` succeeds however long the child
     /// takes to `exec` (or, here, never execs at all).
     #[test]
+    #[cfg(unix)] // fork
     fn a_fork_that_copied_the_lock_fd_cannot_keep_it_after_the_guard_drops() {
         let d = dir("fork");
         let path = d.join("deckd.lock");

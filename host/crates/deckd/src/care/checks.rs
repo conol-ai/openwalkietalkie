@@ -72,14 +72,22 @@ pub fn run(context: &Context, homes: &Homes) -> serde_json::Value {
         None => crate::cli::device_check().into(),
         Some(why) => Check::new(DEVICE, None, format!("not looked for: {why}")),
     });
-    match not_asking_launchd(cfg!(test), launchd_job()) {
-        None => {
+    // Windows has no launchd and never had the renamed agent: its row is
+    // the service host's start at sign-in, a Run value read as it stands.
+    if cfg!(windows) {
+        if !cfg!(test) {
             checks.extend(crate::cli::launchd_checks().into_iter().map(Check::from));
-            checks.push(legacy_launch_agent(&homes.home));
         }
-        Some(why) => {
-            for name in [LAUNCHD, LEGACY_LAUNCH_AGENT] {
-                checks.push(Check::new(name, None, format!("not looked at: {why}")));
+    } else {
+        match not_asking_launchd(cfg!(test), launchd_job()) {
+            None => {
+                checks.extend(crate::cli::launchd_checks().into_iter().map(Check::from));
+                checks.push(legacy_launch_agent(&homes.home));
+            }
+            Some(why) => {
+                for name in [LAUNCHD, LEGACY_LAUNCH_AGENT] {
+                    checks.push(Check::new(name, None, format!("not looked at: {why}")));
+                }
             }
         }
     }
@@ -195,6 +203,7 @@ mod tests {
     use serde_json::Value;
     use std::collections::BTreeSet;
 
+    #[cfg_attr(windows, allow(dead_code))] // its tests are a Mac's rows
     fn keys(value: &Value) -> BTreeSet<&str> {
         value
             .as_object()
@@ -222,6 +231,7 @@ mod tests {
     /// names, the two new ones among them. Three rows are not checked: this
     /// build never enumerates HID and never asks launchd.
     #[test]
+    #[cfg(not(windows))] // the fixture is a Mac's, with launchd's rows
     fn the_reply_has_the_shape_and_every_row_of_the_apps_fixture() {
         let fixture: Value = serde_json::from_str(include_str!(
             "../../../deck-gui-core/tests/fixtures/daemon/care_checks.json"
@@ -337,6 +347,7 @@ mod tests {
     /// launchd itself is not asked: the rows are built from what it would
     /// have said.
     #[test]
+    #[cfg(not(windows))] // the agent from before the rename is a Mac's
     fn a_legacy_plist_in_the_home_fails_its_row() {
         let dir = TestDir::new("care-legacy");
         let home = dir.sub("home");

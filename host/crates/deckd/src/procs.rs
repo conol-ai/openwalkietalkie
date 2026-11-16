@@ -55,7 +55,15 @@ fn children(pid: u32) -> Vec<u32> {
     buf.into_iter().filter_map(|p| u32::try_from(p).ok()).filter(|p| *p > 0).collect()
 }
 
-#[cfg(not(target_os = "macos"))]
+/// Windows: Toolhelp's children of `pid` (`crate::winproc`). Claude Code
+/// runs a Bash call there as a Git Bash (or PowerShell) child whose command
+/// line carries the command.
+#[cfg(windows)]
+fn children(pid: u32) -> Vec<u32> {
+    crate::winproc::children(pid)
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
 fn children(_pid: u32) -> Vec<u32> {
     Vec::new()
 }
@@ -86,14 +94,21 @@ fn args(pid: u32) -> Option<String> {
     parse_procargs(&buf)
 }
 
-#[cfg(not(target_os = "macos"))]
+/// Windows: the process's command line, as one string.
+#[cfg(windows)]
+fn args(pid: u32) -> Option<String> {
+    crate::winproc::command_line(pid)
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
 fn args(_pid: u32) -> Option<String> {
     None
 }
 
 /// `KERN_PROCARGS2`: `argc` (a native `int`), the executable path, NUL
 /// padding, then `argc` NUL-terminated arguments (the environment follows
-/// and is never read).
+/// and is never read). macOS's only; its test runs everywhere.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn parse_procargs(buf: &[u8]) -> Option<String> {
     let argc = i32::from_ne_bytes(buf.get(..4)?.try_into().ok()?);
     let mut rest = buf.get(4..)?;

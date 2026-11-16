@@ -375,6 +375,31 @@ pub fn look_of(
     )
 }
 
+/// Whether a Windows contrast theme is on (`SPI_GETHIGHCONTRAST`).
+#[cfg(windows)]
+fn windows_high_contrast() -> bool {
+    #[repr(C)]
+    struct HighContrast {
+        size: u32,
+        flags: u32,
+        scheme: *mut u16,
+    }
+    #[link(name = "user32")]
+    extern "system" {
+        fn SystemParametersInfoW(action: u32, param: u32, data: *mut HighContrast, ini: u32) -> i32;
+    }
+    const SPI_GETHIGHCONTRAST: u32 = 0x0042;
+    const HCF_HIGHCONTRASTON: u32 = 0x0000_0001;
+    let mut info = HighContrast {
+        size: std::mem::size_of::<HighContrast>() as u32,
+        flags: 0,
+        scheme: std::ptr::null_mut(),
+    };
+    // SAFETY: a sized HIGHCONTRASTW the call fills in.
+    let read = unsafe { SystemParametersInfoW(SPI_GETHIGHCONTRAST, info.size, &mut info, 0) } != 0;
+    read && info.flags & HCF_HIGHCONTRASTON != 0
+}
+
 /// The palette `window` is to be drawn in now: its appearance, and the
 /// Mac's Increase contrast, or what [`APPEARANCE_ENV`] and [`CONTRAST_ENV`]
 /// pin (see [`look_of`]).
@@ -384,7 +409,11 @@ pub fn look(window: &Window, cx: &App) -> Palette {
         crate::macos::effective_dark(),
         crate::macos::increase_contrast(),
     );
-    #[cfg(not(target_os = "macos"))]
+    // Windows: its contrast themes (Settings › Accessibility › Contrast
+    // themes) are the Mac's Increase contrast there.
+    #[cfg(windows)]
+    let (effective_dark, system) = (None, windows_high_contrast());
+    #[cfg(not(any(target_os = "macos", windows)))]
     let (effective_dark, system) = (None, false);
     // gpui is asked only when AppKit has no answer: it prints a line for
     // every name it does not know, and the window asks once a second.

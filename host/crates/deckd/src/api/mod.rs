@@ -201,6 +201,7 @@ pub(crate) mod testkit {
     }
 
     /// The same with any verifier (the accept-loop tests need a slow one).
+    #[cfg_attr(not(unix), allow(dead_code))] // its tests dial the Unix socket
     pub fn test_api_verifier(name: &str, verifier: Arc<dyn PeerVerifier>) -> TestDaemon {
         test_api_with(name, verifier, 0)
     }

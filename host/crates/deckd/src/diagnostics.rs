@@ -92,8 +92,7 @@ pub struct Bundle {
 
 /// `~/Desktop`, where §10.5 puts the file.
 pub fn default_dir() -> Result<PathBuf, String> {
-    let home = std::env::var_os("HOME").ok_or("HOME is not set")?;
-    Ok(PathBuf::from(home).join("Desktop"))
+    Ok(crate::integrations::home_dir()?.join("Desktop"))
 }
 
 /// The file name §10.5 names, with the timestamp flattened so it survives a
@@ -447,12 +446,22 @@ fn versions(opts: &Options) -> Vec<(String, String)> {
                 .unwrap_or_else(|e| e.to_string()),
         ),
     ];
+    #[cfg(not(windows))]
     if opts.probe {
         out.push((
             "macos".into(),
             probe("/usr/bin/sw_vers", &["-productVersion"]),
         ));
         out.push(("arch".into(), probe("/usr/bin/uname", &["-m"])));
+    }
+    #[cfg(windows)]
+    if opts.probe {
+        // `ver` is a cmd built-in: "Microsoft Windows [Version 10.0.26200.1234]".
+        out.push(("windows".into(), probe("cmd.exe", &["/d", "/c", "ver"]).trim().to_string()));
+        out.push((
+            "arch".into(),
+            std::env::var("PROCESSOR_ARCHITECTURE").unwrap_or_else(|e| e.to_string()),
+        ));
     }
     out
 }
@@ -465,6 +474,9 @@ fn versions(opts: &Options) -> Vec<(String, String)> {
 fn codesign_text(opts: &Options) -> String {
     if !opts.probe {
         return "not probed".into();
+    }
+    if cfg!(windows) {
+        return "not applicable: the Windows builds are not code-signed".into();
     }
     let Ok(exe) = std::env::current_exe() else {
         return "the running executable cannot be located".into();
@@ -502,17 +514,42 @@ fn launchctl_text(opts: &Options) -> String {
     if !opts.probe {
         return "not probed".into();
     }
-    [crate::launchd::DECKD_LABEL]
-        .iter()
-        .map(|label| {
-            format!(
-                "--- {label} ---\n{}",
-                crate::launchd::print(label)
-                    .unwrap_or_else(|| format!("not loaded in gui/{}", crate::launchd::uid()))
-            )
-        })
-        .collect::<Vec<String>>()
-        .join("\n")
+    // Windows has no launchd: the service host and the app start at sign-in
+    // from the per-user Run key, so the section carries those values.
+    #[cfg(windows)]
+    {
+        let reg = std::env::var_os("SystemRoot")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| "C:\\Windows".into())
+            .join(r"System32\reg.exe");
+        ["OpenWalkieTalkie Service", "OpenWalkieTalkie"]
+            .iter()
+            .map(|value| {
+                format!(
+                    "--- Run\\{value} ---\n{}",
+                    probe(
+                        &reg.to_string_lossy(),
+                        &["query", r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run", "/v", value],
+                    )
+                )
+            })
+            .collect::<Vec<String>>()
+            .join("\n")
+    }
+    #[cfg(not(windows))]
+    {
+        [crate::launchd::DECKD_LABEL]
+            .iter()
+            .map(|label| {
+                format!(
+                    "--- {label} ---\n{}",
+                    crate::launchd::print(label)
+                        .unwrap_or_else(|| format!("not loaded in gui/{}", crate::launchd::uid()))
+                )
+            })
+            .collect::<Vec<String>>()
+            .join("\n")
+    }
 }
 
 fn integrations_text(env: Option<&integrations::Env>) -> String {
@@ -546,7 +583,15 @@ fn integrations_text(env: Option<&integrations::Env>) -> String {
 
 /// One external command's combined output, or why it did not run.
 fn probe(program: &str, args: &[&str]) -> String {
-    match std::process::Command::new(program).args(args).output() {
+    let mut command = std::process::Command::new(program);
+    command.args(args);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    match command.output() {
         Err(e) => format!("{program}: {e}"),
         Ok(out) => {
             let mut text = String::from_utf8_lossy(&out.stdout).into_owned();

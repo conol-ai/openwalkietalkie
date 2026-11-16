@@ -88,16 +88,22 @@ pub fn sh_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', r"'\''"))
 }
 
-/// How every command a bot runs starts: `deckd`, quoted, then
+/// How every command a bot runs starts: `deckd`, quoted for the local shell
+/// (PowerShell on Windows, POSIX elsewhere), then
 /// `--data-dir` when the service does not run where a bare `deckd` looks
 /// (`data_dir`): a test service's own directory, or Omarchy's
 /// `~/.local/share/openwalkietalkie`, which its systemd unit sets. A bot's
 /// shell has none of the service's environment, so the command has to say.
 #[must_use]
 pub fn invocation(deckd: &Path, data_dir: Option<&Path>) -> String {
-    let deckd = sh_quote(&deckd.to_string_lossy());
+    // PowerShell needs the call operator before a quoted executable path.
+    let quote = |value: &str| {
+        if cfg!(windows) { format!("'{}'", value.replace('\'', "''")) } else { sh_quote(value) }
+    };
+    let program = quote(&deckd.to_string_lossy());
+    let deckd = if cfg!(windows) { format!("& {program}") } else { program };
     match data_dir {
-        Some(dir) => format!("{deckd} --data-dir {}", sh_quote(&dir.to_string_lossy())),
+        Some(dir) => format!("{deckd} --data-dir {}", quote(&dir.to_string_lossy())),
         None => deckd,
     }
 }
@@ -124,11 +130,14 @@ pub fn ask_command(invocation: &str, id: &str) -> String {
 /// an answer given only as a command's argument would leave nothing there.
 #[must_use]
 pub fn routine_text(name: &str, id: &str, invocation: &str) -> String {
+    let shell = if cfg!(windows) {
+        "Run the commands below in PowerShell. Inside single-quoted text, double any apostrophe.\n"
+    } else { "" };
     format!(
         "Each run of this routine is a message I spoke into my OpenWalkieTalkie deck, \
          addressed to you ({name}). The JSON body's \"text\" is what I said: treat it as a \
          message from me in this chat and do what it asks.\n\
-         When you have an answer or you are done, run this on my computer, with a short \
+         {shell}When you have an answer or you are done, run this on my computer, with a short \
          version of your answer I can listen to in place of <your reply>:\n{}\n\
          Then also answer me here in this chat as you normally would, so your full answer \
          stays in this chat's history.\n\
@@ -181,6 +190,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(windows))]
     fn a_service_on_its_own_directory_is_named_in_every_command() {
         // Omarchy's unit runs deckd on ~/.local/share/openwalkietalkie, which a
         // bare `deckd` would not look in.
@@ -196,6 +206,18 @@ mod tests {
         assert!(ask_command(&own, "research").starts_with(&own));
         // The platform's own place needs no flag.
         assert_eq!(invocation(Path::new("/usr/bin/deckd"), None), "'/usr/bin/deckd'");
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn windows_commands_call_the_program_and_quote_powershell_paths() {
+        let command = invocation(
+            Path::new(r"C:\Program Files\Owner's Deck\deckd.exe"),
+            Some(Path::new(r"C:\Users\Owner's Deck\data")),
+        );
+        assert_eq!(command, r"& 'C:\Program Files\Owner''s Deck\deckd.exe' --data-dir 'C:\Users\Owner''s Deck\data'");
+        assert!(reply_command(&command, "research").starts_with(&command));
+        assert!(ask_command(&command, "research").starts_with(&command));
     }
 
     #[test]

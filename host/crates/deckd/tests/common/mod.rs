@@ -384,18 +384,27 @@ pub async fn http(
 
 /// A newline-delimited JSON-RPC client over the Unix socket (what
 /// `deck-client` will be once B4 lands; the exit tests need one now).
+#[cfg(unix)]
+type LocalStream = tokio::net::UnixStream;
+#[cfg(windows)]
+type LocalStream = tokio::net::windows::named_pipe::NamedPipeClient;
+
 pub struct UdsClient {
-    reader: BufReader<tokio::net::unix::OwnedReadHalf>,
-    writer: tokio::net::unix::OwnedWriteHalf,
+    reader: BufReader<tokio::io::ReadHalf<LocalStream>>,
+    writer: tokio::io::WriteHalf<LocalStream>,
     id: u64,
 }
 
 impl UdsClient {
     pub async fn connect(socket: &std::path::Path) -> UdsClient {
+        #[cfg(unix)]
         let stream = tokio::net::UnixStream::connect(socket)
             .await
             .expect("the uds door");
-        let (r, w) = stream.into_split();
+        #[cfg(windows)]
+        let stream = tokio::net::windows::named_pipe::ClientOptions::new()
+            .open(socket).expect("the named-pipe door");
+        let (r, w) = tokio::io::split(stream);
         UdsClient {
             reader: BufReader::new(r),
             writer: w,

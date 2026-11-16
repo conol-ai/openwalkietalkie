@@ -5,10 +5,9 @@
 //! The bridge is the owner's opt-in (`[sources] claude_channels`): the door is
 //! open only while it is switched on.
 //!
-//! Windows has no door yet (see [`serve`]); the hub's bookkeeping is kept
-//! so the rest of the daemon reads an empty one.
-#![cfg_attr(not(unix), allow(dead_code, unused_imports))]
-#[cfg(unix)]
+//! The door is a Unix socket in the data directory, or on Windows a named
+//! pipe named after it ([`socket`], [`link`], [`DoorListener`]); both ends
+//! check the other is the same user running the same `deckd` executable.
 mod mcp;
 
 use crate::desktop::{DesktopError, FromDesktop};
@@ -23,7 +22,6 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-#[cfg(unix)]
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 #[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
@@ -296,13 +294,21 @@ fn process_alive(pid: u32) -> bool {
     crate::liveness::alive(pid)
 }
 
-#[cfg_attr(not(unix), allow(dead_code))]
+/// The door's address: a socket in the data directory, or on Windows the
+/// data directory's pipe name with `-channel` after it (the API's door is
+/// that name alone).
 fn socket(data: &Path) -> PathBuf {
-    data.join("claude-channel.sock")
+    #[cfg(windows)]
+    {
+        PathBuf::from(format!("{}-channel", deck_client::windows::pipe_name_for(data).display()))
+    }
+    #[cfg(not(windows))]
+    {
+        data.join("claude-channel.sock")
+    }
 }
 
 /// Why [`peer`] said no.
-#[cfg(unix)]
 #[derive(Debug)]
 enum PeerError {
     /// Not a same-user process, no pid, or unreadable credentials.
@@ -313,7 +319,6 @@ enum PeerError {
     OtherExecutable { pid: u32, exe: Option<PathBuf> },
 }
 
-#[cfg(unix)]
 impl PeerError {
     /// Is the refused peer plausibly another copy of `deckd` (as opposed to
     /// some unrelated same-user program)? An unresolvable path counts: that
@@ -351,13 +356,141 @@ fn peer(stream: &UnixStream) -> Result<u32, PeerError> {
     Ok(pid)
 }
 
+/// [`peer`] on Windows, for the process at the other end of a pipe: the
+/// same user (the pipe's DACL already admits no other, and the token is
+/// checked as well) running this very `deckd.exe` (paths compare without
+/// case, as Windows' do).
+#[cfg(windows)]
+fn peer_pid(pid: u32) -> Result<u32, PeerError> {
+    let refused = |why: &str| PeerError::Rejected(io::Error::new(io::ErrorKind::PermissionDenied, why.to_string()));
+    let ours = deck_client::windows::current_user().map_err(PeerError::Rejected)?;
+    let theirs = deck_client::windows::process_user(pid).map_err(PeerError::Rejected)?;
+    if ours != theirs {
+        return Err(refused("channel peer"));
+    }
+    let own_executable = std::env::current_exe().map_err(PeerError::Rejected)?;
+    let exe = crate::trust::exe_path(pid);
+    let same = exe.as_ref().is_some_and(|exe| {
+        exe.to_string_lossy().eq_ignore_ascii_case(&own_executable.to_string_lossy())
+    });
+    if !same {
+        return Err(PeerError::OtherExecutable { pid, exe });
+    }
+    Ok(pid)
+}
+
+/// The helper's end of the door: its stream, the stream's two halves, how it
+/// connects, and the daemon it found there, checked as the daemon checks it.
 #[cfg(unix)]
+mod link {
+    use super::{peer, PeerError};
+    use std::path::Path;
+    pub type Stream = tokio::net::UnixStream;
+    pub type Read = tokio::net::unix::OwnedReadHalf;
+    pub type Write = tokio::net::unix::OwnedWriteHalf;
+    pub async fn connect(path: &Path) -> std::io::Result<Stream> {
+        Stream::connect(path).await
+    }
+    pub fn split(stream: Stream) -> (Read, Write) {
+        stream.into_split()
+    }
+    pub fn server_peer(stream: &Stream) -> Result<u32, PeerError> {
+        peer(stream)
+    }
+}
+
+/// The helper's end of the door on Windows: the pipe, opened only when the
+/// process serving it is this user's (`deck_client::windows::connect`).
+#[cfg(windows)]
+mod link {
+    use super::{peer_pid, PeerError};
+    use std::path::Path;
+    pub type Stream = tokio::net::windows::named_pipe::NamedPipeClient;
+    pub type Read = tokio::io::ReadHalf<Stream>;
+    pub type Write = tokio::io::WriteHalf<Stream>;
+    pub async fn connect(path: &Path) -> std::io::Result<Stream> {
+        deck_client::windows::connect(path).await
+    }
+    pub fn split(stream: Stream) -> (Read, Write) {
+        tokio::io::split(stream)
+    }
+    pub fn server_peer(stream: &Stream) -> Result<u32, PeerError> {
+        let pid = deck_client::windows::pipe_peer_pid(stream, false).map_err(PeerError::Rejected)?;
+        peer_pid(pid)
+    }
+}
+
+/// The daemon's end of the door while it is open: the socket (mode 0600),
+/// removed when it closes.
+#[cfg(unix)]
+struct DoorListener {
+    path: PathBuf,
+    listener: UnixListener,
+}
+
+#[cfg(unix)]
+impl DoorListener {
+    fn bind(path: &Path) -> io::Result<DoorListener> {
+        let _ = std::fs::remove_file(path);
+        let listener = UnixListener::bind(path)?;
+        if let Err(error) = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)) {
+            let _ = std::fs::remove_file(path);
+            return Err(error);
+        }
+        Ok(DoorListener { path: path.to_path_buf(), listener })
+    }
+
+    /// The next helper, with its pid when it passed [`peer`].
+    async fn accept(&mut self) -> io::Result<(UnixStream, Result<u32, PeerError>)> {
+        let (stream, _) = self.listener.accept().await?;
+        let verdict = peer(&stream);
+        Ok((stream, verdict))
+    }
+
+    fn close(self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+/// The daemon's end of the door on Windows: pipe instances owned by and
+/// open to this user only, the first one the first of its name, a new one
+/// made as each is taken (as the API's door does).
+#[cfg(windows)]
+struct DoorListener {
+    name: PathBuf,
+    next: tokio::net::windows::named_pipe::NamedPipeServer,
+    security: deck_client::windows::SecurityDescriptor,
+}
+
+#[cfg(windows)]
+impl DoorListener {
+    fn bind(path: &Path) -> io::Result<DoorListener> {
+        let user = deck_client::windows::current_user()?;
+        let security = deck_client::windows::SecurityDescriptor::only(&user)?;
+        let next = crate::api::uds::instance(path, &security, true)?;
+        Ok(DoorListener { name: path.to_path_buf(), next, security })
+    }
+
+    async fn accept(
+        &mut self,
+    ) -> io::Result<(tokio::net::windows::named_pipe::NamedPipeServer, Result<u32, PeerError>)> {
+        self.next.connect().await?;
+        let fresh = crate::api::uds::instance(&self.name, &self.security, false)?;
+        let server = std::mem::replace(&mut self.next, fresh);
+        let verdict = deck_client::windows::pipe_peer_pid(&server, true)
+            .map_err(PeerError::Rejected)
+            .and_then(peer_pid);
+        Ok((server, verdict))
+    }
+
+    fn close(self) {}
+}
+
 struct Reader<R> {
     input: BufReader<R>,
     bytes: Vec<u8>,
 }
 
-#[cfg(unix)]
 impl<R: tokio::io::AsyncRead + Unpin> Reader<R> {
     fn new(input: R) -> Self {
         Self {
@@ -384,7 +517,6 @@ impl<R: tokio::io::AsyncRead + Unpin> Reader<R> {
     }
 }
 
-#[cfg(unix)]
 async fn write<W: AsyncWrite + Unpin>(output: &mut W, value: &Value) -> io::Result<()> {
     let mut bytes = serde_json::to_vec(value)?;
     bytes.push(b'\n');
@@ -396,7 +528,6 @@ async fn write<W: AsyncWrite + Unpin>(output: &mut W, value: &Value) -> io::Resu
 }
 
 /// Why an open door closed.
-#[cfg(unix)]
 #[derive(Debug)]
 enum Closed {
     /// The daemon is stopping.
@@ -416,7 +547,6 @@ enum Closed {
 /// then finds no door, which it already treats as a daemon that is not
 /// running: it retries quietly, and links again by itself once the switch
 /// is back on.
-#[cfg(unix)]
 pub async fn serve(
     data: PathBuf,
     hub: Arc<Hub>,
@@ -426,21 +556,7 @@ pub async fn serve(
     serve_every(data, hub, on, SWITCH_POLL, stop).await;
 }
 
-/// Windows: no channel door yet (its helper link is a Unix socket checked
-/// by peer credentials). The hub stays empty, so every order takes the
-/// next route, exactly as when the door cannot bind on Unix.
-#[cfg(not(unix))]
-pub async fn serve(
-    _data: PathBuf,
-    _hub: Arc<Hub>,
-    _on: impl Fn() -> bool + Send + Sync + 'static,
-    _stop: watch::Receiver<bool>,
-) {
-    tracing::info!("Claude channel door is not supported on this platform; using the inbox route");
-}
-
 /// [`serve`], reading the switch every `poll`.
-#[cfg(unix)]
 async fn serve_every(
     data: PathBuf,
     hub: Arc<Hub>,
@@ -474,7 +590,6 @@ async fn serve_every(
 
 /// The open door: helpers are accepted until the daemon stops or the switch
 /// goes off. Whatever ends it, every link ends with it and the socket goes.
-#[cfg(unix)]
 async fn door(
     data: &Path,
     hub: &Arc<Hub>,
@@ -484,18 +599,13 @@ async fn door(
     stop: &mut watch::Receiver<bool>,
 ) -> Closed {
     let path = socket(data);
-    let _ = std::fs::remove_file(&path);
-    let listener = match UnixListener::bind(&path) {
+    let mut listener = match DoorListener::bind(&path) {
         Ok(listener) => listener,
         Err(error) => {
             tracing::warn!(%error, "Claude channel door unavailable; using inbox");
             return Closed::Unavailable;
         }
     };
-    if std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).is_err() {
-        let _ = std::fs::remove_file(&path);
-        return Closed::Unavailable;
-    }
     let mut connections = tokio::task::JoinSet::new();
     let closed = loop {
         tokio::select! {
@@ -503,9 +613,9 @@ async fn door(
             _ = switch.tick() => if !on() { break Closed::SwitchedOff },
             Some(_) = connections.join_next(), if !connections.is_empty() => {},
             accepted = listener.accept() => {
-                let Ok((stream, _)) = accepted else { break Closed::Unavailable };
+                let Ok((stream, verdict)) = accepted else { break Closed::Unavailable };
                 if connections.len() >= 64 { continue; }
-                let pid = match peer(&stream) {
+                let pid = match verdict {
                     Ok(pid) => { hub.clear_stale(pid); pid }
                     Err(refusal) => {
                         if let PeerError::Rejected(error) = &refusal {
@@ -521,8 +631,9 @@ async fn door(
                 let Some(cli_pid) = cli_pid else { continue };
                 *next += 1;
                 let (hub, number) = (hub.clone(), *next);
+                let (input, output) = tokio::io::split(stream);
                 connections.spawn(async move {
-                    let _ = connection(stream, cli_pid, number, &hub).await;
+                    let _ = connection(input, output, cli_pid, number, &hub).await;
                     hub.entries.lock().expect("channel hub").retain(|_, e| e.connection != number);
                 });
             }
@@ -531,13 +642,15 @@ async fn door(
     connections.abort_all();
     while connections.join_next().await.is_some() {}
     hub.close();
-    let _ = std::fs::remove_file(&path);
+    listener.close();
     closed
 }
 
-#[cfg(unix)]
-async fn connection(stream: UnixStream, pid: u32, number: u64, hub: &Hub) -> io::Result<()> {
-    let (input, mut output) = stream.into_split();
+async fn connection<R, W>(input: R, mut output: W, pid: u32, number: u64, hub: &Hub) -> io::Result<()>
+where
+    R: tokio::io::AsyncRead + Unpin,
+    W: AsyncWrite + Unpin,
+{
     let mut input = Reader::new(input);
     let hello = tokio::time::timeout(BUDGET, input.next()).await??;
     let dir = PathBuf::from(
@@ -597,14 +710,8 @@ async fn connection(stream: UnixStream, pid: u32, number: u64, hub: &Hub) -> io:
     }
 }
 
-#[cfg(unix)]
 pub fn main(data: &Path) -> Result<i32, String> {
     mcp::run(data)
-}
-
-#[cfg(not(unix))]
-pub fn main(_data: &Path) -> Result<i32, String> {
-    Err("the Claude channel helper is not supported on this platform yet".into())
 }
 
 #[cfg(all(test, unix))]
@@ -750,7 +857,10 @@ mod tests {
         let hub = Arc::new(Hub::default());
         let (server, client) = UnixStream::pair().unwrap();
         let server_hub = hub.clone();
-        let server = tokio::spawn(async move { connection(server, 42, 1, &server_hub).await });
+        let server = tokio::spawn(async move {
+            let (read, write) = server.into_split();
+            connection(read, write, 42, 1, &server_hub).await
+        });
         let (input, mut output) = client.into_split();
         let mut input = Reader::new(input);
         write(&mut output, &json!({"config_dir":dir}))

@@ -51,15 +51,17 @@ pub fn rows() -> Vec<Entry> {
 
 impl Language {
     pub fn text(self, english: &str) -> &str {
-        if self == Self::English { return english; }
+        // Windows reads every row through `on_this_computer`, English too.
+        if self == Self::English && cfg!(not(windows)) { return english; }
         for table in scanned() {
             if let Some(entry) = table.iter().find(|entry| entry.0 == english) {
-                return match self {
+                let words = match self {
                     Self::English => entry.0,
                     Self::SimplifiedChinese => entry.1,
                     Self::TraditionalChinese => entry.2,
                     Self::Japanese => entry.3,
                 };
+                return on_this_computer(words);
             }
         }
         english
@@ -72,6 +74,46 @@ impl Language {
     pub fn format_named(self, english: &str, values: &[(&str, &str)]) -> String {
         render(self.text(english), |key| values.iter().find(|(name, _)| *name == key).map(|(_, value)| *value))
     }
+}
+
+/// A row's words as this computer says them. The copy names the Mac it was
+/// written for ("on this Mac", "此 Mac 上", "この Mac"); on Windows each
+/// whole word `Mac` is `PC`, never a `Mac` inside a word (Macropad, macOS).
+/// Only a table's own row comes here, never a key no table has: that may be
+/// host or user content. Each row is changed once and kept.
+#[cfg(windows)]
+fn on_this_computer(words: &'static str) -> &'static str {
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+    static CHANGED: OnceLock<Mutex<HashMap<&'static str, &'static str>>> = OnceLock::new();
+    if !words.contains("Mac") {
+        return words;
+    }
+    let mut changed = CHANGED.get_or_init(Mutex::default).lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    changed.entry(words).or_insert_with(|| Box::leak(pc_for_mac(words).into_boxed_str()))
+}
+
+#[cfg(not(windows))]
+fn on_this_computer(words: &'static str) -> &'static str {
+    words
+}
+
+/// `text` with every whole word `Mac` (no ASCII letter or digit on either
+/// side) as `PC`.
+#[cfg_attr(not(any(windows, test)), allow(dead_code))]
+fn pc_for_mac(text: &str) -> String {
+    let word = |c: Option<char>| c.is_some_and(|c| c.is_ascii_alphanumeric());
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find("Mac") {
+        let before = rest[..at].chars().next_back().or_else(|| out.chars().next_back());
+        let after = rest[at + 3..].chars().next();
+        out.push_str(&rest[..at]);
+        out.push_str(if word(before) || word(after) { "Mac" } else { "PC" });
+        rest = &rest[at + 3..];
+    }
+    out.push_str(rest);
+    out
 }
 
 /// Substitute only the original template, never text supplied as a value.
@@ -99,6 +141,18 @@ fn render<'a>(template: &str, mut value: impl FnMut(&str) -> Option<&'a str>) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn on_windows_the_word_mac_is_pc_and_a_word_containing_it_is_not() {
+        assert_eq!(pc_for_mac("What this app has added to your Mac"), "What this app has added to your PC");
+        assert_eq!(pc_for_mac("on this Mac."), "on this PC.");
+        assert_eq!(pc_for_mac("Mac"), "PC");
+        assert_eq!(pc_for_mac("在此 Mac 上识别"), "在此 PC 上识别");
+        assert_eq!(pc_for_mac("このアプリが Mac に追加したもの"), "このアプリが PC に追加したもの");
+        assert_eq!(pc_for_mac("Macropad keys, macOS, iMac, Mac2"), "Macropad keys, macOS, iMac, Mac2");
+        assert_eq!(pc_for_mac("Mac, Mac\nMac"), "PC, PC\nPC");
+    }
+
     fn placeholders(text: &str) -> std::collections::BTreeSet<&str> {
         let mut found = std::collections::BTreeSet::new();
         let mut rest = text;

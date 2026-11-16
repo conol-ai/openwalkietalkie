@@ -33,7 +33,7 @@
 //! operator is uninstalling is the wrong shape.
 use crate::config::Paths;
 use crate::integrations::{self, Launchctl, Status, Target, Verb};
-use crate::secrets::{KeyHome, SERVICE};
+use crate::secrets::{KeyHome, SERVICE, STORE, STORE_APP, STORE_ITEM};
 use std::path::{Path, PathBuf};
 
 /// Targets with managed files to remove before deleting receipts and backups.
@@ -132,6 +132,11 @@ pub fn run(env: &integrations::Env, paths: &Paths, opts: Options, keys: &KeyHome
     //    the other.
     //    The agent under the project's old name goes the same way, quietly
     //    when it was never there.
+    //    Windows has no launchd: the service stops through its own door and
+    //    its sign-in starts are Run values (`windows_service`).
+    #[cfg(windows)]
+    windows_service(env, paths, &mut outcome);
+    #[cfg(not(windows))]
     for label in [
         crate::launchd::DECKD_LABEL,
         crate::launchd::LEGACY_DECKD_LABEL,
@@ -163,15 +168,38 @@ pub fn run(env: &integrations::Env, paths: &Paths, opts: Options, keys: &KeyHome
             }
         }
     }
+    #[cfg(not(windows))]
     outcome.next_steps.push(
         "the app itself: quit OpenWalkieTalkie and drag it to the Trash. Its SMAppService \
          registration and the `mainApp` login item are unregistered by the app (Settings → \
          Uninstall…), not by this command."
             .into(),
     );
+    #[cfg(windows)]
+    outcome.next_steps.push(
+        "the app itself: quit OpenWalkieTalkie (its tray icon's Quit) and delete the folder it \
+         was unzipped to."
+            .into(),
+    );
 
-    // 3. The data, last, and only when asked.
+    // 3. The data, last, and only when asked. On Windows the logs live in
+    //    the data directory, and they are kept there.
+    #[cfg(windows)]
     if opts.purge {
+        match remove_dir_except(&paths.data, &paths.logs) {
+            Ok(true) if paths.logs.starts_with(&paths.data) => outcome
+                .steps
+                .push(format!("purged {} (its logs kept)", paths.data.display())),
+            Ok(true) => outcome.steps.push(format!("purged {}", paths.data.display())),
+            Ok(false) => outcome
+                .steps
+                .push(format!("purged {} (was absent)", paths.data.display())),
+            Err(e) => outcome.problems.push(e),
+        }
+        // The app's preferences are in that folder too
+        // (`%LOCALAPPDATA%\openwalkietalkie\app-prefs.json`), and went with it.
+    }
+    if opts.purge && cfg!(not(windows)) {
         for dir in [&paths.data, &paths.caches] {
             match remove_dir(dir) {
                 Ok(true) => outcome.steps.push(format!("purged {}", dir.display())),
@@ -192,25 +220,15 @@ pub fn run(env: &integrations::Env, paths: &Paths, opts: Options, keys: &KeyHome
                     .push(format!("cannot remove {}: {e}", prefs.display())),
             }
         }
-        if let Some(store) = keys.store() {
-            match store.delete() {
-                Ok(true) => outcome.steps.push(format!(
-                    "removed the cloud voice key from the Keychain ({SERVICE})"
-                )),
-                Ok(false) => {}
-                Err(why) => outcome.problems.push(format!(
-                    "cannot remove the Keychain item {SERVICE}: {why}; remove it in Keychain \
-                     Access"
-                )),
-            }
+        if cfg!(target_os = "macos") {
+            outcome.next_steps.push(
+                "to give back the TCC grants as well, run `tccutil reset All \
+                 ai.cohdl.openwalkietalkie` — our own bundle id and nothing else. This command \
+                 does not run it for you."
+                    .into(),
+            );
         }
-        outcome.next_steps.push(
-            "to give back the TCC grants as well, run `tccutil reset All \
-             ai.cohdl.openwalkietalkie` — our own bundle id and nothing else. This command does \
-             not run it for you."
-                .into(),
-        );
-    } else {
+    } else if !opts.purge {
         outcome.kept.push(format!(
             "{} — settings, tokens and the deck's remembered slots. `deckd uninstall --purge` \
              deletes them.",
@@ -218,9 +236,24 @@ pub fn run(env: &integrations::Env, paths: &Paths, opts: Options, keys: &KeyHome
         ));
         if keys.store().is_some_and(|store| store.exists() == Ok(true)) {
             outcome.kept.push(format!(
-                "the cloud voice key in the Keychain item {SERVICE} — `deckd uninstall --purge` \
+                "the cloud voice key in {STORE_ITEM} {SERVICE} — `deckd uninstall --purge` \
                  deletes it."
             ));
+        }
+    }
+    // The key's store item (the Keychain on a Mac, Credential Manager on
+    // Windows) goes with a purge on either.
+    if opts.purge {
+        if let Some(store) = keys.store() {
+            match store.delete() {
+                Ok(true) => outcome.steps.push(format!(
+                    "removed the cloud voice key from {STORE} ({SERVICE})"
+                )),
+                Ok(false) => {}
+                Err(why) => outcome.problems.push(format!(
+                    "cannot remove {STORE_ITEM} {SERVICE}: {why}; remove it in {STORE_APP}"
+                )),
+            }
         }
     }
     outcome.kept.push(format!(
@@ -228,6 +261,97 @@ pub fn run(env: &integrations::Env, paths: &Paths, opts: Options, keys: &KeyHome
         paths.logs.display()
     ));
     outcome
+}
+
+/// Windows: stop the running service (`service.stop` through its own door:
+/// a clean exit, which its host does not restart) and remove the sign-in
+/// starts of the service and the app (their Run values). Skipped in a test
+/// environment, as `launchctl` is: it would stop the operator's own service.
+#[cfg(windows)]
+fn windows_service(env: &integrations::Env, paths: &Paths, outcome: &mut Outcome) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    if env.launchctl == Launchctl::Disabled {
+        return;
+    }
+    let stopped = std::env::current_exe().ok().and_then(|exe| {
+        std::process::Command::new(exe)
+            .arg("--data-dir")
+            .arg(&paths.data)
+            .args(["ctl", "--scopes", "admin", "--timeout", "5", "service.stop"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .ok()
+    });
+    match stopped {
+        Some(out) if out.status.success() => outcome.steps.push("stopped the running service".into()),
+        // 2: no service answered, so none was running.
+        Some(out) if out.status.code() == Some(2) => outcome.steps.push("the service was not running".into()),
+        Some(out) => outcome.problems.push(format!(
+            "the service did not stop: {}; end deckd.exe in Task Manager",
+            String::from_utf8_lossy(&out.stderr).trim()
+        )),
+        None => outcome
+            .problems
+            .push("cannot ask the service to stop; end deckd.exe in Task Manager".into()),
+    }
+    let reg = std::env::var_os("SystemRoot")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| "C:\\Windows".into())
+        .join(r"System32\reg.exe");
+    for value in ["OpenWalkieTalkie Service", "OpenWalkieTalkie"] {
+        let removed = std::process::Command::new(&reg)
+            .args(["delete", r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run", "/v", value, "/f"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output();
+        match removed {
+            Ok(out) if out.status.success() => {
+                outcome.steps.push(format!("startup: removed {value}"));
+            }
+            // reg exits 1 when there was no such value.
+            Ok(_) => {}
+            Err(e) => outcome.problems.push(format!("cannot run reg.exe: {e}")),
+        }
+    }
+}
+
+/// Remove everything in `dir` but `keep` (the logs); `Ok(false)` when `dir`
+/// was not there. A service that is still letting go of its files gets a
+/// few moments.
+#[cfg(windows)]
+fn remove_dir_except(dir: &Path, keep: &Path) -> Result<bool, String> {
+    if !dir.exists() {
+        return Ok(false);
+    }
+    let mut last = None;
+    for _ in 0..10 {
+        last = None;
+        let entries = std::fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path == keep {
+                continue;
+            }
+            let removed = if path.is_dir() {
+                std::fs::remove_dir_all(&path)
+            } else {
+                std::fs::remove_file(&path)
+            };
+            if let Err(e) = removed {
+                last = Some(format!("cannot remove {}: {e}", path.display()));
+            }
+        }
+        if last.is_none() {
+            // The folder itself goes too when the logs were not in it (a
+            // data folder of its own, `--data-dir`).
+            if !keep.starts_with(dir) {
+                std::fs::remove_dir(dir).map_err(|e| format!("cannot remove {}: {e}", dir.display()))?;
+            }
+            return Ok(true);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(400));
+    }
+    Err(last.unwrap_or_default())
 }
 
 /// Remove a directory tree; `Ok(false)` when it was not there.
@@ -243,6 +367,7 @@ fn remove_dir(dir: &Path) -> Result<bool, String> {
 /// `launchctl bootout gui/<uid>/<label>`, guarded by a `print` so an absent
 /// job is not an error, and disabled outright in a test environment — a
 /// `bootout` from a unit test would stop the operator's own running service.
+#[cfg(not(windows))]
 fn bootout(env: &integrations::Env, label: &str) -> Result<bool, String> {
     if env.launchctl == Launchctl::Disabled {
         return Ok(false);
@@ -272,10 +397,28 @@ mod tests {
     /// A `Paths` whose data directory is the test environment's, so a purge
     /// deletes the throwaway tree and nothing else.
     fn paths_for(env: &integrations::Env, dir: &TestDir) -> Paths {
-        Paths::from_data_dir(env.data.clone(), dir.sub("logs"), dir.sub("caches"))
+        // Windows keeps the caches inside the data folder (`Paths::detect`),
+        // which is what its purge relies on.
+        let caches = if cfg!(windows) { env.data.join("caches") } else { dir.sub("caches") };
+        let _ = std::fs::create_dir_all(&caches);
+        Paths::from_data_dir(env.data.clone(), dir.sub("logs"), caches)
+    }
+
+    /// `lines` with the key's store named as on a Mac, so one expected line
+    /// holds for Credential Manager on Windows too.
+    fn mac_lines(lines: &[String]) -> Vec<String> {
+        lines
+            .iter()
+            .map(|line| {
+                line.replace(&format!("remove it in {STORE_APP}"), "remove it in Keychain Access")
+                    .replace(STORE_ITEM, "the Keychain item")
+                    .replace(STORE, "the Keychain")
+            })
+            .collect()
     }
 
     #[test]
+    #[cfg(not(windows))] // launchctl
     fn launchctl_is_never_run_from_a_test_environment() {
         let dir = TestDir::new("uninstall-launchctl");
         let env = integrations::test_env(&dir);
@@ -318,12 +461,14 @@ mod tests {
         assert!(!paths.data.exists(), "{:?}", outcome.steps);
         assert!(!paths.caches.exists(), "{:?}", outcome.steps);
         assert!(outcome.problems.is_empty(), "{:?}", outcome.problems);
-        // The thing a purge must *not* do quietly.
-        assert!(
+        // The thing a purge must *not* do quietly (macOS's grants; no other
+        // system has them).
+        assert_eq!(
             outcome
                 .next_steps
                 .iter()
                 .any(|s| s.contains("tccutil reset All")),
+            cfg!(target_os = "macos"),
             "{:?}",
             outcome.next_steps
         );
@@ -332,7 +477,7 @@ mod tests {
         let all = [&outcome.steps, &outcome.next_steps, &outcome.kept];
         assert!(
             !all.iter()
-                .any(|lines| lines.iter().any(|s| s.contains("Keychain"))),
+                .any(|lines| mac_lines(lines).iter().any(|s| s.contains("Keychain"))),
             "{outcome:?}"
         );
         // And the logs are still named as kept.
@@ -362,7 +507,7 @@ mod tests {
         );
         assert_eq!(store.current().as_deref(), Some("sk-test-0123456789abcd"));
         assert!(
-            keep.kept.contains(
+            mac_lines(&keep.kept).contains(
                 &"the cloud voice key in the Keychain item ai.cohdl.openwalkietalkie — `deckd \
                   uninstall --purge` deletes it."
                     .to_string()
@@ -379,7 +524,7 @@ mod tests {
         );
         assert_eq!(store.current(), None);
         assert!(
-            purged.steps.contains(&removed.to_string()),
+            mac_lines(&purged.steps).contains(&removed.to_string()),
             "{:?}",
             purged.steps
         );
@@ -399,7 +544,7 @@ mod tests {
             &KeyHome::Store(empty.clone()),
         );
         assert!(
-            !again.steps.iter().any(|s| s.contains("Keychain")),
+            !mac_lines(&again.steps).iter().any(|s| s.contains("Keychain")),
             "{:?}",
             again.steps
         );
@@ -411,7 +556,7 @@ mod tests {
             &KeyHome::Store(empty),
         );
         assert!(
-            !kept.kept.iter().any(|s| s.contains("Keychain")),
+            !mac_lines(&kept.kept).iter().any(|s| s.contains("Keychain")),
             "{:?}",
             kept.kept
         );
@@ -426,7 +571,7 @@ mod tests {
             &KeyHome::Store(locked.clone()),
         );
         assert_eq!(
-            refused.problems,
+            mac_lines(&refused.problems),
             [
                 "cannot remove the Keychain item ai.cohdl.openwalkietalkie: User interaction is \
                  not allowed. (-25308); remove it in Keychain Access"

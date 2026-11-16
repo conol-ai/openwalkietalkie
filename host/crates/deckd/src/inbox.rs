@@ -125,10 +125,34 @@ pub fn post(inbox: &Inbox, text: &str) -> Result<(), DesktopError> {
     post_to(&inbox.socket, &frame(inbox, text))
 }
 
-/// Windows: not built yet. Claude Code's messaging endpoint there is not
-/// a Unix socket, and nothing has measured what it is, so the route reports
-/// itself unreachable and the order falls through to the next one.
-#[cfg(not(unix))]
+/// Windows: Claude Code's messaging endpoint there is a named pipe
+/// (`CLAUDE_CODE_MESSAGING_SOCKET = \\.\pipe\LOCAL\cc-msg-…`, measured on
+/// 2.1.323), the same two lines over a fresh connection. A pipe opens like a
+/// file; closing our handle ends the message, as the socket's half-close
+/// does. Only a local pipe is ever opened: the path came from a hook's
+/// environment, and `\\server\pipe\…` would leave this machine.
+#[cfg(windows)]
+fn post_to(socket: &Path, bytes: &[u8]) -> Result<(), DesktopError> {
+    use std::io::Write as _;
+    if !socket.to_string_lossy().starts_with(r"\\.\pipe\") {
+        tracing::debug!(socket = %socket.display(), "inbox: not a local pipe");
+        return Err(DesktopError::Inbox("inbox_unreachable"));
+    }
+    let mut pipe = std::fs::OpenOptions::new()
+        .write(true)
+        .open(socket)
+        .map_err(|e| {
+            tracing::debug!(socket = %socket.display(), error = %e, "inbox: connect failed");
+            DesktopError::Inbox("inbox_unreachable")
+        })?;
+    pipe.write_all(bytes).and_then(|()| pipe.flush()).map_err(|e| {
+        tracing::debug!(socket = %socket.display(), error = %e, "inbox: write failed");
+        DesktopError::Inbox("inbox_write_failed")
+    })?;
+    Ok(())
+}
+
+#[cfg(not(any(unix, windows)))]
 fn post_to(socket: &Path, _bytes: &[u8]) -> Result<(), DesktopError> {
     tracing::debug!(socket = %socket.display(), "inbox: not supported on this platform");
     Err(DesktopError::Inbox("inbox_unreachable"))
@@ -203,7 +227,7 @@ pub fn post_async(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))] // a Unix socket stands in for the inbox
 mod tests {
     use super::*;
     use std::io::Read;

@@ -164,11 +164,13 @@ impl Global for Menu {}
 /// Build the status item and install the click handler.
 ///
 /// `None` when the menu bar refused it, which is not fatal: the window
-/// works exactly as it did, and the caller carries on. Off macOS there is
-/// none: the tray backend there is GTK, which this app never starts, and a
-/// status item is the desktop bar's job.
+/// works exactly as it did, and the caller carries on. Windows has one too,
+/// in the notification area (tray-icon's native backend, driven by the
+/// message loop gpui already runs). Elsewhere there is none: the tray
+/// backend there is GTK, which this app never starts, and a status item is
+/// the desktop bar's job.
 pub fn install(language: Language) -> Option<Menu> {
-    if cfg!(not(target_os = "macos")) {
+    if cfg!(not(any(target_os = "macos", windows))) {
         return None;
     }
     // Nothing is known yet: no service has answered. The first event the
@@ -607,15 +609,37 @@ fn menu_line(line: &Line, p: &Palette) -> AnyElement {
 /// it, measured from its centre.
 pub fn icon_rgba(state: IconState) -> Vec<u8> {
     let side = ICON_PX as usize;
+    let ink = glyph_ink();
     let mut pixels = vec![0u8; side * side * 4];
     for (i, pixel) in pixels.as_chunks_mut::<4>().0.iter_mut().enumerate() {
         let (x, y) = (i % side, i / side);
         let at = ((x as f32 + 0.5) / GRID, (y as f32 + 0.5) / GRID);
         // Straight (un-premultiplied) RGBA, which is what
-        // `Icon::from_rgba` takes: black, and the coverage.
+        // `Icon::from_rgba` takes: the ink, and the coverage.
+        pixel[..3].copy_from_slice(&[ink; 3]);
         pixel[3] = (glyph(state, at) * 255.).round() as u8;
     }
     pixels
+}
+
+/// The glyph's grey level. Black on macOS, where AppKit tints the template
+/// for the menu bar. Windows does not tint a tray icon, so it is drawn for
+/// the taskbar's theme: white on a dark taskbar (the default), black on a
+/// light one (`SystemUsesLightTheme`).
+fn glyph_ink() -> u8 {
+    #[cfg(windows)]
+    {
+        let light = crate::run_key::dword(
+            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+            "SystemUsesLightTheme",
+        )
+        .is_some_and(|value| value != 0);
+        if light { 0 } else { 255 }
+    }
+    #[cfg(not(windows))]
+    {
+        0
+    }
 }
 
 /// How much of the glyph for `state` covers the pixel centred on `at`, a

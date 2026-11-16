@@ -166,8 +166,13 @@ const BINDING_WIDTH: f32 = 132.;
 const KEY_WIDTH: f32 = 96.;
 
 /// Where a denied Accessibility grant is lifted.
+#[cfg(not(windows))]
 pub const ACCESSIBILITY_SETTINGS: &str =
     "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
+/// Windows needs no grant to send keys to the user's own desktop; the
+/// nearest page is Accessibility's keyboard settings.
+#[cfg(windows)]
+pub const ACCESSIBILITY_SETTINGS: &str = "ms-settings:easeofaccess-keyboard";
 
 // ---- shortcuts ---------------------------------------------------------------
 
@@ -1222,17 +1227,46 @@ impl Shell {
             p,
         );
         let held = shortcut.as_ref().map(|shortcut| shortcut.mods.clone());
-        let chips = h_flex()
-            .gap(px(4.))
-            .children(Mod::ALL.into_iter().enumerate().map(|(i, m)| {
-                let on = held.as_ref().is_some_and(|mods| mods.contains(&m));
-                Chip::modifier(("key-mod", i), m, on)
-                    .disabled(!editable || held.is_none())
-                    .on_toggle(cx.listener(move |this, on: &bool, window, cx| {
-                        this.stop_recording();
-                        this.edit_key(|draft| draft.set_mod(m, *on), window, cx);
-                    }))
-            }));
+        let chips = if cfg!(windows) {
+            // Windows: the deck types ⌃ and ⌘ alike as Ctrl and ⌥ as Alt
+            // (deckd's `winwin::modifiers`), so the chips are the keys' own
+            // names, and Ctrl stands for both of the Mac's.
+            let shown = [(Mod::Command, "Ctrl"), (Mod::Option, "Alt"), (Mod::Shift, "Shift")];
+            h_flex()
+                .gap(px(4.))
+                .children(shown.into_iter().enumerate().map(|(i, (m, word))| {
+                    let on = held.as_ref().is_some_and(|mods| {
+                        mods.contains(&m) || (m == Mod::Command && mods.contains(&Mod::Control))
+                    });
+                    Chip::word(("key-mod", i), word, on)
+                        .disabled(!editable || held.is_none())
+                        .on_toggle(cx.listener(move |this, on: &bool, window, cx| {
+                            this.stop_recording();
+                            this.edit_key(
+                                |draft| {
+                                    if m == Mod::Command {
+                                        draft.set_mod(Mod::Control, false);
+                                    }
+                                    draft.set_mod(m, *on);
+                                },
+                                window,
+                                cx,
+                            );
+                        }))
+                }))
+        } else {
+            h_flex()
+                .gap(px(4.))
+                .children(Mod::ALL.into_iter().enumerate().map(|(i, m)| {
+                    let on = held.as_ref().is_some_and(|mods| mods.contains(&m));
+                    Chip::modifier(("key-mod", i), m, on)
+                        .disabled(!editable || held.is_none())
+                        .on_toggle(cx.listener(move |this, on: &bool, window, cx| {
+                            this.stop_recording();
+                            this.edit_key(|draft| draft.set_mod(m, *on), window, cx);
+                        }))
+                }))
+        };
         let modifiers = field(self.tr("Modifiers"), chips, None, p);
         let record = if pane.recording {
             self.tr("Press a key\u{2026}")
@@ -1263,9 +1297,10 @@ impl Shell {
                     .min_w_0()
                     .ts(12., 16.)
                     .text_color(p.text2)
-                    .child(ui::para(
-                        self.tr("Pick by hand the shortcuts\nmacOS reserves."),
-                    )),
+                    .child(ui::para(self.tr(crate::voice::here(
+                        "Pick by hand the shortcuts\nmacOS reserves.",
+                        "Pick by hand the shortcuts\nWindows reserves.",
+                    )))),
             )
             .child(
                 Btn::new("key-clear", self.tr("Clear This Key"))
@@ -1365,6 +1400,10 @@ impl Shell {
     /// ask (Check…) while nothing has, or go to System Settings once macOS
     /// said no. Left out while the service has said nothing of it.
     fn access_row(&self, enabled: bool, p: &Palette, cx: &Context<Self>) -> Option<Row> {
+        // Windows asks no grant of a program that types for the person.
+        if cfg!(windows) {
+            return None;
+        }
         let access = self.faces.keys.access?;
         let row = Row::new().title(self.tr("Accessibility"));
         let sub = self.tr("Lets the deck type shortcuts.");

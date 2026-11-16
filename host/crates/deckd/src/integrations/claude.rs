@@ -864,6 +864,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)] // an executable by file mode
     fn channel_exe_is_pinned_only_when_the_live_daemon_runs_the_installed_copy() {
         let dir = TestDir::new("channel-exe");
         let installed = dir.path().join("Applications/deckd");
@@ -1379,7 +1380,7 @@ mod tests {
         install(&env);
         assert_eq!(status(&env).status, Status::Installed);
         // The binary moved: path drift, and `install` goes through it.
-        let moved = dir.path().join("elsewhere/deckd");
+        let moved = crate::integrations::runnable(&dir.path().join("elsewhere/deckd"));
         std::fs::create_dir_all(moved.parent().unwrap()).unwrap();
         std::fs::copy(&env.exe, &moved).unwrap();
         env.exe = moved;

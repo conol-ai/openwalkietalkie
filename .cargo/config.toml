@@ -7,7 +7,19 @@ runner = "tools/flash.sh"
 [build]
 target = "thumbv8m.main-none-eabihf"
 
+# The Windows host links the C runtime statically: sherpa-onnx's prebuilt
+# Windows library is built /MT, every other C dependency (whisper.cpp,
+# hidapi) follows this flag, and the binaries then run on a Windows without
+# the Visual C++ redistributable. Same in host/.cargo/config.toml.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
 [env]
 DEFMT_LOG = "info"
+# whisper.cpp's CMake build (whisper-rs-sys hands every CMAKE_* variable to
+# CMake) on the static C runtime too, matching the Windows rustflags below.
+# MSVC alone reads it.
+CMAKE_MSVC_RUNTIME_LIBRARY = "MultiThreaded"
+CMAKE_POLICY_DEFAULT_CMP0091 = "NEW"
 # Leave unset to let tools/flash.sh auto-detect the CH343 bridge.
 # SIFLI_SFTOOL_PORT = "/dev/cu.wchusbserial5B910815801"

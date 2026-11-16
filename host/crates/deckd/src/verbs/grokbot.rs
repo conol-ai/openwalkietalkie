@@ -411,6 +411,7 @@ pub fn list_lines(status: &Value) -> Vec<String> {
     let mut lines = Vec::new();
     let store = match text(status, "key_store") {
         "keychain" => "keys in the Keychain",
+        "credential_manager" => "keys in Windows Credential Manager",
         "file" => "keys in grokbot-keys.toml",
         other => other,
     };

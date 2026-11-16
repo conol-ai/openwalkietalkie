@@ -92,7 +92,29 @@ whisper-rs = "=0.16.0"
 # calls live in deck-client's `windows` module.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_System_Console", "Win32_System_Threading"] }
+# The computer's own microphone for `voice.listen{input:"mac"}`
+# (`audio::system_mic`): cpal over WASAPI.
+cpal = { workspace = true }
+# The local synthesiser on Windows (`audio::kokoro`), as on macOS: Kokoro via
+# sherpa-onnx's prebuilt static library.
+sherpa-onnx = { workspace = true }
+# The deck's BLE audio service on Windows: WinRT's GATT client (`ble::winrt`).
+# The version gpui already brings into this lock.
+windows = { version = "=0.61.3", features = [
+    "Devices_Bluetooth",
+    "Devices_Bluetooth_GenericAttributeProfile",
+    "Devices_Enumeration",
+    "Foundation",
+    "Foundation_Collections",
+    "Storage_Streams",
+] }
 chrono = { version = "=0.4.45", default-features = false, features = ["std", "clock"] }
+# Voice: the engine Linux runs (`audio::linux`, `engine`, `lanes`, `tts`)
+# needs these two; the deck's link carries the audio over USB.
+rubato = { workspace = true }
+rtrb = { workspace = true }
+# The local recogniser on Windows: whisper.cpp on the CPU, as on Linux.
+whisper-rs = "=0.16.0"
 
 [dev-dependencies]
 deck-wrap = { path = "../deck-wrap" }

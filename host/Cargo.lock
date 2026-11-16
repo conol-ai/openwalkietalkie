@@ -1973,6 +1973,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "whisper-rs",
+ "windows 0.61.3",
  "windows-sys 0.61.2",
 ]
 
@@ -5488,6 +5489,7 @@ dependencies = [
  "objc2-service-management",
  "raw-window-handle",
  "serde_json",
+ "sha2 0.10.9",
  "tokio",
  "tray-icon",
 ]

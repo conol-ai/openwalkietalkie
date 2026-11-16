@@ -309,13 +309,16 @@ mod tests {
             "data/claude-marketplace/.claude-plugin/marketplace.json",
             25,
         );
+        // A deckd at an absolute path as this platform writes one.
+        let deckd = if cfg!(windows) { "C:/opt/deckd.exe" } else { "/opt/deckd" };
         dir.write(
             "home/.codex/hooks.json",
-            r#"{"hooks":{
-                "Stop":[{"hooks":[{"type":"command","command":"/opt/deckd hook codex"}]},
+            &r#"{"hooks":{
+                "Stop":[{"hooks":[{"type":"command","command":"DECKD hook codex"}]},
                         {"hooks":[{"type":"command","command":"echo mine"}]}],
-                "SessionEnd":[{"hooks":[{"type":"command","command":"/opt/deckd hook codex"}]}]
-            }}"#,
+                "SessionEnd":[{"hooks":[{"type":"command","command":"DECKD hook codex"}]}]
+            }}"#
+                .replace("DECKD", deckd),
         );
         sized(dir, "caches/stt/ggml-large-v3-turbo.bin", 1000);
         sized(dir, "caches/tts/kokoro/model.onnx", 700);
@@ -476,6 +479,7 @@ mod tests {
         );
         assert!(launcher
             .path
+            .replace('\\', "/")
             .ends_with("/Applications/Codex with OpenWalkieTalkie.app"));
         for id in [
             "stt",
@@ -565,6 +569,7 @@ mod tests {
     /// the bootloader backups, says how much it freed, has nothing to do a
     /// second time, and waits for a firmware operation that is running.
     #[test]
+    #[cfg(unix)] // a symlink out of the cache
     fn clearing_the_firmware_cache_keeps_the_bootloader_backups() {
         let dir = TestDir::new("care-cache-clear");
         let (mut context, _) = every_item(&dir);

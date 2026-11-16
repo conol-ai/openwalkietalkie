@@ -118,11 +118,16 @@ mod tests {
             assert!(text.contains(line.as_str()), "{line} is not at the top");
         }
         assert!(!text.contains("sk-not-for-the-file"), "the key was copied");
-        use std::os::unix::fs::PermissionsExt;
-        assert_eq!(
-            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
-            0o600
-        );
+        // Owner-only by file mode where there are file modes; on Windows the
+        // folder's own ACL (the user's profile) is what keeps it.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
         // A directory that cannot be made is the caller's to fix.
         let blocked = dir.write("blocked", "a file, not a directory");
         let error = write(&context, Some(&env), &options, &blocked, now).unwrap_err();
@@ -135,10 +140,9 @@ mod tests {
     #[test]
     fn the_target_is_the_desktop_or_an_absolute_directory() {
         assert_eq!(Target::parse("desktop"), Ok(Target::Desktop));
-        assert_eq!(
-            Target::parse("/Users/you/Documents"),
-            Ok(Target::Dir("/Users/you/Documents".into()))
-        );
+        // An absolute directory as this platform writes one.
+        let documents = if cfg!(windows) { r"C:\Users\you\Documents" } else { "/Users/you/Documents" };
+        assert_eq!(Target::parse(documents), Ok(Target::Dir(documents.into())));
         for to in ["", "Desktop", "~/Desktop", "out"] {
             assert_eq!(
                 Target::parse(to).unwrap_err().code,

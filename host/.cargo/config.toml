@@ -5,3 +5,12 @@
 # This file only exists so a `cargo` run from inside host/ never inherits the
 # thumb target.
 [build]
+
+# The Windows host links the C runtime statically (see the repo root's
+# .cargo/config.toml for why).
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[env]
+CMAKE_MSVC_RUNTIME_LIBRARY = "MultiThreaded"
+CMAKE_POLICY_DEFAULT_CMP0091 = "NEW"
