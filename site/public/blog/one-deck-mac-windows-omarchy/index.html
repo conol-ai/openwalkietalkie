@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie v0.14.0: One deck for Mac, Windows and Omarchy · OpenWalkieTalkie</title>
+<meta name="description" content="The Mac app becomes the deck's companion, the service also runs on Windows and Omarchy, Grok Bot joins Claude Code and Codex on the deck, and the deck confirms its own firmware installs." />
+<link rel="canonical" href="https://openwalkietalkie.org/blog/one-deck-mac-windows-omarchy/" />
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.14.0: One deck for Mac, Windows and Omarchy · OpenWalkieTalkie" />
+<meta property="og:description" content="The Mac app becomes the deck's companion, the service also runs on Windows and Omarchy, Grok Bot joins Claude Code and Codex on the deck, and the deck confirms its own firmware installs." />
+<meta property="og:url" content="https://openwalkietalkie.org/blog/one-deck-mac-windows-omarchy/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie Blog" href="/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">Skip to content</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/" aria-label="OpenWalkieTalkie — home">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="Sections">
+      <a href="/#pile">The Pile</a>
+      <a href="/#features">Features</a>
+      <a href="/#demo">Try It</a>
+      <a href="/#faces">Faces</a>
+      <a href="/#blueprint">Blueprint</a>
+      <a href="/docs/">Docs</a>
+      <a href="/blog/" aria-current="true">Blog</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle day and night theme" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">DAY</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="Open menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">THE BLOG · RELEASE NOTES</p>
+  <h1>OpenWalkieTalkie v0.14.0: One deck for Mac, Windows and Omarchy</h1>
+  <p class="post-meta"><span>November 16, 2026</span><span>Mac and Windows apps, Omarchy, service and firmware</span></p>
+</header>
+<article class="post-body">
+  <p>Version 0.14.0 is the largest release so far. The Mac app becomes the deck's companion, the service also runs on Windows and on Omarchy, Grok Bot joins Claude Code and Codex on the deck, and the deck confirms its own firmware installs.</p>
+  <h2>A companion for the deck</h2>
+  <p>Sessions are read and answered on the deck, and no session text reaches the app's window. The window looks after the deck and the service around it, on five pages: <strong>Deck</strong>, <strong>Faces &amp; Keys</strong>, <strong>Integrations</strong>, <strong>Voice</strong> and <strong>Service</strong>. Integrations shows whether each source is arriving, with <strong>Send a Test Question</strong> and <strong>Set Up</strong> or <strong>Repair</strong> for each one. Service has <strong>Check my setup</strong>, <strong>Export Support File</strong>, the updates, and everything installed, with <strong>Uninstall</strong>. A first run installs nothing until you choose <strong>Add These</strong>.</p>
+  <p>The roster, card answers, the order box and the Usage page left the window, because the deck has them. ENTER on a session's card brings that session's own app forward, with no Automation permission. Settings are kept per deck, the service checks for updates itself, and it stops collecting 10 minutes after the deck unlinks.</p>
+  <h2>Grok Bot joins Claude Code and Codex</h2>
+  <p>Grok Bot, xAI's teammate app, is the newest integration. Each bot is a row on the deck's own <strong>Grok Bot</strong> page, drawn with the Grok mark. A press on a bot goes to the webhook of a routine in that bot. The bot answers by running <code>deckd grokbot say</code> on your computer: a short version of its answer appears on the deck and is read out, and the whole answer stays in the bot's chat. A bot can also ask you something on the deck and get your choice back.</p>
+  <p>To add a bot on a Mac, open <strong>Integrations → Grok Bot → Bots…</strong>, type its name and choose <strong>Copy Prompt</strong>. Send the prompt to the bot in Grok Bot's chat, and the bot makes its own routine. Copy the routine's <strong>POST to</strong> URL and <strong>key</strong> back into the dialog, then allow the bot to run commands in Grok Bot's <strong>Settings → Computer</strong>. A command a bot runs can report to the deck, but cannot answer another session's card or change a setting.</p>
+  <h2>Windows, as a preview</h2>
+  <p>The service and the companion app now run on Windows 10 and 11 (x64): the System face, Claude Code, Claude Channels, Codex, the Macropad, voice, Grok Bot, the tray icon, start at sign-in and in-app updates. Every release now includes an unsigned ZIP for Windows. Because it is unsigned, SmartScreen asks for <strong>More info → Run anyway</strong>, and Smart App Control blocks it. The <a href="/docs/windows/">Windows install guide</a> walks through it.</p>
+  <h2>Omarchy</h2>
+  <p>On an Omarchy (Hyprland) machine, the Linux service and the Omarchy bridge put that machine's Claude Code, Codex and Kimi Code sessions on the deck. The Omarchy face switches windows and workspaces, and voice orders are typed into the session's terminal. Superwhisper recognises your presses when it is installed, and the Macropad types through uinput, so Omarchy's Super shortcuts work. The <a href="/docs/omarchy/">Omarchy guide</a> covers the build and the install.</p>
+  <h2>The deck confirms its own updates</h2>
+  <p>From firmware 0.14.0 on, a firmware update starts only when you press ENTER on the deck. CANCEL, the timeout, voice and the API install nothing. The update from 0.13 to 0.14 is still confirmed in the app, and a deck in recovery mode installs at once.</p>
+  <p>A question's notice now takes the next ENTER, so the next press opens the question and the one after answers it. Jumping to a new question also leaves a running Timer, a ringing alarm and a game alone.</p>
+  <h2>Changes to know about</h2>
+  <ul>
+    <li>The ancestry cap now catches a natively installed Claude Code. Admin <code>deckd</code> commands run inside Claude Code or Codex are refused; run them from a terminal of your own.</li>
+    <li>The local TCP door is off by default and will be removed in the next release.</li>
+    <li>Claude usage on the deck's Usage face is now opt-in, and the service no longer records from the Mac's microphone when the deck's cannot be used.</li>
+  </ul>
+  <h2>Update</h2>
+  <p>On a Mac, choose <strong>Check for Updates…</strong>, or install the signed, notarized <strong>0.14.0</strong> app for Apple Silicon or Intel (macOS 13 or later). Then, with the deck connected by USB, open <strong>Service → Updates</strong>, choose <strong>Check</strong> beside the deck, then <strong>Review…</strong> and <strong>Install</strong>. The regular update preserves settings and Bluetooth pairing. On Windows, download the ZIP from the release and follow the Windows guide.</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.14.0" rel="noopener">Get OpenWalkieTalkie v0.14.0 and checksums on GitHub →</a></p>
+  <p class="post-back"><a href="/blog/">← Back to the blog</a></p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · A COHDL project · MIT software · CERN-OHL-P hardware</span>
+    <nav aria-label="Footer">
+      <a href="/#waitlist">Join the waitlist</a>
+      <a href="/privacy/">Privacy Policy</a>
+      <a href="/cookies/">Cookie information</a>
+      <a href="/cookies/" data-privacy-open>Privacy notice</a>
+      <a href="/">Home</a>
+      <a href="/#demo">Try It</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Join the CoHDL and OpenWalkieTalkie community on Discord">Discord</a>
+      <a href="/blog/feed.xml">Feed</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

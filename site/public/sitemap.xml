@@ -2,13 +2,13 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://openwalkietalkie.org/</loc>
-    <lastmod>2026-11-08</lastmod>
+    <lastmod>2026-11-16</lastmod>
     <changefreq>monthly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
     <loc>https://openwalkietalkie.org/blog/</loc>
-    <lastmod>2026-11-08</lastmod>
+    <lastmod>2026-11-16</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
@@ -20,6 +20,7 @@
     <loc>https://openwalkietalkie.org/blog/workflows-and-usage/</loc>
     <lastmod>2026-10-13</lastmod>
   </url>
+  <url><loc>https://openwalkietalkie.org/blog/one-deck-mac-windows-omarchy/</loc><lastmod>2026-11-16</lastmod></url>
   <url><loc>https://openwalkietalkie.org/blog/radio-branding/</loc><lastmod>2026-10-15</lastmod></url>
   <url><loc>https://openwalkietalkie.org/blog/images-and-questions/</loc><lastmod>2026-10-15</lastmod></url>
   <url><loc>https://openwalkietalkie.org/privacy/</loc><lastmod>2026-10-16</lastmod></url>
