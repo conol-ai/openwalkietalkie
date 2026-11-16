@@ -210,6 +210,14 @@ async fn a_press_reaches_the_bot_and_the_bot_answers_on_the_deck() {
         "{}",
         seen.body
     );
+    // The test service runs on a directory of its own, as Omarchy's does:
+    // the bot's commands name it, since a bot's shell has no DECKD_DATA_DIR.
+    assert!(
+        seen.body["reply_with"].as_str().unwrap().contains(" --data-dir '"),
+        "{}",
+        seen.body
+    );
+    assert!(seen.body["how_to_answer"].as_str().unwrap().contains("in this chat"));
     d.until("the bot working on the order", |s| {
         let a = &s.agents[&agent.id];
         a.state == AgentState::Working && a.title.as_deref() == Some("Find flights to Tokyo")

@@ -626,13 +626,18 @@ so a user knows what runs outside their sandbox.
 Grok Bot (xAI's teammate app) has no public API, so deckd reaches a bot the
 two ways Grok Bot documents (design §5.10):
 
-- **Deck to bot: a routine's webhook.** In Grok Bot, give the bot a routine
-  with a **Webhook** trigger. Then set the bot up here with the routine's URL
-  and key, from the Integrations page's **Bots…** or from a terminal:
+- **Deck to bot: a routine's webhook.** The bot makes its own routine: in
+  the Integrations page's **Bots…**, type the bot's name and **Copy Prompt**
+  (or run `deckd grokbot prompt "Research"`), and send that to the bot in
+  Grok Bot's chat. It asks for a routine named "OpenWalkieTalkie" with a
+  **Webhook** trigger and the deck's instruction. Open the routine (the
+  bot's name at the top of its chat → **Details**) and copy its **POST to**
+  URL and **key** into **Bots…**, or set the bot up from a terminal:
 
   ```sh
+  deckd grokbot prompt "Research"                      # the message that makes the routine
   deckd grokbot add "Research" --webhook "https://…"   # asks for the key, without echo
-  deckd grokbot routine research                       # the instruction to give the routine
+  deckd grokbot routine research                       # the routine's instruction again
   deckd grokbot test research                          # one test call
   deckd grokbot list                                   # hosts, keys, last calls
   ```
@@ -641,8 +646,9 @@ two ways Grok Bot documents (design §5.10):
   posted to the webhook. The key goes to the Keychain, never `config.toml`.
 - **Bot to deck: commands it runs on this Mac.** Allow the bot to run
   commands in Grok Bot's Settings → Computer. Every webhook call's body says
-  how to answer (`reply_with`, `ask_with`), and the routine's instruction
-  says to use them:
+  how to answer (`reply_with`, `ask_with`, `how_to_answer`), and the
+  routine's instruction says to use them: a short version of the answer goes
+  to the deck, and the whole answer stays in the bot's chat as well:
 
   ```sh
   deckd grokbot say --bot research "Three flights; the cheapest leaves at 9."
@@ -650,8 +656,10 @@ two ways Grok Bot documents (design §5.10):
   deckd grokbot state --bot research working --title "Comparing fares"
   ```
 
-  A command a bot runs counts as an agent's (the §4.2 cap): it may report to
-  the deck, and it may not answer for you or change a setting.
+  On a Mac, a command a bot runs counts as an agent's (the §4.2 cap): it may
+  report to the deck, and it may not answer for you or change a setting.
+- **On Linux (Omarchy)** the setup is the CLI's, and a bot's commands are
+  not capped: see `omarchy/README.md`, Grok Bot.
 
 ## Historical week-3 gaps
 

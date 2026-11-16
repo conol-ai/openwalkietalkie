@@ -4,7 +4,7 @@ The deck as a remote for an Omarchy (Hyprland) laptop: windows and workspaces, t
 
 **Linux with this bridge is a supported target.** For every pull request and every push to `main`, the CI job "Linux host" on Ubuntu 24.04 builds the host workspace for Linux and runs its tests (every crate but the Mac app: `deckd`, `deck-proto`, `deck-model`, `deck-client`, `deck-gui-core` and `deck-wrap`), then runs this directory's Python tests (see [Tests](#tests)). The window is macOS only; there is no Linux window yet. The bridge talks to `deckd` through the face feed (`device.ws.set` and the `device.ws`, `device.key` and `device.link` events), which is a public interface documented in the [native companion API](https://openwalkietalkie.org/docs/native-companions/#feed-the-omarchy-face).
 
-**On Linux, `deckd` does not tell your processes apart.** Two checks of the macOS service are not implemented on Linux: the ancestry cap, which keeps a process started by an agent CLI from asking for more than `observe,agent,voice,hooks:ingest`, and the trusted principal, the signed app. So every process of your user, one started by Claude Code, Codex or Kimi Code included, may ask `deckd`'s socket for `admin` (its settings, integrations, setup checks and tokens), and no client is ever trusted, so an allow a client sends for a permission card is refused. A firmware install still needs a press on the deck, unless the deck is already in recovery.
+**On Linux, `deckd` does not tell your processes apart.** Two checks of the macOS service are not implemented on Linux: the ancestry cap, which keeps a process started by an agent CLI from asking for more than `observe,agent,voice,hooks:ingest`, and the trusted principal, the signed app. So every process of your user, one started by Claude Code, Codex, Kimi Code or Grok Bot included, may ask `deckd`'s socket for `admin` (its settings, integrations, setup checks and tokens), and no client is ever trusted, so an allow a client sends for a permission card is refused. A firmware install still needs a press on the deck, unless the deck is already in recovery.
 
 **Recommended: the Linux `deckd` installed on Omarchy itself.** The deck pairs with Omarchy over Bluetooth. BlueZ exposes its HID service as `/dev/hidraw*`, which `hid.rs` drives; voice travels over the deck's audio GATT service (BlueZ) and is recognised on the machine by Whisper. Two systemd user services run on Omarchy: `deckd.service` (the Linux `deckd`) and `omarchy-deck.service` (the Python bridge in this directory).
 
@@ -67,6 +67,24 @@ DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd stt install --model small
 ### Kimi Code
 
 Kimi Code has hooks (`[[hooks]]` in its `config.toml`). `omarchy_hook.py install kimi` writes one marked block, backing the file up first, and `uninstall` restores it as it was; it checks the result with `tomllib`, so it needs Python 3.11 or newer. Without the hooks, the bridge reads `~/.kimi-code/sessions/*/agents/main/wire.jsonl` for each session's state instead (`KIMI_CODE_HOME` is honoured). At the end of every reply, a summary of it goes to the deck.
+
+### Grok Bot
+
+The Linux `deckd` carries Grok Bot as the Mac's does: each bot is a row on the deck's own "Grok Bot" page, a press on it is posted to the bot's routine webhook (with `curl`), and the bot answers by running `deckd grokbot say` on this machine. There is no window on Linux, so the CLI does what the Mac app's **Bots…** dialog does:
+
+```sh
+export DECKD_DATA_DIR=~/.local/share/openwalkietalkie
+deckd grokbot prompt "Research"                      # send this to the bot in Grok Bot's chat
+deckd grokbot add "Research" --webhook "https://…"   # the routine's "POST to"; asks for its "key"
+deckd grokbot test research
+```
+
+From the prompt, the bot makes a routine named "OpenWalkieTalkie" with a webhook trigger; open it (the bot's name at the top of its chat → Details) for its "POST to" and "key". The commands the bot is given name this service's directory (`deckd --data-dir ~/.local/share/openwalkietalkie grokbot say …`), because a command Grok Bot runs has none of the unit's environment and would look for the XDG socket. The key is kept in `~/.local/share/openwalkietalkie/grokbot-keys.toml`, mode 0600. A short version of each answer goes to the deck, and the whole answer stays in the bot's chat.
+
+What Grok Bot decides, not `deckd`:
+- Grok Bot ships its Linux app as `.deb` and `.rpm` packages (`grok-bot`) and none for Arch, so on Omarchy it is installed by hand.
+- The bot answers on the deck only if it may run commands here (Grok Bot's Settings → Computer). Its documentation describes that for a Mac or a Windows computer and does not say it works on Linux. Without it, a press still reaches the bot, and the answer stays in its chat.
+- As with every other process here (above), a command the bot runs is not capped: on Linux it could ask `deckd` for `admin`.
 
 ## What it does
 
@@ -195,3 +213,5 @@ On 2026-11-15, the same machine with another Rev B deck (official 0.13.0, Blueto
 ## Not yet verified
 
 See issue ZhangHanDong/openwalkietalkie#1: real Codex and Kimi Code sessions, the Codex usage bars, and a real Mac.
+
+Grok Bot has not been run on Omarchy yet: its Linux app on Arch, and whether its Settings → Computer runs a bot's commands on Linux.

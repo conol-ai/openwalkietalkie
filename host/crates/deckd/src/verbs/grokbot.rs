@@ -9,8 +9,9 @@
 //!
 //! **The owner's verbs** set a bot up: `add` (its name and its routine's
 //! webhook; the key is typed, never put on the command line), `remove`,
-//! `list`, `test` and `routine` (the instruction to give the routine). They
-//! ask for `admin`, which a process an agent started is refused.
+//! `list`, `test`, `routine` (the instruction to give the routine) and
+//! `prompt` (the message that has a bot make that routine itself). They ask
+//! for `admin`, which a process an agent started is refused.
 use super::{ask, finish, print_json, text, Service, Stop, ADMIN};
 use clap::Subcommand;
 use serde_json::{json, Value};
@@ -110,6 +111,13 @@ pub enum GrokbotCmd {
     },
     /// Print the instruction to give a bot's webhook routine in Grok Bot.
     Routine { bot: String },
+    /// Print the message to send a bot in Grok Bot's chat: the bot makes
+    /// its own webhook routine, with the instruction `routine` prints. Then
+    /// `add` takes the routine's URL ("POST to") and key.
+    Prompt {
+        /// The bot's name on the deck, or a bot that is set up.
+        bot: String,
+    },
 }
 
 /// `deckd grokbot …`.
@@ -297,14 +305,7 @@ fn grokbot(
         }
         GrokbotCmd::Routine { bot } => {
             let status = ask(service, ADMIN, "grokbot.status", json!({}), err)?;
-            let found = find_bot(&status, &bot).or_else(|| {
-                status["bots"].as_array()?.iter().find(|b| {
-                    b["name"]
-                        .as_str()
-                        .is_some_and(|name| name.eq_ignore_ascii_case(bot.trim()))
-                })
-            });
-            match found.and_then(|b| b["routine"].as_str()) {
+            match set_up_bot(&status, &bot).and_then(|b| b["routine"].as_str()) {
                 Some(routine) => {
                     writeln!(out, "{routine}")?;
                     Ok(0)
@@ -314,7 +315,35 @@ fn grokbot(
                 ))),
             }
         }
+        GrokbotCmd::Prompt { bot } => {
+            let status = ask(service, ADMIN, "grokbot.status", json!({}), err)?;
+            // A bot that is set up keeps its id; a new name gets the id the
+            // service will give it when it is added.
+            let (name, id) = match set_up_bot(&status, &bot) {
+                Some(found) => (text(found, "name").to_string(), text(found, "id").to_string()),
+                None => {
+                    let name = bot.trim();
+                    if let Some(problem) = crate::grokbot::name_problem(name) {
+                        return Err(Stop::Refused(problem.to_string()));
+                    }
+                    (name.to_string(), crate::grokbot::slug(name))
+                }
+            };
+            writeln!(out, "{}", crate::grokbot::setup_prompt(&name, &id, &invocation_of(&status)))?;
+            Ok(0)
+        }
     }
+}
+
+/// The bot that is set up under `bot`: its id, or its name ignoring case.
+fn set_up_bot<'a>(status: &'a Value, bot: &str) -> Option<&'a Value> {
+    find_bot(status, bot).or_else(|| {
+        status["bots"].as_array()?.iter().find(|b| {
+            b["name"]
+                .as_str()
+                .is_some_and(|name| name.eq_ignore_ascii_case(bot.trim()))
+        })
+    })
 }
 
 /// The words of a reply or a question, or stdin for `-`.
@@ -397,7 +426,11 @@ pub fn list_lines(status: &Value) -> Vec<String> {
     ));
     let bots = status["bots"].as_array().cloned().unwrap_or_default();
     if bots.is_empty() {
-        lines.push("  no bot is set up: deckd grokbot add <name> --webhook <url>".into());
+        lines.push(
+            "  no bot is set up: deckd grokbot prompt <name>, send that to the bot, then \
+             deckd grokbot add <name> --webhook <url>"
+                .into(),
+        );
     }
     for bot in &bots {
         let set_up = bot["set_up"].as_bool() == Some(true);
@@ -425,13 +458,26 @@ pub fn list_lines(status: &Value) -> Vec<String> {
             ));
         }
     }
-    if let Some(deckd) = status["deckd"].as_str() {
+    if status["invocation"].is_string() || status["deckd"].is_string() {
         lines.push(format!(
             "A bot answers with: {} grokbot say --bot <id> '<reply>'",
-            crate::grokbot::sh_quote(deckd)
+            invocation_of(status)
         ));
     }
     lines
+}
+
+/// How the service's bots start their commands: as it says
+/// (`grokbot.status`'s `invocation`, which names its data directory when a
+/// bare `deckd` would not find it), else its `deckd` alone.
+fn invocation_of(status: &Value) -> String {
+    status["invocation"].as_str().map_or_else(
+        || {
+            let deckd = status["deckd"].as_str().unwrap_or("deckd");
+            crate::grokbot::invocation(std::path::Path::new(deckd), None)
+        },
+        str::to_string,
+    )
 }
 
 #[cfg(test)]
@@ -557,5 +603,42 @@ mod tests {
         assert!(lines[2].contains("not set up"));
         assert!(lines[3].ends_with("grokbot say --bot <id> '<reply>'"));
         assert_eq!(refusal_line(&json!({"status": 401})), "Grok Bot refused the key (HTTP 401): copy the routine's key again");
+    }
+
+    #[test]
+    fn prompt_writes_the_message_that_makes_a_bot_s_routine() {
+        let status = json!({
+            "deckd": "/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd",
+            "bots": [{"id": "research", "name": "Research", "routine": "…"}]
+        });
+        // A new name: the id the service will give it.
+        let script = Script::new(vec![Ok(status.clone())]);
+        let (code, out, _) = run_with(&script, GrokbotCmd::Prompt { bot: "Travel Desk".into() });
+        assert_eq!(code, 0);
+        assert!(out.starts_with("Please make a routine named \"OpenWalkieTalkie\""), "{out}");
+        assert!(out.contains("grokbot say --bot 'travel-desk'"), "{out}");
+        assert_eq!(script.call(0).scopes, ["admin"]);
+        // A bot that is set up, by its name in any case: its own id and name.
+        let script = Script::new(vec![Ok(status.clone())]);
+        let (_, out, _) = run_with(&script, GrokbotCmd::Prompt { bot: "research".into() });
+        assert!(out.contains("addressed to you (Research)") && out.contains("--bot 'research'"), "{out}");
+        // A service on its own directory (Omarchy's): its commands say where.
+        let own = json!({
+            "deckd": "/home/owner/.local/bin/deckd",
+            "invocation": "'/home/owner/.local/bin/deckd' --data-dir '/home/owner/.local/share/openwalkietalkie'",
+            "bots": []
+        });
+        let script = Script::new(vec![Ok(own)]);
+        let (_, out, _) = run_with(&script, GrokbotCmd::Prompt { bot: "Research".into() });
+        assert!(
+            out.contains("--data-dir '/home/owner/.local/share/openwalkietalkie' grokbot say --bot 'research'"),
+            "{out}"
+        );
+        // No name, no prompt: refused, with why.
+        let script = Script::new(vec![Ok(status)]);
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        let refused = run(&script, GrokbotCmd::Prompt { bot: "  ".into() }, &mut out, &mut err);
+        assert_eq!(refused, Err("the bot needs a name".to_string()));
+        assert!(out.is_empty());
     }
 }

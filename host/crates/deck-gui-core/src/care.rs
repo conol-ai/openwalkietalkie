@@ -492,6 +492,11 @@ pub struct GrokBot {
     pub key_store: String,
     /// Whether Grok Bot's app is on this Mac.
     pub app_installed: bool,
+    /// The service's `deckd`.
+    pub deckd: Option<String>,
+    /// How the commands a bot runs start: `deckd`, quoted, and the
+    /// service's data directory when a bare `deckd` would not find it.
+    pub invocation: Option<String>,
     pub bots: Vec<Bot>,
 }
 
@@ -528,6 +533,8 @@ impl GrokBot {
             live: result.get("live").and_then(Value::as_bool).unwrap_or(false),
             key_store: text(result.get("key_store")).unwrap_or_default(),
             app_installed: result.get("app_installed").and_then(Value::as_bool).unwrap_or(false),
+            deckd: text(result.get("deckd")),
+            invocation: text(result.get("invocation")),
             bots,
         }
     }

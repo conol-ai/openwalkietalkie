@@ -55,8 +55,9 @@ use gpui::{
 };
 use gpui_component::input::{InputEvent, InputState};
 use gpui_component::{h_flex, v_flex};
+use deck_model::grokbot;
 use serde_json::{json, Value};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// The table's columns (the board's, GEN `integrations`): the source's tile,
 /// then after the name the count on the deck, the last event, the hand-off
@@ -1018,7 +1019,8 @@ pub(crate) struct BotForm {
 
 impl IntegrationsPane {
     /// The pane, and the subscriptions its text fields need kept alive:
-    /// Return in the Grok Bot dialog's key field adds the bot.
+    /// Return in the Grok Bot dialog's key field adds the bot, and typing a
+    /// name draws the dialog again.
     pub(crate) fn new(
         window: &mut Window,
         cx: &mut Context<Shell>,
@@ -1031,12 +1033,18 @@ impl IntegrationsPane {
                 this.add_bot(window, cx);
             }
         });
+        // **Copy Prompt** copies the prompt for the name as typed.
+        let typed = cx.subscribe_in(&name, window, |_, _, event, _, cx| {
+            if matches!(event, InputEvent::Change) {
+                cx.notify();
+            }
+        });
         (
             IntegrationsPane {
                 bot_form: Some(BotForm { name, webhook, key }),
                 ..IntegrationsPane::default()
             },
-            vec![add],
+            vec![add, typed],
         )
     }
 
@@ -1286,6 +1294,12 @@ impl Shell {
         // window's own and stay.
         let form = self.integrations.bot_form.take();
         self.integrations = staged(scene, shots::board_now());
+        if let Some(form) = &form {
+            // The dialog's scene has a second bot half added: its name typed,
+            // so **Copy Prompt** is live.
+            let typed = if scene == Scene::IntegrationsBots { "Travel Desk" } else { "" };
+            form.name.update(cx, |input, cx| input.set_value(typed, window, cx));
+        }
         self.integrations.bot_form = form;
         match scene {
             Scene::IntegrationsPlan => {
@@ -1814,7 +1828,7 @@ impl Shell {
                     let has_key = value.get("has_key").and_then(Value::as_bool) == Some(true);
                     this.integrations.bot_note = Some(if has_key {
                         language.format(
-                            "{0} is set up. Give its routine the instruction below.",
+                            "{0} is set up. Test checks that Grok Bot takes its webhook.",
                             &[&name],
                         )
                     } else {
@@ -2377,8 +2391,11 @@ impl Shell {
     }
 
     /// The Grok Bot dialog: the bots set up, each with its routine's
-    /// instruction to copy, **Test** and **Remove**; then the three fields
-    /// that add one; what the last call said; **Done**.
+    /// instruction to copy, **Test** and **Remove**; then adding one in four
+    /// steps (its name; **Copy Prompt**, which has the bot make its own
+    /// webhook routine; where Grok Bot shows the routine's URL and key, and
+    /// their fields; Grok Bot's Computer setting); what the last call said;
+    /// **Done**.
     fn render_bots(&self, cx: &Context<Self>) -> AnyElement {
         let p = *palette(cx);
         let pane = &self.integrations;
@@ -2392,12 +2409,8 @@ impl Shell {
             .ts(13., 18.)
             .child(div().semibold().child("Grok Bot"))
             .child(div().text_color(p.text2).child(ui::para(self.tr(
-                "Give each bot a routine in Grok Bot with a webhook trigger, and paste the \
-                 routine's URL and key here. A press on the deck goes to that webhook.",
-            ))))
-            .child(div().text_color(p.text2).child(ui::para(self.tr(
-                "The bot answers on the deck by running a command on this Mac: allow it in Grok \
-                 Bot's Settings, under Computer.",
+                "A press on the deck goes to a bot's routine webhook, and the bot answers by \
+                 running a command on this Mac.",
             ))));
         if status.is_some_and(|g| !g.app_installed) {
             body = body.child(
@@ -2459,11 +2472,52 @@ impl Shell {
             );
         }
         if let Some(form) = &pane.bot_form {
+            let typed = form.name.read(cx).value().to_string();
+            let copy_prompt = match bot_prompt(&typed, status, crate::app::deckd_path()) {
+                Some(prompt) => ui::CopyButton::new(
+                    "grokbot-copy-prompt",
+                    prompt,
+                    self.tr("Copy Prompt"),
+                    self.tr("Copied"),
+                )
+                .into_any_element(),
+                // Nothing to copy until the bot has a name.
+                None => Btn::new("grokbot-copy-prompt", self.tr("Copy Prompt"))
+                    .disabled(true)
+                    .into_any_element(),
+            };
             body = body
                 .child(div().mt(px(16.)).semibold().child(self.tr("Add a bot")))
+                .child(bot_step(1, self.tr("Name the bot as the deck should show it."), &p))
                 .child(ui::field(&form.name, &p).mt(px(6.)))
+                .child(bot_step(
+                    2,
+                    self.tr(
+                        "In Grok Bot, send this to that bot. It makes a routine with a webhook \
+                         trigger.",
+                    ),
+                    &p,
+                ))
+                .child(h_flex().mt(px(6.)).child(copy_prompt))
+                .child(bot_step(
+                    3,
+                    self.tr(
+                        "Open that routine: click the bot's name at the top of its chat, then \
+                         Details. From its Webhook section, copy \u{201c}POST to\u{201d} and \
+                         \u{201c}key\u{201d} into these fields.",
+                    ),
+                    &p,
+                ))
                 .child(ui::field(&form.webhook, &p).mt(px(6.)))
-                .child(ui::field(&form.key, &p).mt(px(6.)));
+                .child(ui::field(&form.key, &p).mt(px(6.)))
+                .child(bot_step(
+                    4,
+                    self.tr(
+                        "In Grok Bot's Settings, under Computer, allow the bot to run commands \
+                         on this Mac.",
+                    ),
+                    &p,
+                ));
         }
         body.children(pane.bot_note.clone().map(|note| {
             div()
@@ -2602,6 +2656,53 @@ fn rebased(mut sources: Sources, now: Ts) -> Sources {
         });
     }
     sources
+}
+
+/// What **Copy Prompt** copies for the name typed in the Grok Bot dialog:
+/// the message that has the bot make its own webhook routine, with the
+/// instruction the service will give that bot once it is added
+/// (`deck_model::grokbot::setup_prompt`). `None` until the name would be a
+/// bot's, or with no `deckd` to start the bot's commands with: the
+/// service's own (`grokbot.status`'s `invocation`, else its `deckd`), else
+/// the one beside this app. A name that is set up keeps that bot's id and
+/// name.
+pub fn bot_prompt(
+    typed: &str,
+    status: Option<&care::GrokBot>,
+    beside: Option<PathBuf>,
+) -> Option<String> {
+    let typed = typed.trim();
+    if grokbot::name_problem(typed).is_some() {
+        return None;
+    }
+    let invocation = status
+        .and_then(|g| g.invocation.clone())
+        .or_else(|| {
+            let deckd = status.and_then(|g| g.deckd.clone()).map(PathBuf::from).or(beside)?;
+            Some(grokbot::invocation(&deckd, None))
+        })?;
+    let (name, id) = status
+        .and_then(|g| {
+            g.bots
+                .iter()
+                .find(|bot| bot.id == typed || bot.name.trim().eq_ignore_ascii_case(typed))
+        })
+        .map_or_else(
+            || (typed.to_string(), grokbot::slug(typed)),
+            |bot| (bot.name.clone(), bot.id.clone()),
+        );
+    Some(grokbot::setup_prompt(&name, &id, &invocation))
+}
+
+/// One step of the Grok Bot dialog's "Add a bot": its number, then what to
+/// do.
+fn bot_step(n: u8, words: impl Into<SharedString>, p: &Palette) -> impl IntoElement {
+    h_flex()
+        .mt(px(12.))
+        .gap(px(8.))
+        .items_start()
+        .child(div().w(px(14.)).flex_none().text_color(p.text2).child(format!("{n}.")))
+        .child(div().flex_1().min_w_0().child(ui::para(words)))
 }
 
 /// `grokbot.status` with the board's one bot, Research, whose last call

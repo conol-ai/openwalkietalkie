@@ -752,13 +752,16 @@ These need a deck on firmware with the `grok` kind, this build of the app
 and service, and a Grok Bot account. Nothing here was run against a real
 bot before release.
 
-- [ ] In Grok Bot, give one bot a routine with a **webhook** trigger. In
-      the app, open Integrations → Grok Bot → **Bots…**, paste the
-      routine's URL and key, and choose **Add Bot**. The row says
+- [ ] In the app, open Integrations → Grok Bot → **Bots…** and type a
+      bot's name: **Copy Prompt** turns on. Send the prompt to that bot in
+      Grok Bot's chat. The bot makes a routine named "OpenWalkieTalkie"
+      with a webhook trigger.
+- [ ] Open the routine (the bot's name at the top of its chat →
+      **Details**): its instruction is the deck's. Copy **POST to** and
+      **key** into the dialog and choose **Add Bot**. The row says
       **Set up**, and the deck's roster has a **Grok Bot** page with the
       bot on it, drawn with the Grok mark.
-- [ ] **Copy Instruction**, and paste it as the routine's instruction.
-      **Test**: the dialog says Grok Bot took it, and a run starts in the
+- [ ] **Test**: the dialog says Grok Bot took it, and a run starts in the
       bot's chat.
 - [ ] In Grok Bot's Settings → Computer, allow the bot to run commands on
       this Mac. Hold ✉ on the bot and say something. Its row shows
@@ -772,6 +775,11 @@ bot before release.
 - [ ] Paste a wrong key with **Add Bot** (same name). **Test** says Grok
       Bot refused the key, and a press on the bot shows "Not delivered" on
       the deck.
+- [ ] On Omarchy (the Linux `deckd` on `~/.local/share/openwalkietalkie`):
+      `deckd grokbot prompt`, `add` and `test` set a bot up, and its
+      commands carry `--data-dir`. A press reaches the bot. If Grok Bot's
+      Settings → Computer runs commands on Linux, the reply reaches the
+      deck; if not, the answer is in the bot's chat.
 - [ ] Switch Grok Bot off on its row: its page leaves the deck. Switch it
       on again: it comes back.
 - [ ] A deck on firmware without the `grok` kind shows the bot with the

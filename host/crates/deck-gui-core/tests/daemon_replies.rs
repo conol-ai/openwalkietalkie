@@ -112,6 +112,7 @@ fn the_grok_bot_status_reads_into_bots_without_a_key() {
     let status = deck_gui_core::care::GrokBot::parse(&serde_json::json!({
         "enabled": true, "live": true, "key_store": "keychain", "app_installed": true,
         "deckd": "/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd",
+        "invocation": "'/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd'",
         "bots": [
             {"id": "research", "name": "Research", "set_up": true, "webhook_host": "api.cursor.com",
              "has_key": true, "on_deck": true, "last": {"at_ms": 1, "ok": false, "status": 401, "reason": "webhook_401"},
@@ -122,6 +123,14 @@ fn the_grok_bot_status_reads_into_bots_without_a_key() {
     }));
     assert!(status.enabled && status.live && status.app_installed);
     assert_eq!(status.key_store, "keychain");
+    assert_eq!(
+        status.deckd.as_deref(),
+        Some("/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd")
+    );
+    assert_eq!(
+        status.invocation.as_deref(),
+        Some("'/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd'")
+    );
     let research = &status.bots[0];
     assert_eq!((research.id.as_str(), research.host.as_deref()), ("research", Some("api.cursor.com")));
     assert_eq!((research.last_ok, research.last_status), (Some(false), Some(401)));

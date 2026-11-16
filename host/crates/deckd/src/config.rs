@@ -1822,6 +1822,13 @@ impl Paths {
                 data.join("caches"),
             ));
         }
+        Paths::platform_default()
+    }
+
+    /// The platform's defaults, whatever `DECKD_DATA_DIR` says: where a bare
+    /// `deckd`, started from a shell without the service's environment,
+    /// looks for the service (`grokbot` compares its own socket with it).
+    pub fn platform_default() -> Result<Paths, ConfigError> {
         let base = directories::BaseDirs::new()
             .ok_or_else(|| ConfigError::Parse("no home directory".into()))?;
         let home = base.home_dir();

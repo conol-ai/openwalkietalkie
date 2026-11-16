@@ -729,7 +729,7 @@ A deck whose hello does not count `grok` among its `kinds` (`docs/deck-protocol.
 A bot that reports before it is set up (`deckd grokbot say --bot "Travel Desk" …`) is put on the deck by its name, as a bot that can talk to the deck. An order to it fails as `no_webhook`.
 
 **Orders.** A press addressed to a bot reaches the module through `agent.wait`, as for any poll agent. It becomes a `POST` to the bot's webhook through `/usr/bin/curl`:
-- The body is `{source:"openwalkietalkie", bot, bot_id, text, order, test:false, sent_at, reply_with, ask_with}`. The last two are the commands the bot answers with.
+- The body is `{source:"openwalkietalkie", bot, bot_id, text, order, test:false, sent_at, reply_with, ask_with, how_to_answer}`. `reply_with` and `ask_with` are the commands the bot answers with. `how_to_answer` (`deck_model::grokbot::HOW_TO_ANSWER`) asks for a short version on the deck and the whole answer in the chat as well: Grok Bot shows a run's result in the bot's chat, and an answer given only as a command's argument would leave nothing there.
 - The URL, the key and the body travel in a config on curl's stdin, never on its command line.
 - Only HTTPS is spoken (plain HTTP to loopback, for the tests), no redirect is followed, and a call gives up after 15 s.
 
@@ -751,9 +751,9 @@ A `2xx` shows the bot as `working`, with the order as its title. It stays so for
   - `webhook_host`, never the URL's path;
   - `has_key` and `on_deck`;
   - the last call;
-  - the routine's instruction (`grokbot::routine_text`), which tells the bot to treat the body's `text` as a message from its owner and to answer with `reply_with` and `ask_with`.
+  - the routine's instruction (`grokbot::routine_text`), which tells the bot to treat the body's `text` as a message from its owner, to answer with `reply_with` and `ask_with`, and to answer in the chat as well.
 
-`config.get` publishes `grokbot.enabled` alone, and `config.set` writes only that key, which is the Integrations page's switch. The CLI is `deckd grokbot add|remove|list|test|routine`; `add` reads the key without echo, never from the command line.
+`config.get` publishes `grokbot.enabled` alone, and `config.set` writes only that key, which is the Integrations page's switch. The CLI is `deckd grokbot add|remove|list|test|routine|prompt`; `add` reads the key without echo, never from the command line. `prompt <name>` prints the message that has a bot make its own routine (`deck_model::grokbot::setup_prompt`): a routine named "OpenWalkieTalkie" with a webhook trigger, whose instruction is the bot's `routine_text`. The names, ids and texts live in `deck_model::grokbot`, shared with the app, so the app writes a bot's prompt before the bot is added, word for word as the service writes its instruction.
 
 **Keys.** They follow the voice key's rule (`secrets::home_for`):
 - On a Mac's own install, the Keychain: one generic password per bot, service `ai.cohdl.openwalkietalkie`, account `grokbot.bots.<id>.key`.
@@ -761,12 +761,22 @@ A `2xx` shows the bot as `working`, with the order as its title. It stays so for
 
 A key is never in `config.toml`, a reply, the bus or a log line.
 
+**How a bot calls back.** Every command a bot is given starts with `grokbot.status`'s `invocation` (`grokbot::bot_invocation`): `deckd`, quoted, and `--data-dir <dir>` whenever the service's socket is not where a bare `deckd` looks (`Paths::platform_default`). That is a test service's own directory, or Omarchy's unit, which runs on `~/.local/share/openwalkietalkie` while a bare Linux `deckd` looks for `$XDG_RUNTIME_DIR/openwalkietalkie/deckd.sock`. A command Grok Bot runs has none of the service's environment, so it has to say. A Mac's own install needs no flag, so its commands are unchanged.
+
+**Linux (Omarchy).** The module is the same: `curl` from `PATH`, the keys in `grokbot-keys.toml`, the setup through `deckd grokbot prompt|add|test` (there is no window), as `host/omarchy/README.md` shows. `app_installed` looks for Grok Bot's `grok-bot` package (`grokbot::grok_bot_places`: the program on `PATH`, `/opt/Grok Bot`, its desktop entry). Two things differ:
+- There is no ancestry cap on Linux (§4.2), so a bot's commands are not held to `agent` there.
+- Grok Bot does not document running a bot's commands on Linux (its Settings → Computer). Without that, a press still reaches the bot, and the answer stays in its chat.
+
 **Quiet.** Switched off (`[grokbot] enabled = false`) or dormant (§5.8), the bots leave the deck (`released`, `dormant`) and their commands are refused (`grokbot_off`, `no_deck`).
 
 **In the app.** The Integrations page has a Grok Bot row, from `sources.list`'s `grokbot`: `ready`, `setup` or `off`, counted in `bots`, and amber while a bot that is set up has no key. It carries the switch and **Bots…**, a dialog with:
 - each bot's host, key and last call;
 - **Copy Instruction**, **Test** and **Remove**;
-- the three fields that add a bot.
+- adding a bot in four steps:
+  1. its name on the deck;
+  2. **Copy Prompt**, the setup prompt for that name, to send the bot in Grok Bot's chat (it stays disabled until there is a name);
+  3. where Grok Bot shows the new routine's URL and key (the bot's name at the top of its chat → Details → the routine's Webhook section: "POST to", "key"), then their two fields;
+  4. Grok Bot's Settings → Computer, which lets the bot answer.
 
 **Not verified against a real bot by this change.** No routine was created from here, so two points are open:
 - whether a bot acts on a webhook body as its owner's message under Grok Bot's Auto Review;

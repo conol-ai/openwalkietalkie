@@ -209,7 +209,7 @@ pub const STRINGS: &[Entry] = &[
     // Grok Bot's row and its dialog (`crate::integrations::render_bots`):
     // each bot through its routine's webhook, its key kept by the service,
     // and what Grok Bot said to the last call.
-    ("A key is missing", "缺少密钥", "缺少密鑰", "キーがありません"),
+    ("A key is missing", "缺少密钥", "缺少金鑰", "キーがありません"),
     ("Set up", "已设置", "已設定", "設定済み"),
     ("Through each bot's webhook.", "通过每个机器人的 Webhook。", "透過每個機器人的 Webhook。", "各ボットの Webhook 経由。"),
     ("No bot is set up yet.", "还没有设置机器人。", "尚未設定機器人。", "まだボットが設定されていません。"),
@@ -225,11 +225,11 @@ pub const STRINGS: &[Entry] = &[
     ),
     (
         "The routine's webhook URL (POST to)",
-        "例行任务的 Webhook URL（POST to）",
-        "例行任務的 Webhook URL（POST to）",
-        "ルーティンの Webhook URL（POST to）",
+        "例行任务的 Webhook URL（POST 到）",
+        "例行任務的 Webhook URL（POST 到）",
+        "ルーティンの Webhook URL（POST先）",
     ),
-    ("The routine's key", "例行任务的密钥", "例行任務的密鑰", "ルーティンのキー"),
+    ("The routine's key", "例行任务的密钥", "例行任務的金鑰", "ルーティンのキー"),
     ("A bot needs a name.", "机器人需要一个名称。", "機器人需要一個名稱。", "ボットには名前が必要です。"),
     (
         "Paste the routine's webhook URL.",
@@ -238,15 +238,9 @@ pub const STRINGS: &[Entry] = &[
         "ルーティンの Webhook URL を貼り付けてください。",
     ),
     (
-        "{0} is set up. Give its routine the instruction below.",
-        "{0} 已设置。请把下面的说明交给它的例行任务。",
-        "{0} 已設定。請把下面的說明交給它的例行任務。",
-        "{0} を設定しました。下の指示をそのルーティンに設定してください。",
-    ),
-    (
         "{0} is set up, with no key yet.",
         "{0} 已设置，但还没有密钥。",
-        "{0} 已設定，但尚無密鑰。",
+        "{0} 已設定，但尚無金鑰。",
         "{0} を設定しましたが、まだキーがありません。",
     ),
     (
@@ -255,15 +249,15 @@ pub const STRINGS: &[Entry] = &[
         "Grok Bot 已接收 {0} 的測試，回覆會送到裝置上。",
         "Grok Bot が {0} のテストを受け付けました。返信はデバイスに届きます。",
     ),
-    ("Key kept", "已保存密钥", "已儲存密鑰", "キー保存済み"),
-    ("No key", "无密钥", "無密鑰", "キーなし"),
+    ("Key kept", "已保存密钥", "已儲存金鑰", "キー保存済み"),
+    ("No key", "无密钥", "無金鑰", "キーなし"),
     ("Not called yet", "尚未调用", "尚未呼叫", "未呼び出し"),
     ("Last call: HTTP {0}", "上次调用：HTTP {0}", "上次呼叫：HTTP {0}", "前回の呼び出し：HTTP {0}"),
     ("Last call: no answer", "上次调用：无响应", "上次呼叫：無回應", "前回の呼び出し：応答なし"),
     (
         "Grok Bot refused the key (HTTP {0}). Copy the routine's key again.",
         "Grok Bot 拒绝了密钥（HTTP {0}）。请重新复制例行任务的密钥。",
-        "Grok Bot 拒絕了密鑰（HTTP {0}）。請重新複製例行任務的密鑰。",
+        "Grok Bot 拒絕了金鑰（HTTP {0}）。請重新複製例行任務的金鑰。",
         "Grok Bot がキーを拒否しました（HTTP {0}）。ルーティンのキーをもう一度コピーしてください。",
     ),
     (
@@ -285,18 +279,6 @@ pub const STRINGS: &[Entry] = &[
         "Webhook が応答しませんでした：{0}",
     ),
     (
-        "Give each bot a routine in Grok Bot with a webhook trigger, and paste the routine's URL and key here. A press on the deck goes to that webhook.",
-        "在 Grok Bot 中为每个机器人创建一个由 Webhook 触发的例行任务，并把它的 URL 和密钥粘贴到这里。在设备上按住说话，内容就会发送到这个 Webhook。",
-        "在 Grok Bot 中為每個機器人建立一個由 Webhook 觸發的例行任務，並把它的 URL 和密鑰貼到這裡。在裝置上按住說話，內容就會傳送到這個 Webhook。",
-        "Grok Bot で各ボットに Webhook トリガーのルーティンを作り、その URL とキーをここに貼り付けてください。デバイスで話した内容はその Webhook に送られます。",
-    ),
-    (
-        "The bot answers on the deck by running a command on this Mac: allow it in Grok Bot's Settings, under Computer.",
-        "机器人会在这台 Mac 上运行命令，把回复送到设备上：请在 Grok Bot 的“设置”中的“电脑”里允许。",
-        "機器人會在這台 Mac 上執行命令，把回覆送到裝置上：請在 Grok Bot 的「設定」中的「電腦」裡允許。",
-        "ボットはこの Mac でコマンドを実行してデバイスに返信します。Grok Bot の「設定」の「コンピュータ」で許可してください。",
-    ),
-    (
         "Grok Bot is not installed on this Mac.",
         "这台 Mac 上没有安装 Grok Bot。",
         "這台 Mac 上沒有安裝 Grok Bot。",
@@ -306,4 +288,42 @@ pub const STRINGS: &[Entry] = &[
     ("Test", "测试", "測試", "テスト"),
     ("Add a bot", "添加机器人", "新增機器人", "ボットを追加"),
     ("Add Bot", "添加", "新增", "追加"),
+    (
+        "A press on the deck goes to a bot's routine webhook, and the bot answers by running a command on this Mac.",
+        "在设备上按住说话，内容会发送到机器人例行任务的 Webhook；机器人在这台 Mac 上运行命令来回复。",
+        "在裝置上按住說話，內容會傳送到機器人例行任務的 Webhook；機器人在這台 Mac 上執行命令來回覆。",
+        "デバイスで話した内容はボットのルーティンの Webhook に送られ、ボットはこの Mac でコマンドを実行して返信します。",
+    ),
+    (
+        "Name the bot as the deck should show it.",
+        "输入机器人在设备上显示的名称。",
+        "輸入機器人在裝置上顯示的名稱。",
+        "デバイスに表示するボットの名前を入力します。",
+    ),
+    (
+        "In Grok Bot, send this to that bot. It makes a routine with a webhook trigger.",
+        "在 Grok Bot 中把这段提示词发给该机器人，它会创建一个由 Webhook 触发的例行任务。",
+        "在 Grok Bot 中把這段提示詞傳給該機器人，它會建立一個由 Webhook 觸發的例行任務。",
+        "Grok Bot でこのプロンプトをそのボットに送ると、Webhook トリガーのルーティンが作られます。",
+    ),
+    ("Copy Prompt", "复制提示词", "複製提示詞", "プロンプトをコピー"),
+    // Grok Bot's own labels, as its Chinese and Japanese screens show them.
+    (
+        "Open that routine: click the bot's name at the top of its chat, then Details. From its Webhook section, copy \u{201c}POST to\u{201d} and \u{201c}key\u{201d} into these fields.",
+        "打开该例行任务：点按聊天顶部的机器人名称，再点“详情”。从“Webhook”部分把“POST 到”和“密钥”复制到这些输入框。",
+        "打開該例行任務：點按聊天頂端的機器人名稱，再點「詳細資訊」。從「Webhook」區塊把「POST 到」和「金鑰」複製到這些欄位。",
+        "そのルーティンを開きます。チャット上部のボット名をクリックし、「詳細」を開きます。「Webhook」セクションの「POST先」と「キー」をこれらの欄にコピーしてください。",
+    ),
+    (
+        "In Grok Bot's Settings, under Computer, allow the bot to run commands on this Mac.",
+        "在 Grok Bot 的“设置”中的“电脑”里，允许机器人在这台 Mac 上运行命令。",
+        "在 Grok Bot 的「設定」中的「電腦」裡，允許機器人在這台 Mac 上執行命令。",
+        "Grok Bot の「設定」の「コンピューター」で、ボットがこの Mac でコマンドを実行できるようにします。",
+    ),
+    (
+        "{0} is set up. Test checks that Grok Bot takes its webhook.",
+        "{0} 已设置。点“测试”可检查 Grok Bot 是否接受它的 Webhook。",
+        "{0} 已設定。點「測試」可檢查 Grok Bot 是否接受它的 Webhook。",
+        "{0} を設定しました。「テスト」で Grok Bot が Webhook を受け付けるか確認できます。",
+    ),
 ];

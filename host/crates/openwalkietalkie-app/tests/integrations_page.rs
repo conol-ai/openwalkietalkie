@@ -15,7 +15,7 @@ use deck_gui_core::UiAction;
 use deck_model::{Tone, Ts};
 use openwalkietalkie_app::i18n;
 use openwalkietalkie_app::integrations::{
-    age_words, app_icon, apps, apps_paused_after, bot_line, bot_refusal, change_word,
+    age_words, app_icon, apps, apps_paused_after, bot_line, bot_prompt, bot_refusal, change_word,
     channels_stale, count_words,
     handoff_words, others_line, receipt_line, toggle_action, tools, total_words, Control, Facts,
     Line, NextStep, State, Toggle,
@@ -1141,6 +1141,42 @@ fn the_grok_bot_row_and_dialog_say_what_holds_a_bot_back() {
     );
 }
 
+/// **Copy Prompt** copies the message that has a bot make its own webhook
+/// routine, for the name as typed: nothing until there is a name, the
+/// service's `deckd` in the bot's commands (else the one beside the app),
+/// and a bot that is set up keeps its id and its name.
+#[test]
+fn the_grok_bot_prompt_follows_the_name_typed() {
+    let status = care::GrokBot::parse(&json!({
+        "deckd": "/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd",
+        "bots": [{"id": "research", "name": "Research", "set_up": true}]
+    }));
+    assert_eq!(bot_prompt("  ", Some(&status), None), None);
+    let travel = bot_prompt(" Travel Desk ", Some(&status), None).unwrap();
+    assert!(
+        travel.starts_with("Please make a routine named \"OpenWalkieTalkie\" with a webhook trigger"),
+        "{travel}"
+    );
+    assert!(travel.contains("addressed to you (Travel Desk)"), "{travel}");
+    assert!(travel.contains(
+        "'/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd' grokbot say --bot 'travel-desk'"
+    ));
+    let research = bot_prompt("RESEARCH", Some(&status), None).unwrap();
+    assert!(research.contains("addressed to you (Research)") && research.contains("--bot 'research'"));
+    // Before the service has answered: the deckd beside this app.
+    let beside = bot_prompt("Travel Desk", None, Some("/Apps/OWT.app/Contents/MacOS/deckd".into()));
+    assert!(beside.unwrap().contains("'/Apps/OWT.app/Contents/MacOS/deckd' grokbot say"));
+    assert_eq!(bot_prompt("Travel Desk", None, None), None);
+    // A service on a directory of its own says how its bots reach it.
+    let own = care::GrokBot::parse(&json!({
+        "deckd": "/opt/owt/deckd",
+        "invocation": "'/opt/owt/deckd' --data-dir '/srv/owt'",
+        "bots": []
+    }));
+    let prompt = bot_prompt("Travel Desk", Some(&own), None).unwrap();
+    assert!(prompt.contains("'/opt/owt/deckd' --data-dir '/srv/owt' grokbot say --bot 'travel-desk'"));
+}
+
 #[test]
 fn every_row_the_page_adds_is_the_only_row_of_its_key() {
     i18n::install();
@@ -1153,10 +1189,10 @@ fn every_row_the_page_adds_is_the_only_row_of_its_key() {
     // now names Ghostty; the page's own sentence for an out-of-date plugin;
     // the six it added since (the count's hint, a connected app heard on
     // this Mac, two for leftover Codex hooks, two for the sessions no row
-    // counts); the Local API page's Advanced, held here; and Grok Bot's 32:
-    // its row's states and lines, the dialog's words and what Grok Bot says
-    // to a call.
-    assert_eq!(i18n::integrations::STRINGS.len(), 77);
+    // counts); the Local API page's Advanced, held here; and Grok Bot's 36:
+    // its row's states and lines, the dialog's words and its four steps, and
+    // what Grok Bot says to a call.
+    assert_eq!(i18n::integrations::STRINGS.len(), 81);
     assert!(!i18n::integrations::STRINGS
         .iter()
         .any(|row| row.0 == "Focuses its tab"));
@@ -1168,8 +1204,8 @@ fn every_word_the_page_says_has_a_row() {
     assert_eq!(i18n::missing_rows(source), Vec::<String>::new());
     // Pinned, so a lookup the scanner stopped seeing fails here rather than
     // passing as a page with less to translate. Grok Bot's row and dialog
-    // added 31.
-    assert_eq!(i18n::literals(source).len(), 122);
+    // added 37, its four steps and Copy Prompt among them.
+    assert_eq!(i18n::literals(source).len(), 128);
 }
 
 /// A fresh test service's own replies (`deck-gui-core`'s recorded fixtures,

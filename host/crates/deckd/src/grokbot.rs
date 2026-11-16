@@ -72,10 +72,6 @@ pub const WORKING_FOR: Duration = Duration::from_secs(15 * 60);
 /// and never longer than the most.
 pub const ASK_DEFAULT_S: u64 = 300;
 pub const ASK_MAX_S: u64 = 600;
-/// A bot's name on the deck, in characters.
-pub const NAME_MAX: usize = 32;
-/// A bot id: lower-case letters, digits and dashes.
-pub const ID_MAX: usize = 32;
 /// What a bot may say in one `say`, in bytes (the deck shows the start; the
 /// app's channel the whole reply).
 pub const TEXT_MAX: usize = 8 * 1024;
@@ -98,68 +94,12 @@ const RETRY: Duration = Duration::from_secs(5);
 // Names, ids and texts
 // ---------------------------------------------------------------------------
 
-/// An id for a bot named `name`: lower-case ASCII letters and digits, runs
-/// of anything else as one dash, at most [`ID_MAX`]. A name with no ASCII
-/// letter or digit at all gets `bot-` and a hash of the name, so it still
-/// has one, and always the same one.
-#[must_use]
-pub fn slug(name: &str) -> String {
-    let mut out = String::new();
-    for ch in name.trim().chars() {
-        if ch.is_ascii_alphanumeric() {
-            out.push(ch.to_ascii_lowercase());
-        } else if !out.ends_with('-') && !out.is_empty() {
-            out.push('-');
-        }
-    }
-    let mut id: String = out.trim_matches('-').chars().take(ID_MAX).collect();
-    while id.ends_with('-') {
-        id.pop();
-    }
-    if id.is_empty() {
-        // FNV-1a: stable across runs and builds, unlike the std hasher.
-        let mut hash: u32 = 0x811c_9dc5;
-        for byte in name.trim().as_bytes() {
-            hash ^= u32::from(*byte);
-            hash = hash.wrapping_mul(0x0100_0193);
-        }
-        id = format!("bot-{hash:08x}");
-    }
-    id
-}
-
-/// Why `id` cannot name a bot, or `None`.
-#[must_use]
-pub fn id_problem(id: &str) -> Option<&'static str> {
-    if id.is_empty() || id.len() > ID_MAX {
-        return Some("a bot id is 1 to 32 characters");
-    }
-    if !id
-        .bytes()
-        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
-        || id.starts_with('-')
-        || id.ends_with('-')
-    {
-        return Some("a bot id is lower-case letters, digits and dashes");
-    }
-    None
-}
-
-/// Why `name` cannot be a bot's name on the deck, or `None`.
-#[must_use]
-pub fn name_problem(name: &str) -> Option<&'static str> {
-    let name = name.trim();
-    if name.is_empty() {
-        return Some("the bot needs a name");
-    }
-    if name.chars().count() > NAME_MAX {
-        return Some("a bot's name is at most 32 characters");
-    }
-    if name.chars().any(char::is_control) {
-        return Some("a bot's name has no control characters");
-    }
-    None
-}
+// The names, ids and words are shared with the app, which writes a bot's
+// setup prompt before the bot is added (`deck_model::grokbot`).
+pub use deck_model::grokbot::{
+    ask_command, id_problem, invocation, name_problem, reply_command, routine_text, setup_prompt,
+    sh_quote, slug, HOW_TO_ANSWER, ID_MAX, NAME_MAX,
+};
 
 /// Which bot a command means: the id of a bot that is set up (by its id,
 /// or by its name ignoring case), or the id a bot that is not set up is put
@@ -204,54 +144,17 @@ pub fn resolve(bots: &BTreeMap<String, GrokBotEntry>, bot: &str) -> Result<Resol
     })
 }
 
-/// `value` in single quotes for a POSIX shell.
-#[must_use]
-pub fn sh_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', r"'\''"))
-}
-
-/// The command a bot runs to put its reply on the deck.
-#[must_use]
-pub fn reply_command(deckd: &Path, id: &str) -> String {
-    format!(
-        "{} grokbot say --bot {} '<your reply>'",
-        sh_quote(&deckd.to_string_lossy()),
-        sh_quote(id)
-    )
-}
-
-/// The command a bot runs to ask the operator on the deck.
-#[must_use]
-pub fn ask_command(deckd: &Path, id: &str) -> String {
-    format!(
-        "{} grokbot ask --bot {} --choice 'Yes' --choice 'No' '<your question>'",
-        sh_quote(&deckd.to_string_lossy()),
-        sh_quote(id)
-    )
-}
-
-/// The instruction the owner gives the bot's webhook routine (in their own
-/// words if they like): how to read an order and how to answer it.
-#[must_use]
-pub fn routine_text(name: &str, id: &str, deckd: &Path) -> String {
-    format!(
-        "Each run of this routine is a message I spoke into my OpenWalkieTalkie deck, \
-         addressed to you ({name}). The JSON body's \"text\" is what I said: treat it as a \
-         message from me in this chat and do what it asks.\n\
-         When you have an answer or you are done, run this on my computer, with a short \
-         reply I can listen to in place of <your reply>:\n{}\n\
-         If you need me to decide something, run this instead, with your question and up to \
-         four short choices; it prints my answer:\n{}\n\
-         Every message's body repeats both commands as \"reply_with\" and \"ask_with\".",
-        reply_command(deckd, id),
-        ask_command(deckd, id),
-    )
-}
-
 /// The body of the webhook call an order becomes. `order` is the deck's
-/// order id, `None` for a test.
+/// order id, `None` for a test; `invocation` starts the bot's commands
+/// ([`bot_invocation`]).
 #[must_use]
-pub fn order_body(id: &str, name: &str, text: &str, order: Option<&str>, deckd: &Path) -> String {
+pub fn order_body(
+    id: &str,
+    name: &str,
+    text: &str,
+    order: Option<&str>,
+    invocation: &str,
+) -> String {
     json!({
         "source": "openwalkietalkie",
         "bot": name,
@@ -260,10 +163,25 @@ pub fn order_body(id: &str, name: &str, text: &str, order: Option<&str>, deckd: 
         "order": order,
         "test": order.is_none(),
         "sent_at": rfc3339_now(),
-        "reply_with": reply_command(deckd, id),
-        "ask_with": ask_command(deckd, id),
+        "reply_with": reply_command(invocation, id),
+        "ask_with": ask_command(invocation, id),
+        "how_to_answer": HOW_TO_ANSWER,
     })
     .to_string()
+}
+
+/// How the commands this service gives its bots start: its own `deckd`,
+/// and `--data-dir` when its socket is not where a bare `deckd` looks
+/// (Omarchy's unit runs it on `~/.local/share/openwalkietalkie`; a test
+/// service runs on a directory of its own). A bot's shell has none of the
+/// service's environment, so the command has to say.
+#[must_use]
+pub fn bot_invocation(deckd: &Path, paths: &crate::config::Paths) -> String {
+    let elsewhere = match crate::config::Paths::platform_default() {
+        Ok(bare) => bare.socket != paths.socket,
+        Err(_) => true,
+    };
+    invocation(deckd, elsewhere.then_some(paths.data.as_path()))
 }
 
 /// Now, as the body's `sent_at` gives it: RFC 3339, seconds, UTC.
@@ -726,6 +644,8 @@ struct Module {
     keys: Arc<dyn BotKeys>,
     curl: PathBuf,
     deckd: PathBuf,
+    /// How the bot's commands start ([`bot_invocation`]).
+    invocation: String,
     principal: Principal,
     session: Option<SessionId>,
     mail: mpsc::UnboundedSender<Mail>,
@@ -750,11 +670,13 @@ pub async fn run(api: Arc<Api>, keys: Arc<dyn BotKeys>, mut stop: watch::Receive
     hub.attach(tx, keys.clone(), api.paths.config.clone());
     let (mail_tx, mut mail) = mpsc::unbounded_channel();
     let mut gate = api.core.adapters().watch_gate();
+    let deckd = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("deckd"));
     let mut module = Module {
         api: api.clone(),
         keys,
         curl: webhook::curl(),
-        deckd: std::env::current_exe().unwrap_or_else(|_| PathBuf::from("deckd")),
+        invocation: bot_invocation(&deckd, &api.paths),
+        deckd,
         principal: Principal::Adapter(AdapterKind::Grok),
         session: None,
         mail: mail_tx,
@@ -1293,7 +1215,7 @@ impl Module {
         let url = entry.webhook.clone();
         let keys = self.keys.clone();
         let curl = self.curl.clone();
-        let body = order_body(&id, &name, &text, order.as_deref(), &self.deckd);
+        let body = order_body(&id, &name, &text, order.as_deref(), &self.invocation);
         let title = sanitize::cut(&sanitize::collapse(&text), TITLE_MAX);
         let mail = self.mail.clone();
         tokio::spawn(async move {
@@ -1356,7 +1278,7 @@ impl Module {
         let name = display_name(&entry);
         let keys = self.keys.clone();
         let curl = self.curl.clone();
-        let body = order_body(&id, &name, TEST_TEXT, None, &self.deckd);
+        let body = order_body(&id, &name, TEST_TEXT, None, &self.invocation);
         let mail = self.mail.clone();
         tokio::spawn(async move {
             let result = tokio::task::spawn_blocking(move || {
@@ -1431,7 +1353,7 @@ impl Module {
                     "has_key": has_key.get(id).copied().unwrap_or(false),
                     "on_deck": self.bots.contains_key(id),
                     "last": last,
-                    "routine": routine_text(&display_name(entry), id, &self.deckd),
+                    "routine": routine_text(&display_name(entry), id, &self.invocation),
                 })
             })
             .collect();
@@ -1452,6 +1374,7 @@ impl Module {
             "live": self.live,
             "key_store": self.keys.word(),
             "deckd": self.deckd.to_string_lossy(),
+            "invocation": self.invocation,
             "app_installed": grok_bot_app().is_some(),
             "bots": bots,
         })
@@ -1491,15 +1414,33 @@ fn display_name(entry: &GrokBotEntry) -> String {
     }
 }
 
-/// Grok Bot's app, where it is installed (`/Applications`, then the
-/// home folder's Applications).
+/// Grok Bot's app, where it is installed ([`grok_bot_places`]).
 #[must_use]
 pub fn grok_bot_app() -> Option<PathBuf> {
-    let mut places = vec![PathBuf::from("/Applications/Grok Bot.app")];
-    if let Some(home) = std::env::var_os("HOME") {
-        places.push(PathBuf::from(home).join("Applications/Grok Bot.app"));
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    grok_bot_places(home.as_deref(), std::env::var_os("PATH").as_deref())
+        .into_iter()
+        .find(|place| place.exists())
+}
+
+/// Where Grok Bot's app may be, in order. On a Mac: `/Applications`, then
+/// the home folder's Applications. On Linux, where Grok Bot ships `.deb`
+/// and `.rpm` packages named `grok-bot`: that program on `PATH`, the
+/// package's folder under `/opt`, and its desktop entry, system-wide or the
+/// user's own.
+#[must_use]
+pub fn grok_bot_places(home: Option<&Path>, path: Option<&std::ffi::OsStr>) -> Vec<PathBuf> {
+    let mut places = Vec::new();
+    if cfg!(target_os = "macos") {
+        places.push(PathBuf::from("/Applications/Grok Bot.app"));
+        places.extend(home.map(|home| home.join("Applications/Grok Bot.app")));
+    } else if cfg!(target_os = "linux") {
+        places.extend(path.into_iter().flat_map(std::env::split_paths).map(|dir| dir.join("grok-bot")));
+        places.push(PathBuf::from("/opt/Grok Bot"));
+        places.push(PathBuf::from("/usr/share/applications/grok-bot.desktop"));
+        places.extend(home.map(|home| home.join(".local/share/applications/grok-bot.desktop")));
     }
-    places.into_iter().find(|place| place.exists())
+    places
 }
 
 /// One bot's `agent.wait` loop: its orders and the answers to its questions.
@@ -1622,8 +1563,48 @@ mod tests {
     }
 
     #[test]
+    fn a_service_on_its_own_directory_names_it_in_the_bot_s_commands() {
+        let deckd = Path::new("/usr/local/bin/deckd");
+        let dir = std::env::temp_dir().join("owt-grokbot-invocation");
+        let own = crate::config::Paths::from_data_dir(dir.clone(), dir.join("logs"), dir.join("caches"));
+        assert_eq!(
+            bot_invocation(deckd, &own),
+            format!("'/usr/local/bin/deckd' --data-dir '{}'", dir.display())
+        );
+        // Where a bare `deckd` looks anyway: no flag.
+        let bare = crate::config::Paths::platform_default().unwrap();
+        assert_eq!(bot_invocation(deckd, &bare), "'/usr/local/bin/deckd'");
+    }
+
+    #[test]
+    fn grok_bot_is_looked_for_where_its_installers_put_it() {
+        let places = grok_bot_places(
+            Some(Path::new("/home/owner")),
+            Some(std::ffi::OsStr::new("/usr/local/bin:/usr/bin")),
+        );
+        if cfg!(target_os = "macos") {
+            assert_eq!(
+                places,
+                [
+                    PathBuf::from("/Applications/Grok Bot.app"),
+                    PathBuf::from("/home/owner/Applications/Grok Bot.app")
+                ]
+            );
+        } else if cfg!(target_os = "linux") {
+            for place in [
+                "/usr/bin/grok-bot",
+                "/opt/Grok Bot",
+                "/usr/share/applications/grok-bot.desktop",
+                "/home/owner/.local/share/applications/grok-bot.desktop",
+            ] {
+                assert!(places.contains(&PathBuf::from(place)), "{place}: {places:?}");
+            }
+        }
+    }
+
+    #[test]
     fn an_order_body_tells_the_bot_how_to_answer() {
-        let deckd = Path::new("/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd");
+        let deckd = &invocation(Path::new("/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd"), None);
         let body: Value =
             serde_json::from_str(&order_body("research", "Research", "Find it's flights", Some("or_1"), deckd))
                 .unwrap();
@@ -1637,6 +1618,9 @@ mod tests {
         );
         assert!(body["ask_with"].as_str().unwrap().contains("grokbot ask --bot 'research' --choice 'Yes'"));
         assert!(body["sent_at"].as_str().unwrap().ends_with('Z'));
+        // An older routine's instruction still has the answer kept in the chat.
+        assert_eq!(body["how_to_answer"], HOW_TO_ANSWER);
+        assert!(HOW_TO_ANSWER.contains("answer me in this chat"));
         let test: Value =
             serde_json::from_str(&order_body("research", "Research", TEST_TEXT, None, deckd)).unwrap();
         assert_eq!(test["test"], true);
@@ -1645,5 +1629,6 @@ mod tests {
         assert_eq!(sh_quote("it's"), r"'it'\''s'");
         let routine = routine_text("Research", "research", deckd);
         assert!(routine.contains("(Research)") && routine.contains("grokbot say --bot 'research'"));
+        assert!(routine.contains("Then also answer me here in this chat"));
     }
 }

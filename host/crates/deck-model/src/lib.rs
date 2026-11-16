@@ -17,6 +17,9 @@ mod device;
 mod device_status;
 mod effect;
 pub mod guard;
+/// Grok Bot's names and words: ids, the commands a bot runs, its routine's
+/// instruction and its setup prompt.
+pub mod grokbot;
 /// The hand-off: a press on a session's `Open app` card raises its app.
 pub mod handoff;
 mod ids;
