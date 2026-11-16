@@ -45,3 +45,4 @@ pub mod system_status;
 pub mod verbs;
 
 pub mod firmware;
+pub mod grokbot;

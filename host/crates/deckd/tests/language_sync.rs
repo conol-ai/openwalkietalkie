@@ -48,7 +48,7 @@ async fn device_language_changes_reach_the_live_gui_subscription_and_snapshot() 
     let mut observer = daemon.connect().await;
     observer.call("session.hello", json!({"client":{"name":"language-gui","version":"1"},"scopes":["observe"],"subscribe":["*"],"snapshot":true})).await;
     daemon.device_input(DeviceLine::Hello { v: 1, fw: "language".into(), sid: 7, boot: false, rx: 1024,
-        agents: None, lang: Some(1), lang_rev: Some(1), faces: vec![] });
+        agents: None, lang: Some(1), lang_rev: Some(1), kinds: None, faces: vec![] });
     let first = observer.line_where("initial device language", |line| line["method"] == "event" && line["params"]["type"] == "device.set").await;
     assert_eq!(first["params"]["data"], json!({"k":"language","v":1,"rev":1}));
     daemon.device_input(DeviceLine::Language { value: 2, revision: 2 });

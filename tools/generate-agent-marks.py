@@ -23,7 +23,8 @@ ROOT = Path(__file__).resolve().parents[1]
 ICONS = ROOT / "host/crates/openwalkietalkie-app/assets/icons"
 OUT = ROOT / "assets/marks"
 SIZE, SCALE = 24, 8
-MARKS = {"claude": "claude-mark", "codex": "openai-mark", "gemini": "gemini-mark", "conol": "conol-mark"}
+MARKS = {"claude": "claude-mark", "codex": "openai-mark", "gemini": "gemini-mark", "conol": "conol-mark",
+         "grok": "grok-mark"}
 
 
 # Conol's mascot (viewBox 0 0 200 200, plate off): ink strokes 9.3 wide.

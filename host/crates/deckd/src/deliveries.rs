@@ -89,7 +89,7 @@ pub const PICKER_WINDOW: Duration = Duration::from_secs(10);
 const OTHER: &str = "other";
 /// Where a card came from: the source of its agent's session
 /// (`care::sources::Ledger::word`). A connected app is `app`, never its name.
-const FROM: &[&str] = &["claude", "codex", "other", "app", "daemon", "unknown"];
+const FROM: &[&str] = &["claude", "codex", "grokbot", "other", "app", "daemon", "unknown"];
 const KINDS: &[&str] = &["q", "r"];
 const ORIGINS: &[&str] = &["permission", "question", "elicitation", "custom", "ready"];
 const DELIVERS: &[&str] = &["hold", "push", "poll", "focus", "none"];
@@ -130,6 +130,10 @@ const END_REASONS: &[&str] = &[
     "resume",
     "logout",
     "prompt_input_exit",
+    // `crate::grokbot`: a bot's question that ran out, and one the
+    // operator snoozed (the bot's command was answered "snoozed").
+    "ask_timeout",
+    "snoozed",
 ];
 /// End reasons that mean the card was decided in the session itself, never
 /// on the deck: the call ran, the turn ended or moved on, the session
@@ -1013,6 +1017,7 @@ mod tests {
                 agents: None,
                 lang: Some(0),
                 lang_rev: Some(1),
+                kinds: None,
                 faces: Vec::new(),
             }
         }

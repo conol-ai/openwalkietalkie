@@ -21,8 +21,9 @@ use std::path::{Path, PathBuf};
 pub struct PeerVerdict {
     /// The peer is the verified GUI (`SecCode` requirement + path).
     pub trusted: bool,
-    /// An agent CLI (`claude`/`codex`/`gemini`/`node`) is in its ancestry:
-    /// scopes are capped to `Scope::AGENT_DESCENDED_CAP`.
+    /// An agent CLI (`claude`/`codex`/`gemini`/`node`) or an agent app
+    /// ([`AGENT_APP_BUNDLES`]) is in its ancestry: scopes are capped to
+    /// `Scope::AGENT_DESCENDED_CAP`.
     pub ancestry_capped: bool,
     /// The peer's executable, when it could be read (for the log).
     pub exe: Option<PathBuf>,
@@ -43,6 +44,12 @@ pub trait PeerVerifier: Send + Sync {
 /// The names in a ppid chain that cap a peer (§4.2), compared by basename,
 /// case-insensitively.
 pub const AGENT_PROCESS_NAMES: [&str; 4] = ["claude", "codex", "gemini", "node"];
+/// Apps whose processes act for an agent, by their bundle's directory name.
+/// Grok Bot runs a bot's commands on this Mac ("Execution on this
+/// computer") from its own helper processes, so a command a bot ran is
+/// capped exactly like one Claude Code ran: it may report to the deck
+/// (`deckd grokbot say|ask|state`), and it may not answer for the operator.
+pub const AGENT_APP_BUNDLES: [&str; 1] = ["Grok Bot.app"];
 /// The ancestry walk stops here.
 pub const ANCESTRY_MAX_HOPS: usize = 64;
 /// The trusted executable's path suffix inside the bundle.
@@ -237,6 +244,18 @@ fn is_versioned_agent_path(path: &str) -> bool {
         })
 }
 
+/// Whether an executable's path lies inside one of [`AGENT_APP_BUNDLES`]
+/// (`/Applications/Grok Bot.app/Contents/Frameworks/Grok Bot Helper.app/…`
+/// included): a whole path component, compared case-insensitively, so a
+/// file merely named like the app is not a match.
+pub fn is_agent_app_path(path: &str) -> bool {
+    path.split('/').any(|part| {
+        AGENT_APP_BUNDLES
+            .iter()
+            .any(|bundle| part.eq_ignore_ascii_case(bundle))
+    })
+}
+
 /// The executable of a trusted peer lives at `…app/Contents/MacOS/OpenWalkieTalkie`.
 pub fn is_gui_path(path: &Path) -> bool {
     path.to_str().is_some_and(|p| p.ends_with(GUI_EXE_SUFFIX))
@@ -297,7 +316,11 @@ pub fn ancestry_capped_within(pid: u32, max_hops: usize) -> bool {
         let Some(hop) = MacProcs.get(cur) else {
             return false;
         };
-        if hop.names.iter().any(|name| is_agent_process_name(name)) {
+        if hop
+            .names
+            .iter()
+            .any(|name| is_agent_process_name(name) || is_agent_app_path(name))
+        {
             return true;
         }
         // pid 1 is launchd: the chain ends there, and so does a pid whose
@@ -373,6 +396,33 @@ mod tests {
         assert!(fake.verify(1).ancestry_capped);
         let boxed: Box<dyn PeerVerifier> = Box::new(FakeVerifier::default());
         assert!(!boxed.verify(2).trusted);
+    }
+
+    /// A command a Grok Bot runs on this Mac is started by the app's own
+    /// helper, so the helper's path (or the app's) anywhere up the chain caps
+    /// the peer. The match is a whole path component: neither a file named
+    /// like the app nor the bundle of another app is one.
+    #[test]
+    fn a_process_inside_grok_bot_app_is_an_agent_app() {
+        for path in [
+            "/Applications/Grok Bot.app/Contents/MacOS/Grok Bot",
+            "/Applications/Grok Bot.app/Contents/Frameworks/Grok Bot Helper.app/Contents/MacOS/Grok Bot Helper",
+            "/Users/owner/Applications/grok bot.app/Contents/MacOS/Grok Bot",
+        ] {
+            assert!(is_agent_app_path(path), "{path}");
+        }
+        for path in [
+            "/Applications/Grok Bot.app.zip",
+            "/Users/owner/Downloads/Grok_Bot_1.1.0.dmg",
+            "/Applications/Grok.app/Contents/MacOS/Grok",
+            "/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd",
+            "/bin/zsh",
+            "Grok Bot",
+        ] {
+            assert!(!is_agent_app_path(path), "{path}");
+        }
+        // The CLI names are untouched by the app list.
+        assert!(!is_agent_process_name("/Applications/Grok Bot.app/Contents/MacOS/Grok Bot"));
     }
 
     /// The native installer puts the real binary at

@@ -50,3 +50,32 @@ Drawn for this app in the same style: `bluetooth`, `check-circle`, `deck`,
 The product marks `claude-mark` (Anthropic's Claude) and `openai-mark`
 (OpenAI) are ports of Zeron's and are trademarks of their owners. They are
 shown only to identify which agent CLI a row is about.
+
+The product mark `grok-mark` (xAI's Grok) is from LobeHub's icon set
+(https://github.com/lobehub/lobe-icons), with its colour set to
+`currentColor` and its two arcs' flags written out in full so every SVG
+renderer reads them; both are modifications. It is a trademark of its
+owner and is shown only to identify a Grok Bot row. The deck draws the
+same mark, rasterised by `tools/generate-agent-marks.py`.
+
+    MIT License
+    Copyright (c) 2023 LobeHub
+
+    Permission is hereby granted, free of charge, to any person obtaining a
+    copy of this software and associated documentation files (the
+    "Software"), to deal in the Software without restriction, including
+    without limitation the rights to use, copy, modify, merge, publish,
+    distribute, sublicense, and/or sell copies of the Software, and to permit
+    persons to whom the Software is furnished to do so, subject to the
+    following conditions:
+
+    The above copyright notice and this permission notice shall be included
+    in all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+    OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+    NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+    DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+    OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+    USE OR OTHER DEALINGS IN THE SOFTWARE.

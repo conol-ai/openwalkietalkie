@@ -25,6 +25,7 @@ pub mod care;
 pub mod config;
 pub mod device;
 pub mod firmware;
+pub mod grokbot;
 pub mod service;
 
 use crate::cli::CtlFailure;
@@ -48,6 +49,24 @@ pub trait Service {
     /// One call on a fresh session that asks for `scopes`.
     fn call(&self, scopes: &[&str], method: &str, params: Value) -> Result<Value, CtlFailure>;
 
+    /// [`Service::call`] for a method that may take longer than `deckd
+    /// ctl`'s 30 s to answer (`grokbot.ask` waits for the operator).
+    fn call_for(
+        &self,
+        scopes: &[&str],
+        method: &str,
+        params: Value,
+        _timeout: Duration,
+    ) -> Result<Value, CtlFailure> {
+        self.call(scopes, method, params)
+    }
+
+    /// A key typed by the owner: without echo on a terminal, else the first
+    /// line of stdin (`deckd grokbot add`).
+    fn read_key(&self, prompt: &str) -> Result<String, String> {
+        crate::cli::read_key(prompt)
+    }
+
     /// The wait between two reads of a status a verb follows (`--wait`).
     fn pause(&self, every: Duration) {
         std::thread::sleep(every);
@@ -67,6 +86,16 @@ impl Socket {
 impl Service for Socket {
     fn call(&self, scopes: &[&str], method: &str, params: Value) -> Result<Value, CtlFailure> {
         crate::cli::uds_call(&self.0, scopes, method, params)
+    }
+
+    fn call_for(
+        &self,
+        scopes: &[&str],
+        method: &str,
+        params: Value,
+        timeout: Duration,
+    ) -> Result<Value, CtlFailure> {
+        crate::cli::uds_call_for(&self.0, scopes, method, params, timeout)
     }
 }
 
@@ -197,6 +226,8 @@ pub(crate) mod testkit {
         replies: RefCell<VecDeque<Result<Value, CtlFailure>>>,
         pub asked: RefCell<Vec<Asked>>,
         pub pauses: RefCell<u32>,
+        /// What the owner "types" when a verb reads a key; `None` is no key.
+        pub key: RefCell<Option<String>>,
     }
 
     impl Script {
@@ -237,6 +268,10 @@ pub(crate) mod testkit {
 
         fn pause(&self, _every: Duration) {
             *self.pauses.borrow_mut() += 1;
+        }
+
+        fn read_key(&self, _prompt: &str) -> Result<String, String> {
+            self.key.borrow().clone().ok_or_else(|| "no key given".to_string())
         }
     }
 

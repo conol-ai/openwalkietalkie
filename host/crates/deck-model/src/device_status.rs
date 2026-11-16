@@ -195,6 +195,7 @@ mod tests {
             agents: None,
             lang: None,
             lang_rev: None,
+            kinds: None,
             faces: vec![],
         })
     }

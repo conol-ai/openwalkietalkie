@@ -138,6 +138,26 @@ pub(crate) fn uds_call(
     )
 }
 
+/// [`uds_call`] with a reply allowed to take `timeout` (`grokbot.ask` waits
+/// for the operator for minutes).
+pub(crate) fn uds_call_for(
+    socket: &Path,
+    scopes: &[&str],
+    method: &str,
+    params: serde_json::Value,
+    timeout: Duration,
+) -> Result<serde_json::Value, CtlFailure> {
+    let names: Vec<String> = scopes.iter().map(|s| s.to_string()).collect();
+    let scopes = parse_scopes(&names).map_err(CtlFailure::Unreachable)?;
+    one_call(
+        socket,
+        ctl_config(socket, CTL_CLIENT, scopes),
+        timeout,
+        method,
+        params,
+    )
+}
+
 /// `GET /v1/info` on `127.0.0.1:<port>`, hand-written HTTP/1.1 over a
 /// blocking `TcpStream` (no HTTP client crate: the same probe the TCP
 /// door uses against a squatter, contract §3.3). The body is the JSON
@@ -349,6 +369,13 @@ pub enum Cmd {
     Care {
         #[command(subcommand)]
         cmd: crate::verbs::care::CareCmd,
+    },
+    /// Grok Bot on the deck: the commands a bot runs on this Mac (`say`,
+    /// `ask`, `state`) and the owner's (`add`, `remove`, `list`, `test`,
+    /// `routine`).
+    Grokbot {
+        #[command(subcommand)]
+        cmd: crate::verbs::grokbot::GrokbotCmd,
     },
     /// The deck's firmware: what the service knows, a check for a release,
     /// and an install by cable.
@@ -973,6 +1000,7 @@ fn run(cli: Cli) -> Result<i32, String> {
             DeviceCmd::Deck(cmd) => verb(&paths, cmd, crate::verbs::device::run),
         },
         Cmd::Care { cmd } => verb(&paths, cmd, crate::verbs::care::run),
+        Cmd::Grokbot { cmd } => verb(&paths, cmd, crate::verbs::grokbot::run),
         Cmd::Firmware { cmd } => verb(&paths, cmd, crate::verbs::firmware::run),
         Cmd::Config { cmd } => verb(&paths, cmd, crate::verbs::config::run),
         Cmd::Service { cmd } => verb(&paths, cmd, crate::verbs::service::run),
@@ -1404,7 +1432,7 @@ fn hf_cache_dir(model: &str) -> Option<PathBuf> {
 }
 
 /// The key, typed without echo on a terminal or read from a pipe.
-fn read_key(prompt: &str) -> Result<String, String> {
+pub(crate) fn read_key(prompt: &str) -> Result<String, String> {
     // SAFETY: `isatty` reads a descriptor's type; fd 0 is always valid here.
     let tty = unsafe { libc::isatty(0) } == 1;
     let mut line = String::new();

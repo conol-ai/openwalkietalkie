@@ -1,5 +1,5 @@
 //! The agent marks the roster draws for each session: the same marks as the
-//! Mac app (its `claude-mark`, `openai-mark`, `gemini-mark` and
+//! Mac app (its `claude-mark`, `openai-mark`, `gemini-mark`, `grok-mark` and
 //! `conol-mark`; Lucide's bot for anything else), as alpha masks from
 //! `tools/generate-agent-marks.py --all`, tinted here. Two sizes: 24 px for
 //! the carousel's peeks, 40 px for its card.
@@ -33,14 +33,16 @@ const CODEX: &[u8; SMALL] = include_bytes!("../../assets/marks/codex.alpha");
 const GEMINI: &[u8; SMALL] = include_bytes!("../../assets/marks/gemini.alpha");
 const CONOL: &[u8; SMALL] = include_bytes!("../../assets/marks/conol.alpha");
 const OTHER: &[u8; SMALL] = include_bytes!("../../assets/marks/other.alpha");
+const GROK: &[u8; SMALL] = include_bytes!("../../assets/marks/grok.alpha");
 const CLAUDE_L: &[u8; LARGE] = include_bytes!("../../assets/marks/claude-40.alpha");
 const CODEX_L: &[u8; LARGE] = include_bytes!("../../assets/marks/codex-40.alpha");
 const GEMINI_L: &[u8; LARGE] = include_bytes!("../../assets/marks/gemini-40.alpha");
 const CONOL_L: &[u8; LARGE] = include_bytes!("../../assets/marks/conol-40.alpha");
 const OTHER_L: &[u8; LARGE] = include_bytes!("../../assets/marks/other-40.alpha");
+const GROK_L: &[u8; LARGE] = include_bytes!("../../assets/marks/grok-40.alpha");
 
-/// A kind's tint: Claude's clay, Conol's yellow, Gemini's blue, Codex and
-/// everything else in the text colours.
+/// A kind's tint: Claude's clay, Conol's yellow, Gemini's blue, Codex, Grok
+/// and everything else in the text colours.
 #[must_use]
 pub const fn tint(kind: AgentKind) -> u32 {
     match kind {
@@ -49,6 +51,7 @@ pub const fn tint(kind: AgentKind) -> u32 {
         AgentKind::Gemini => 0x4C9AFF,
         AgentKind::Conol => 0xFFE238,
         AgentKind::Other => 0xC9CCD1,
+        AgentKind::Grok => 0xE8E9EA,
     }
 }
 
@@ -61,11 +64,13 @@ pub fn mask(kind: AgentKind, size: Size) -> &'static [u8] {
         (AgentKind::Gemini, Size::Small) => GEMINI,
         (AgentKind::Conol, Size::Small) => CONOL,
         (AgentKind::Other, Size::Small) => OTHER,
+        (AgentKind::Grok, Size::Small) => GROK,
         (AgentKind::Claude, Size::Large) => CLAUDE_L,
         (AgentKind::Codex, Size::Large) => CODEX_L,
         (AgentKind::Gemini, Size::Large) => GEMINI_L,
         (AgentKind::Conol, Size::Large) => CONOL_L,
         (AgentKind::Other, Size::Large) => OTHER_L,
+        (AgentKind::Grok, Size::Large) => GROK_L,
     }
 }
 
@@ -139,7 +144,7 @@ mod tests {
     fn every_kind_has_a_visible_mark_at_both_sizes() {
         for size in [Size::Small, Size::Large] {
             let len = (size.px() * size.px()) as usize;
-            for kind in [AgentKind::Claude, AgentKind::Codex, AgentKind::Gemini, AgentKind::Conol, AgentKind::Other] {
+            for kind in [AgentKind::Claude, AgentKind::Codex, AgentKind::Gemini, AgentKind::Conol, AgentKind::Other, AgentKind::Grok] {
                 let mask = mask(kind, size);
                 assert_eq!(mask.len(), len);
                 let ink = mask.iter().filter(|&&a| a > 128).count();

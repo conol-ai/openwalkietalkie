@@ -474,7 +474,7 @@ fn the_care_verbs_read_a_no_device_daemon_from_the_command_line() {
         .iter()
         .filter_map(|row| row["id"].as_str())
         .collect();
-    assert_eq!(ids, ["claude", "claude_channels", "codex"]);
+    assert_eq!(ids, ["claude", "claude_channels", "codex", "grokbot"]);
     drop(daemon);
 
     let empty = std::env::temp_dir().join(format!("dkv{}", std::process::id()));

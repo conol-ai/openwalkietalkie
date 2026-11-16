@@ -14,6 +14,41 @@ pub enum Kind {
     Gemini,
     Other,
     Conol,
+    // Grok Bot, bridged by deckd's `grokbot` module. Sent only to a deck
+    // that draws it (`Kind::for_deck`); any other deck gets `other`. A plain
+    // comment, not a doc one: the schema lists the kinds as one enum only
+    // while no variant has a description of its own.
+    Grok,
+}
+
+impl Kind {
+    /// How many kinds a deck draws when its hello does not say (`kinds`):
+    /// the protocol's list as it was before `grok` was appended.
+    pub const DRAWN_BY_DEFAULT: u8 = 5;
+
+    /// This kind's place in the protocol's list ([`KINDS`]), which is only
+    /// ever appended to: a deck's hello `kinds` counts a prefix of it.
+    #[must_use]
+    pub fn wire_index(self) -> usize {
+        KINDS
+            .iter()
+            .position(|(_, kind)| *kind == self)
+            .expect("every kind is in the protocol's list")
+    }
+
+    /// The kind to send a deck that draws the first `kinds` of the list
+    /// (`None`: a deck whose hello predates the field). A kind the deck
+    /// does not know is sent as `other`: an unknown `kind` would fail the
+    /// whole `agent` line on the deck, and the agent would not show at all.
+    #[must_use]
+    pub fn for_deck(self, kinds: Option<u8>) -> Kind {
+        let drawn = usize::from(kinds.unwrap_or(Self::DRAWN_BY_DEFAULT));
+        if self.wire_index() < drawn {
+            self
+        } else {
+            Kind::Other
+        }
+    }
 }
 
 #[derive(
@@ -578,6 +613,11 @@ pub enum DeviceLine {
         lang: Option<u8>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         lang_rev: Option<u32>,
+        /// How many of the protocol's agent kinds the deck draws
+        /// ([`Kind::for_deck`]); `None` from a deck that predates the
+        /// field, which draws [`Kind::DRAWN_BY_DEFAULT`].
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        kinds: Option<u8>,
         faces: Vec<FaceEntry>,
     },
     Key {
@@ -687,12 +727,16 @@ impl DeviceLine {
     }
 }
 
+/// The agent kinds in the protocol's own order, the firmware's `KINDS`
+/// (`src/deck/proto.rs`). Only ever appended to: a deck's hello `kinds`
+/// says how long a prefix of this list it draws.
 pub(crate) const KINDS: &[(&str, Kind)] = &[
     ("claude", Kind::Claude),
     ("codex", Kind::Codex),
     ("gemini", Kind::Gemini),
     ("other", Kind::Other),
     ("conol", Kind::Conol),
+    ("grok", Kind::Grok),
 ];
 pub(crate) const STATES: &[(&str, AgentState)] = &[
     ("working", AgentState::Working),

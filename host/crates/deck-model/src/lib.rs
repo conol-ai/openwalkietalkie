@@ -11,10 +11,15 @@ mod command;
 mod devapi;
 #[cfg(test)]
 mod language_tests;
+#[cfg(test)]
+mod grok_tests;
 mod device;
 mod device_status;
 mod effect;
 pub mod guard;
+/// Grok Bot's names and words: ids, the commands a bot runs, its routine's
+/// instruction and its setup prompt.
+pub mod grokbot;
 /// The hand-off: a press on a session's `Open app` card raises its app.
 pub mod handoff;
 mod ids;
@@ -52,7 +57,7 @@ pub use agent::{
     ChatImage, ChatMessage, ChatRole, MessageMeta,
     Agent, Answer, AnswerCap, AnswerSource, Caps, Card, CardStatus, Choice, Deliver, Group, Order,
     OrderCap, OrderSource, Origin, OriginKind, Owner, Page, PidKind, Reply, SessionInfo, Source,
-    Terminal, TitleSource, TranscribeCap,
+    Terminal, TitleSource, TranscribeCap, GROK_BOT_PROJECT,
 };
 pub use command::{
     AgentRegister, AgentUpdate, CardClear, CardSet, Command, DeviceReport, DeviceSet, FocusReport,

@@ -34,6 +34,30 @@ fn ui() -> Box<UiState> {
     ui
 }
 
+/// The deck says how many agent kinds it draws, and that is every kind this
+/// host knows: a deck built from the same tree is never sent `other` in
+/// place of a kind it has a mark for. A deck whose hello predates `kinds`
+/// is sent `other` for Grok, the one kind appended since.
+#[test]
+fn the_hello_counts_every_kind_the_host_sends() {
+    let state = ui();
+    let DeviceLine::Hello { kinds, .. } = parse_device_line(&fw_encode(Event::Hello, &state)).unwrap() else {
+        panic!("a hello");
+    };
+    assert_eq!(kinds, Some(KINDS.len() as u8));
+    for (_, kind) in KINDS {
+        assert_eq!(kind.for_deck(kinds), *kind, "{kind:?}");
+    }
+    assert_eq!(Kind::Grok.for_deck(None), Kind::Other);
+    assert_eq!(Kind::Grok.for_deck(Some(Kind::DRAWN_BY_DEFAULT)), Kind::Other);
+    assert_eq!(Kind::Conol.for_deck(None), Kind::Conol);
+    assert_eq!(Kind::Claude.for_deck(Some(1)), Kind::Claude);
+    assert_eq!(Kind::Codex.for_deck(Some(1)), Kind::Other);
+    // Old decks drew exactly the first five, in this order.
+    let first: Vec<&str> = KINDS.iter().take(usize::from(Kind::DRAWN_BY_DEFAULT)).map(|(name, _)| *name).collect();
+    assert_eq!(first, ["claude", "codex", "gemini", "other", "conol"]);
+}
+
 #[test]
 fn language_preferences_are_versioned_and_use_the_dedicated_message() {
     let line = HostLine::Language { value: 3, revision: u32::MAX };
@@ -100,6 +124,7 @@ fn fw_kind(k: Kind) -> msg::AgentKind {
         Kind::Gemini => msg::AgentKind::Gemini,
         Kind::Other => msg::AgentKind::Other,
         Kind::Conol => msg::AgentKind::Conol,
+        Kind::Grok => msg::AgentKind::Grok,
     }
 }
 
@@ -881,6 +906,7 @@ fn device_corpus(ui: &UiState) -> Vec<(Vec<u8>, DeviceLine)> {
             agents: Some(255),
             lang: Some(0),
             lang_rev: Some(0),
+            kinds: Some(KINDS.len() as u8),
             faces: faces.clone(),
         },
     ));

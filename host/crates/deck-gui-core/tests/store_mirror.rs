@@ -131,6 +131,7 @@ impl Morning {
             agents: None,
             lang: None,
             lang_rev: None,
+            kinds: None,
             faces: strip(),
         }));
         self.apply(Command::Link(LinkEvent::Live { sid: SID }));

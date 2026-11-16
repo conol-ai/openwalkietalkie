@@ -4,7 +4,7 @@
 
 **Linux 加上本适配器是正式支持的平台。** 每个 pull request 和每次推送到 `main`，CI 的 “Linux host” 任务都会在 Ubuntu 24.04 上为 Linux 构建 host 工作区并运行它的测试（除 Mac 应用以外的所有 crate：`deckd`、`deck-proto`、`deck-model`、`deck-client`、`deck-gui-core` 和 `deck-wrap`），再运行本目录的 Python 测试（见[测试](#测试)）。窗口应用只有 macOS 版，Linux 上暂时没有窗口。适配器通过页面数据接口（`device.ws.set`，以及 `device.ws`、`device.key`、`device.link` 事件）和 `deckd` 通信，这是公开接口，写在 [native companion API 文档](https://openwalkietalkie.org/docs/native-companions/#feed-the-omarchy-face)里。
 
-**在 Linux 上，`deckd` 分不清你的各个进程。** macOS 版服务的两项检查在 Linux 上没有实现：祖先进程上限（让由 agent CLI 启动的进程最多只能申请 `observe,agent,voice,hooks:ingest`），以及受信任的主体（签名的应用）。所以你这个用户的任何进程，包括由 Claude Code、Codex 或 Kimi Code 启动的进程，都可以向 `deckd` 的 socket 申请 `admin`（它的设置、集成、自检和令牌）；也没有任何客户端会被视为受信任，所以客户端为权限卡片发来的允许会被拒绝。固件安装仍然需要在对讲机上按一下，除非对讲机已经处于恢复模式。
+**在 Linux 上，`deckd` 分不清你的各个进程。** macOS 版服务的两项检查在 Linux 上没有实现：祖先进程上限（让由 agent CLI 启动的进程最多只能申请 `observe,agent,voice,hooks:ingest`），以及受信任的主体（签名的应用）。所以你这个用户的任何进程，包括由 Claude Code、Codex、Kimi Code 或 Grok Bot 启动的进程，都可以向 `deckd` 的 socket 申请 `admin`（它的设置、集成、自检和令牌）；也没有任何客户端会被视为受信任，所以客户端为权限卡片发来的允许会被拒绝。固件安装仍然需要在对讲机上按一下，除非对讲机已经处于恢复模式。
 
 **推荐方案：Linux 版 `deckd` 直接装在 Omarchy 上。** 对讲机用蓝牙直连 Omarchy：BlueZ 把它的 HID 服务暴露成 `/dev/hidraw*`，由 `hid.rs` 驱动；语音走对讲机的音频 GATT 服务（BlueZ），用本机 Whisper 识别。Omarchy 上跑两个 systemd 用户服务：`deckd.service`（Linux 版 `deckd`）和 `omarchy-deck.service`（本目录的 Python 适配器）。
 
@@ -67,6 +67,24 @@ DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd stt install --model small
 ### Kimi Code
 
 Kimi Code 有 hook（`config.toml` 里的 `[[hooks]]`），`omarchy_hook.py install kimi` 会写入一个带标记的块，先备份，卸载时原样还原；它用 `tomllib` 检查写入结果，所以需要 Python 3.11 或更新版本。没装 hook 时，适配器退回去读 `~/.kimi-code/sessions/*/agents/main/wire.jsonl` 判断状态（尊重 `KIMI_CODE_HOME`）。每次回复结束，回复摘要会推到对讲机上。
+
+### Grok Bot
+
+Linux 版 `deckd` 和 Mac 版一样支持 Grok Bot：每个机器人是对讲机上“Grok Bot”页面里的一行，对它按住说话的内容会用 `curl` 发到该机器人例行任务的 Webhook，机器人在这台机器上运行 `deckd grokbot say` 来回复。Linux 上没有窗口，所以由命令行完成 Mac 应用里 **Bots…** 对话框做的事：
+
+```sh
+export DECKD_DATA_DIR=~/.local/share/openwalkietalkie
+deckd grokbot prompt "Research"                      # 把输出发给 Grok Bot 聊天里的这个机器人
+deckd grokbot add "Research" --webhook "https://…"   # 例行任务的“POST 到”；会提示输入它的“密钥”
+deckd grokbot test research
+```
+
+机器人收到提示词后，会创建一个名为“OpenWalkieTalkie”、由 Webhook 触发的例行任务；打开它（点聊天顶部的机器人名称 → 详情）就能看到“POST 到”和“密钥”。交给机器人的命令会写明这个服务的目录（`deckd --data-dir ~/.local/share/openwalkietalkie grokbot say …`），因为 Grok Bot 运行的命令没有这个 systemd 单元的环境变量，否则会去找 XDG 的 socket。密钥保存在 `~/.local/share/openwalkietalkie/grokbot-keys.toml`，权限 0600。每个回答的简短版本会发到对讲机上，完整回答仍留在机器人的聊天里。
+
+以下由 Grok Bot 决定，不由 `deckd` 决定：
+- Grok Bot 的 Linux 应用只提供 `.deb` 和 `.rpm` 包（`grok-bot`），没有 Arch 的包，所以在 Omarchy 上需要手动安装。
+- 只有在允许机器人在这台机器上运行命令时（Grok Bot 的“设置”→“电脑”），它才能在对讲机上回复。它的文档只说明了 Mac 和 Windows 电脑上的这项功能，没有说 Linux 上能用。不能运行命令时，按住说话的内容仍会发给机器人，回答留在它的聊天里。
+- 和这里的其他进程一样（见上文），机器人运行的命令不受上限约束：在 Linux 上它可以向 `deckd` 申请 `admin`。
 
 ## 能做什么
 
@@ -195,3 +213,5 @@ python3 -m unittest discover -s host/omarchy -p 'test_*.py'
 ## 还没验证的
 
 见 issue ZhangHanDong/openwalkietalkie#1：Codex 和 Kimi Code 真实会话、Codex 用量栏、macOS 真机。
+
+Grok Bot 还没在 Omarchy 上跑过：它的 Linux 应用在 Arch 上的安装，以及它的“设置”→“电脑”在 Linux 上能否运行机器人的命令。

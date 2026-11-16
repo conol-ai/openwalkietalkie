@@ -58,6 +58,8 @@ pub struct Options {
     /// from the start, so only the sessions the deck reads are fed in full.
     /// Off, every session is, as under `--no-device`.
     pub lazy: bool,
+    /// `[grokbot]`: the bots a test runs `deckd::grokbot::run` with.
+    pub grokbot: deckd::config::GrokBot,
 }
 
 impl Default for Options {
@@ -70,6 +72,7 @@ impl Default for Options {
             uds_default_scope: "observe".into(),
             codex_socket: None,
             lazy: false,
+            grokbot: deckd::config::GrokBot::default(),
         }
     }
 }
@@ -112,6 +115,7 @@ impl Daemon {
         config.api.uds_max_scope = options.uds_max_scope;
         config.api.uds_default_scope = options.uds_default_scope;
         config.codex.daemon_socket = options.codex_socket.map(|p| p.display().to_string());
+        config.grokbot = options.grokbot;
         // The hold mechanics are what these daemons are for: a permission
         // ask goes to the deck at once. `set_settle_s` turns the window on.
         config.hooks.claude.settle_s = 0;

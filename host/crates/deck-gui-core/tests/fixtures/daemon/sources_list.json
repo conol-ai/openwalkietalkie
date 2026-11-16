@@ -47,6 +47,21 @@
       "does": null
     },
     {
+      "id": "grokbot",
+      "kind": "tool",
+      "name": "Grok Bot",
+      "enabled": true,
+      "state": "ready",
+      "on_deck": 1,
+      "sessions": 1,
+      "unit": "bots",
+      "last_event_at": "2026-11-11T10:00:30.000Z",
+      "handoff": "none",
+      "hooks": null,
+      "stale": null,
+      "does": null
+    },
+    {
       "id": "app:Conol",
       "kind": "app",
       "name": "Conol",

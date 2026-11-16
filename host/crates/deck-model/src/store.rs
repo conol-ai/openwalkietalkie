@@ -682,7 +682,7 @@ impl Store {
             .get(id)
             .and_then(|a| a.slot.zip(Some(a)))
         {
-            let line = agent_state_line(slot, agent, now);
+            let line = agent_state_line(slot, agent, now, self.snapshot.device.kinds);
             self.device_op(DeviceOp::Put(Key::AgentState(slot), line));
         }
         if self.aux.get(id).is_some_and(|a| a.workflow_view) {
@@ -863,6 +863,7 @@ impl Store {
         if matches!(link, LinkEvent::Down) {
             self.snapshot.device.language_supported = false;
             self.snapshot.device.fw = None;
+            self.snapshot.device.kinds = None;
             self.snapshot.device.face = None;
             // §6.3 Absent: answers in flight cannot be confirmed, the utterance is lost.
             self.fail_answering_cards("link");
@@ -880,11 +881,13 @@ impl Store {
                 agents,
                 lang,
                 lang_rev,
+                kinds,
                 ..
             } => {
                 self.set_capacity(agents.unwrap_or(Slot::DEFAULT).max(1));
                 let dev = &mut self.snapshot.device;
                 dev.fw = Some(fw);
+                dev.kinds = kinds;
                 dev.boot = Some(boot);
                 dev.faces = faces.clone();
                 dev.language_supported = lang.zip(lang_rev).is_some();
@@ -1211,7 +1214,7 @@ fn project_with(snapshot: &Snapshot, now: Ts, aux: Option<&BTreeMap<AgentId, Age
     for (slot, agent) in snapshot.by_slot() {
         ops.push(DeviceOp::Put(
             Key::AgentState(slot),
-            agent_state_line(slot, agent, now),
+            agent_state_line(slot, agent, now, snapshot.device.kinds),
         ));
         if let Some(title) = &agent.title {
             ops.push(DeviceOp::Put(
@@ -1307,10 +1310,12 @@ fn project_with(snapshot: &Snapshot, now: Ts, aux: Option<&BTreeMap<AgentId, Age
     ops
 }
 
-pub(crate) fn agent_state_line(slot: Slot, agent: &Agent, now: Ts) -> HostLine {
+/// `kinds`: how many of the protocol's kinds the deck draws (its hello's
+/// `kinds`), so a kind it would refuse goes as `other`.
+pub(crate) fn agent_state_line(slot: Slot, agent: &Agent, now: Ts, kinds: Option<u8>) -> HostLine {
     HostLine::Agent {
         slot: slot.0,
-        kind: Some(agent.device_kind()),
+        kind: Some(agent.device_kind().for_deck(kinds)),
         name: Some(agent.name.clone()),
         // Always sent, empty for "no project": the state line is the whole
         // record, so a session that lost its cwd on a re-register leaves
@@ -1732,6 +1737,7 @@ mod tests {
             sid: 0,
             boot,
             rx: 1024, agents: None, lang: None, lang_rev: None,
+            kinds: None,
             faces: faces.clone(),
         };
         let (events, effects) = s.apply(Command::Device(hello(true)), Instant::now());
@@ -1757,6 +1763,7 @@ mod tests {
                 sid: 0,
                 boot: true,
                 rx: 512, agents: None, lang: None, lang_rev: None,
+                kinds: None,
                 faces: vec![],
             }),
             Instant::now(),

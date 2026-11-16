@@ -15,7 +15,8 @@ use deck_gui_core::UiAction;
 use deck_model::{Tone, Ts};
 use openwalkietalkie_app::i18n;
 use openwalkietalkie_app::integrations::{
-    age_words, app_icon, apps, apps_paused_after, change_word, channels_stale, count_words,
+    age_words, app_icon, apps, apps_paused_after, bot_line, bot_prompt, bot_refusal, change_word,
+    channels_stale, count_words,
     handoff_words, others_line, receipt_line, toggle_action, tools, total_words, Control, Facts,
     Line, NextStep, State, Toggle,
 };
@@ -59,6 +60,13 @@ fn board() -> Facts {
         )))),
         reports: installer("installed"),
         channels_stale: 0,
+        grokbot: Some(care::GrokBot::parse(&serde_json::json!({
+            "enabled": true, "live": true, "key_store": "keychain", "app_installed": true,
+            "bots": [{"id": "research", "name": "Research", "set_up": true,
+                      "webhook_host": "api.cursor.com", "has_key": true, "on_deck": true,
+                      "last": {"at_ms": 1, "ok": true, "status": 200, "reason": null},
+                      "routine": "Each run of this routine is…"}]
+        }))),
     }
 }
 
@@ -90,7 +98,10 @@ fn the_board_reads_as_the_board_draws_it() {
     let facts = board();
     let rows = tools(&facts, NOW, EN);
     let ids: Vec<&str> = rows.iter().map(|line| line.id.as_str()).collect();
-    assert_eq!(ids, ["claude", "claude_channels", "codex", "codex-desktop"]);
+    assert_eq!(
+        ids,
+        ["claude", "claude_channels", "codex", "codex-desktop", "grokbot"]
+    );
 
     let claude = &rows[0];
     assert_eq!(
@@ -145,6 +156,15 @@ fn the_board_reads_as_the_board_draws_it() {
     );
     assert_eq!(desktop.state, state("Not set up", Tone::Gray));
     assert_eq!(desktop.control, Control::SetUp("codex-desktop"));
+
+    let grokbot = &rows[4];
+    assert_eq!((grokbot.name.as_str(), grokbot.icon), ("Grok Bot", ic::GROK));
+    assert_eq!(grokbot.sub, "Through each bot's webhook.\nBots: Research");
+    assert_eq!(grokbot.count.as_deref(), Some("1 bot"));
+    assert_eq!(grokbot.handoff.as_deref(), Some("Not yet"));
+    assert_eq!(grokbot.state, state("Set up", Tone::Green));
+    assert_eq!(grokbot.control, Control::Switch(Toggle::GrokBot, true));
+    assert!(grokbot.bots && !grokbot.connect, "Bots… beside the name");
 
     let apps = apps(&facts, NOW, EN);
     let ids: Vec<&str> = apps.iter().map(|line| line.id.as_str()).collect();
@@ -1053,6 +1073,110 @@ fn the_board_in_chinese_uses_the_sheets_words() {
     assert_eq!(apps[0].handoff.as_deref(), Some("自行处理"));
 }
 
+/// Grok Bot's row says what is wrong before anything else: off, paused, a
+/// bot with no key, or no bot at all; and the dialog's lines say where each
+/// bot's webhook is and how its last call went, in every language.
+#[test]
+fn the_grok_bot_row_and_dialog_say_what_holds_a_bot_back() {
+    i18n::install();
+    let mut facts = board();
+    let row = |facts: &Facts| tools(facts, NOW, EN).remove(4);
+    // A bot with no key: every order to it would be refused.
+    facts.grokbot.as_mut().unwrap().bots[0].has_key = false;
+    assert_eq!(row(&facts).state, state("A key is missing", Tone::Amber));
+    // Off by its own switch, then paused with everything, before the key.
+    config(&mut facts).grokbot = Some(false);
+    assert_eq!(row(&facts).state, state("Off", Tone::Gray));
+    assert_eq!(row(&facts).control, Control::Switch(Toggle::GrokBot, false));
+    config(&mut facts).grokbot = Some(true);
+    config(&mut facts).paused = Some(true);
+    assert_eq!(row(&facts).state, state("Paused", Tone::Gray));
+    config(&mut facts).paused = Some(false);
+    // No bot yet.
+    facts.grokbot.as_mut().unwrap().bots.clear();
+    source(&mut facts, "grokbot").state = Some(SourceState::Setup);
+    let line = row(&facts);
+    assert_eq!(line.state, state("Not set up", Tone::Gray));
+    assert_eq!(line.sub, "Through each bot's webhook.\nNo bot is set up yet.");
+    // The switch writes its own key.
+    let written = toggle_action(&Toggle::GrokBot, false, facts.config.as_ref().unwrap());
+    assert_eq!(
+        written,
+        UiAction::ConfigSet {
+            key: "grokbot.enabled".into(),
+            value: deck_gui_core::ConfigValue::Bool(false)
+        }
+    );
+    // A service with no Grok Bot has no row.
+    facts.sources.as_mut().unwrap().sources.retain(|s| s.id != "grokbot");
+    assert_eq!(tools(&facts, NOW, EN).len(), 4);
+
+    let bot = care::Bot {
+        id: "research".into(),
+        name: "Research".into(),
+        set_up: true,
+        host: Some("api.cursor.com".into()),
+        has_key: true,
+        on_deck: true,
+        last_status: Some(401),
+        last_ok: Some(false),
+        routine: None,
+    };
+    assert_eq!(bot_line(&bot, EN), "api.cursor.com \u{b7} Key kept \u{b7} Last call: HTTP 401");
+    assert_eq!(
+        bot_line(&care::Bot { has_key: false, last_ok: None, ..bot.clone() }, ZH),
+        "api.cursor.com \u{b7} 无密钥 \u{b7} 尚未调用"
+    );
+    assert_eq!(
+        bot_refusal(&json!({"status": 401}), EN),
+        "Grok Bot refused the key (HTTP 401). Copy the routine's key again."
+    );
+    assert_eq!(
+        bot_refusal(&json!({"status": 500}), EN),
+        "Grok Bot did not start a run (HTTP 500). Is the routine paused?"
+    );
+    assert_eq!(
+        bot_refusal(&json!({"why": "Could not resolve host"}), EN),
+        "The webhook did not answer: Could not resolve host"
+    );
+}
+
+/// **Copy Prompt** copies the message that has a bot make its own webhook
+/// routine, for the name as typed: nothing until there is a name, the
+/// service's `deckd` in the bot's commands (else the one beside the app),
+/// and a bot that is set up keeps its id and its name.
+#[test]
+fn the_grok_bot_prompt_follows_the_name_typed() {
+    let status = care::GrokBot::parse(&json!({
+        "deckd": "/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd",
+        "bots": [{"id": "research", "name": "Research", "set_up": true}]
+    }));
+    assert_eq!(bot_prompt("  ", Some(&status), None), None);
+    let travel = bot_prompt(" Travel Desk ", Some(&status), None).unwrap();
+    assert!(
+        travel.starts_with("Please make a routine named \"OpenWalkieTalkie\" with a webhook trigger"),
+        "{travel}"
+    );
+    assert!(travel.contains("addressed to you (Travel Desk)"), "{travel}");
+    assert!(travel.contains(
+        "'/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd' grokbot say --bot 'travel-desk'"
+    ));
+    let research = bot_prompt("RESEARCH", Some(&status), None).unwrap();
+    assert!(research.contains("addressed to you (Research)") && research.contains("--bot 'research'"));
+    // Before the service has answered: the deckd beside this app.
+    let beside = bot_prompt("Travel Desk", None, Some("/Apps/OWT.app/Contents/MacOS/deckd".into()));
+    assert!(beside.unwrap().contains("'/Apps/OWT.app/Contents/MacOS/deckd' grokbot say"));
+    assert_eq!(bot_prompt("Travel Desk", None, None), None);
+    // A service on a directory of its own says how its bots reach it.
+    let own = care::GrokBot::parse(&json!({
+        "deckd": "/opt/owt/deckd",
+        "invocation": "'/opt/owt/deckd' --data-dir '/srv/owt'",
+        "bots": []
+    }));
+    let prompt = bot_prompt("Travel Desk", Some(&own), None).unwrap();
+    assert!(prompt.contains("'/opt/owt/deckd' --data-dir '/srv/owt' grokbot say --bot 'travel-desk'"));
+}
+
 #[test]
 fn every_row_the_page_adds_is_the_only_row_of_its_key() {
     i18n::install();
@@ -1065,8 +1189,10 @@ fn every_row_the_page_adds_is_the_only_row_of_its_key() {
     // now names Ghostty; the page's own sentence for an out-of-date plugin;
     // the six it added since (the count's hint, a connected app heard on
     // this Mac, two for leftover Codex hooks, two for the sessions no row
-    // counts); and the Local API page's Advanced, held here.
-    assert_eq!(i18n::integrations::STRINGS.len(), 45);
+    // counts); the Local API page's Advanced, held here; and Grok Bot's 36:
+    // its row's states and lines, the dialog's words and its four steps, and
+    // what Grok Bot says to a call.
+    assert_eq!(i18n::integrations::STRINGS.len(), 81);
     assert!(!i18n::integrations::STRINGS
         .iter()
         .any(|row| row.0 == "Focuses its tab"));
@@ -1077,8 +1203,9 @@ fn every_word_the_page_says_has_a_row() {
     let source = include_str!("../src/integrations.rs");
     assert_eq!(i18n::missing_rows(source), Vec::<String>::new());
     // Pinned, so a lookup the scanner stopped seeing fails here rather than
-    // passing as a page with less to translate.
-    assert_eq!(i18n::literals(source).len(), 91);
+    // passing as a page with less to translate. Grok Bot's row and dialog
+    // added 37, its four steps and Copy Prompt among them.
+    assert_eq!(i18n::literals(source).len(), 128);
 }
 
 /// A fresh test service's own replies (`deck-gui-core`'s recorded fixtures,
@@ -1110,6 +1237,7 @@ fn a_fresh_services_own_replies_offer_set_up_and_show_the_two_switched_off_as_of
         config: Some(SourcesConfig::parse(&fixture(RECORDED_CONFIG))),
         reports: Report::list(&status).0,
         channels_stale: channels_stale(&status),
+        grokbot: None,
     };
     assert_eq!(
         facts.paused(),

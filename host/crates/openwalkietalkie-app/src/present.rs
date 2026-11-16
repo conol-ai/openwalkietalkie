@@ -36,6 +36,11 @@ use serde_json::Value;
 use std::path::Path;
 use std::sync::{Mutex, PoisonError};
 
+/// The routine instruction a staged Grok Bot scene shows (the service
+/// writes the real one, with this Mac's own `deckd`).
+pub const GROKBOT_ROUTINE_EXAMPLE: &str = "Each run of this routine is a message I spoke into my \
+OpenWalkieTalkie deck, addressed to you (Research).";
+
 /// Custom Channels still require Claude's interactive preview opt-in.
 pub const CLAUDE_CHANNEL_COMMAND: &str =
     "claude --dangerously-load-development-channels plugin:openwalkietalkie@openwalkietalkie";

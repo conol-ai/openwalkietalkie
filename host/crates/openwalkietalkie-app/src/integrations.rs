@@ -43,18 +43,21 @@ use crate::style::{palette, Palette};
 use crate::ui::{self, ic, Btn, Press, Row, Switch, Type as _};
 use deck_gui_core::admin::{method_missing, Plan, Report, Status, Verb};
 use deck_gui_core::care::{
-    self, keys, Handoff, QuestionTest, Source, SourceState, Sources, SourcesConfig, TestState,
-    TestStatus, Unit,
+    self, keys, BotKey, GrokBot, Handoff, QuestionTest, Source, SourceState, Sources,
+    SourcesConfig, TestState, TestStatus, Unit,
 };
 use deck_gui_core::i18n::Language;
 use deck_gui_core::{ConfigValue, UiAction};
 use deck_model::{Tone, Ts};
 use gpui::{
-    div, prelude::*, px, AnyElement, Context, Div, Hsla, SharedString, Subscription, Window,
+    div, prelude::*, px, AnyElement, Context, Div, Entity, Hsla, SharedString, Subscription,
+    Window,
 };
+use gpui_component::input::{InputEvent, InputState};
 use gpui_component::{h_flex, v_flex};
+use deck_model::grokbot;
 use serde_json::{json, Value};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// The table's columns (the board's, GEN `integrations`): the source's tile,
 /// then after the name the count on the deck, the last event, the hand-off
@@ -84,6 +87,8 @@ const CONNECT: &str = "connect-claude";
 const CONNECT_WIDTH: f32 = 460.;
 const NEXT_STEP: &str = "next-step";
 const NEXT_STEP_WIDTH: f32 = 520.;
+const BOTS: &str = "grokbot-bots";
+const BOTS_WIDTH: f32 = 560.;
 
 /// How often `sources.list` is asked while the page shows, and while it
 /// does not (the old-helper count the Deck page and the menu read).
@@ -91,11 +96,12 @@ const SOURCES_EVERY: u64 = 5;
 const BACKGROUND_EVERY: u64 = 30;
 
 /// The harness's scenes that are this page's.
-const INTEGRATIONS_SCENES: [Scene; 4] = [
+const INTEGRATIONS_SCENES: [Scene; 5] = [
     Scene::Integrations,
     Scene::IntegrationsPaused,
     Scene::IntegrationsRepair,
     Scene::IntegrationsPlan,
+    Scene::IntegrationsBots,
 ];
 
 // ---- what the page says, as pure functions ---------------------------------
@@ -112,6 +118,9 @@ pub struct Facts {
     /// `integrations.status`'s count of refused helpers, the one a service
     /// from before `sources.list` gives.
     pub channels_stale: u32,
+    /// `grokbot.status`; `None` until it has answered, and from a service
+    /// with no Grok Bot.
+    pub grokbot: Option<GrokBot>,
 }
 
 impl Facts {
@@ -183,6 +192,7 @@ impl Facts {
             Toggle::Claude => config.claude,
             Toggle::ClaudeChannels => config.claude_channels,
             Toggle::Codex => config.codex_daemon,
+            Toggle::GrokBot => config.grokbot,
             Toggle::App(name) => Some(!config.apps_paused.iter().any(|paused| paused == name)),
         }
     }
@@ -229,6 +239,8 @@ pub enum Toggle {
     ClaudeChannels,
     /// `codex.daemon`.
     Codex,
+    /// `grokbot.enabled`.
+    GrokBot,
     /// The app's name in `sources.apps_paused`.
     App(String),
 }
@@ -277,6 +289,8 @@ pub struct Line {
     /// **How to Connect…** beside the name: the Claude Channels row while
     /// the bridge is on.
     pub connect: bool,
+    /// **Bots…** beside the name: the Grok Bot row.
+    pub bots: bool,
 }
 
 /// A source's count, in its own unit: `1 session`, `3 sessions`, `2
@@ -288,6 +302,8 @@ pub fn count_words(count: u32, unit: &Unit, language: Language) -> String {
         (Unit::Threads, _) => language.format("{0} threads", &[&n]),
         (Unit::Chats, 1) => language.text("1 chat").to_string(),
         (Unit::Chats, _) => language.format("{0} chats", &[&n]),
+        (Unit::Bots, 1) => language.text("1 bot").to_string(),
+        (Unit::Bots, _) => language.format("{0} bots", &[&n]),
         (_, 1) => language.text("1 session").to_string(),
         (_, _) => language.format("{0} sessions", &[&n]),
     }
@@ -382,6 +398,9 @@ fn source_state(state: &SourceState, waiting: &str, language: Language) -> State
         SourceState::Connected => State::connected(language),
         SourceState::Waiting => State::new(waiting, Tone::Gray),
         SourceState::Off => State::off(language),
+        // Grok Bot's two: a bot set up, or none yet.
+        SourceState::Ready => State::new(language.text("Set up"), Tone::Green),
+        SourceState::Setup => State::new(language.text("Not set up"), Tone::Gray),
         SourceState::Unknown(word) => State::new(word.as_str(), Tone::Gray),
     }
 }
@@ -426,14 +445,69 @@ pub fn card_state(line: &Line) -> Option<&State> {
 }
 
 /// The Agent tools card's rows, in the board's order: Claude Code, Claude
-/// Channels, Codex CLI, Codex Desktop.
+/// Channels, Codex CLI, Codex Desktop, then Grok Bot from a service that
+/// lists it.
 pub fn tools(facts: &Facts, now: Ts, language: Language) -> Vec<Line> {
-    vec![
+    let mut lines = vec![
         claude_line(facts, now, language),
         channels_line(facts, language),
         codex_line(facts, now, language),
         desktop_line(facts, language),
-    ]
+    ];
+    if facts.source(Source::GROKBOT).is_some() {
+        lines.push(grokbot_line(facts, now, language));
+    }
+    lines
+}
+
+/// Grok Bot: its bots through their routines' webhooks, its switch, and
+/// **Bots…** to set them up. Off by its own switch; paused with everything
+/// else; amber while a bot that is set up has no key (every order to it
+/// would be refused); otherwise set up, or not yet.
+fn grokbot_line(facts: &Facts, now: Ts, language: Language) -> Line {
+    let source = facts.source(Source::GROKBOT);
+    let switch = facts.switch(&Toggle::GrokBot);
+    let on = switch.unwrap_or(true) && source.is_none_or(|source| source.enabled);
+    let figures = figures(source, now, language);
+    let names: Vec<&str> = facts
+        .grokbot
+        .as_ref()
+        .map(|grokbot| grokbot.set_up().map(|bot| bot.name.as_str()).collect())
+        .unwrap_or_default();
+    let keyless = facts
+        .grokbot
+        .as_ref()
+        .map_or(0, |grokbot| grokbot.set_up().filter(|bot| !bot.has_key).count());
+    let state = source.and_then(|source| source.state.as_ref()).map(|state| {
+        held(on, facts.all_paused(), language).unwrap_or_else(|| match state {
+            _ if keyless > 0 => State::new(language.text("A key is missing"), Tone::Amber),
+            SourceState::Ready => State::new(language.text("Set up"), Tone::Green),
+            SourceState::Setup => State::new(language.text("Not set up"), Tone::Gray),
+            other => source_state(other, language.text("Not set up"), language),
+        })
+    });
+    let mut sub = language.text("Through each bot's webhook.").to_string();
+    sub.push('\n');
+    if names.is_empty() {
+        sub.push_str(language.text("No bot is set up yet."));
+    } else {
+        sub.push_str(&language.format("Bots: {0}", &[&names.join(", ")]));
+    }
+    Line {
+        id: Source::GROKBOT.into(),
+        name: "Grok Bot".into(),
+        icon: ic::GROK,
+        sub,
+        wide: false,
+        count: figures.count,
+        total: figures.total,
+        age: figures.age,
+        handoff: figures.handoff,
+        state,
+        control: Control::switch(Toggle::GrokBot, switch),
+        connect: false,
+        bots: true,
+    }
 }
 
 /// Claude Code: the plugin's state from the installer, its sessions from
@@ -481,6 +555,7 @@ fn claude_line(facts: &Facts, now: Ts, language: Language) -> Line {
         state,
         control,
         connect: false,
+        bots: false,
     }
 }
 
@@ -543,6 +618,7 @@ fn channels_line(facts: &Facts, language: Language) -> Line {
         state,
         control: Control::switch(Toggle::ClaudeChannels, switch),
         connect: on,
+        bots: false,
     }
 }
 
@@ -589,6 +665,7 @@ fn codex_line(facts: &Facts, now: Ts, language: Language) -> Line {
         state,
         control: Control::switch(Toggle::Codex, switch),
         connect: false,
+        bots: false,
     }
 }
 
@@ -625,6 +702,7 @@ fn desktop_line(facts: &Facts, language: Language) -> Line {
         state,
         control,
         connect: false,
+        bots: false,
     }
 }
 
@@ -681,6 +759,7 @@ fn app_line(app: &Source, facts: &Facts, now: Ts, language: Language) -> Line {
         state,
         control: Control::switch(toggle, switch),
         connect: false,
+        bots: false,
     }
 }
 
@@ -704,6 +783,7 @@ pub fn toggle_action(toggle: &Toggle, on: bool, config: &SourcesConfig) -> UiAct
         Toggle::Claude => (keys::CLAUDE, ConfigValue::Bool(on)),
         Toggle::ClaudeChannels => (keys::CLAUDE_CHANNELS, ConfigValue::Bool(on)),
         Toggle::Codex => (keys::CODEX_DAEMON, ConfigValue::Bool(on)),
+        Toggle::GrokBot => (keys::GROKBOT, ConfigValue::Bool(on)),
         Toggle::App(name) => (
             keys::APPS_PAUSED,
             ConfigValue::List(apps_paused_after(&config.apps_paused, name, on)),
@@ -727,6 +807,47 @@ pub fn apps_paused_after(paused: &[String], name: &str, on: bool) -> Vec<String>
         list.push(name.to_string());
     }
     list
+}
+
+/// One bot's line in the Grok Bot dialog: where its webhook is, whether it
+/// has its key, and how its last call went.
+pub fn bot_line(bot: &care::Bot, language: Language) -> String {
+    let mut parts = Vec::new();
+    if let Some(host) = &bot.host {
+        parts.push(host.clone());
+    }
+    parts.push(
+        language
+            .text(if bot.has_key { "Key kept" } else { "No key" })
+            .to_string(),
+    );
+    parts.push(match (bot.last_ok, bot.last_status) {
+        (None, _) => language.text("Not called yet").to_string(),
+        (Some(_), Some(status)) => language.format("Last call: HTTP {0}", &[&status.to_string()]),
+        (Some(_), None) => language.text("Last call: no answer").to_string(),
+    });
+    parts.join(" \u{b7} ")
+}
+
+/// Why Grok Bot did not take a test, in a sentence.
+pub fn bot_refusal(reply: &Value, language: Language) -> String {
+    match reply.get("status").and_then(Value::as_u64) {
+        Some(status @ (401 | 403)) => language.format(
+            "Grok Bot refused the key (HTTP {0}). Copy the routine's key again.",
+            &[&status.to_string()],
+        ),
+        Some(404) => language
+            .text("Grok Bot does not know this webhook (HTTP 404). Copy the routine's URL again.")
+            .to_string(),
+        Some(status) => language.format(
+            "Grok Bot did not start a run (HTTP {0}). Is the routine paused?",
+            &[&status.to_string()],
+        ),
+        None => language.format(
+            "The webhook did not answer: {0}",
+            &[reply.get("why").and_then(Value::as_str).unwrap_or("")],
+        ),
+    }
 }
 
 /// What a run left, as its dialog shows it: the one command that finishes
@@ -880,16 +1001,51 @@ pub struct IntegrationsPane {
     applied: Option<Applied>,
     /// What the last run left to the owner, in its dialog.
     next_step: Option<NextStep>,
+    /// The Grok Bot dialog's fields: `None` in a pane a harness scene drew.
+    bot_form: Option<BotForm>,
+    /// A Grok Bot call on its way: the dialog's buttons wait for it.
+    bot_busy: bool,
+    /// What the last Grok Bot call said, under the dialog's buttons.
+    bot_note: Option<String>,
+}
+
+/// The Grok Bot dialog's three fields: the bot's name, its routine's
+/// webhook, and the routine's key (masked, and emptied once sent).
+pub(crate) struct BotForm {
+    name: Entity<InputState>,
+    webhook: Entity<InputState>,
+    key: Entity<InputState>,
 }
 
 impl IntegrationsPane {
-    /// The pane, and the subscriptions its text fields need kept alive: it
-    /// has no text field.
+    /// The pane, and the subscriptions its text fields need kept alive:
+    /// Return in the Grok Bot dialog's key field adds the bot, and typing a
+    /// name draws the dialog again.
     pub(crate) fn new(
-        _window: &mut Window,
-        _cx: &mut Context<Shell>,
+        window: &mut Window,
+        cx: &mut Context<Shell>,
     ) -> (IntegrationsPane, Vec<Subscription>) {
-        (IntegrationsPane::default(), Vec::new())
+        let name = cx.new(|cx| InputState::new(window, cx));
+        let webhook = cx.new(|cx| InputState::new(window, cx));
+        let key = cx.new(|cx| InputState::new(window, cx).masked(true));
+        let add = cx.subscribe_in(&key, window, |this, _, event, window, cx| {
+            if matches!(event, InputEvent::PressEnter { .. }) {
+                this.add_bot(window, cx);
+            }
+        });
+        // **Copy Prompt** copies the prompt for the name as typed.
+        let typed = cx.subscribe_in(&name, window, |_, _, event, _, cx| {
+            if matches!(event, InputEvent::Change) {
+                cx.notify();
+            }
+        });
+        (
+            IntegrationsPane {
+                bot_form: Some(BotForm { name, webhook, key }),
+                ..IntegrationsPane::default()
+            },
+            vec![add, typed],
+        )
     }
 
     /// Claude sessions still on a helper from before the last update.
@@ -946,6 +1102,7 @@ impl Shell {
         self.read_sources(force, window, cx);
         self.read_config(force, window, cx);
         self.read_test(force, window, cx);
+        self.read_grokbot(window, cx);
     }
 
     /// The page.
@@ -1018,6 +1175,7 @@ impl Shell {
         match id {
             PLAN => self.render_plan(cx).map(|body| (body, PLAN_WIDTH)),
             CONNECT => Some((self.render_connect(cx), CONNECT_WIDTH)),
+            BOTS => Some((self.render_bots(cx), BOTS_WIDTH)),
             NEXT_STEP => self
                 .render_next_step(cx)
                 .map(|body| (body, NEXT_STEP_WIDTH)),
@@ -1038,8 +1196,21 @@ impl Shell {
         }
     }
 
-    /// Nothing lives outside the render: the page has no text field.
-    pub(crate) fn localize_integrations(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {}
+    /// The Grok Bot dialog's placeholders, in the window's language.
+    pub(crate) fn localize_integrations(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(form) = &self.integrations.bot_form else {
+            return;
+        };
+        let (name, webhook, key) = (form.name.clone(), form.webhook.clone(), form.key.clone());
+        for (input, words) in [
+            (name, "The bot's name, as the deck shows it"),
+            (webhook, "The routine's webhook URL (POST to)"),
+            (key, "The routine's key"),
+        ] {
+            let words = self.tr(words).to_string();
+            input.update(cx, |input, cx| input.set_placeholder(words, window, cx));
+        }
+    }
 
     /// A connection that came: the settings (the menu's pause), the sources
     /// (the old-helper count) and the installer are read again whatever
@@ -1109,6 +1280,7 @@ impl Shell {
         if scene.live() {
             self.integrations = IntegrationsPane {
                 connected: self.state.connected(),
+                bot_form: self.integrations.bot_form.take(),
                 ..IntegrationsPane::default()
             };
             return false;
@@ -1118,14 +1290,24 @@ impl Shell {
             self.go(Screen::Integrations, window, cx);
         }
         // After `go`: what it asked of a detached state was answered at once,
-        // and changes nothing here.
+        // and changes nothing here. The Grok Bot dialog's fields are the
+        // window's own and stay.
+        let form = self.integrations.bot_form.take();
         self.integrations = staged(scene, shots::board_now());
+        if let Some(form) = &form {
+            // The dialog's scene has a second bot half added: its name typed,
+            // so **Copy Prompt** is live.
+            let typed = if scene == Scene::IntegrationsBots { "Travel Desk" } else { "" };
+            form.name.update(cx, |input, cx| input.set_value(typed, window, cx));
+        }
+        self.integrations.bot_form = form;
         match scene {
             Scene::IntegrationsPlan => {
                 self.integrations.plan_open = true;
                 self.open_dialog(PLAN, window);
             }
             Scene::IntegrationsRepair => self.open_dialog(NEXT_STEP, window),
+            Scene::IntegrationsBots => self.open_dialog(BOTS, window),
             _ => {}
         }
         cx.notify();
@@ -1583,6 +1765,130 @@ impl Shell {
         cx.notify();
     }
 
+    // ---- Grok Bot --------------------------------------------------------------
+
+    /// `grokbot.status`, for the row's names and the dialog's bots. A
+    /// service with no Grok Bot (`-32601`) has no row to say anything on.
+    fn read_grokbot(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.ask(UiAction::GrokbotStatus, window, cx, |this, result, _window, cx| {
+            let pane = &mut this.integrations;
+            match result {
+                Ok(value) => pane.facts.grokbot = Some(GrokBot::parse(&value)),
+                Err(e) if method_missing(&e) => pane.facts.grokbot = None,
+                Err(_) => {}
+            }
+            cx.notify();
+        });
+    }
+
+    fn open_bots(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.integrations.bot_note = None;
+        self.read_grokbot(window, cx);
+        self.open_dialog(BOTS, window);
+        cx.notify();
+    }
+
+    /// **Add Bot**: the three fields as one `grokbot.add`. A bot already set
+    /// up under that name is updated, and keeps its key when none is typed.
+    pub(crate) fn add_bot(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(form) = &self.integrations.bot_form else {
+            return;
+        };
+        if self.integrations.bot_busy {
+            return;
+        }
+        let name = form.name.read(cx).value().trim().to_string();
+        let webhook = form.webhook.read(cx).value().trim().to_string();
+        let key = form.key.read(cx).value().trim().to_string();
+        let missing = if name.is_empty() {
+            Some("A bot needs a name.")
+        } else if webhook.is_empty() {
+            Some("Paste the routine's webhook URL.")
+        } else {
+            None
+        };
+        if let Some(missing) = missing {
+            self.integrations.bot_note = Some(self.tr(missing).to_string());
+            cx.notify();
+            return;
+        }
+        let key_field = form.key.clone();
+        key_field.update(cx, |input, cx| input.set_value("", window, cx));
+        self.integrations.bot_busy = true;
+        let action = UiAction::GrokbotAdd {
+            name: name.clone(),
+            webhook,
+            key: (!key.is_empty()).then(|| BotKey::new(&key)),
+        };
+        self.ask(action, window, cx, move |this, result, window, cx| {
+            this.integrations.bot_busy = false;
+            let language = this.language();
+            match result {
+                Ok(value) => {
+                    let has_key = value.get("has_key").and_then(Value::as_bool) == Some(true);
+                    this.integrations.bot_note = Some(if has_key {
+                        language.format(
+                            "{0} is set up. Test checks that Grok Bot takes its webhook.",
+                            &[&name],
+                        )
+                    } else {
+                        language.format("{0} is set up, with no key yet.", &[&name])
+                    });
+                    if let Some(form) = &this.integrations.bot_form {
+                        let (name, webhook) = (form.name.clone(), form.webhook.clone());
+                        name.update(cx, |input, cx| input.set_value("", window, cx));
+                        webhook.update(cx, |input, cx| input.set_value("", window, cx));
+                    }
+                    this.read_grokbot(window, cx);
+                    this.read_sources(true, window, cx);
+                }
+                Err(e) => {
+                    this.integrations.bot_note = Some(e.to_string());
+                }
+            }
+            cx.notify();
+        });
+        cx.notify();
+    }
+
+    fn remove_bot(&mut self, id: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.integrations.bot_busy = true;
+        self.ask(UiAction::GrokbotRemove { bot: id }, window, cx, |this, result, window, cx| {
+            this.integrations.bot_busy = false;
+            this.integrations.bot_note = match result {
+                Ok(_) => None,
+                Err(e) => Some(e.to_string()),
+            };
+            this.read_grokbot(window, cx);
+            this.read_sources(true, window, cx);
+            cx.notify();
+        });
+        cx.notify();
+    }
+
+    /// **Test**: a test message to the bot's webhook, and what Grok Bot
+    /// said to it, under the buttons.
+    fn test_bot(&mut self, id: String, name: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.integrations.bot_busy = true;
+        self.ask(UiAction::GrokbotTest { bot: id }, window, cx, move |this, result, window, cx| {
+            this.integrations.bot_busy = false;
+            let language = this.language();
+            this.integrations.bot_note = Some(match result {
+                Ok(value) if value.get("ok").and_then(Value::as_bool) == Some(true) => {
+                    language.format(
+                        "Grok Bot took the test for {0}. Its reply comes to the deck.",
+                        &[&name],
+                    )
+                }
+                Ok(value) => bot_refusal(&value, language),
+                Err(e) => e.to_string(),
+            });
+            this.read_grokbot(window, cx);
+            cx.notify();
+        });
+        cx.notify();
+    }
+
     // ---- the page's parts ----------------------------------------------------
 
     /// The line under the head: what the last test question did, and at its
@@ -1823,6 +2129,20 @@ impl Shell {
                         .hover(move |style| style.text_color(hover))
                         .child(self.tr("How to Connect\u{2026}"))
                         .on_click(cx.listener(|this, _, window, cx| this.open_connect(window, cx))),
+                )
+            })
+            .when(line.bots, |title| {
+                title.child(
+                    Press::new(SharedString::from(format!("{scope}-bots")))
+                        .radius(4.)
+                        .flex_none()
+                        .ts(12., 16.)
+                        .medium()
+                        .whitespace_nowrap()
+                        .text_color(p.text2)
+                        .hover(move |style| style.text_color(hover))
+                        .child(self.tr("Bots\u{2026}"))
+                        .on_click(cx.listener(|this, _, window, cx| this.open_bots(window, cx))),
                 )
             })
     }
@@ -2070,6 +2390,159 @@ impl Shell {
             .into_any_element()
     }
 
+    /// The Grok Bot dialog: the bots set up, each with its routine's
+    /// instruction to copy, **Test** and **Remove**; then adding one in four
+    /// steps (its name; **Copy Prompt**, which has the bot make its own
+    /// webhook routine; where Grok Bot shows the routine's URL and key, and
+    /// their fields; Grok Bot's Computer setting); what the last call said;
+    /// **Done**.
+    fn render_bots(&self, cx: &Context<Self>) -> AnyElement {
+        let p = *palette(cx);
+        let pane = &self.integrations;
+        let language = self.language();
+        let busy = pane.bot_busy || !self.state.connected();
+        let status = pane.facts.grokbot.as_ref();
+        let bots: Vec<&care::Bot> = status.map(|g| g.set_up().collect()).unwrap_or_default();
+        let mut body = v_flex()
+            .p(px(20.))
+            .gap(px(4.))
+            .ts(13., 18.)
+            .child(div().semibold().child("Grok Bot"))
+            .child(div().text_color(p.text2).child(ui::para(self.tr(
+                "A press on the deck goes to a bot's routine webhook, and the bot answers by \
+                 running a command on this Mac.",
+            ))));
+        if status.is_some_and(|g| !g.app_installed) {
+            body = body.child(
+                div()
+                    .text_color(p.text2)
+                    .child(ui::para(self.tr("Grok Bot is not installed on this Mac."))),
+            );
+        }
+        for (i, bot) in bots.iter().enumerate() {
+            let id = bot.id.clone();
+            let name = bot.name.clone();
+            let test = {
+                let (id, name) = (id.clone(), name.clone());
+                cx.listener(move |this: &mut Shell, _: &gpui::ClickEvent, window, cx| {
+                    this.test_bot(id.clone(), name.clone(), window, cx);
+                })
+            };
+            let remove = {
+                let id = id.clone();
+                cx.listener(move |this: &mut Shell, _: &gpui::ClickEvent, window, cx| {
+                    this.remove_bot(id.clone(), window, cx);
+                })
+            };
+            body = body.child(
+                h_flex()
+                    .mt(px(if i == 0 { 12. } else { 6. }))
+                    .gap(px(8.))
+                    .child(
+                        v_flex()
+                            .flex_1()
+                            .min_w_0()
+                            .child(div().medium().child(name))
+                            .child(
+                                div()
+                                    .ts(12., 16.)
+                                    .text_color(p.text2)
+                                    .child(bot_line(bot, language)),
+                            ),
+                    )
+                    .children(bot.routine.clone().map(|routine| {
+                        ui::CopyButton::new(
+                            SharedString::from(format!("grokbot-copy-{i}")),
+                            routine,
+                            self.tr("Copy Instruction"),
+                            self.tr("Copied"),
+                        )
+                    }))
+                    .child(
+                        Btn::new(SharedString::from(format!("grokbot-test-{i}")), self.tr("Test"))
+                            .disabled(busy || !bot.has_key)
+                            .on_click(test),
+                    )
+                    .child(
+                        Btn::new(SharedString::from(format!("grokbot-remove-{i}")), self.tr("Remove"))
+                            .danger()
+                            .disabled(busy)
+                            .on_click(remove),
+                    ),
+            );
+        }
+        if let Some(form) = &pane.bot_form {
+            let typed = form.name.read(cx).value().to_string();
+            let copy_prompt = match bot_prompt(&typed, status, crate::app::deckd_path()) {
+                Some(prompt) => ui::CopyButton::new(
+                    "grokbot-copy-prompt",
+                    prompt,
+                    self.tr("Copy Prompt"),
+                    self.tr("Copied"),
+                )
+                .into_any_element(),
+                // Nothing to copy until the bot has a name.
+                None => Btn::new("grokbot-copy-prompt", self.tr("Copy Prompt"))
+                    .disabled(true)
+                    .into_any_element(),
+            };
+            body = body
+                .child(div().mt(px(16.)).semibold().child(self.tr("Add a bot")))
+                .child(bot_step(1, self.tr("Name the bot as the deck should show it."), &p))
+                .child(ui::field(&form.name, &p).mt(px(6.)))
+                .child(bot_step(
+                    2,
+                    self.tr(
+                        "In Grok Bot, send this to that bot. It makes a routine with a webhook \
+                         trigger.",
+                    ),
+                    &p,
+                ))
+                .child(h_flex().mt(px(6.)).child(copy_prompt))
+                .child(bot_step(
+                    3,
+                    self.tr(
+                        "Open that routine: click the bot's name at the top of its chat, then \
+                         Details. From its Webhook section, copy \u{201c}POST to\u{201d} and \
+                         \u{201c}key\u{201d} into these fields.",
+                    ),
+                    &p,
+                ))
+                .child(ui::field(&form.webhook, &p).mt(px(6.)))
+                .child(ui::field(&form.key, &p).mt(px(6.)))
+                .child(bot_step(
+                    4,
+                    self.tr(
+                        "In Grok Bot's Settings, under Computer, allow the bot to run commands \
+                         on this Mac.",
+                    ),
+                    &p,
+                ));
+        }
+        body.children(pane.bot_note.clone().map(|note| {
+            div()
+                .mt(px(8.))
+                .ts(12., 16.)
+                .text_color(p.text2)
+                .child(ui::para(note))
+        }))
+        .child(
+            h_flex()
+                .mt(px(16.))
+                .gap(px(8.))
+                .justify_end()
+                .when(pane.bot_form.is_some(), |buttons| {
+                    buttons.child(
+                        Btn::new("grokbot-add", self.tr("Add Bot"))
+                            .disabled(busy)
+                            .on_click(cx.listener(|this, _, window, cx| this.add_bot(window, cx))),
+                    )
+                })
+                .child(self.done_button("grokbot-done", cx)),
+        )
+        .into_any_element()
+    }
+
     /// What a run left to the owner, in place of the line that would have
     /// said it was done: the command that finishes it, with **Copy
     /// Command**, and the service's warnings as it wrote them.
@@ -2185,6 +2658,68 @@ fn rebased(mut sources: Sources, now: Ts) -> Sources {
     sources
 }
 
+/// What **Copy Prompt** copies for the name typed in the Grok Bot dialog:
+/// the message that has the bot make its own webhook routine, with the
+/// instruction the service will give that bot once it is added
+/// (`deck_model::grokbot::setup_prompt`). `None` until the name would be a
+/// bot's, or with no `deckd` to start the bot's commands with: the
+/// service's own (`grokbot.status`'s `invocation`, else its `deckd`), else
+/// the one beside this app. A name that is set up keeps that bot's id and
+/// name.
+pub fn bot_prompt(
+    typed: &str,
+    status: Option<&care::GrokBot>,
+    beside: Option<PathBuf>,
+) -> Option<String> {
+    let typed = typed.trim();
+    if grokbot::name_problem(typed).is_some() {
+        return None;
+    }
+    let invocation = status
+        .and_then(|g| g.invocation.clone())
+        .or_else(|| {
+            let deckd = status.and_then(|g| g.deckd.clone()).map(PathBuf::from).or(beside)?;
+            Some(grokbot::invocation(&deckd, None))
+        })?;
+    let (name, id) = status
+        .and_then(|g| {
+            g.bots
+                .iter()
+                .find(|bot| bot.id == typed || bot.name.trim().eq_ignore_ascii_case(typed))
+        })
+        .map_or_else(
+            || (typed.to_string(), grokbot::slug(typed)),
+            |bot| (bot.name.clone(), bot.id.clone()),
+        );
+    Some(grokbot::setup_prompt(&name, &id, &invocation))
+}
+
+/// One step of the Grok Bot dialog's "Add a bot": its number, then what to
+/// do.
+fn bot_step(n: u8, words: impl Into<SharedString>, p: &Palette) -> impl IntoElement {
+    h_flex()
+        .mt(px(12.))
+        .gap(px(8.))
+        .items_start()
+        .child(div().w(px(14.)).flex_none().text_color(p.text2).child(format!("{n}.")))
+        .child(div().flex_1().min_w_0().child(ui::para(words)))
+}
+
+/// `grokbot.status` with the board's one bot, Research, whose last call
+/// was taken.
+fn grokbot_status() -> Value {
+    json!({
+        "enabled": true, "live": true, "key_store": "keychain", "app_installed": true,
+        "deckd": "/Applications/OpenWalkieTalkie.app/Contents/MacOS/deckd",
+        "bots": [{
+            "id": "research", "name": "Research", "set_up": true,
+            "webhook_host": "api.cursor.com", "has_key": true, "on_deck": true,
+            "last": {"at_ms": 1_794_391_290_000_u64, "ok": true, "status": 200, "reason": null},
+            "routine": crate::present::GROKBOT_ROUTINE_EXAMPLE,
+        }]
+    })
+}
+
 /// The pane as a staged scene draws it at `now`.
 fn staged(scene: Scene, now: Ts) -> IntegrationsPane {
     let mut pane = IntegrationsPane {
@@ -2195,6 +2730,7 @@ fn staged(scene: Scene, now: Ts) -> IntegrationsPane {
     let board = |pane: &mut IntegrationsPane, claude: &str| {
         let installer = installer_reply(claude);
         pane.facts.sources = Some(rebased(Sources::parse(&fixture(SOURCES_FIXTURE)), now));
+        pane.facts.grokbot = Some(GrokBot::parse(&grokbot_status()));
         pane.facts.reports = Report::list(&installer).0;
         pane.facts.channels_stale = channels_stale(&installer);
         pane.test = TestStatus::parse(&fixture(TEST_FIXTURE)).question;
@@ -2203,6 +2739,7 @@ fn staged(scene: Scene, now: Ts) -> IntegrationsPane {
     match scene {
         Scene::Integrations
         | Scene::IntegrationsPlan
+        | Scene::IntegrationsBots
         | Scene::Service
         | Scene::ServiceStop
         | Scene::ServiceFirmware

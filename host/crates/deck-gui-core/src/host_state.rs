@@ -311,6 +311,24 @@ pub enum UiAction {
     /// `sources.list` — what feeds the deck, as counts and times per source,
     /// never a session.
     SourcesList,
+    /// `grokbot.status` — the bots set up for Grok Bot, whether each has its
+    /// key, how its last call went, and the instruction for its routine.
+    GrokbotStatus,
+    /// `grokbot.add{name, webhook, key?}` — set a bot up, or change one; a
+    /// bot added again with no key keeps the one it has.
+    GrokbotAdd {
+        name: String,
+        webhook: String,
+        key: Option<crate::care::BotKey>,
+    },
+    /// `grokbot.remove{bot}` — off the deck, its webhook and key forgotten.
+    GrokbotRemove {
+        bot: String,
+    },
+    /// `grokbot.test{bot}` — a test message posted to the bot's webhook.
+    GrokbotTest {
+        bot: String,
+    },
     /// `care.test.question` — a test question on the deck. Answers at once
     /// with `sent` or `no_deck`; the outcome is read later with
     /// [`UiAction::TestStatus`].
@@ -442,6 +460,16 @@ impl UiAction {
                 ("config.set", serde_json::json!({"patch": patch}))
             }
             UiAction::SourcesList => ("sources.list", serde_json::json!({})),
+            UiAction::GrokbotStatus => ("grokbot.status", serde_json::json!({})),
+            UiAction::GrokbotAdd { name, webhook, key } => {
+                let mut params = serde_json::json!({"name": name, "webhook": webhook});
+                if let Some(key) = key {
+                    params["key"] = serde_json::Value::String(key.reveal().to_string());
+                }
+                ("grokbot.add", params)
+            }
+            UiAction::GrokbotRemove { bot } => ("grokbot.remove", serde_json::json!({"bot": bot})),
+            UiAction::GrokbotTest { bot } => ("grokbot.test", serde_json::json!({"bot": bot})),
             UiAction::TestQuestion => ("care.test.question", serde_json::json!({})),
             UiAction::TestVoice => ("care.test.voice", serde_json::json!({})),
             UiAction::TestSay => ("care.test.say", serde_json::json!({})),
@@ -1387,6 +1415,27 @@ mod tests {
     fn the_care_actions_are_the_methods_the_contract_names_and_carry_only_their_own_params() {
         for (action, method, params) in [
             (UiAction::SourcesList, "sources.list", serde_json::json!({})),
+            (UiAction::GrokbotStatus, "grokbot.status", serde_json::json!({})),
+            (
+                UiAction::GrokbotAdd {
+                    name: "Research".into(),
+                    webhook: "https://example.com/hook".into(),
+                    key: Some(crate::care::BotKey::new("k-1")),
+                },
+                "grokbot.add",
+                serde_json::json!({"name": "Research", "webhook": "https://example.com/hook", "key": "k-1"}),
+            ),
+            (
+                UiAction::GrokbotAdd {
+                    name: "Research".into(),
+                    webhook: "https://example.com/hook".into(),
+                    key: None,
+                },
+                "grokbot.add",
+                serde_json::json!({"name": "Research", "webhook": "https://example.com/hook"}),
+            ),
+            (UiAction::GrokbotRemove { bot: "research".into() }, "grokbot.remove", serde_json::json!({"bot": "research"})),
+            (UiAction::GrokbotTest { bot: "research".into() }, "grokbot.test", serde_json::json!({"bot": "research"})),
             (UiAction::TestQuestion, "care.test.question", serde_json::json!({})),
             (UiAction::TestVoice, "care.test.voice", serde_json::json!({})),
             (UiAction::TestSay, "care.test.say", serde_json::json!({})),

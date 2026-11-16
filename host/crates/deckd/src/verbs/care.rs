@@ -1207,9 +1207,14 @@ mod tests {
         );
         assert_eq!(
             lines[4],
+            "grokbot (Grok Bot): on, ready; 1 of 1 bots on the deck; last event \
+             2026-11-11T10:00:30.000Z"
+        );
+        assert_eq!(
+            lines[5],
             "app:Conol: on, connected; 7 of 7 chats on the deck; last event 2026-11-11T10:01:48.000Z"
         );
-        assert_eq!(lines.len(), 6);
+        assert_eq!(lines.len(), 7);
         let paused = json!({"paused": true, "sources": [], "other": 2});
         assert_eq!(
             sources_text(&paused),

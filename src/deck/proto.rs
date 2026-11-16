@@ -91,12 +91,17 @@ impl LineAssembler {
 
 // ---- vocabulary --------------------------------------------------------------
 
+/// The agent kinds in the protocol's own order. The list is only ever
+/// appended to, and the hello's `kinds` says how long a prefix of it this
+/// firmware draws, so a host never sends a kind the deck would refuse
+/// (an unknown `kind` fails the whole `agent` line).
 const KINDS: &[(&str, AgentKind)] = &[
     ("claude", AgentKind::Claude),
     ("codex", AgentKind::Codex),
     ("gemini", AgentKind::Gemini),
     ("other", AgentKind::Other),
     ("conol", AgentKind::Conol),
+    ("grok", AgentKind::Grok),
 ];
 const STATES: &[(&str, AgentState)] = &[
     ("working", AgentState::Working),
@@ -688,6 +693,10 @@ pub fn encode(event: Event, ui: &UiState, out: &mut [u8; TX_MAX]) -> usize {
             json.key("agents").number(ui.deck.agents.len() as u32);
             json.key("lang").number(ui.language as u32);
             json.key("lang_rev").number(ui.language_revision);
+            // The agent kinds this deck draws: the first `kinds` of the
+            // protocol's list. A deck that does not say draws the first
+            // five, the ones there were before `grok`.
+            json.key("kinds").number(KINDS.len() as u32);
             json.key("faces");
             faces(&mut json, ui);
         }
@@ -1379,7 +1388,7 @@ mod tests {
         let strip = r#"[{"f":1,"t":"agents","n":"Agents"},{"f":2,"t":"omarchy","n":"Omarchy"},{"f":3,"t":"macropad","n":"Macropad"},{"f":4,"t":"usage","n":"Usage"},{"f":7,"t":"system","n":"System"},{"f":6,"t":"arcade","n":"Arcade"},{"f":5,"t":"settings","n":"Settings"}]"#;
         assert_eq!(
             encoded(Event::Hello, &ui),
-            std::format!(r#"{{"m":"hello","v":1,"fw":"{FW_VERSION}","sid":0,"boot":1,"rx":1024,"agents":{agents},"lang":0,"lang_rev":0,"faces":{strip}}}"#, agents = ui.deck.agents.len())
+            std::format!(r#"{{"m":"hello","v":1,"fw":"{FW_VERSION}","sid":0,"boot":1,"rx":1024,"agents":{agents},"lang":0,"lang_rev":0,"kinds":6,"faces":{strip}}}"#, agents = ui.deck.agents.len())
         );
         assert_eq!(encoded(Event::Faces, &ui), std::format!(r#"{{"m":"faces","list":{strip}}}"#));
         // A held session is reported once the sync is complete; a renamed face ends `boot`.
