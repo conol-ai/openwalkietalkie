@@ -82,7 +82,7 @@ deckd grokbot test research
 机器人收到提示词后，会创建一个名为“OpenWalkieTalkie”、由 Webhook 触发的例行任务；打开它（点聊天顶部的机器人名称 → 详情）就能看到“POST 到”和“密钥”。交给机器人的命令会写明这个服务的目录（`deckd --data-dir ~/.local/share/openwalkietalkie grokbot say …`），因为 Grok Bot 运行的命令没有这个 systemd 单元的环境变量，否则会去找 XDG 的 socket。密钥保存在 `~/.local/share/openwalkietalkie/grokbot-keys.toml`，权限 0600。每个回答的简短版本会发到对讲机上，完整回答仍留在机器人的聊天里。
 
 以下由 Grok Bot 决定，不由 `deckd` 决定：
-- Grok Bot 的 Linux 应用只提供 `.deb` 和 `.rpm` 包（`grok-bot`），没有 Arch 的包，所以在 Omarchy 上需要手动安装。
+- Grok Bot 的 Linux 应用提供 `.deb`、`.rpm` 包（`grok-bot`）和 AppImage。在 Omarchy（Arch）上可以直接运行 AppImage。
 - 只有在允许机器人在这台机器上运行命令时（Grok Bot 的“设置”→“电脑”），它才能在对讲机上回复。它的文档只说明了 Mac 和 Windows 电脑上的这项功能，没有说 Linux 上能用。不能运行命令时，按住说话的内容仍会发给机器人，回答留在它的聊天里。
 - 和这里的其他进程一样（见上文），机器人运行的命令不受上限约束：在 Linux 上它可以向 `deckd` 申请 `admin`。
 
@@ -214,4 +214,4 @@ python3 -m unittest discover -s host/omarchy -p 'test_*.py'
 
 见 issue ZhangHanDong/openwalkietalkie#1：Codex 和 Kimi Code 真实会话、Codex 用量栏、macOS 真机。
 
-Grok Bot 还没在 Omarchy 上跑过：它的 Linux 应用在 Arch 上的安装，以及它的“设置”→“电脑”在 Linux 上能否运行机器人的命令。
+Grok Bot 还没在 Omarchy 上跑过：它的 AppImage 在 Omarchy 上的运行，以及它的“设置”→“电脑”在 Linux 上能否运行机器人的命令。

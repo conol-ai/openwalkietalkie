@@ -775,6 +775,11 @@ bot before release.
 - [ ] Paste a wrong key with **Add Bot** (same name). **Test** says Grok
       Bot refused the key, and a press on the bot shows "Not delivered" on
       the deck.
+- [ ] On Windows: **Copy Prompt** gives PowerShell commands (`& '…\deckd.exe' …`).
+      A press reaches the bot, and its reply reaches the deck. `deckd
+      grokbot list` says the keys are in Credential Manager. A command the
+      bot runs is refused `admin` (`deckd grokbot list` run by the bot fails
+      with the ancestry hint).
 - [ ] On Omarchy (the Linux `deckd` on `~/.local/share/openwalkietalkie`):
       `deckd grokbot prompt`, `add` and `test` set a bot up, and its
       commands carry `--data-dir`. A press reaches the bot. If Grok Bot's

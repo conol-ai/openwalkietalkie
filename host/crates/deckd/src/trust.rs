@@ -50,6 +50,11 @@ pub const AGENT_PROCESS_NAMES: [&str; 4] = ["claude", "codex", "gemini", "node"]
 /// capped exactly like one Claude Code ran: it may report to the deck
 /// (`deckd grokbot say|ask|state`), and it may not answer for the operator.
 pub const AGENT_APP_BUNDLES: [&str; 1] = ["Grok Bot.app"];
+/// The same apps on Windows, by their executable's file name: Grok Bot's
+/// per-user install is `%LOCALAPPDATA%\Programs\Grok Bot\Grok Bot.exe`,
+/// and its helper processes run that same executable. Windows names a hop
+/// by that file name and by its full path, and either matches.
+pub const AGENT_APP_EXES: [&str; 2] = ["Grok Bot.exe", "grok-bot.exe"];
 /// The ancestry walk stops here.
 pub const ANCESTRY_MAX_HOPS: usize = 64;
 /// The trusted executable's path suffix inside the bundle.
@@ -270,16 +275,20 @@ fn is_versioned_agent_path(path: &str) -> bool {
         })
 }
 
-/// Whether an executable's path lies inside one of [`AGENT_APP_BUNDLES`]
+/// Whether an executable's path lies inside one of [`AGENT_APP_BUNDLES`],
+/// or is one of [`AGENT_APP_EXES`] (Windows, `\` or `/` either way)
 /// (`/Applications/Grok Bot.app/Contents/Frameworks/Grok Bot Helper.app/…`
 /// included): a whole path component, compared case-insensitively, so a
 /// file merely named like the app is not a match.
 pub fn is_agent_app_path(path: &str) -> bool {
-    path.split('/').any(|part| {
-        AGENT_APP_BUNDLES
-            .iter()
-            .any(|bundle| part.eq_ignore_ascii_case(bundle))
-    })
+    let separators = ['/', '\\'];
+    let file = path.rsplit(separators).next().unwrap_or(path);
+    AGENT_APP_EXES.iter().any(|exe| file.eq_ignore_ascii_case(exe))
+        || path.split(separators).any(|part| {
+            AGENT_APP_BUNDLES
+                .iter()
+                .any(|bundle| part.eq_ignore_ascii_case(bundle))
+        })
 }
 
 /// The executable of a trusted peer lives at `…app/Contents/MacOS/OpenWalkieTalkie`.
@@ -483,6 +492,31 @@ mod tests {
         }
         // The CLI names are untouched by the app list.
         assert!(!is_agent_process_name("/Applications/Grok Bot.app/Contents/MacOS/Grok Bot"));
+    }
+
+    /// Windows names a hop by its executable's file name and by its full
+    /// path. Grok Bot's install, and the helpers that run the same
+    /// executable, cap the peer by either; a folder merely named like the
+    /// app, or another program in it, does not. The rule is plain text, so
+    /// it is checked on every platform.
+    #[test]
+    fn a_grok_bot_process_on_windows_is_an_agent_app() {
+        for path in [
+            r"C:\Users\Owner\AppData\Local\Programs\Grok Bot\Grok Bot.exe",
+            "Grok Bot.exe",
+            r"D:\Apps\grok bot.EXE",
+            r"C:\Tools\grok-bot.exe",
+        ] {
+            assert!(is_agent_app_path(path), "{path}");
+        }
+        for path in [
+            r"C:\Users\Owner\Documents\Grok Bot\notes.exe",
+            r"C:\Users\Owner\Downloads\Grok Bot.exe.download",
+            r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
+            r"C:\Users\Owner\AppData\Local\OpenWalkieTalkie\deckd.exe",
+        ] {
+            assert!(!is_agent_app_path(path), "{path}");
+        }
     }
 
     /// The native installer puts the real binary at
