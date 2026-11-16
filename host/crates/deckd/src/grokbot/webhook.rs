@@ -178,14 +178,22 @@ pub fn curl_config(post: &Post) -> String {
     cfg
 }
 
-/// The curl to run: the system's on a Mac, the one on `PATH` elsewhere.
+/// The system curl on macOS and Windows, the one on `PATH` elsewhere.
 #[must_use]
 pub fn curl() -> PathBuf {
-    let system = Path::new("/usr/bin/curl");
-    if cfg!(target_os = "macos") && system.exists() {
-        system.to_path_buf()
-    } else {
-        PathBuf::from("curl")
+    #[cfg(windows)]
+    {
+        PathBuf::from(std::env::var_os("SystemRoot").unwrap_or_else(|| r"C:\Windows".into()))
+            .join("System32/curl.exe")
+    }
+    #[cfg(not(windows))]
+    {
+        let system = Path::new("/usr/bin/curl");
+        if cfg!(target_os = "macos") && system.exists() {
+            system.to_path_buf()
+        } else {
+            PathBuf::from("curl")
+        }
     }
 }
 
@@ -207,7 +215,13 @@ pub fn send(curl: &Path, post: &Post) -> Outcome {
             why: problem.to_string(),
         };
     }
-    let child = Command::new(curl)
+    let mut command = Command::new(curl);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt as _;
+        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    let child = command
         .args(["--disable", "-K", "-"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

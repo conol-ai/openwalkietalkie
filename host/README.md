@@ -64,7 +64,16 @@ Releases from 0.14.0 include an unsigned preview zip; the website's
   hides it to the tray icon, whose menu quits. The app allows
   `firmware.check`/`install` only when it runs from a folder named `bin`, as
   on Linux.
-- **Agents.** The roster, Bash approvals and the ancestry cap read the
+- **Grok Bot** is available in Integrations → Bots, just as
+  on macOS and Omarchy: add a bot's routine webhook, then use the deck to
+  send it orders and receive replies or questions. Copy Prompt generates
+  PowerShell commands, including the service's executable and data directory.
+  Allow the bot to run those commands in Grok Bot's Computer settings.
+  Webhook keys for the normal Windows install live in Credential Manager,
+  under `ai.cohdl.openwalkietalkie/grokbot.bots.<id>.key`; isolated data
+  directories keep `grokbot-keys.toml` instead. Webhooks use Windows' system
+  `curl.exe` without opening a console window.
+- **Claude and Codex.** The roster, Bash approvals and the ancestry cap read the
   process table (Toolhelp, `NtQueryInformationProcess` for command lines).
   The Claude inbox and Claude Channels use named pipes beside the API's;
   Codex is reached through `codex app-server proxy` over stdio. The Macropad

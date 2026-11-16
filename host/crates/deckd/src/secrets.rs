@@ -226,9 +226,8 @@ fn refused(e: &std::io::Error) -> StoreError {
 
 #[cfg(windows)]
 impl CredentialStore {
-    /// A store under another target name: a test's own, never the key's.
-    #[cfg(test)]
-    fn named(target: &str) -> CredentialStore {
+    /// A separate generic credential, such as a Grok Bot routine's key.
+    pub(crate) fn named(target: &str) -> CredentialStore {
         CredentialStore { target: target.to_string() }
     }
 
@@ -280,7 +279,7 @@ impl KeyStore for CredentialStore {
             return self.delete().map(drop);
         }
         let mut target = self.target();
-        let mut user = wide(ACCOUNT);
+        let mut user = wide(self.target.rsplit('/').next().unwrap_or(ACCOUNT));
         let mut blob = key.as_bytes().to_vec();
         let credential = Credential {
             flags: 0,

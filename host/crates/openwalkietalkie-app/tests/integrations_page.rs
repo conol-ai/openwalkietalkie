@@ -100,7 +100,11 @@ fn the_board_reads_as_the_board_draws_it() {
     let ids: Vec<&str> = rows.iter().map(|line| line.id.as_str()).collect();
     assert_eq!(
         ids,
-        ["claude", "claude_channels", "codex", "codex-desktop", "grokbot"]
+        if cfg!(windows) {
+            vec!["claude", "claude_channels", "codex", "grokbot"]
+        } else {
+            vec!["claude", "claude_channels", "codex", "codex-desktop", "grokbot"]
+        }
     );
 
     let claude = &rows[0];
@@ -147,7 +151,7 @@ fn the_board_reads_as_the_board_draws_it() {
     assert_eq!(codex.state, state("Connected", Tone::Green));
     assert_eq!(codex.control, Control::Switch(Toggle::Codex, true));
 
-    let desktop = &rows[3];
+    if let Some(desktop) = rows.iter().find(|line| line.id == "codex-desktop") {
     assert_eq!((desktop.icon, desktop.wide), (ic::MONITOR, true));
     assert_eq!(
         desktop.sub,
@@ -156,8 +160,9 @@ fn the_board_reads_as_the_board_draws_it() {
     );
     assert_eq!(desktop.state, state("Not set up", Tone::Gray));
     assert_eq!(desktop.control, Control::SetUp("codex-desktop"));
+    }
 
-    let grokbot = &rows[4];
+    let grokbot = row(&rows, "grokbot");
     assert_eq!((grokbot.name.as_str(), grokbot.icon), ("Grok Bot", ic::GROK));
     assert_eq!(grokbot.sub, "Through each bot's webhook.\nBots: Research");
     assert_eq!(grokbot.count.as_deref(), Some("1 bot"));
@@ -232,30 +237,32 @@ fn the_installer_status_decides_what_a_plugin_row_says_and_offers() {
     }
     // The same rule for Codex Desktop, which is installed or not and has
     // no switch.
-    let mut facts = board();
-    facts.reports = Report::list(&json!({"targets": [
-        {"target": "codex-desktop", "status": "installed"}
-    ]}))
-    .0;
-    let rows = tools(&facts, NOW, EN);
-    assert_eq!(rows[3].state, state("Installed", Tone::Green));
-    assert_eq!(rows[3].control, Control::None);
-    facts.reports = Report::list(&json!({"targets": [
-        {"target": "codex-desktop", "status": "path_drift"}
-    ]}))
-    .0;
-    let rows = tools(&facts, NOW, EN);
-    assert_eq!(rows[3].state, state("Needs repair", Tone::Amber));
-    assert!(matches!(
-        rows[3].control,
-        Control::Repair("codex-desktop", _)
-    ));
-    // Before the installer has answered, nothing is claimed: the plugin row
-    // keeps its switch and says no state.
-    assert_eq!(rows[0].state, None);
-    assert_eq!(rows[0].control, Control::Switch(Toggle::Claude, true));
-    facts.reports.clear();
-    assert_eq!(tools(&facts, NOW, EN)[3].state, None);
+    if cfg!(not(windows)) {
+        let mut facts = board();
+        facts.reports = Report::list(&json!({"targets": [
+            {"target": "codex-desktop", "status": "installed"}
+        ]}))
+        .0;
+        let rows = tools(&facts, NOW, EN);
+        assert_eq!(rows[3].state, state("Installed", Tone::Green));
+        assert_eq!(rows[3].control, Control::None);
+        facts.reports = Report::list(&json!({"targets": [
+            {"target": "codex-desktop", "status": "path_drift"}
+        ]}))
+        .0;
+        let rows = tools(&facts, NOW, EN);
+        assert_eq!(rows[3].state, state("Needs repair", Tone::Amber));
+        assert!(matches!(
+            rows[3].control,
+            Control::Repair("codex-desktop", _)
+        ));
+        // Before the installer has answered, nothing is claimed: the plugin row
+        // keeps its switch and says no state.
+        assert_eq!(rows[0].state, None);
+        assert_eq!(rows[0].control, Control::Switch(Toggle::Claude, true));
+        facts.reports.clear();
+        assert_eq!(tools(&facts, NOW, EN)[3].state, None);
+    }
 }
 
 #[test]
@@ -344,7 +351,9 @@ fn one_switch_pauses_every_source_and_the_older_hooks_switch_pauses_claude_code(
     assert_eq!(rows[1].state, state("Restart 2 sessions", Tone::Amber));
     assert_eq!(rows[2].state, state("Paused", Tone::Gray));
     // The installer's word stands: there is nothing to pause.
-    assert_eq!(rows[3].state, state("Not set up", Tone::Gray));
+    if cfg!(not(windows)) {
+        assert_eq!(row(&rows, "codex-desktop").state, state("Not set up", Tone::Gray));
+    }
     for app in apps(&facts, NOW, EN) {
         assert_eq!(app.state, state("Paused", Tone::Gray), "{}", app.name);
         // Each source's own switch is still its own.
@@ -453,7 +462,7 @@ fn a_connected_apps_chats_are_heard_on_this_mac_while_the_voice_pages_switch_is_
     config(&mut facts).stt_companion = Some(false);
     assert!(!facts.companion());
     let rows = apps(&facts, NOW, EN);
-    assert_eq!(row(&rows, "app:Conol").sub, "Sessions. Its chats are\nheard on this Mac.");
+    assert_eq!(row(&rows, "app:Conol").sub, EN.text("Sessions. Its chats are\nheard on this Mac."));
     // An app that does not transcribe its chats says what it does either way.
     assert_eq!(
         row(&rows, "app:Omarchy remote").sub,
@@ -461,7 +470,7 @@ fn a_connected_apps_chats_are_heard_on_this_mac_while_the_voice_pages_switch_is_
     );
     assert_eq!(
         apps(&facts, NOW, ZH)[0].sub,
-        "会话。聊天语音\n在此 Mac 上识别。"
+        if cfg!(windows) { "会话。聊天语音\n在此 PC 上识别。" } else { "会话。聊天语音\n在此 Mac 上识别。" }
     );
     // A service with no such switch: the app's cloud hears them, as there.
     config(&mut facts).stt_companion = None;
@@ -505,8 +514,8 @@ fn leftover_codex_hooks_are_said_on_the_codex_row_with_where_they_are_removed() 
     for status in ["outdated", "modified", "untrusted", "paused", "teleported"] {
         assert_eq!(
             row(&tools(&with_codex(status), NOW, EN), "codex").sub,
-            "Through Codex itself.\nLeftover hooks are still on this Mac: remove them in \
-             Footprint.",
+            EN.text("Through Codex itself.\nLeftover hooks are still on this Mac: remove them in \
+             Footprint."),
             "{status}"
         );
     }
@@ -1064,10 +1073,10 @@ fn the_board_in_chinese_uses_the_sheets_words() {
         state("重启 2 个会话", Tone::Amber)
     );
     assert_eq!(row(&rows, "codex").count.as_deref(), Some("2 个对话"));
-    assert_eq!(
+    if cfg!(not(windows)) { assert_eq!(
         row(&rows, "codex-desktop").state,
         state("未设置", Tone::Gray)
-    );
+    ); }
     let apps = apps(&facts, NOW, ZH);
     assert_eq!(apps[0].sub, "会话。聊天语音\n由 Conol 云端识别。");
     assert_eq!(apps[0].handoff.as_deref(), Some("自行处理"));
@@ -1080,7 +1089,7 @@ fn the_board_in_chinese_uses_the_sheets_words() {
 fn the_grok_bot_row_and_dialog_say_what_holds_a_bot_back() {
     i18n::install();
     let mut facts = board();
-    let row = |facts: &Facts| tools(facts, NOW, EN).remove(4);
+    let row = |facts: &Facts| tools(facts, NOW, EN).into_iter().find(|line| line.id == "grokbot").unwrap();
     // A bot with no key: every order to it would be refused.
     facts.grokbot.as_mut().unwrap().bots[0].has_key = false;
     assert_eq!(row(&facts).state, state("A key is missing", Tone::Amber));
@@ -1109,7 +1118,7 @@ fn the_grok_bot_row_and_dialog_say_what_holds_a_bot_back() {
     );
     // A service with no Grok Bot has no row.
     facts.sources.as_mut().unwrap().sources.retain(|s| s.id != "grokbot");
-    assert_eq!(tools(&facts, NOW, EN).len(), 4);
+    assert_eq!(tools(&facts, NOW, EN).len(), if cfg!(windows) { 3 } else { 4 });
 
     let bot = care::Bot {
         id: "research".into(),
@@ -1247,7 +1256,9 @@ fn a_fresh_services_own_replies_offer_set_up_and_show_the_two_switched_off_as_of
     assert_eq!(facts.stale_helpers(), 0);
     let rows = tools(&facts, NOW, EN);
     let ids: Vec<&str> = rows.iter().map(|line| line.id.as_str()).collect();
-    assert_eq!(ids, ["claude", "claude_channels", "codex", "codex-desktop"]);
+    assert_eq!(ids, if cfg!(windows) { vec!["claude", "claude_channels", "codex"] } else {
+        vec!["claude", "claude_channels", "codex", "codex-desktop"]
+    });
     // Claude Code: the plugin is not on this Mac, so it is set up from
     // here; its hooks are counted by the service all the same.
     let claude = row(&rows, "claude");
@@ -1300,9 +1311,10 @@ fn a_fresh_services_own_replies_offer_set_up_and_show_the_two_switched_off_as_of
     assert!(facts.companion());
     assert_eq!(others_line(&facts, EN), None, "no session under no row");
     // Codex Desktop: its launcher is not written.
-    let desktop = row(&rows, "codex-desktop");
+    if let Some(desktop) = rows.iter().find(|line| line.id == "codex-desktop") {
     assert_eq!(desktop.state, state("Not set up", Tone::Gray));
     assert_eq!(desktop.control, Control::SetUp("codex-desktop"));
+    }
     assert!(apps(&facts, NOW, EN).is_empty(), "no app has connected");
     // The test question: no line before the first; then the one a question
     // with no deck gets, sent and read back alike.

@@ -488,7 +488,7 @@ pub struct GrokBot {
     pub enabled: bool,
     /// On, and a deck to show the bots on.
     pub live: bool,
-    /// Where the keys are kept: `keychain`, `file`.
+    /// Where the keys are kept: `keychain`, `credential_manager`, `file`.
     pub key_store: String,
     /// Whether Grok Bot's app is on this Mac.
     pub app_installed: bool,
