@@ -767,6 +767,15 @@ A key is never in `config.toml`, a reply, the bus or a log line.
 - There is no ancestry cap on Linux (§4.2), so a bot's commands are not held to `agent` there.
 - Grok Bot does not document running a bot's commands on Linux (its Settings → Computer). Without that, a press still reaches the bot, and the answer stays in its chat.
 
+Grok Bot's Linux app comes as `.deb` and `.rpm` packages and as an AppImage, which is the one that runs on Arch as it is. An AppImage can live anywhere, so `app_installed` does not see one.
+
+**Windows.** The module is the same, with these differences:
+- The commands are PowerShell's: `& '…\deckd.exe' grokbot say …`, in single quotes with an apostrophe doubled. The routine's instruction says so (`deck_model::grokbot::invocation`, `routine_text`).
+- The normal install keeps its keys in Credential Manager (`ai.cohdl.openwalkietalkie/grokbot.bots.<id>.key`). An isolated data directory keeps them in `grokbot-keys.toml`.
+- The webhook is posted with the system `curl.exe`, and no console window opens.
+- `app_installed` looks for `Grok Bot.exe` on `PATH` and in the per-user install under the profile folder, which `HOME` does not name on Windows.
+- The ancestry cap counts a process whose executable is `Grok Bot.exe` (`trust::AGENT_APP_EXES`) as an agent's, by its file name or its full path. A bot's commands are capped as on a Mac.
+
 **Quiet.** Switched off (`[grokbot] enabled = false`) or dormant (§5.8), the bots leave the deck (`released`, `dormant`) and their commands are refused (`grokbot_off`, `no_deck`).
 
 **In the app.** The Integrations page has a Grok Bot row, from `sources.list`'s `grokbot`: `ready`, `setup` or `off`, counted in `bots`, and amber while a bot that is set up has no key. It carries the switch and **Bots…**, a dialog with:

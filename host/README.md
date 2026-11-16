@@ -72,7 +72,8 @@ Releases from 0.14.0 include an unsigned preview zip; the website's
   Webhook keys for the normal Windows install live in Credential Manager,
   under `ai.cohdl.openwalkietalkie/grokbot.bots.<id>.key`; isolated data
   directories keep `grokbot-keys.toml` instead. Webhooks use Windows' system
-  `curl.exe` without opening a console window.
+  `curl.exe` without opening a console window. A command the bot runs counts
+  as an agent's (the ancestry cap knows `Grok Bot.exe`), as on a Mac.
 - **Claude and Codex.** The roster, Bash approvals and the ancestry cap read the
   process table (Toolhelp, `NtQueryInformationProcess` for command lines).
   The Claude inbox and Claude Channels use named pipes beside the API's;

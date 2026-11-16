@@ -1417,7 +1417,12 @@ fn display_name(entry: &GrokBotEntry) -> String {
 /// Grok Bot's app, where it is installed ([`grok_bot_places`]).
 #[must_use]
 pub fn grok_bot_app() -> Option<PathBuf> {
-    let home = std::env::var_os("HOME").map(PathBuf::from);
+    // The platform's own home folder: Windows sets no HOME (a service
+    // started at logon has only USERPROFILE), which left Grok Bot's
+    // per-user install unlooked-for there.
+    let home = directories::BaseDirs::new()
+        .map(|base| base.home_dir().to_path_buf())
+        .or_else(|| std::env::var_os("HOME").map(PathBuf::from));
     grok_bot_places(home.as_deref(), std::env::var_os("PATH").as_deref())
         .into_iter()
         .find(|place| place.exists())

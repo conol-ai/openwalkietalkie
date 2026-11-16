@@ -82,7 +82,7 @@ deckd grokbot test research
 From the prompt, the bot makes a routine named "OpenWalkieTalkie" with a webhook trigger; open it (the bot's name at the top of its chat → Details) for its "POST to" and "key". The commands the bot is given name this service's directory (`deckd --data-dir ~/.local/share/openwalkietalkie grokbot say …`), because a command Grok Bot runs has none of the unit's environment and would look for the XDG socket. The key is kept in `~/.local/share/openwalkietalkie/grokbot-keys.toml`, mode 0600. A short version of each answer goes to the deck, and the whole answer stays in the bot's chat.
 
 What Grok Bot decides, not `deckd`:
-- Grok Bot ships its Linux app as `.deb` and `.rpm` packages (`grok-bot`) and none for Arch, so on Omarchy it is installed by hand.
+- Grok Bot ships its Linux app as `.deb` and `.rpm` packages (`grok-bot`) and as an AppImage. On Omarchy (Arch), the AppImage is the one that runs as it is.
 - The bot answers on the deck only if it may run commands here (Grok Bot's Settings → Computer). Its documentation describes that for a Mac or a Windows computer and does not say it works on Linux. Without it, a press still reaches the bot, and the answer stays in its chat.
 - As with every other process here (above), a command the bot runs is not capped: on Linux it could ask `deckd` for `admin`.
 
@@ -214,4 +214,4 @@ On 2026-11-15, the same machine with another Rev B deck (official 0.13.0, Blueto
 
 See issue ZhangHanDong/openwalkietalkie#1: real Codex and Kimi Code sessions, the Codex usage bars, and a real Mac.
 
-Grok Bot has not been run on Omarchy yet: its Linux app on Arch, and whether its Settings → Computer runs a bot's commands on Linux.
+Grok Bot has not been run on Omarchy yet: its AppImage there, and whether its Settings → Computer runs a bot's commands on Linux.
