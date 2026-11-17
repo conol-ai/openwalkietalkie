@@ -359,6 +359,8 @@ class QuietDeckd(threading.Thread):
     def answer(self, method, params):
         if method == 'service.info':
             return self.info
+        if method == 'agent.register' and params['key'].endswith(':dictate'):
+            return {'agent': 'ag_dictate'}  # the bridge's own Dictate agent, out of the sessions' count
         if method == 'agent.register':  # one agent per session key, as deckd's register is
             return {'agent': self.agents.setdefault(params['key'], f'ag_{len(self.agents) + 1}')}
         return {}

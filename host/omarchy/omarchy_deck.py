@@ -56,9 +56,10 @@ from omarchy_kimi import KimiWatcher, hooks_installed  # noqa: E402
 from omarchy_sessions import Bridge, ControlServer, control_socket_path  # noqa: E402
 from omarchy_transcribe import Transcriber, fetch_wav  # noqa: E402
 from omarchy_input import UinputKeyboard  # noqa: E402
+from omarchy_dictate import Dictation  # noqa: E402
 
 EVENTS = ['device.ws', 'device.key', 'device.link', 'agent.order', 'focus.changed',
-          'device.macro', 'device.macros', 'device.profile']
+          'device.macro', 'device.macros', 'device.profile', 'device.face']
 MAX_WINDOWS = 6
 MAX_CHIPS = 9
 TITLE_MAX = 48
@@ -316,6 +317,8 @@ class Remote:
         # Omarchy's dictation (Superwhisper) transcribes presses to these sessions, when installed.
         self.transcriber = Transcriber()
         self.bridge.transcribe = self.transcriber.available
+        # PTT on the Omarchy face dictates at the cursor (`omarchy_dictate`).
+        self.dictation = Dictation(self.call, transcribe=self.transcriber.available, ensure=ensure_instance)
         self.kimi = KimiWatcher()
         self.kimi_polled = 0.0
         self.last_hypr_error = -HYPR_ERROR_LOG_S
@@ -376,6 +379,7 @@ class Remote:
                 print('the deck linked: feeding the face and the roster again', file=sys.stderr)
                 self.last = None
                 self.bridge.reregister()
+                self.start_dictation()
                 self.try_push(force=True)
         return quiet
 
@@ -431,6 +435,15 @@ class Remote:
             return
         self.rpc.call('device.ws.set', line)
         self.last, self.last_push = line, now
+
+    def start_dictation(self) -> None:
+        """Register Dictate and follow the face: at a connection, and at the wake from quiet."""
+        try:
+            self.dictation.start()
+        except (RpcError, ConnectionError, TimeoutError, OSError) as error:
+            # Dictation is extra: the face and the sessions go on without it, and the next
+            # connection registers it again.
+            print(f'dictate: {error}', file=sys.stderr)
 
     # Macropad -------------------------------------------------------------
     def load_macros(self) -> None:
@@ -555,8 +568,15 @@ class Remote:
 
     def handle(self, event: dict) -> None:
         kind, data = event.get('type'), event.get('data') or {}
-        if kind in ('agent.order', 'focus.changed'):
+        if kind == 'agent.order' and self.dictation.on_order(data):
+            pass  # dictation, typed at the cursor
+        elif kind in ('agent.order', 'focus.changed'):
             self.bridge.on_event(event)
+        elif kind == 'device.face' and not self.quiet:
+            try:
+                self.dictation.follow_face()
+            except RpcError as error:
+                print(f'dictate: face: {error}', file=sys.stderr)
         elif kind == 'device.key':
             self.on_key(data)
         elif kind == 'device.ws':
@@ -588,6 +608,7 @@ class Remote:
             self.link_at_hello(time.monotonic())
             if not self.tick_quiet(time.monotonic()):
                 self.bridge.reregister()  # first: sessions register whether or not Hyprland answers
+                self.start_dictation()
                 self.try_push(force=True)
             while True:
                 message = self.rpc.receive(0.25)
@@ -609,6 +630,7 @@ class Remote:
                     for message in self.kimi_messages():
                         self.bridge.on_hook(message)
                 self.bridge.tick(now)
+                self.dictation.tick(now)
                 if self.dirty.is_set():
                     self.dirty.clear()
                     time.sleep(0.05)  # let a burst of Hyprland events settle

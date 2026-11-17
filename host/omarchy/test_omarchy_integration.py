@@ -41,7 +41,10 @@ class FakeDeckd(threading.Thread):
                     line, buffer = buffer.split(b'\n', 1)
                     request = json.loads(line)
                     self.calls.append((request['method'], request['params']))
-                    result = {'agent': 'ag_1'} if request['method'] == 'agent.register' else {}
+                    # Every agent its own id, as deckd gives them: the session's and Dictate's.
+                    key = request['params'].get('key', '')
+                    agent = 'ag_dictate' if key.endswith(':dictate') else 'ag_1'
+                    result = {'agent': agent} if request['method'] == 'agent.register' else {}
                     conn.sendall(json.dumps({'jsonrpc': '2.0', 'id': request['id'], 'result': result}).encode() + b'\n')
                     if request['method'] == 'agent.update' and not self.sent_order:
                         self.sent_order = True
