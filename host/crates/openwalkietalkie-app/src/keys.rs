@@ -1066,9 +1066,10 @@ impl Shell {
     /// where the keys go.
     pub(crate) fn render_keys(&self, dim: bool, p: &Palette, cx: &Context<Self>) -> Div {
         let keys = self.macro_face().map(|face| face.keys).unwrap_or_default();
-        h_flex()
-            .w_full()
-            .items_start()
+        // Beside the grid the inspector has the room the design gives it; in a
+        // narrower page (a tiled window) it goes under the grid, full width.
+        let row = if self.page_narrow() { v_flex() } else { h_flex().items_start() };
+        row.w_full()
             .gap(px(20.))
             .child(self.key_grid(&keys, p, cx))
             .child(self.key_inspector(&keys, !dim, p, cx))

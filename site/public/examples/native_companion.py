@@ -34,12 +34,11 @@ def socket_path():
         return Path(os.environ['DECKD_DATA_DIR']) / 'deckd.sock'
     if sys.platform == 'darwin':
         return Path.home() / 'Library/Application Support/OpenWalkieTalkie/deckd.sock'
-    # The service's own rule: $XDG_RUNTIME_DIR, else ${XDG_CACHE_HOME:-~/.cache}
-    # (an unset, empty or relative variable is skipped).
-    for name in ('XDG_RUNTIME_DIR', 'XDG_CACHE_HOME'):
-        if os.path.isabs(os.environ.get(name, '')):
-            return Path(os.environ[name]) / 'openwalkietalkie/deckd.sock'
-    return Path.home() / '.cache/openwalkietalkie/deckd.sock'
+    # The service's own rule: ${XDG_DATA_HOME:-~/.local/share}/openwalkietalkie
+    # (an unset, empty or relative XDG_DATA_HOME is skipped).
+    if os.path.isabs(os.environ.get('XDG_DATA_HOME', '')):
+        return Path(os.environ['XDG_DATA_HOME']) / 'openwalkietalkie/deckd.sock'
+    return Path.home() / '.local/share/openwalkietalkie/deckd.sock'
 
 
 class RpcError(Exception):

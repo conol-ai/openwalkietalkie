@@ -2,8 +2,9 @@
 //! `deck_client::default_socket` writes the daemon's rule out again (it
 //! cannot depend on `deckd`), so this row holds the two against each other:
 //! `deckd::config::Paths::detect` against the client's answer, under the
-//! data-dir override, a runtime dir, a cache dir, a relative XDG variable
-//! (which neither counts) and none at all. On macOS every case but the
+//! data-dir override, an XDG data home, a runtime and a cache dir (which
+//! have no say), a relative XDG variable (which does not count) and none at
+//! all. On macOS every case but the
 //! first is the Library folder; on Linux each is a different branch.
 //!
 //! A process of its own, because the environment is process-global. It only
@@ -22,34 +23,35 @@ fn the_client_looks_where_the_daemon_listens() {
             "the data dir",
             &[
                 ("DECKD_DATA_DIR", Some("/tmp/dkcs-data")),
-                ("XDG_RUNTIME_DIR", Some("/tmp/dkcs-run")),
+                ("XDG_DATA_HOME", Some("/tmp/dkcs-xdg-data")),
             ],
         ),
         (
-            "a runtime dir",
+            "an XDG data home",
             &[
                 ("DECKD_DATA_DIR", None),
+                ("XDG_DATA_HOME", Some("/tmp/dkcs-xdg-data")),
+            ],
+        ),
+        (
+            "a runtime and a cache dir, which have no say",
+            &[
+                ("XDG_DATA_HOME", None),
                 ("XDG_RUNTIME_DIR", Some("/tmp/dkcs-run")),
                 ("XDG_CACHE_HOME", Some("/tmp/dkcs-cache")),
             ],
         ),
         (
-            "a cache dir and no runtime dir",
-            &[
-                ("XDG_RUNTIME_DIR", None),
-                ("XDG_CACHE_HOME", Some("/tmp/dkcs-cache")),
-            ],
-        ),
-        (
-            "relative XDG variables",
-            &[
-                ("XDG_RUNTIME_DIR", Some("run")),
-                ("XDG_CACHE_HOME", Some("cache")),
-            ],
+            "a relative XDG data home",
+            &[("XDG_DATA_HOME", Some("data"))],
         ),
         (
             "no XDG variable",
-            &[("XDG_RUNTIME_DIR", None), ("XDG_CACHE_HOME", None)],
+            &[
+                ("XDG_DATA_HOME", None),
+                ("XDG_RUNTIME_DIR", None),
+                ("XDG_CACHE_HOME", None),
+            ],
         ),
     ];
     for (case, env) in cases {
@@ -73,6 +75,6 @@ fn the_client_looks_where_the_daemon_listens() {
             home.join("Library/Application Support/OpenWalkieTalkie/deckd.sock")
         );
     } else {
-        assert_eq!(last, home.join(".cache/openwalkietalkie/deckd.sock"));
+        assert_eq!(last, home.join(".local/share/openwalkietalkie/deckd.sock"));
     }
 }

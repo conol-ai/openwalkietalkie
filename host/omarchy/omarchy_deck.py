@@ -14,7 +14,7 @@ the face sends back (`device.key`, `device.ws`) into Hyprland dispatches, using
 the same Lua-first, legacy-fallback calls as Omarchy's own scripts.
 
 Deck controls on the Omarchy face (the face's own grammar, docs/agent-command-deck.md):
-  wheel CCW / CW        next / previous window (Alt+Tab)
+  wheel                 down / up the window rows (the deck sends cw / ccw)
   LEFT / RIGHT          previous / next workspace
   SHIFT+LEFT / RIGHT    focus the window to the left / right
   ENTER                 toggle fullscreen
@@ -56,9 +56,10 @@ from omarchy_kimi import KimiWatcher, hooks_installed  # noqa: E402
 from omarchy_sessions import Bridge, ControlServer, control_socket_path  # noqa: E402
 from omarchy_transcribe import Transcriber, fetch_wav  # noqa: E402
 from omarchy_input import UinputKeyboard  # noqa: E402
+from omarchy_dictate import Dictation  # noqa: E402
 
 EVENTS = ['device.ws', 'device.key', 'device.link', 'agent.order', 'focus.changed',
-          'device.macro', 'device.macros', 'device.profile']
+          'device.macro', 'device.macros', 'device.profile', 'device.face']
 MAX_WINDOWS = 6
 MAX_CHIPS = 9
 TITLE_MAX = 48
@@ -83,8 +84,6 @@ LEGACY = 'legacy'
 # (key, shift) -> (Lua expression, legacy dispatcher + args). Press only, except
 # the wheel, which arrives as act 2 steps.
 KEYMAP = {
-    ('ccw', 0): ('hl.dsp.window.cycle_next()', ['cyclenext']),
-    ('cw', 0): ('hl.dsp.window.cycle_next({ next = false })', ['cyclenext', 'prev']),
     ('left', 1): ('hl.dsp.focus({ direction = "l" })', ['movefocus', 'l']),
     ('right', 1): ('hl.dsp.focus({ direction = "r" })', ['movefocus', 'r']),
     ('enter', 0): ('hl.dsp.window.fullscreen({ mode = "fullscreen" })', ['fullscreen', '0']),
@@ -96,6 +95,12 @@ KEYMAP = {
 # LEFT / RIGHT step through the monitor's workspace slots 1-10 (and wrap), as
 # Super+<n> would: Hyprland's own `m+1` only visits workspaces that have windows.
 WORKSPACE_STEP = {'left': -1, 'right': 1}
+# The wheel steps through the face's own window rows, not through Hyprland's `cyclenext`: that
+# follows Hyprland's own window order, which is not the rows' screen order, and the highlight
+# would jump past the row below it. On this face the deck sends `cw` for the next row and `ccw`
+# for the previous one (the remote protocol's words, `src/ui/state/omarchy.rs`), whichever way
+# the wheel turns on its own lists, and moves its own highlight at once, stopping at either end.
+WINDOW_STEP = {'cw': 1, 'ccw': -1}
 
 # Macropad keys (`MacroKey.keys`, deck_proto's KEYSTROKE_KEYS) as wtype names them. deckd types
 # them itself only on macOS; on Linux it has no desktop, so the bridge types them. The modifiers
@@ -146,9 +151,9 @@ def _absolute_env(name: str) -> Path | None:
 
 def daemon_socket_path() -> Path:
     """Where a Linux `deckd` started without `DECKD_DATA_DIR` listens (its
-    `config::Paths::detect`): `$XDG_RUNTIME_DIR/openwalkietalkie/deckd.sock`,
-    else under `$XDG_CACHE_HOME`, else under `~/.cache`."""
-    base = _absolute_env('XDG_RUNTIME_DIR') or _absolute_env('XDG_CACHE_HOME') or Path.home() / '.cache'
+    `config::Paths::detect`): `$XDG_DATA_HOME/openwalkietalkie/deckd.sock`, else under
+    `~/.local/share`, the folder the Omarchy units run it on."""
+    base = _absolute_env('XDG_DATA_HOME') or Path.home() / '.local/share'
     return base / 'openwalkietalkie' / 'deckd.sock'
 
 
@@ -316,6 +321,8 @@ class Remote:
         # Omarchy's dictation (Superwhisper) transcribes presses to these sessions, when installed.
         self.transcriber = Transcriber()
         self.bridge.transcribe = self.transcriber.available
+        # PTT on the Omarchy face dictates at the cursor (`omarchy_dictate`).
+        self.dictation = Dictation(self.call, transcribe=self.transcriber.available, ensure=ensure_instance)
         self.kimi = KimiWatcher()
         self.kimi_polled = 0.0
         self.last_hypr_error = -HYPR_ERROR_LOG_S
@@ -376,6 +383,7 @@ class Remote:
                 print('the deck linked: feeding the face and the roster again', file=sys.stderr)
                 self.last = None
                 self.bridge.reregister()
+                self.start_dictation()
                 self.try_push(force=True)
         return quiet
 
@@ -431,6 +439,15 @@ class Remote:
             return
         self.rpc.call('device.ws.set', line)
         self.last, self.last_push = line, now
+
+    def start_dictation(self) -> None:
+        """Register Dictate and follow the face: at a connection, and at the wake from quiet."""
+        try:
+            self.dictation.start()
+        except (RpcError, ConnectionError, TimeoutError, OSError) as error:
+            # Dictation is extra: the face and the sessions go on without it, and the next
+            # connection registers it again.
+            print(f'dictate: {error}', file=sys.stderr)
 
     # Macropad -------------------------------------------------------------
     def load_macros(self) -> None:
@@ -531,10 +548,24 @@ class Remote:
         try:
             if action:
                 dispatch(*action)
+            elif k in WINDOW_STEP and not shift:
+                self.step_window(WINDOW_STEP[k])
             elif k in WORKSPACE_STEP and not shift:
                 self.step_workspace(WORKSPACE_STEP[k])
         except HYPR_ERRORS as error:
             print(f'hyprland: {error}; key {k} dropped', file=sys.stderr)
+
+    def step_window(self, step: int) -> None:
+        """Focus the row `step` away from the highlighted one, in the order the face lists them,
+        stopping at either end as the deck's own highlight does: read afresh, so a window opened or
+        closed meanwhile counts."""
+        built = self.snapshot()
+        if built is None:
+            return
+        line, addresses = built
+        target = min(max(line['sel'] + step, 0), len(addresses) - 1)
+        if addresses and target != line['sel']:
+            focus_window(addresses[target])
 
     def step_workspace(self, step: int) -> None:
         monitor = next((m for m in hyprctl_json('monitors') if m.get('focused')), None)
@@ -555,8 +586,15 @@ class Remote:
 
     def handle(self, event: dict) -> None:
         kind, data = event.get('type'), event.get('data') or {}
-        if kind in ('agent.order', 'focus.changed'):
+        if kind == 'agent.order' and self.dictation.on_order(data):
+            pass  # dictation, typed at the cursor
+        elif kind in ('agent.order', 'focus.changed'):
             self.bridge.on_event(event)
+        elif kind == 'device.face' and not self.quiet:
+            try:
+                self.dictation.follow_face()
+            except RpcError as error:
+                print(f'dictate: face: {error}', file=sys.stderr)
         elif kind == 'device.key':
             self.on_key(data)
         elif kind == 'device.ws':
@@ -588,6 +626,7 @@ class Remote:
             self.link_at_hello(time.monotonic())
             if not self.tick_quiet(time.monotonic()):
                 self.bridge.reregister()  # first: sessions register whether or not Hyprland answers
+                self.start_dictation()
                 self.try_push(force=True)
             while True:
                 message = self.rpc.receive(0.25)
@@ -609,6 +648,7 @@ class Remote:
                     for message in self.kimi_messages():
                         self.bridge.on_hook(message)
                 self.bridge.tick(now)
+                self.dictation.tick(now)
                 if self.dirty.is_set():
                     self.dirty.clear()
                     time.sleep(0.05)  # let a burst of Hyprland events settle
@@ -650,7 +690,7 @@ def main() -> int:
     # after the bridge is still found.
     parser.add_argument('--socket', type=Path, default=None,
                         help='deckd Unix socket (default: $DECKD_SOCKET, $DECKD_DATA_DIR/deckd.sock, '
-                             "else deckd's own: $XDG_RUNTIME_DIR/openwalkietalkie/deckd.sock)")
+                             "else deckd's own: ${XDG_DATA_HOME:-~/.local/share}/openwalkietalkie/deckd.sock)")
     parser.add_argument('--control-socket', type=Path, default=control_socket_path(),
                         help='where omarchy_hook.py reports Claude Code / Codex events')
     args = parser.parse_args()

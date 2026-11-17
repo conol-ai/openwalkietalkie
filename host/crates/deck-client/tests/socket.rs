@@ -19,18 +19,17 @@ fn default_socket_honours_deckd_data_dir() {
             .ends_with("Library/Application Support/OpenWalkieTalkie/deckd.sock"));
     } else {
         // The daemon's own rule elsewhere, read from this process's
-        // environment: the runtime dir, else the cache dir.
+        // environment: `$XDG_DATA_HOME/openwalkietalkie`, the runtime and
+        // cache directories having no say.
         std::env::set_var("XDG_RUNTIME_DIR", "/run/user/4242");
-        assert_eq!(
-            default_socket(),
-            std::path::PathBuf::from("/run/user/4242/openwalkietalkie/deckd.sock")
-        );
-        std::env::remove_var("XDG_RUNTIME_DIR");
         std::env::set_var("XDG_CACHE_HOME", "/tmp/dc-cache");
+        std::env::set_var("XDG_DATA_HOME", "/tmp/dc-data");
         assert_eq!(
             default_socket(),
-            std::path::PathBuf::from("/tmp/dc-cache/openwalkietalkie/deckd.sock")
+            std::path::PathBuf::from("/tmp/dc-data/openwalkietalkie/deckd.sock")
         );
+        std::env::remove_var("XDG_DATA_HOME");
+        std::env::remove_var("XDG_RUNTIME_DIR");
         std::env::remove_var("XDG_CACHE_HOME");
     }
 }

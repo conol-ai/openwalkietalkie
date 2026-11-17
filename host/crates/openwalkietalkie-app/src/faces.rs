@@ -665,6 +665,14 @@ impl Shell {
 
     /// The page: its head, the strip, and the selected face's panel.
     /// Dimmed, with every control off, while the service is not answering.
+    /// Whether the page has less room than its design: a tiled window (Hyprland
+    /// gives a window any size, below the minimum macOS and Windows enforce).
+    /// This page's rows of fixed-width parts then wrap or stack instead of
+    /// spilling out of their cards.
+    pub(crate) fn page_narrow(&self) -> bool {
+        self.content_width < ui::PAGE_WIDTH + 2. * ui::PAGE_SIDE
+    }
+
     pub(crate) fn render_faces(&self, dim: bool, cx: &Context<Self>) -> AnyElement {
         let p = *palette(cx);
         let header = ui::Header::new(
@@ -972,12 +980,16 @@ impl Shell {
         let writable = linked && !pending && !dim;
         let add = !addable(list, LINUX).is_empty();
         let full = list.len() + usize::from(add) >= FULL_COLUMNS;
+        let narrow = self.page_narrow();
         let mut tiles = ui::Group::new("face-strip", Layout::Row)
             .h_flex()
             .w_full()
             .items_start()
             .map(|row| {
-                if full {
+                if narrow {
+                    // Too little room for the row: the tiles go on to a second.
+                    row.flex_wrap().gap(px(TILE_GAP))
+                } else if full {
                     row.gap(px(FULL_GAP)).justify_between()
                 } else {
                     row.gap(px(TILE_GAP))
@@ -1002,6 +1014,7 @@ impl Shell {
         let note = StripNote::of(linked || dim, pending, self.faces.writes.refused);
         let buttons = h_flex()
             .w_full()
+            .flex_wrap()
             .gap(px(8.))
             .px(px(16.))
             .py(px(10.))

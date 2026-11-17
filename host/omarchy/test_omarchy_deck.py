@@ -77,11 +77,32 @@ class Keys(unittest.TestCase):
         remote.addresses = ['0xa', '0xb']
         return remote
 
-    def test_wheel_steps_cycle_windows_and_a_release_does_nothing(self):
-        with mock.patch.object(o, 'dispatch') as d:
-            self.remote().on_key({'k': 'ccw', 'act': 2, 'shift': 0})
+    def test_the_wheel_steps_through_the_rows_in_their_order_and_stops_at_the_ends(self):
+        # Three tiled windows: Hyprland's own order (by address) is not the rows' screen order.
+        # The deck sends `cw` for the next row on this face, `ccw` for the previous one.
+        clients = [client('0xc', 3, title='bottom right', x=900, y=600),
+                   client('0xa', 3, title='left', x=0, focus=0),
+                   client('0xb', 3, title='top right', x=900, y=0)]
+        def run(key, focused):
+            for c in clients:
+                c['focusHistoryID'] = 0 if c['address'] == focused else 5
+            answers = {'monitors': MONITORS, 'workspaces': WORKSPACES, 'clients': clients}
+            with mock.patch.object(o, 'hyprctl_json', side_effect=lambda what: answers[what]), \
+                    mock.patch.object(o, 'focus_window') as f:
+                self.remote().on_key({'k': key, 'act': 2, 'shift': 0})
+            return f.call_args[0][0] if f.called else None
+        self.assertEqual(run('cw', '0xa'), '0xb', 'left -> top right: the row below, not 0xc')
+        self.assertEqual(run('cw', '0xb'), '0xc')
+        self.assertIsNone(run('cw', '0xc'), 'the last row stays, as the deck\'s highlight does')
+        self.assertEqual(run('ccw', '0xc'), '0xb')
+        self.assertIsNone(run('ccw', '0xa'), 'and so does the first')
+
+    def test_a_release_does_nothing(self):
+        with mock.patch.object(o, 'dispatch') as d, mock.patch.object(o, 'focus_window') as f:
+            self.remote().on_key({'k': 'ccw', 'act': 0, 'shift': 0})
             self.remote().on_key({'k': 'enter', 'act': 0, 'shift': 0})
-        d.assert_called_once_with('hl.dsp.window.cycle_next()', ['cyclenext'])
+        d.assert_not_called()
+        f.assert_not_called()
 
     def test_left_and_right_step_workspace_slots_and_wrap_and_shift_moves_window_focus(self):
         monitors = lambda ws: [{'focused': True, 'activeWorkspace': {'id': ws}}]
@@ -359,6 +380,8 @@ class QuietDeckd(threading.Thread):
     def answer(self, method, params):
         if method == 'service.info':
             return self.info
+        if method == 'agent.register' and params['key'].endswith(':dictate'):
+            return {'agent': 'ag_dictate'}  # the bridge's own Dictate agent, out of the sessions' count
         if method == 'agent.register':  # one agent per session key, as deckd's register is
             return {'agent': self.agents.setdefault(params['key'], f'ag_{len(self.agents) + 1}')}
         return {}
@@ -553,13 +576,13 @@ class SocketPath(unittest.TestCase):
         self.assertEqual(self.path(env), Path('/data/deckd.sock'))
         self.assertEqual(self.path({**env, 'DECKD_SOCKET': '/tmp/s.sock'}), Path('/tmp/s.sock'))
 
-    def test_deckds_own_socket_is_under_the_runtime_dir_else_the_cache_dir(self):
+    def test_deckds_own_socket_is_in_its_data_folder(self):
         cases = [
-            ({'XDG_RUNTIME_DIR': self.RUN, 'XDG_CACHE_HOME': '/c'}, f'{self.RUN}/openwalkietalkie/deckd.sock'),
-            ({'XDG_CACHE_HOME': '/c'}, '/c/openwalkietalkie/deckd.sock'),
+            ({'XDG_DATA_HOME': '/d', 'XDG_RUNTIME_DIR': self.RUN}, '/d/openwalkietalkie/deckd.sock'),
             # A relative XDG variable does not count, as in deckd.
-            ({'XDG_RUNTIME_DIR': 'run', 'XDG_CACHE_HOME': 'c'}, f'{self.HOME}/.cache/openwalkietalkie/deckd.sock'),
-            ({}, f'{self.HOME}/.cache/openwalkietalkie/deckd.sock'),
+            ({'XDG_DATA_HOME': 'd'}, f'{self.HOME}/.local/share/openwalkietalkie/deckd.sock'),
+            ({'XDG_RUNTIME_DIR': self.RUN, 'XDG_CACHE_HOME': '/c'}, f'{self.HOME}/.local/share/openwalkietalkie/deckd.sock'),
+            ({}, f'{self.HOME}/.local/share/openwalkietalkie/deckd.sock'),
         ]
         for env, want in cases:
             self.assertEqual(self.path({'HOME': self.HOME, **env}), Path(want), env)
@@ -567,7 +590,7 @@ class SocketPath(unittest.TestCase):
     def test_an_old_tunnels_end_is_used_only_while_deckds_own_socket_is_absent(self):
         import tempfile as _t
         with _t.TemporaryDirectory(dir='/tmp') as runtime:
-            env = {'HOME': self.HOME, 'XDG_RUNTIME_DIR': runtime}
+            env = {'HOME': self.HOME, 'XDG_RUNTIME_DIR': runtime, 'XDG_DATA_HOME': runtime}
             own = Path(runtime) / 'openwalkietalkie' / 'deckd.sock'
             self.assertEqual(self.path(env), own, 'neither is there: deckd\'s own')
             tunnel = Path(runtime) / 'deckd.sock'
