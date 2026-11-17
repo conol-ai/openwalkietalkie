@@ -5,9 +5,8 @@
 //! `site/public/examples/native_companion.py` (`tools/release.py` refuses a
 //! release whose download differs), and the companion guide beside it
 //! documents `config::Paths::detect`'s rule: on Linux the socket is in
-//! `$XDG_RUNTIME_DIR/openwalkietalkie/`, else in
-//! `${XDG_CACHE_HOME:-~/.cache}/openwalkietalkie/`, and `DECKD_DATA_DIR`
-//! overrides both. A client that follows the example must reach the same
+//! `${XDG_DATA_HOME:-~/.local/share}/openwalkietalkie/`, and `DECKD_DATA_DIR`
+//! overrides it. A client that follows the example must reach the same
 //! file the daemon binds.
 
 use std::io::Write;

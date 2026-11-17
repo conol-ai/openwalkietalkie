@@ -690,7 +690,7 @@ def main() -> int:
     # after the bridge is still found.
     parser.add_argument('--socket', type=Path, default=None,
                         help='deckd Unix socket (default: $DECKD_SOCKET, $DECKD_DATA_DIR/deckd.sock, '
-                             "else deckd's own: $XDG_RUNTIME_DIR/openwalkietalkie/deckd.sock)")
+                             "else deckd's own: ${XDG_DATA_HOME:-~/.local/share}/openwalkietalkie/deckd.sock)")
     parser.add_argument('--control-socket', type=Path, default=control_socket_path(),
                         help='where omarchy_hook.py reports Claude Code / Codex events')
     args = parser.parse_args()

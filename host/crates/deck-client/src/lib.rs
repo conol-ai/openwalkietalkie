@@ -631,9 +631,8 @@ impl Drop for Client {
 /// The socket `deckd` listens on, by the daemon's own rule
 /// (`config::Paths::detect`): `$DECKD_DATA_DIR/deckd.sock` when that is
 /// set; else on macOS `~/Library/Application Support/OpenWalkieTalkie/
-/// deckd.sock`, and elsewhere `$XDG_RUNTIME_DIR/openwalkietalkie/deckd.sock`,
-/// or, with no runtime dir, `$XDG_CACHE_HOME/openwalkietalkie/deckd.sock`,
-/// else `~/.cache/openwalkietalkie/deckd.sock`. On Windows it is the pipe
+/// deckd.sock`, and elsewhere `$XDG_DATA_HOME/openwalkietalkie/deckd.sock`,
+/// else `~/.local/share/openwalkietalkie/deckd.sock`. On Windows it is the pipe
 /// of `$DECKD_DATA_DIR`, else of `%LOCALAPPDATA%\OpenWalkieTalkie`
 /// ([`local_door_for`]).
 pub fn default_socket() -> PathBuf {
