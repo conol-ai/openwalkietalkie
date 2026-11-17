@@ -28,7 +28,10 @@ use crate::style::{palette, Palette};
 use crate::ui::{self, ic, Type as _};
 use deck_gui_core::attention::{attention, Extras};
 use deck_gui_core::i18n::Language;
-use deck_gui_core::{events, AppEvent, IconState, MenuCommand, MenuModel, NoService};
+use deck_gui_core::{IconState, MenuCommand, MenuModel};
+#[cfg(any(target_os = "macos", windows))]
+use deck_gui_core::{events, AppEvent, NoService};
+#[cfg(any(target_os = "macos", windows))]
 use deck_model::Snapshot;
 use gpui::{
     div, hsla, img, point, prelude::*, px, AnyElement, BoxShadow, Context, Div, Global, Hsla,
@@ -36,7 +39,9 @@ use gpui::{
 };
 use gpui_component::{h_flex, v_flex};
 use std::sync::Arc;
+#[cfg(any(target_os = "macos", windows))]
 use tray_icon::menu::{CheckMenuItem, Menu as Items, MenuEvent, MenuItem, PredefinedMenuItem};
+#[cfg(any(target_os = "macos", windows))]
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
 /// The status item's bitmap, in pixels. AppKit shows it 18 pt high, so 36
@@ -55,6 +60,7 @@ const STROKE: f32 = 1.5;
 
 /// The id of the menu's first line. The line is disabled, so it is never
 /// clicked, and no [`MenuCommand`] parses the id.
+#[cfg(any(target_os = "macos", windows))]
 const STATUS: &str = "menu-status";
 
 /// The MenuBar board, at the window's top-left.
@@ -135,6 +141,7 @@ pub fn describe(state: IconState, language: Language) -> &'static str {
 /// parked in a `gpui` [`Global`] so they live exactly as long as the app:
 /// dropping the icon would take it out of the menu bar, and a window that
 /// hides on close must not be able to.
+#[cfg(any(target_os = "macos", windows))]
 pub struct Menu {
     icon: TrayIcon,
     /// A handle on the menu the icon shows: **Show Link Problem…** is put
@@ -161,6 +168,24 @@ pub struct Menu {
 
 impl Global for Menu {}
 
+/// Elsewhere (Linux) there is no status item: the tray backend there is GTK,
+/// which this app never starts, and a status item is the desktop bar's job.
+/// The type stays, so the window's code is the same everywhere.
+#[cfg(not(any(target_os = "macos", windows)))]
+pub struct Menu {
+    watch: Option<Subscription>,
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
+pub fn install(_language: Language) -> Option<Menu> {
+    None
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
+impl Menu {
+    fn show(&mut self, _icon: IconState, _lines: Vec<Line>, _language: Language) {}
+}
+
 /// Build the status item and install the click handler.
 ///
 /// `None` when the menu bar refused it, which is not fatal: the window
@@ -169,10 +194,8 @@ impl Global for Menu {}
 /// message loop gpui already runs). Elsewhere there is none: the tray
 /// backend there is GTK, which this app never starts, and a status item is
 /// the desktop bar's job.
+#[cfg(any(target_os = "macos", windows))]
 pub fn install(language: Language) -> Option<Menu> {
-    if cfg!(not(any(target_os = "macos", windows))) {
-        return None;
-    }
     // Nothing is known yet: no service has answered. The first event the
     // bus delivers puts the mirror's words in, and why none answers.
     let model = MenuModel::of(
@@ -266,6 +289,7 @@ pub fn install(language: Language) -> Option<Menu> {
     Some(menu)
 }
 
+#[cfg(any(target_os = "macos", windows))]
 impl Menu {
     /// Put `lines` and the icon for `icon` in the menu bar, touching only
     /// what changed. A refusal from AppKit is said once and not retried:
@@ -357,6 +381,7 @@ impl Menu {
 /// The icon for `state` as `tray-icon` takes it. `None` only when the
 /// bitmap is the wrong length for its size, which is a bug in
 /// [`icon_rgba`] and not a runtime condition.
+#[cfg(any(target_os = "macos", windows))]
 fn icon_for(state: IconState) -> Option<Icon> {
     Icon::from_rgba(icon_rgba(state), ICON_PX, ICON_PX)
         .map_err(|e| eprintln!("openwalkietalkie-app: bad status item icon: {e}"))

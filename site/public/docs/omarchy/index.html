@@ -85,8 +85,9 @@
   <li><strong>Your sessions on the roster</strong> as working, ready or asking. Selecting one brings its terminal to the front.</li>
   <li><strong>Voice orders:</strong> hold PTT on a session and speak. The words are typed into its terminal, and the reply is shown and spoken when the turn ends.</li>
   <li><strong>The Macropad, System and Usage faces</strong>, filled from this laptop.</li>
+  <li><strong>The companion app</strong>, the same window as on a Mac, in Omarchy’s app launcher.</li>
 </ul>
-<p>There is no Linux download yet: you build <code>deckd</code> from the source, which takes about ten minutes the first time. Every command below runs in a terminal on the Omarchy laptop.</p>
+<p>There is no Linux download yet: you build <code>deckd</code> and the app from the source, which takes about ten minutes the first time. Every command below runs in a terminal on the Omarchy laptop.</p>
 
 <h2>1. Install the tools</h2>
 <pre><code>sudo pacman -S --needed base-devel git rustup cmake clang espeak-ng wtype
@@ -96,9 +97,9 @@ rustup default stable</code></pre>
 <h2>2. Build and install</h2>
 <pre><code>git clone https://github.com/conol-ai/openwalkietalkie.git
 cd openwalkietalkie/host
-cargo build --release --target x86_64-unknown-linux-gnu -p deckd
-sh omarchy/install.sh target/x86_64-unknown-linux-gnu/release/deckd</code></pre>
-<p><code>install.sh</code> puts <code>deckd</code> in <code>~/.local/bin</code>, copies the bridge to <code>~/.local/share/openwalkietalkie/omarchy</code>, and starts both as systemd user services, <code>deckd</code> and <code>omarchy-deck</code>. They start again at every login. At the end it prints the steps that need root, which are the next section.</p>
+cargo build --release --target x86_64-unknown-linux-gnu -p deckd -p openwalkietalkie-app
+sh omarchy/install.sh target/x86_64-unknown-linux-gnu/release/deckd target/x86_64-unknown-linux-gnu/release/openwalkietalkie-app</code></pre>
+<p><code>install.sh</code> puts <code>deckd</code> and the app in <code>~/.local/bin</code>, adds the app to Omarchy’s launcher as <strong>OpenWalkieTalkie</strong>, copies the bridge to <code>~/.local/share/openwalkietalkie/omarchy</code>, and starts both as systemd user services, <code>deckd</code> and <code>omarchy-deck</code>. They start again at every login. At the end it prints the steps that need root, which are the next section.</p>
 
 <h2>3. Let the service open the deck</h2>
 <p>The deck’s HID device belongs to root until a udev rule hands it to you. Run the two commands <code>install.sh</code> printed:</p>
@@ -112,7 +113,7 @@ sudo udevadm control --reload &amp;&amp; sudo udevadm trigger --subsystem-match=
   <li><strong>Bluetooth:</strong> pair <strong>OpenWalkieTalkie</strong> from Omarchy’s Bluetooth menu (or with <code>bluetoothctl</code>). The deck keeps one pairing at a time: if it was paired with a Mac, remove it there first.</li>
 </ul>
 <p>The service links by itself, within seconds. Check it:</p>
-<pre><code>DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd status</code></pre>
+<pre><code>deckd status</code></pre>
 <p>The <code>link:</code> line should say <code>Connected, session Live</code>.</p>
 
 <h2>5. Put your sessions on the deck</h2>
@@ -128,7 +129,7 @@ python3 omarchy/omarchy_hook.py install kimi</code></pre>
   <li><strong>With Superwhisper</strong> (Omarchy’s dictation, if you use it), there is nothing to set up. It recognises the presses in its own mode, language and vocabulary, in under a second in its Cloud mode. Check that it is ready with <code>superwhisper status</code>.</li>
   <li><strong>Without it</strong>, download the local Whisper model once (about 465 MB):
 <pre><code>printf '[voice.stt]\nengine = "whisper"\nmodel = "small"\nlanguage = "auto"\n' &gt;&gt; ~/.local/share/openwalkietalkie/config.toml
-DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd stt install --model small</code></pre>
+deckd stt install --model small</code></pre>
   Whisper runs on the laptop’s CPU, so a press takes a few seconds or more, depending on the processor.</li>
 </ul>
 <p>Voice reaches sessions that run in a terminal window. A session hosted inside another app has no terminal to type into, and the deck shows the order as not delivered.</p>
@@ -143,32 +144,33 @@ systemctl --user restart omarchy-deck</code></pre>
 
 <h2>8. Optional: Claude usage bars</h2>
 <p>The Usage face can show your Claude rate-limit windows, read every five minutes with your Claude Code login:</p>
-<pre><code>DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd config set 'usage.providers=["codex","claude"]'</code></pre>
+<pre><code>deckd config set 'usage.providers=["codex","claude"]'</code></pre>
 
 <h2>Check the setup</h2>
-<pre><code>DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd care checks
+<pre><code>deckd care checks
 python3 omarchy/omarchy_hook.py status
 journalctl --user -u deckd -u omarchy-deck -f</code></pre>
-<p>Every <code>deckd</code> command needs the <code>DECKD_DATA_DIR=…</code> prefix shown here, because the services keep their files in <code>~/.local/share/openwalkietalkie</code>.</p>
+<p>Or open <strong>OpenWalkieTalkie</strong> from the app launcher: its Deck page shows the link, and its Service page starts and stops the service (the <code>deckd</code> systemd unit) and opens the app at login. The service keeps all its files in <code>~/.local/share/openwalkietalkie</code>.</p>
 
 <h2>Update</h2>
 <pre><code>cd openwalkietalkie/host
 git pull
-cargo build --release --target x86_64-unknown-linux-gnu -p deckd
-sh omarchy/install.sh target/x86_64-unknown-linux-gnu/release/deckd</code></pre>
-<p>Running <code>install.sh</code> again restarts both services with the new code. To update the deck’s firmware, connect it with USB-C and run <code>deckd firmware check</code>, then <code>deckd firmware install</code> (with the same prefix). The deck asks you to press ENTER before it installs. This is the same USB path the Mac uses, but it has not yet been tried on Omarchy.</p>
+cargo build --release --target x86_64-unknown-linux-gnu -p deckd -p openwalkietalkie-app
+sh omarchy/install.sh target/x86_64-unknown-linux-gnu/release/deckd target/x86_64-unknown-linux-gnu/release/openwalkietalkie-app</code></pre>
+<p>Running <code>install.sh</code> again restarts both services with the new code; quit and reopen the app to run its new version. To update the deck’s firmware, connect it with USB-C and run <code>deckd firmware check</code>, then <code>deckd firmware install</code>, or use the app’s Service page. The deck asks you to press ENTER before it installs. This is the same USB path the Mac uses, but it has not yet been tried on Omarchy.</p>
 
 <h2>Not on Omarchy yet</h2>
 <ul>
   <li>Answering permission prompts on the deck: they stay in the terminal.</li>
   <li>Codex’s usage bars, and the Reader’s history and tool rows for Omarchy sessions.</li>
-  <li>A desktop app: everything is set up from the terminal, as above.</li>
+  <li>A tray icon and automatic app updates: the app is built from source, so update it as above.</li>
 </ul>
 
 <h2>Uninstall</h2>
 <pre><code>python3 omarchy/omarchy_hook.py uninstall all
 systemctl --user disable --now deckd omarchy-deck
-rm -f ~/.config/systemd/user/deckd.service ~/.config/systemd/user/omarchy-deck.service ~/.local/bin/deckd
+rm -f ~/.config/systemd/user/deckd.service ~/.config/systemd/user/omarchy-deck.service ~/.local/bin/deckd ~/.local/bin/openwalkietalkie-app
+rm -f ~/.local/share/applications/openwalkietalkie.desktop ~/.local/share/icons/hicolor/512x512/apps/openwalkietalkie.png ~/.config/autostart/openwalkietalkie.desktop
 rm -rf ~/.local/share/openwalkietalkie
 sudo rm -f /etc/udev/rules.d/70-openwalkietalkie.rules /etc/udev/rules.d/71-openwalkietalkie-uinput.rules /etc/modules-load.d/openwalkietalkie-uinput.conf</code></pre>
 <p>The hook uninstall removes only what it added to each agent’s settings.</p>

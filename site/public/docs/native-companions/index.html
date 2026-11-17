@@ -94,7 +94,7 @@
 <ul>
 <li>Override: <code>$DECKD_DATA_DIR/deckd.sock</code>, when the variable is set.</li>
 <li>macOS: <code>~/Library/Application Support/OpenWalkieTalkie/deckd.sock</code>.</li>
-<li>Linux: <code>${XDG_RUNTIME_DIR}/openwalkietalkie/deckd.sock</code>; without <code>XDG_RUNTIME_DIR</code> the service uses <code>${XDG_CACHE_HOME:-~/.cache}/openwalkietalkie/deckd.sock</code>. The Omarchy setup sets <code>DECKD_DATA_DIR=~/.local/share/openwalkietalkie</code>, so its socket is <code>~/.local/share/openwalkietalkie/deckd.sock</code>. Linux is a supported target for the service and the Omarchy bridge; the desktop window is macOS only.</li>
+<li>Linux: <code>${XDG_DATA_HOME:-~/.local/share}/openwalkietalkie/deckd.sock</code>, the folder the Omarchy setup runs the service on. Linux is a supported target for the service, the Omarchy bridge and the companion app (<a href="/docs/omarchy/">the Omarchy guide</a>).</li>
 </ul>
 <p>Begin every connection with:</p>
 <pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;session.hello&quot;,&quot;params&quot;:{

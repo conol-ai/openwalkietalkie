@@ -379,46 +379,214 @@ pub fn repair_agent_if_registered() -> Result<LoginItem, String> {
     Ok(agent_status())
 }
 
+// ---- Linux (Omarchy): systemd and XDG autostart --------------------------------
+//
+// The service is the `deckd.service` user unit that `host/omarchy/install.sh`
+// writes (`~/.config/systemd/user`): its Start / Stop at login are the unit's
+// `enable --now` / `disable --now`, and `Restart=on-failure` restarts the
+// 75 of `service.restart`, as launchd's KeepAlive does. A machine without the
+// unit has no service this app can manage: `NotFound`, and the Service page
+// says to run the install.
+//
+// This app's own "open at login" is an XDG autostart entry
+// (`~/.config/autostart`), which Omarchy's session starts (uwsm, through
+// systemd's xdg-autostart generator) as every desktop following the spec does.
+//
+// The same two rules as elsewhere: only the installed copy changes either
+// (the one in a `bin` folder beside its `deckd`, as `install.sh` puts it in
+// `~/.local/bin`), and every change answers with the status read back.
+
+#[cfg(target_os = "linux")]
+const UNIT: &str = "deckd.service";
+#[cfg(target_os = "linux")]
+const AUTOSTART: &str = "openwalkietalkie.desktop";
+
+#[cfg(target_os = "linux")]
+fn refused(main_item: bool) -> Option<&'static str> {
+    let launch = crate::app::launch();
+    let live = std::env::var(LIVE).as_deref() == Ok("1");
+    if may_change(launch, main_item, live) {
+        None
+    } else {
+        launch.hands_off()
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn config_home() -> Option<std::path::PathBuf> {
+    std::env::var_os("XDG_CONFIG_HOME")
+        .map(std::path::PathBuf::from)
+        .filter(|dir| dir.is_absolute())
+        .or_else(|| std::env::var_os("HOME").map(|home| std::path::PathBuf::from(home).join(".config")))
+}
+
+#[cfg(target_os = "linux")]
+fn autostart_entry() -> Option<std::path::PathBuf> {
+    config_home().map(|dir| dir.join("autostart").join(AUTOSTART))
+}
+
+/// The autostart entry for the app at `exe`: XDG's desktop entry format.
+#[cfg(target_os = "linux")]
+pub fn autostart_text(exe: &std::path::Path) -> String {
+    format!(
+        "[Desktop Entry]\nType=Application\nName=OpenWalkieTalkie\n\
+         Comment=The OpenWalkieTalkie deck's companion\nExec=\"{}\"\n\
+         Icon=openwalkietalkie\nTerminal=false\nX-GNOME-Autostart-enabled=true\n",
+        exe.display()
+    )
+}
+
+/// `systemctl --user is-enabled` as a status: `enabled` is on, `disabled` is
+/// off, a unit systemd does not know is `NotFound`, and anything else
+/// (`masked`, `static`, a failed call) is kept as an unknown status.
+#[cfg(target_os = "linux")]
+pub fn unit_status(is_enabled: Option<&str>) -> LoginItem {
+    match is_enabled.map(str::trim) {
+        Some("enabled") => LoginItem::Enabled,
+        Some("disabled") => LoginItem::NotRegistered,
+        Some("not-found") | Some("") | None => LoginItem::NotFound,
+        Some(_) => LoginItem::Unknown(-1),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn systemctl(args: &[&str]) -> Result<String, String> {
+    let out = std::process::Command::new("systemctl")
+        .arg("--user")
+        .args(args)
+        .output()
+        .map_err(|e| format!("systemctl: {e}"))?;
+    let text = String::from_utf8_lossy(&out.stdout).into_owned();
+    if out.status.success() || args.first() == Some(&"is-enabled") {
+        Ok(text)
+    } else {
+        Err(format!(
+            "systemctl --user {}: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&out.stderr).trim()
+        ))
+    }
+}
+
+/// This app's own "open at login": whether its autostart entry is there.
+#[cfg(target_os = "linux")]
+pub fn status() -> LoginItem {
+    match autostart_entry() {
+        Some(entry) if entry.is_file() => LoginItem::Enabled,
+        _ => LoginItem::NotRegistered,
+    }
+}
+
+/// Open this app at login (an autostart entry naming this copy), then re-read.
+#[cfg(target_os = "linux")]
+pub fn register() -> Result<LoginItem, String> {
+    if let Some(why) = refused(true) {
+        return Err(format!("{why}; nothing changed (status is {})", status().code()));
+    }
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let entry = autostart_entry().ok_or("no home folder")?;
+    if let Some(dir) = entry.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&entry, autostart_text(&exe)).map_err(|e| e.to_string())?;
+    Ok(status())
+}
+
+/// Stop opening this app at login, then re-read.
+#[cfg(target_os = "linux")]
+pub fn unregister() -> Result<LoginItem, String> {
+    if let Some(why) = refused(true) {
+        return Err(format!("{why}; nothing changed (status is {})", status().code()));
+    }
+    if let Some(entry) = autostart_entry() {
+        match std::fs::remove_file(&entry) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+    Ok(status())
+}
+
+/// The service's start at login: the `deckd.service` user unit's state. A
+/// copy that is not the installed one carries no service to report.
+#[cfg(target_os = "linux")]
+pub fn agent_status() -> LoginItem {
+    if !crate::app::launch().bundled {
+        return LoginItem::NotFound;
+    }
+    unit_status(systemctl(&["is-enabled", UNIT]).ok().as_deref())
+}
+
+/// Start the service at every login, and now; then re-read.
+#[cfg(target_os = "linux")]
+pub fn register_agent() -> Result<LoginItem, String> {
+    if let Some(why) = refused(false) {
+        return Err(format!("{why}; nothing changed (status is {})", agent_status().code()));
+    }
+    systemctl(&["enable", "--now", UNIT])?;
+    Ok(agent_status())
+}
+
+/// Stop starting the service at login, and stop it now; then re-read.
+#[cfg(target_os = "linux")]
+pub fn unregister_agent() -> Result<LoginItem, String> {
+    if let Some(why) = refused(false) {
+        return Err(format!("{why}; nothing changed (status is {})", agent_status().code()));
+    }
+    systemctl(&["disable", "--now", UNIT])?;
+    Ok(agent_status())
+}
+
+/// The unit names `~/.local/bin/deckd`, wherever this copy runs from: there
+/// is nothing to point anywhere else. Report what it is.
+#[cfg(target_os = "linux")]
+pub fn repair_agent_if_registered() -> Result<LoginItem, String> {
+    if let Some(why) = refused(false) {
+        return Err(format!("{why}; nothing changed (status is {})", agent_status().code()));
+    }
+    Ok(agent_status())
+}
+
 // ---- everything above, elsewhere --------------------------------------------
 //
 // There is no login item to read or to write, so the honest answer is the
-// one status that claims nothing, and a refusal for every change. The
-// service's own setup there is `host/omarchy/install.sh`'s, not this app's.
+// one status that claims nothing, and a refusal for every change.
 
-#[cfg(not(any(target_os = "macos", windows)))]
-const MACOS_ONLY: &str = "SMAppService is macOS only";
+#[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
+const MACOS_ONLY: &str = "login items are made on macOS, Windows and Linux only";
 
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
 pub fn status() -> LoginItem {
     LoginItem::Unknown(-1)
 }
 
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
 pub fn register() -> Result<LoginItem, String> {
     Err(MACOS_ONLY.into())
 }
 
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
 pub fn unregister() -> Result<LoginItem, String> {
     Err(MACOS_ONLY.into())
 }
 
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
 pub fn agent_status() -> LoginItem {
     LoginItem::Unknown(-1)
 }
 
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
 pub fn register_agent() -> Result<LoginItem, String> {
     Err(MACOS_ONLY.into())
 }
 
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
 pub fn unregister_agent() -> Result<LoginItem, String> {
     Err(MACOS_ONLY.into())
 }
 
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
 pub fn repair_agent_if_registered() -> Result<LoginItem, String> {
     Err(MACOS_ONLY.into())
 }
@@ -426,6 +594,25 @@ pub fn repair_agent_if_registered() -> Result<LoginItem, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn the_units_state_reads_as_a_login_item() {
+        assert_eq!(unit_status(Some("enabled\n")), LoginItem::Enabled);
+        assert_eq!(unit_status(Some("disabled\n")), LoginItem::NotRegistered);
+        assert_eq!(unit_status(Some("not-found\n")), LoginItem::NotFound);
+        assert_eq!(unit_status(None), LoginItem::NotFound);
+        assert_eq!(unit_status(Some("masked\n")), LoginItem::Unknown(-1));
+        assert!(!unit_status(Some("masked")).registered());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn the_autostart_entry_runs_this_copy() {
+        let text = autostart_text(std::path::Path::new("/home/u/.local/bin/openwalkietalkie-app"));
+        assert!(text.starts_with("[Desktop Entry]\nType=Application\n"), "{text}");
+        assert!(text.contains("Exec=\"/home/u/.local/bin/openwalkietalkie-app\"\n"), "{text}");
+    }
 
     #[test]
     fn reading_the_login_item_changes_nothing_on_this_machine() {

@@ -2,7 +2,7 @@
 
 The deck as a remote for an Omarchy (Hyprland) laptop: windows and workspaces, the scratchpad, Claude Code / Codex / Kimi Code sessions, and voice orders. [简体中文](README.zh-CN.md) · Step-by-step install guide: [openwalkietalkie.org/docs/omarchy](https://openwalkietalkie.org/docs/omarchy/)
 
-**Linux with this bridge is a supported target.** For every pull request and every push to `main`, the CI job "Linux host" on Ubuntu 24.04 builds the host workspace for Linux and runs its tests (every crate but the Mac app: `deckd`, `deck-proto`, `deck-model`, `deck-client`, `deck-gui-core` and `deck-wrap`), then runs this directory's Python tests (see [Tests](#tests)). The window is macOS only; there is no Linux window yet. The bridge talks to `deckd` through the face feed (`device.ws.set` and the `device.ws`, `device.key` and `device.link` events), which is a public interface documented in the [native companion API](https://openwalkietalkie.org/docs/native-companions/#feed-the-omarchy-face).
+**Linux with this bridge is a supported target.** For every pull request and every push to `main`, the CI job "Linux host" on Ubuntu 24.04 builds the host workspace for Linux and runs its tests (every crate but the Mac app: `deckd`, `deck-proto`, `deck-model`, `deck-client`, `deck-gui-core` and `deck-wrap`), then runs this directory's Python tests (see [Tests](#tests)). The companion app, the window, runs on Linux too: see [The companion app](#the-companion-app). The bridge talks to `deckd` through the face feed (`device.ws.set` and the `device.ws`, `device.key` and `device.link` events), which is a public interface documented in the [native companion API](https://openwalkietalkie.org/docs/native-companions/#feed-the-omarchy-face).
 
 **On Linux, `deckd` does not tell your processes apart.** Two checks of the macOS service are not implemented on Linux: the ancestry cap, which keeps a process started by an agent CLI from asking for more than `observe,agent,voice,hooks:ingest`, and the trusted principal, the signed app. So every process of your user, one started by Claude Code, Codex, Kimi Code or Grok Bot included, may ask `deckd`'s socket for `admin` (its settings, integrations, setup checks and tokens), and no client is ever trusted, so an allow a client sends for a permission card is refused. A firmware install still needs a press on the deck, unless the deck is already in recovery.
 
@@ -42,9 +42,27 @@ Any process of your user can then make an input device, as with ydotool.
 
 **The udev rule.** Without it, `/dev/hidraw*` belongs to root and `deckd` logs `cannot open HID device`: the deck shows as present (`deckd probe`) and its voice links over BLE, but the HID link never comes up. `70-openwalkietalkie.rules` gives the user at the seat the deck's node, on USB and on Bluetooth alike: it matches the HID id (`KERNELS=="*:1209:5754.*"`), because over Bluetooth the deck is a uhid device with no USB parent, so a rule on `ATTRS{idVendor}` never matches it. `install.sh` cannot write `/etc` and prints these two commands while the rule is missing; once it is in, `deckd` opens the deck by itself, with no restart.
 
-`install.sh` copies the bridge to `~/.local/share/openwalkietalkie/omarchy/`, installs `deckd` to `~/.local/bin/deckd` when it is given the binary, and enables and starts the two units in `systemd/` (it is idempotent; `systemctl --user disable --now deckd omarchy-deck` undoes it). `deckd.service` runs `deckd run` with `DECKD_DATA_DIR=~/.local/share/openwalkietalkie`, so its config, socket and caches are all under that directory; `omarchy-deck.service` starts the bridge on that socket. (A `deckd` started without `DECKD_DATA_DIR` uses the XDG directories instead, and its socket is `$XDG_RUNTIME_DIR/openwalkietalkie/deckd.sock`, or `${XDG_CACHE_HOME:-~/.cache}/openwalkietalkie/deckd.sock` when `XDG_RUNTIME_DIR` is unset, which is where the bridge looks when it is started without `--socket`.) `omarchy_hook.py install` writes into each CLI's settings a hook command that points at the copy, and that command lets the call through when the script is missing, so moving the repository never blocks a session. `install.sh` also switches off `deckd`'s own sources of the same sessions (`deckd config set sources.claude=false codex.daemon=false`): its Claude hooks and `claude agents` roster seed, and its Codex app-server connection, would put every session on the roster a second time, under another key, beside the bridge's. The bridge finds the running Hyprland instance and Wayland display by itself, with no environment variables to set.
+`install.sh` copies the bridge to `~/.local/share/openwalkietalkie/omarchy/`, installs `deckd` to `~/.local/bin/deckd` when it is given the binary, and enables and starts the two units in `systemd/` (it is idempotent; `systemctl --user disable --now deckd omarchy-deck` undoes it). `deckd.service` runs `deckd run`, whose files on Linux are all in one folder, `~/.local/share/openwalkietalkie` (`$XDG_DATA_HOME/openwalkietalkie` when that is set): its config, state, logs, caches and socket, as one folder holds them on a Mac. `omarchy-deck.service` starts the bridge, and the companion app and every `deckd` command find the service there with nothing to set. (`DECKD_DATA_DIR` still points a `deckd` at another folder, a test's.) `omarchy_hook.py install` writes into each CLI's settings a hook command that points at the copy, and that command lets the call through when the script is missing, so moving the repository never blocks a session. `install.sh` also switches off `deckd`'s own sources of the same sessions (`deckd config set sources.claude=false codex.daemon=false`): its Claude hooks and `claude agents` roster seed, and its Codex app-server connection, would put every session on the roster a second time, under another key, beside the bridge's. The bridge finds the running Hyprland instance and Wayland display by itself, with no environment variables to set.
 
-A `deckd` command meant for that service needs the same directory, or it looks for the XDG socket and finds none: `DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd care checks` checks the setup, and the same prefix goes before every care verb (`deckd care sources|pause|resume|test …`, `deckd config get|set`, `deckd device get|set`, `deckd firmware status`; the table is §10.7 of [the host service design](../../docs/host-service.md)). With no ancestry cap on Linux (above), they work from any terminal.
+`deckd care checks` checks the setup, and the other care verbs work the same way with nothing in front (`deckd care sources|pause|resume|test …`, `deckd config get|set`, `deckd device get|set`, `deckd firmware status`; the table is §10.7 of [the host service design](../../docs/host-service.md)). With no ancestry cap on Linux (above), they work from any terminal.
+
+### The companion app
+
+The window the Mac and Windows have runs on Omarchy too: the deck and its settings, the faces and their keys, integrations, voice and the service, in the deck's language. Build it beside `deckd` and give it to `install.sh` as the second binary:
+
+```sh
+cargo build --release --target x86_64-unknown-linux-gnu -p deckd -p openwalkietalkie-app
+sh omarchy/install.sh target/x86_64-unknown-linux-gnu/release/deckd \
+    target/x86_64-unknown-linux-gnu/release/openwalkietalkie-app
+```
+
+`install.sh` puts it in `~/.local/bin` beside `deckd`, which is what makes it the installed copy, the one allowed to change anything outside its window, and adds it to Omarchy's app launcher (`~/.local/share/applications/openwalkietalkie.desktop`, with its icon). On Linux:
+
+- **Service › Start / Stop at login** is the `deckd.service` user unit's `systemctl --user enable --now` / `disable --now`, and a restart from the window is the unit's `Restart=on-failure`.
+- **Open at login** is an XDG autostart entry (`~/.config/autostart/openwalkietalkie.desktop`), which Omarchy's session starts.
+- There is no tray icon (that is the desktop bar's job; the tray library's Linux backend is GTK, which the app does not start) and no app updates: it is built from source, so `git pull`, build and `install.sh` again.
+
+The build needs, beyond `deckd`'s, the Wayland and X11 libraries gpui links (`libxkbcommon`, `wayland`, `libxcb`), which Omarchy has.
 
 ### Voice (PTT)
 
@@ -56,7 +74,7 @@ echo '[voice.stt]
 engine = "whisper"
 model = "small"
 language = "auto"' >> ~/.local/share/openwalkietalkie/config.toml
-DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd stt install --model small
+deckd stt install --model small
 ```
 
 `stt install` downloads from Hugging Face. When that cannot be reached, fetch the same file from a mirror (`https://hf-mirror.com/ggerganov/whisper.cpp/resolve/main/ggml-small.bin`) into `~/.local/share/openwalkietalkie/caches/stt/`. Chinese comes out in Simplified characters: on Linux, speech recognised as Chinese is decoded again with a Simplified Chinese prompt.
@@ -70,10 +88,9 @@ Kimi Code has hooks (`[[hooks]]` in its `config.toml`). `omarchy_hook.py install
 
 ### Grok Bot
 
-The Linux `deckd` carries Grok Bot as the Mac's does: each bot is a row on the deck's own "Grok Bot" page, a press on it is posted to the bot's routine webhook (with `curl`), and the bot answers by running `deckd grokbot say` on this machine. There is no window on Linux, so the CLI does what the Mac app's **Bots…** dialog does:
+The Linux `deckd` carries Grok Bot as the Mac's does: each bot is a row on the deck's own "Grok Bot" page, a press on it is posted to the bot's routine webhook (with `curl`), and the bot answers by running `deckd grokbot say` on this machine. From a terminal, the CLI does what the app's **Bots…** dialog does:
 
 ```sh
-export DECKD_DATA_DIR=~/.local/share/openwalkietalkie
 deckd grokbot prompt "Research"                      # send this to the bot in Grok Bot's chat
 deckd grokbot add "Research" --webhook "https://…"   # the routine's "POST to"; asks for its "key"
 deckd grokbot test research
@@ -101,7 +118,7 @@ What Grok Bot decides, not `deckd`:
 | **Voice orders** | Press PTT on a selected Omarchy session and speak: Superwhisper (else Whisper) recognises it, and the text is typed into its terminal, followed by Enter (with `wtype`). A session with no terminal window on Omarchy (one an app hosts) cannot be typed into: the deck shows the order as not delivered |
 | Replies | When a turn ends, its reply (600 characters at most) goes to the session's Ready card and is spoken, for Claude Code and Codex from their Stop hook, for Kimi Code from its log |
 | **Macropad** | A Macropad key with a keystroke (`cmd+shift+4`) types it on Omarchy as a keyboard of its own (uinput, `omarchy_input.py`), so Omarchy's Super shortcuts fire as well as the focused app's: `cmd` is Super, `opt` / `alt` is Alt. Needs `/dev/uinput` (below); without it the keys go by `wtype`, which reaches the focused app but none of Hyprland's binds. Only with the Linux `deckd`: a Mac's `deckd` types them on the Mac |
-| **Usage face** | Claude's rate-limit windows, read with the Claude Code login (`~/.claude/.credentials.json`) every 5 minutes, once switched on: `DECKD_DATA_DIR=~/.local/share/openwalkietalkie deckd config set 'usage.providers=["codex","claude"]'`. Codex's bars come from its app-server daemon, which `install.sh` leaves unconnected (it would put Codex sessions on the roster twice), so they stay empty |
+| **Usage face** | Claude's rate-limit windows, read with the Claude Code login (`~/.claude/.credentials.json`) every 5 minutes, once switched on: `deckd config set 'usage.providers=["codex","claude"]'`. Codex's bars come from its app-server daemon, which `install.sh` leaves unconnected (it would put Codex sessions on the roster twice), so they stay empty |
 | **System face** | The Linux `deckd` fills it: CPU (`/proc/stat`), memory in use (`MemTotal - MemAvailable`), free space on `/`, and the busiest GPU whose driver reports its load (`gpu_busy_percent`: amdgpu; Intel and NVIDIA's driver show none) |
 
 The key map is `KEYMAP` at the top of `omarchy_deck.py`; that is the one place to change it.
@@ -165,7 +182,7 @@ As Omarchy does it, add a line to `~/.config/hypr/autostart.lua`:
 o.launch_on_start("python3 /path/to/host/omarchy/omarchy_deck.py")
 ```
 
-Or run `python3 omarchy_deck.py` in a terminal first to watch its log. Without `--socket` it connects to `$DECKD_SOCKET`, else `$DECKD_DATA_DIR/deckd.sock`, else where a Linux `deckd` started without `DECKD_DATA_DIR` listens (see the `install.sh` paragraph above) — or, while no socket is there, to `$XDG_RUNTIME_DIR/deckd.sock` (`~/.local/state/deckd.sock` when `XDG_RUNTIME_DIR` is unset), the tunnel's end. It looks again before every connection and reconnects by itself: a Mac restart, a `deckd` restart or a dropped tunnel needs nothing from you.
+Or run `python3 omarchy_deck.py` in a terminal first to watch its log. Without `--socket` it connects to `$DECKD_SOCKET`, else `$DECKD_DATA_DIR/deckd.sock`, else where a Linux `deckd` listens (`~/.local/share/openwalkietalkie/deckd.sock`, see the `install.sh` paragraph above) — or, while no socket is there, to `$XDG_RUNTIME_DIR/deckd.sock` (`~/.local/state/deckd.sock` when `XDG_RUNTIME_DIR` is unset), the tunnel's end. It looks again before every connection and reconnects by itself: a Mac restart, a `deckd` restart or a dropped tunnel needs nothing from you.
 
 ### 4. Install the hooks (so sessions reach the roster)
 

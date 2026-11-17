@@ -681,10 +681,13 @@ fn socket_for(macos: bool, var: impl Fn(&str) -> Option<std::ffi::OsString>) -> 
     if macos {
         return home.join("Library/Application Support/OpenWalkieTalkie/deckd.sock");
     }
-    let absolute = |name: &str| var(name).map(PathBuf::from).filter(|dir| dir.is_absolute());
-    absolute("XDG_RUNTIME_DIR")
-        .or_else(|| absolute("XDG_CACHE_HOME"))
-        .unwrap_or_else(|| home.join(".cache"))
+    // One folder, as on the other platforms: `$XDG_DATA_HOME/openwalkietalkie`,
+    // else `~/.local/share/openwalkietalkie`, the folder the Omarchy units run
+    // the service on (`host/omarchy/systemd`).
+    var("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .filter(|dir| dir.is_absolute())
+        .unwrap_or_else(|| home.join(".local/share"))
         .join("openwalkietalkie/deckd.sock")
 }
 
@@ -734,8 +737,8 @@ mod tests {
 
     /// The daemon's rule (`config::Paths::detect`) on both platforms,
     /// against a made-up environment: the data dir first; the Library
-    /// folder on macOS; elsewhere the runtime dir, else the cache dir, else
-    /// `~/.cache`, each XDG variable only when it is an absolute path.
+    /// folder on macOS; elsewhere `$XDG_DATA_HOME`, only when it is an
+    /// absolute path, else `~/.local/share`.
     /// (Windows names a pipe instead: `windows::tests`.)
     #[cfg(not(windows))]
     #[test]
@@ -761,22 +764,18 @@ mod tests {
         );
         let linux = [
             (
-                vec![home, ("XDG_RUNTIME_DIR", "/run/user/1"), ("XDG_CACHE_HOME", "/c")],
-                "/run/user/1/openwalkietalkie/deckd.sock",
+                vec![home, ("XDG_RUNTIME_DIR", "/run/user/1"), ("XDG_DATA_HOME", "/d")],
+                "/d/openwalkietalkie/deckd.sock",
             ),
             (
-                vec![home, ("XDG_CACHE_HOME", "/c")],
-                "/c/openwalkietalkie/deckd.sock",
+                vec![home, ("XDG_DATA_HOME", "d")],
+                "/home/u/.local/share/openwalkietalkie/deckd.sock",
             ),
             (
-                vec![home, ("XDG_RUNTIME_DIR", "run/user/1"), ("XDG_CACHE_HOME", "c")],
-                "/home/u/.cache/openwalkietalkie/deckd.sock",
+                vec![home, ("XDG_RUNTIME_DIR", "/run/user/1")],
+                "/home/u/.local/share/openwalkietalkie/deckd.sock",
             ),
-            (
-                vec![home, ("XDG_RUNTIME_DIR", "")],
-                "/home/u/.cache/openwalkietalkie/deckd.sock",
-            ),
-            (vec![home], "/home/u/.cache/openwalkietalkie/deckd.sock"),
+            (vec![home], "/home/u/.local/share/openwalkietalkie/deckd.sock"),
         ];
         for (env, want) in linux {
             assert_eq!(rule(false, &env), PathBuf::from(want), "{env:?}");

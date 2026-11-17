@@ -84,8 +84,6 @@ LEGACY = 'legacy'
 # (key, shift) -> (Lua expression, legacy dispatcher + args). Press only, except
 # the wheel, which arrives as act 2 steps.
 KEYMAP = {
-    ('ccw', 0): ('hl.dsp.window.cycle_next()', ['cyclenext']),
-    ('cw', 0): ('hl.dsp.window.cycle_next({ next = false })', ['cyclenext', 'prev']),
     ('left', 1): ('hl.dsp.focus({ direction = "l" })', ['movefocus', 'l']),
     ('right', 1): ('hl.dsp.focus({ direction = "r" })', ['movefocus', 'r']),
     ('enter', 0): ('hl.dsp.window.fullscreen({ mode = "fullscreen" })', ['fullscreen', '0']),
@@ -97,6 +95,10 @@ KEYMAP = {
 # LEFT / RIGHT step through the monitor's workspace slots 1-10 (and wrap), as
 # Super+<n> would: Hyprland's own `m+1` only visits workspaces that have windows.
 WORKSPACE_STEP = {'left': -1, 'right': 1}
+# The wheel steps through the face's own window rows (counter-clockwise: the next row down),
+# not through Hyprland's `cyclenext`: that follows Hyprland's own window order, which is not the
+# rows' screen order, and the highlight would jump past the row below it.
+WINDOW_STEP = {'ccw': 1, 'cw': -1}
 
 # Macropad keys (`MacroKey.keys`, deck_proto's KEYSTROKE_KEYS) as wtype names them. deckd types
 # them itself only on macOS; on Linux it has no desktop, so the bridge types them. The modifiers
@@ -147,9 +149,9 @@ def _absolute_env(name: str) -> Path | None:
 
 def daemon_socket_path() -> Path:
     """Where a Linux `deckd` started without `DECKD_DATA_DIR` listens (its
-    `config::Paths::detect`): `$XDG_RUNTIME_DIR/openwalkietalkie/deckd.sock`,
-    else under `$XDG_CACHE_HOME`, else under `~/.cache`."""
-    base = _absolute_env('XDG_RUNTIME_DIR') or _absolute_env('XDG_CACHE_HOME') or Path.home() / '.cache'
+    `config::Paths::detect`): `$XDG_DATA_HOME/openwalkietalkie/deckd.sock`, else under
+    `~/.local/share`, the folder the Omarchy units run it on."""
+    base = _absolute_env('XDG_DATA_HOME') or Path.home() / '.local/share'
     return base / 'openwalkietalkie' / 'deckd.sock'
 
 
@@ -544,10 +546,23 @@ class Remote:
         try:
             if action:
                 dispatch(*action)
+            elif k in WINDOW_STEP and not shift:
+                self.step_window(WINDOW_STEP[k])
             elif k in WORKSPACE_STEP and not shift:
                 self.step_workspace(WORKSPACE_STEP[k])
         except HYPR_ERRORS as error:
             print(f'hyprland: {error}; key {k} dropped', file=sys.stderr)
+
+    def step_window(self, step: int) -> None:
+        """Focus the row `step` away from the highlighted one, in the order the face lists them,
+        wrapping at either end: read afresh, so a window opened or closed meanwhile counts."""
+        built = self.snapshot()
+        if built is None:
+            return
+        line, addresses = built
+        if len(addresses) < 2:
+            return
+        focus_window(addresses[(line['sel'] + step) % len(addresses)])
 
     def step_workspace(self, step: int) -> None:
         monitor = next((m for m in hyprctl_json('monitors') if m.get('focused')), None)

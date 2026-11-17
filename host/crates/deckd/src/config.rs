@@ -1847,25 +1847,17 @@ impl Paths {
                 data.join("caches"),
             ))
         } else {
-            let runtime = base
-                .runtime_dir()
-                .map(|d| d.join("openwalkietalkie"))
-                .unwrap_or_else(|| base.cache_dir().join("openwalkietalkie"));
-            let mut paths = Paths::from_data_dir(
-                base.config_dir().join("openwalkietalkie"),
-                base.state_dir()
-                    .unwrap_or(base.data_dir())
-                    .join("openwalkietalkie/logs"),
-                base.cache_dir().join("openwalkietalkie"),
-            );
-            paths.state = base
-                .state_dir()
-                .unwrap_or(base.data_dir())
-                .join("openwalkietalkie/state.json");
-            paths.socket = runtime.join("deckd.sock");
-            paths.lock = runtime.join("deckd.lock");
-            paths.port = runtime.join("port");
-            Ok(paths)
+            // One folder, as on the other platforms, and the one the Omarchy
+            // units run the service on (`host/omarchy/systemd`): the window,
+            // the bridge and a bare `deckd` from a shell all find it with no
+            // `DECKD_DATA_DIR`. `deck_client::default_socket` names the same
+            // `$XDG_DATA_HOME/openwalkietalkie`, else `~/.local/share/...`.
+            let data = base.data_dir().join("openwalkietalkie");
+            Ok(Paths::from_data_dir(
+                data.clone(),
+                data.join("logs"),
+                data.join("caches"),
+            ))
         }
     }
 }

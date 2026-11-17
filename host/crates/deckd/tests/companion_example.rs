@@ -149,41 +149,36 @@ fn the_examples_linux_rule_is_the_one_deckd_follows() {
         return;
     };
     let home = "/home/owner";
-    let cases: [(&[(&str, &str)], &str); 7] = [
-        // Neither variable: the cache directory under the home.
-        (&[], "/home/owner/.cache/openwalkietalkie/deckd.sock"),
-        // No runtime directory: the cache directory.
+    let cases: [(&[(&str, &str)], &str); 6] = [
+        // No variable: the data directory under the home, the Omarchy units' own.
+        (&[], "/home/owner/.local/share/openwalkietalkie/deckd.sock"),
+        // `XDG_DATA_HOME` moves it.
         (
-            &[("XDG_CACHE_HOME", "/var/cache/owner")],
-            "/var/cache/owner/openwalkietalkie/deckd.sock",
+            &[("XDG_DATA_HOME", "/data/owner")],
+            "/data/owner/openwalkietalkie/deckd.sock",
         ),
-        // The runtime directory comes first.
+        // A relative or empty value is skipped, as `directories` skips it.
+        (
+            &[("XDG_DATA_HOME", "data")],
+            "/home/owner/.local/share/openwalkietalkie/deckd.sock",
+        ),
+        (
+            &[("XDG_DATA_HOME", "")],
+            "/home/owner/.local/share/openwalkietalkie/deckd.sock",
+        ),
+        // The runtime and cache directories no longer have a say.
         (
             &[
                 ("XDG_RUNTIME_DIR", "/run/user/1000"),
                 ("XDG_CACHE_HOME", "/var/cache/owner"),
             ],
-            "/run/user/1000/openwalkietalkie/deckd.sock",
+            "/home/owner/.local/share/openwalkietalkie/deckd.sock",
         ),
-        // A relative or empty value is skipped, as `directories` skips it.
-        (
-            &[("XDG_RUNTIME_DIR", "run/user/1000")],
-            "/home/owner/.cache/openwalkietalkie/deckd.sock",
-        ),
-        (
-            &[("XDG_RUNTIME_DIR", ""), ("XDG_CACHE_HOME", "cache")],
-            "/home/owner/.cache/openwalkietalkie/deckd.sock",
-        ),
-        // Never the state directory the example used to fall back to.
-        (
-            &[("XDG_STATE_HOME", "/home/owner/.local/state")],
-            "/home/owner/.cache/openwalkietalkie/deckd.sock",
-        ),
-        // `DECKD_DATA_DIR` wins over both, as it does for the daemon.
+        // `DECKD_DATA_DIR` wins, as it does for the daemon.
         (
             &[
                 ("DECKD_DATA_DIR", "/srv/owt"),
-                ("XDG_RUNTIME_DIR", "/run/user/1000"),
+                ("XDG_DATA_HOME", "/data/owner"),
             ],
             "/srv/owt/deckd.sock",
         ),
