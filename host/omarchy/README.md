@@ -108,7 +108,7 @@ What Grok Bot decides, not `deckd`:
 | Feature | How |
 |---|---|
 | **The Omarchy face** | Shows the focused monitor's workspaces (Omarchy gives each monitor its own 1 to 10) and up to 6 windows of the current workspace, the focused one highlighted |
-| Switch windows | Wheel counter-clockwise / clockwise = next / previous window (`cycle_next`); tap a window row to focus it |
+| Switch windows | Turn the wheel to move down or up the window rows, the way it moves through the deck's other lists, and focus that window; tap a window row to focus it |
 | Switch workspaces | Tap a workspace chip; LEFT / RIGHT = previous / next workspace (stepping through the fixed slots 1 to 10, empty ones included) |
 | Move the focus | SHIFT+LEFT / SHIFT+RIGHT = focus the window to the left / right (SHIFT is the bottom key on the right, HOME: hold it, then press the direction) |
 | Fullscreen | ENTER = toggle fullscreen |

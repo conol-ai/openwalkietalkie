@@ -14,7 +14,7 @@ the face sends back (`device.key`, `device.ws`) into Hyprland dispatches, using
 the same Lua-first, legacy-fallback calls as Omarchy's own scripts.
 
 Deck controls on the Omarchy face (the face's own grammar, docs/agent-command-deck.md):
-  wheel CCW / CW        next / previous window (Alt+Tab)
+  wheel                 down / up the window rows (the deck sends cw / ccw)
   LEFT / RIGHT          previous / next workspace
   SHIFT+LEFT / RIGHT    focus the window to the left / right
   ENTER                 toggle fullscreen
@@ -95,10 +95,12 @@ KEYMAP = {
 # LEFT / RIGHT step through the monitor's workspace slots 1-10 (and wrap), as
 # Super+<n> would: Hyprland's own `m+1` only visits workspaces that have windows.
 WORKSPACE_STEP = {'left': -1, 'right': 1}
-# The wheel steps through the face's own window rows (counter-clockwise: the next row down),
-# not through Hyprland's `cyclenext`: that follows Hyprland's own window order, which is not the
-# rows' screen order, and the highlight would jump past the row below it.
-WINDOW_STEP = {'ccw': 1, 'cw': -1}
+# The wheel steps through the face's own window rows, not through Hyprland's `cyclenext`: that
+# follows Hyprland's own window order, which is not the rows' screen order, and the highlight
+# would jump past the row below it. On this face the deck sends `cw` for the next row and `ccw`
+# for the previous one (the remote protocol's words, `src/ui/state/omarchy.rs`), whichever way
+# the wheel turns on its own lists, and moves its own highlight at once, stopping at either end.
+WINDOW_STEP = {'cw': 1, 'ccw': -1}
 
 # Macropad keys (`MacroKey.keys`, deck_proto's KEYSTROKE_KEYS) as wtype names them. deckd types
 # them itself only on macOS; on Linux it has no desktop, so the bridge types them. The modifiers
@@ -555,14 +557,15 @@ class Remote:
 
     def step_window(self, step: int) -> None:
         """Focus the row `step` away from the highlighted one, in the order the face lists them,
-        wrapping at either end: read afresh, so a window opened or closed meanwhile counts."""
+        stopping at either end as the deck's own highlight does: read afresh, so a window opened or
+        closed meanwhile counts."""
         built = self.snapshot()
         if built is None:
             return
         line, addresses = built
-        if len(addresses) < 2:
-            return
-        focus_window(addresses[(line['sel'] + step) % len(addresses)])
+        target = min(max(line['sel'] + step, 0), len(addresses) - 1)
+        if addresses and target != line['sel']:
+            focus_window(addresses[target])
 
     def step_workspace(self, step: int) -> None:
         monitor = next((m for m in hyprctl_json('monitors') if m.get('focused')), None)

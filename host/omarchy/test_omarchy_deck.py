@@ -77,8 +77,9 @@ class Keys(unittest.TestCase):
         remote.addresses = ['0xa', '0xb']
         return remote
 
-    def test_the_wheel_steps_through_the_rows_in_their_order_and_wraps(self):
+    def test_the_wheel_steps_through_the_rows_in_their_order_and_stops_at_the_ends(self):
         # Three tiled windows: Hyprland's own order (by address) is not the rows' screen order.
+        # The deck sends `cw` for the next row on this face, `ccw` for the previous one.
         clients = [client('0xc', 3, title='bottom right', x=900, y=600),
                    client('0xa', 3, title='left', x=0, focus=0),
                    client('0xb', 3, title='top right', x=900, y=0)]
@@ -89,11 +90,12 @@ class Keys(unittest.TestCase):
             with mock.patch.object(o, 'hyprctl_json', side_effect=lambda what: answers[what]), \
                     mock.patch.object(o, 'focus_window') as f:
                 self.remote().on_key({'k': key, 'act': 2, 'shift': 0})
-            return f.call_args[0][0]
-        self.assertEqual(run('ccw', '0xa'), '0xb', 'left -> top right: the row below, not 0xc')
-        self.assertEqual(run('ccw', '0xb'), '0xc')
-        self.assertEqual(run('ccw', '0xc'), '0xa', 'wraps to the first row')
-        self.assertEqual(run('cw', '0xa'), '0xc', 'and back up from the first')
+            return f.call_args[0][0] if f.called else None
+        self.assertEqual(run('cw', '0xa'), '0xb', 'left -> top right: the row below, not 0xc')
+        self.assertEqual(run('cw', '0xb'), '0xc')
+        self.assertIsNone(run('cw', '0xc'), 'the last row stays, as the deck\'s highlight does')
+        self.assertEqual(run('ccw', '0xc'), '0xb')
+        self.assertIsNone(run('ccw', '0xa'), 'and so does the first')
 
     def test_a_release_does_nothing(self):
         with mock.patch.object(o, 'dispatch') as d, mock.patch.object(o, 'focus_window') as f:
