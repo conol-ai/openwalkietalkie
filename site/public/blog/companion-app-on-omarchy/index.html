@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie v0.15.0: The companion app on Omarchy · OpenWalkieTalkie</title>
+<meta name="description" content="The companion app runs on Omarchy, PTT on the Omarchy face dictates at your cursor, the wheel follows the window rows, and the Linux service keeps one folder." />
+<link rel="canonical" href="https://openwalkietalkie.org/blog/companion-app-on-omarchy/" />
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.15.0: The companion app on Omarchy · OpenWalkieTalkie" />
+<meta property="og:description" content="The companion app runs on Omarchy, PTT on the Omarchy face dictates at your cursor, the wheel follows the window rows, and the Linux service keeps one folder." />
+<meta property="og:url" content="https://openwalkietalkie.org/blog/companion-app-on-omarchy/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie Blog" href="/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">Skip to content</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/" aria-label="OpenWalkieTalkie — home">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="Sections">
+      <a href="/#pile">The Pile</a>
+      <a href="/#features">Features</a>
+      <a href="/#demo">Try It</a>
+      <a href="/#faces">Faces</a>
+      <a href="/#blueprint">Blueprint</a>
+      <a href="/docs/">Docs</a>
+      <a href="/blog/" aria-current="true">Blog</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle day and night theme" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">DAY</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="Open menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">THE BLOG · RELEASE NOTES</p>
+  <h1>OpenWalkieTalkie v0.15.0: The companion app on Omarchy</h1>
+  <p class="post-meta"><span>November 17, 2026</span><span>Omarchy app, dictation and service</span></p>
+</header>
+<article class="post-body">
+  <p>Version 0.15.0 brings the companion app to Omarchy and makes the deck a dictation microphone there. The deck's firmware is unchanged at 0.14.0.</p>
+  <h2>The companion app on Omarchy</h2>
+  <p>The app the Mac and Windows have now runs on Omarchy (Hyprland), as <strong>OpenWalkieTalkie</strong> in the app launcher, with the same five pages: <strong>Deck</strong>, <strong>Faces &amp; Keys</strong>, <strong>Integrations</strong>, <strong>Voice</strong> and <strong>Service</strong>. It finds the service by itself. <strong>Service</strong> starts and stops the service through its systemd user unit, and <strong>Open at login</strong> is an XDG autostart entry. There is no tray icon, which is the desktop bar's job, and no in-app update, because the app is built from source.</p>
+  <p><strong>Faces &amp; Keys</strong> also fits a tiled window narrower than the app's design: the face strip wraps onto a second row and the key editor goes under the key grid. The <a href="/docs/omarchy/">Omarchy guide</a> covers building and installing it.</p>
+  <h2>Dictation on the Omarchy face</h2>
+  <p>On the Omarchy face, PTT works like Superwhisper's own push-to-talk. Hold it and talk, release, and your words are typed at the cursor of whatever window has the keyboard, with no Enter. CANCEL while you hold throws the recording away. Superwhisper does the recognition when it is installed, in its own mode, language and vocabulary; otherwise the local Whisper model does. The bridge puts a <strong>Dictate</strong> entry on the roster for this, and selecting it on the Agents face dictates the same way.</p>
+  <h2>The wheel follows the rows</h2>
+  <p>On the Omarchy face the wheel now moves through the window rows in the order the face lists them, the way it moves through the deck's other lists, and stops at the first and last row. It used to follow Hyprland's own window order, so a turn could skip the row below.</p>
+  <h2>One folder on Linux</h2>
+  <p>The Linux service now keeps everything in one folder, <code>~/.local/share/openwalkietalkie</code>, as one folder holds it on a Mac. Omarchy installs already ran there, and <code>deckd</code> commands no longer need the <code>DECKD_DATA_DIR=…</code> prefix. If you ran <code>deckd</code> by hand on Linux with the earlier layout, move its files to that folder or set <code>DECKD_DATA_DIR</code>.</p>
+  <h2>Update</h2>
+  <p>On a Mac, choose <strong>Check for Updates…</strong>, or install the signed, notarized <strong>0.15.0</strong> app for Apple Silicon or Intel (macOS 13 or later). On Windows, download the ZIP from the release. On Omarchy, pull, build the service and the app, and run <code>install.sh</code> with both, as the <a href="/docs/omarchy/">Omarchy guide</a> shows. The deck needs no firmware update for this release.</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.15.0" rel="noopener">Get OpenWalkieTalkie v0.15.0 and checksums on GitHub →</a></p>
+  <p class="post-back"><a href="/blog/">← Back to the blog</a></p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · A COHDL project · MIT software · CERN-OHL-P hardware</span>
+    <nav aria-label="Footer">
+      <a href="/#waitlist">Join the waitlist</a>
+      <a href="/privacy/">Privacy Policy</a>
+      <a href="/cookies/">Cookie information</a>
+      <a href="/cookies/" data-privacy-open>Privacy notice</a>
+      <a href="/">Home</a>
+      <a href="/#demo">Try It</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Join the CoHDL and OpenWalkieTalkie community on Discord">Discord</a>
+      <a href="/blog/feed.xml">Feed</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>
