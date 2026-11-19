@@ -6353,8 +6353,8 @@
       "manual/index.html"
     ]
   },
-  "1802c12d4b91": {
-    "en": "THE FIELD MANUAL / V9.3B",
+  "03d9cd473ac2": {
+    "en": "THE FIELD MANUAL / EDITION 01",
     "pages": [
       "manual/index.html"
     ]
@@ -6371,8 +6371,8 @@
       "manual/index.html"
     ]
   },
-  "c4752b41dc1e": {
-    "en": "OpenWalkieTalkie V9.3B front view and control map",
+  "9a3c33381570": {
+    "en": "OpenWalkieTalkie front view and control map",
     "pages": [
       "manual/index.html"
     ]
@@ -6515,14 +6515,14 @@
       "manual/index.html"
     ]
   },
-  "753e98459778": {
-    "en": "Tap a row to select it; tap the",
+  "f7220ddf6a89": {
+    "en": "Rows in Agents and Settings: tap",
     "pages": [
       "manual/index.html"
     ]
   },
-  "d7b31bc05c60": {
-    "en": "selected row again to open it.",
+  "b1c8bafa3ce6": {
+    "en": "to select, tap again to open.",
     "pages": [
       "manual/index.html"
     ]
@@ -6575,8 +6575,8 @@
       "manual/index.html"
     ]
   },
-  "cf3eb6a8a431": {
-    "en": "Tap a row to select it; tap the selected row again to open it.",
+  "c361fddfc7af": {
+    "en": "In Agents and Settings, tap a row to select it and tap it again to open it. Elsewhere a tap acts at once.",
     "pages": [
       "manual/index.html"
     ]
@@ -6815,8 +6815,8 @@
       "manual/index.html"
     ]
   },
-  "10c4d3770ec8": {
-    "en": "For wireless use, click <b>Open Bluetooth Settings</b> on Deck and pair <b>OpenWalkieTalkie</b>. Under <b>Privacy &amp; Security → Bluetooth</b>, allow the companion’s access. Return to Deck and check its link state.",
+  "2fca83d908f3": {
+    "en": "For wireless use, pair <b>OpenWalkieTalkie</b> in macOS <b>System Settings → Bluetooth</b>. Under <b>Privacy &amp; Security → Bluetooth</b>, allow the companion’s access. Return to Deck and check its link state.",
     "pages": [
       "manual/index.html"
     ]
@@ -7115,8 +7115,8 @@
       "manual/index.html"
     ]
   },
-  "c75bfe6a9563": {
-    "en": "Follow the <a href=\"https://code.claude.com/docs/en/quickstart\">official Claude Code setup</a> to install and sign in. In your project terminal, run <code>claude --version</code> to check that it is available. If the companion says “Not found in PATH”, complete the installer’s PATH instructions and reopen the companion before setting up the plugin.",
+  "010c437db385": {
+    "en": "Follow the <a href=\"https://code.claude.com/docs/en/quickstart\">official Claude Code setup</a> to install and sign in. In your project terminal, run <code>claude --version</code> to check that it is available.",
     "pages": [
       "manual/index.html"
     ]
@@ -7127,8 +7127,8 @@
       "manual/index.html"
     ]
   },
-  "6e7a28ca4d63": {
-    "en": "Open <b>Integrations → Claude Code → Set Up</b>. Review the proposed changes and confirm them. If the app reports a setup problem, use <b>Repair</b> and review the proposed fix. Start a new Claude session after installation; an existing session can reload the plugin with <code>/reload-plugins</code>.",
+  "1d2a89356f90": {
+    "en": "Open <b>Integrations → Claude Code → Set Up</b>. Review the proposed changes and confirm them. If the service cannot find <code>claude</code>, Set Up asks for one more step: click <b>Copy Command</b> and run the command in a terminal. If the app reports a setup problem, use <b>Repair</b> and review the proposed fix. Start a new Claude session after installation; an existing session can reload the plugin with <code>/reload-plugins</code>.",
     "pages": [
       "manual/index.html"
     ]
@@ -7283,8 +7283,8 @@
       "manual/index.html"
     ]
   },
-  "90aad4a9ec56": {
-    "en": "<b>ON THE DECK:</b> Tap the question notice, or press ENTER on a conversation with a pending card. Read the question, turn SCROLL to choose, then press ENTER to submit. CANCEL snoozes the card; it does not choose “No”. Swipe down from the top to find it again.",
+  "75b8b5345ff1": {
+    "en": "<b>ON THE DECK:</b> When a question notice pops up, tap it, or press ENTER before touching anything else. ENTER on a conversation with a pending card also opens it. Read the question, turn SCROLL to choose, then press ENTER to submit. CANCEL snoozes the card; it does not choose “No”. Swipe down from the top to find it again.",
     "pages": [
       "manual/index.html"
     ]
@@ -7457,8 +7457,8 @@
       "manual/index.html"
     ]
   },
-  "3b38c91ea739": {
-    "en": "Hold SHIFT + turn to System and read the host status. If it is gray or offline, check the connection on page 2. Press CANCEL to return to Agents.",
+  "15e15a865e7f": {
+    "en": "Hold SHIFT + turn to System and read the host status. If it is gray or offline, check the connection on page 2. CANCEL does nothing here; hold SHIFT + turn to leave.",
     "pages": [
       "manual/index.html"
     ]
@@ -7781,8 +7781,8 @@
       "manual/index.html"
     ]
   },
-  "92ce596e1172": {
-    "en": "Select Modifiers → ENTER, turn SCROLL to ⇧⌘, then ENTER. Select Key → ENTER, choose 4, then ENTER. Select Save → ENTER. This assigns",
+  "f976fa6a1c9b": {
+    "en": "Hold PTT and say “Screenshot” for the Label. Select Modifiers → ENTER, turn SCROLL to ⇧⌘, then ENTER. Select Key → ENTER, choose 4, then ENTER. Select Save → ENTER. This assigns",
     "pages": [
       "manual/index.html"
     ]
@@ -7793,20 +7793,20 @@
       "manual/index.html"
     ]
   },
-  "81ed69fc60d4": {
-    "en": "Focus the Mac desktop and tap the assigned key. If macOS requests Accessibility access, enable the named app or host process under Privacy",
+  "a40d45b7425f": {
+    "en": "Focus the Mac desktop and tap Screenshot. If macOS asks for Accessibility access, enable the app it names under Privacy",
     "pages": [
       "manual/index.html"
     ]
   },
-  "370583eaac91": {
-    "en": "Security → Accessibility, then try again. The Mac screenshot cursor should appear; press Escape to cancel.",
+  "dd00d30815bd": {
+    "en": "Security → Accessibility, then try again. The screenshot cursor appears; press Escape to cancel.",
     "pages": [
       "manual/index.html"
     ]
   },
-  "ac18c3699dff": {
-    "en": "Shortcuts are sent to your desktop. Check which app has focus before using them.",
+  "68c183aec471": {
+    "en": "Shortcuts go to whichever app has focus.",
     "pages": [
       "manual/index.html"
     ]
@@ -7895,8 +7895,8 @@
       "manual/index.html"
     ]
   },
-  "27646532a68b": {
-    "en": "On Rev A, hold CANCEL for 3 seconds to power off; hold PTT for 2 seconds to power on. Use the Mac app’s board-aware firmware update flow. Power behavior depends on your board and firmware.",
+  "e94e2f2c72a1": {
+    "en": "Hold PTT for 2 seconds to power on; hold CANCEL for 3 seconds to power off. Update firmware over USB from the Mac app’s Service page. From firmware 0.14.0, press ENTER on the deck to start the install.",
     "pages": [
       "manual/index.html"
     ]
