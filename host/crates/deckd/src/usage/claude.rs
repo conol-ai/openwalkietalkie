@@ -39,7 +39,7 @@ use crate::api::Api;
 use crate::core::handle::CoreMsg;
 
 pub const URL: &str = "https://api.anthropic.com/api/oauth/usage?cedar_ember=1";
-const PROFILE_URL: &str = "https://api.anthropic.com/api/oauth/profile";
+pub(crate) const PROFILE_URL: &str = "https://api.anthropic.com/api/oauth/profile";
 /// The beta header the OAuth endpoints require.
 const BETA: &str = "oauth-2025-04-20";
 /// The Keychain item Claude Code writes its login into on macOS.
@@ -54,7 +54,7 @@ const BACKOFF_MAX: Duration = Duration::from_secs(15 * 60);
 /// expired and Claude Code has not refreshed it yet.
 const NO_LOGIN_RETRY: Duration = Duration::from_secs(10 * 60);
 /// After the operator denied the Keychain dialog.
-const DENIED_RETRY: Duration = Duration::from_secs(60 * 60);
+pub(crate) const DENIED_RETRY: Duration = Duration::from_secs(60 * 60);
 /// How long `security` may wait on a dialog before it counts as denied.
 #[cfg(target_os = "macos")]
 const SECURITY_TIMEOUT: Duration = Duration::from_secs(120);
@@ -307,35 +307,32 @@ async fn feed(api: &Api, windows: Vec<Window>, account: Option<String>, resets: 
 /// feature); curl's own `--max-time` bounds it, and the wait here is
 /// bounded again on top.
 async fn fetch(token: &str, url: &str) -> Result<(u16, String), String> {
-    let config = curl_config(token, url);
-    let run = tokio::task::spawn_blocking(move || -> Result<std::process::Output, String> {
-        let mut child = std::process::Command::new("curl")
-            .args([
-                "-sS",
-                "--max-time",
-                &HTTP_TIMEOUT_S.to_string(),
-                "--config",
-                "-",
-            ])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("curl: {e}"))?;
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin
-                .write_all(config.as_bytes())
-                .map_err(|e| format!("curl stdin: {e}"))?;
-            drop(stdin);
-        }
-        child
-            .wait_with_output()
-            .map_err(|e| format!("curl: {e}"))
-    });
-    let out = tokio::time::timeout(CHILD_TIMEOUT, run)
+    let (token, url) = (token.to_string(), url.to_string());
+    let run = tokio::task::spawn_blocking(move || fetch_blocking(&token, &url, HTTP_TIMEOUT_S));
+    tokio::time::timeout(CHILD_TIMEOUT, run)
         .await
         .map_err(|_| "curl did not finish".to_string())?
-        .map_err(|e| format!("curl task: {e}"))??;
+        .map_err(|e| format!("curl task: {e}"))?
+}
+
+/// [`fetch`] on the calling thread, with curl's `--max-time` given: the
+/// account lookup (`super::claude_identity`) runs it with a short one.
+pub(crate) fn fetch_blocking(token: &str, url: &str, max_time_s: u64) -> Result<(u16, String), String> {
+    let config = curl_config(token, url);
+    let mut child = std::process::Command::new("curl")
+        .args(curl_args(max_time_s))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("curl: {e}"))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(config.as_bytes())
+            .map_err(|e| format!("curl stdin: {e}"))?;
+        drop(stdin);
+    }
+    let out = child.wait_with_output().map_err(|e| format!("curl: {e}"))?;
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);
         return Err(format!(
@@ -345,6 +342,21 @@ async fn fetch(token: &str, url: &str) -> Result<(u16, String), String> {
         ));
     }
     split_answer(&String::from_utf8_lossy(&out.stdout))
+}
+
+/// curl's arguments: the whole request is bounded by `--max-time`, the
+/// connection by the same or less, and the rest comes on stdin.
+fn curl_args(max_time_s: u64) -> Vec<String> {
+    let max = max_time_s.max(1);
+    vec![
+        "-sS".into(),
+        "--connect-timeout".into(),
+        max.min(10).to_string(),
+        "--max-time".into(),
+        max.to_string(),
+        "--config".into(),
+        "-".into(),
+    ]
 }
 
 /// The config file on curl's stdin: the URL, the headers, and the status
@@ -391,18 +403,6 @@ pub fn profile_account(value: &serde_json::Value) -> Option<String> {
         .or_else(|| value["oauthAccount"]["emailAddress"].as_str()))
 }
 
-/// The status-line helper runs in the CLI's own profile environment.
-/// Read its cached identity there, rather than guessing from the daemon's
-/// default profile. Never fall back to another profile when unavailable.
-pub fn statusline_account() -> Option<String> {
-    let path = match std::env::var_os("CLAUDE_CONFIG_DIR").filter(|v| !v.is_empty()) {
-        Some(dir) => std::path::PathBuf::from(dir).join(".claude.json"),
-        None => crate::integrations::home_dir().ok()?.join(".claude.json"),
-    };
-    let bytes = std::fs::read(path).ok()?;
-    profile_account(&serde_json::from_slice(&bytes).ok()?)
-}
-
 /// Where Claude Code's login is read from.
 pub mod credentials {
     use super::Login;
@@ -418,16 +418,19 @@ pub mod credentials {
     /// `~/.claude/.credentials.json` (`$CLAUDE_CONFIG_DIR` first when the
     /// daemon has one).
     pub fn file() -> Login {
-        let dir = std::env::var_os("CLAUDE_CONFIG_DIR")
-            .map(std::path::PathBuf::from)
-            .or_else(|| crate::integrations::home_dir().ok().map(|home| home.join(".claude")));
-        let Some(dir) = dir else {
-            return Login::None;
-        };
-        match std::fs::read(dir.join(".credentials.json")) {
-            Ok(bytes) => from_bytes(&bytes),
-            Err(_) => Login::None,
+        match file_bytes() {
+            Some(bytes) => from_bytes(&bytes),
+            None => Login::None,
         }
+    }
+
+    /// The credentials file's bytes, when there is one.
+    pub fn file_bytes() -> Option<Vec<u8>> {
+        let dir = std::env::var_os("CLAUDE_CONFIG_DIR")
+            .filter(|v| !v.is_empty())
+            .map(std::path::PathBuf::from)
+            .or_else(|| crate::integrations::home_dir().ok().map(|home| home.join(".claude")))?;
+        std::fs::read(dir.join(".credentials.json")).ok()
     }
 
     /// The `Claude Code-credentials` item of the login keychain, under
@@ -442,30 +445,82 @@ pub mod credentials {
     /// dialog came back at every poll and "Always Allow" never stuck.
     #[cfg(target_os = "macos")]
     pub fn keychain() -> Login {
-        let Some(account) = account() else {
+        if account().is_none() {
             return Login::None;
-        };
-        let child = std::process::Command::new("/usr/bin/security")
+        }
+        match security(super::SECURITY_TIMEOUT) {
+            Some((code, out)) => from_security(code, &out),
+            None => Login::Denied,
+        }
+    }
+
+    /// What reading the Keychain item came to, for the status line's
+    /// account label (`super::super::claude_identity`), which backs off on
+    /// the two kinds of failure differently.
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum Item {
+        Found(Vec<u8>),
+        /// No item (`errSecItemNotFound`), or no Keychain on this platform.
+        Missing,
+        /// `security` could not be run, or did not answer within the wait.
+        Failed,
+        /// `security` answered with a refusal: access denied, the dialog
+        /// cancelled, the keychain locked.
+        Denied,
+    }
+
+    /// The `Claude Code-credentials` item, waiting at most `wait` on
+    /// `security`.
+    #[cfg(target_os = "macos")]
+    pub fn keychain_item(wait: std::time::Duration) -> Item {
+        if account().is_none() {
+            return Item::Missing;
+        }
+        item_from_security(security(wait))
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    pub fn keychain_item(_wait: std::time::Duration) -> Item {
+        Item::Missing
+    }
+
+    /// [`keychain_item`] from what `security` came to (`None`: not run, or
+    /// killed at the deadline).
+    #[cfg(any(target_os = "macos", test))]
+    pub fn item_from_security(answer: Option<(Option<i32>, Vec<u8>)>) -> Item {
+        match answer {
+            Some((Some(0), out)) => Item::Found(out.trim_ascii().to_vec()),
+            Some((Some(44), _)) => Item::Missing,
+            Some(_) => Item::Denied,
+            None => Item::Failed,
+        }
+    }
+
+    /// Run `security find-generic-password -w` for the item, waiting at
+    /// most `wait`: its exit status and what it printed, or `None` when it
+    /// could not be run or was killed at the deadline.
+    #[cfg(target_os = "macos")]
+    fn security(wait: std::time::Duration) -> Option<(Option<i32>, Vec<u8>)> {
+        let account = account()?;
+        let mut child = std::process::Command::new("/usr/bin/security")
             .args(["find-generic-password", "-s", super::KEYCHAIN_SERVICE, "-a", &account, "-w"])
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null())
-            .spawn();
-        let Ok(mut child) = child else {
-            return Login::Denied;
-        };
-        // A dialog the operator never answers must not hold the probe forever.
-        let deadline = std::time::Instant::now() + super::SECURITY_TIMEOUT;
+            .spawn()
+            .ok()?;
+        // A dialog the operator never answers must not hold the caller forever.
+        let deadline = std::time::Instant::now() + wait;
         let status = loop {
             match child.try_wait() {
                 Ok(Some(status)) => break status,
                 Ok(None) if std::time::Instant::now() < deadline => {
-                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    std::thread::sleep(std::time::Duration::from_millis(20));
                 }
                 _ => {
                     let _ = child.kill();
                     let _ = child.wait();
-                    return Login::Denied;
+                    return None;
                 }
             }
         };
@@ -473,7 +528,7 @@ pub mod credentials {
         if let Some(mut stdout) = child.stdout.take() {
             let _ = std::io::Read::read_to_end(&mut stdout, &mut out);
         }
-        from_security(status.code(), &out)
+        Some((status.code(), out))
     }
 
     /// What `security find-generic-password -w` came to: its exit status and
@@ -580,6 +635,19 @@ mod tests {
         ] {
             assert_eq!(credentials::from_bytes(none.as_bytes()), Login::None, "{none}");
         }
+    }
+
+    #[test]
+    fn curl_is_bounded_by_the_time_it_is_given() {
+        let args = curl_args(5);
+        let after = |flag: &str| args.iter().position(|a| a == flag).map(|i| args[i + 1].clone());
+        assert_eq!(after("--max-time").as_deref(), Some("5"));
+        assert_eq!(after("--connect-timeout").as_deref(), Some("5"));
+        let probe = curl_args(HTTP_TIMEOUT_S);
+        assert!(probe.contains(&HTTP_TIMEOUT_S.to_string()));
+        assert!(probe.contains(&"10".to_string()), "connect within 10 s");
+        // The token is never an argument.
+        assert!(args.iter().chain(&probe).all(|a| !a.contains("Bearer")));
     }
 
     #[test]

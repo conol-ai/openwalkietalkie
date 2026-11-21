@@ -100,7 +100,13 @@ impl Which {
 /// a CLI reads before it reads stdout, and any non-zero value is a
 /// decision we did not make.
 #[must_use]
-pub fn main(which: &str, rest: &[String], socket: Option<PathBuf>) -> i32 {
+pub fn main(which: &str, rest: &[String], socket: Option<PathBuf>, caches: Option<PathBuf>) -> i32 {
+    // Not a CLI's hook: the account lookup the status line starts and does
+    // not wait for (`usage::claude_identity`). Nothing on stdout.
+    if which == crate::usage::claude_identity::LOOKUP_HOOK {
+        crate::usage::claude_identity::lookup_main(rest.last().map(String::as_str));
+        return 0;
+    }
     let mut input = std::io::stdin().lock();
     let mut out = std::io::stdout().lock();
     let mut err = std::io::stderr().lock();
@@ -108,6 +114,7 @@ pub fn main(which: &str, rest: &[String], socket: Option<PathBuf>) -> i32 {
         which,
         rest,
         socket.as_deref(),
+        caches.as_deref(),
         &mut input,
         &mut out,
         &mut err,
@@ -122,6 +129,7 @@ pub fn run(
     which: &str,
     rest: &[String],
     socket: Option<&Path>,
+    caches: Option<&Path>,
     input: &mut impl Read,
     out: &mut impl Write,
     err: &mut impl Write,
@@ -153,10 +161,13 @@ pub fn run(
             return;
         }
     };
+    // The rate limits are the account's whose login the CLI is using, so
+    // the label is that login's own (`usage::claude_identity`): `null` while
+    // it is not known yet, never another account's email.
     if which == Which::ClaudeStatusline && payload.get("rate_limits").is_some() {
         if let Some(object) = payload.as_object_mut() {
             object.insert("_openwalkietalkie_account".into(),
-                serde_json::json!(crate::usage::claude::statusline_account()));
+                serde_json::json!(crate::usage::claude_identity::statusline_account(caches)));
         }
     }
     let walk = walk::from_process();
@@ -534,6 +545,7 @@ mod tests {
             "codex",
             &[],
             None,
+            None,
             &mut b"{}".as_slice(),
             &mut out,
             &mut err,
@@ -551,6 +563,7 @@ mod tests {
             "codex-notify",
             &strings(&["turn-ended", "not json at all"]),
             Some(&socket),
+            None,
             &mut b"".as_slice(),
             &mut out,
             &mut err,
@@ -568,6 +581,7 @@ mod tests {
             "claude-statusline",
             &strings(&["printf 'the user line'"]),
             Some(&socket),
+            None,
             &mut b"{\"session_id\":\"x\"}".as_slice(),
             &mut out,
             &mut err,
