@@ -27,6 +27,26 @@
 //! When the lookup fails (offline, 401, 429, timeout) the label stays off,
 //! and the lookup is not tried again for [`RETRY_AFTER_S`]. A missing label
 //! is honest; a wrong one is worse than none.
+//!
+//! **The Keychain** (macOS, where Claude Code keeps no credentials file) is
+//! read with `/usr/bin/security`, one process per render, because only a
+//! read of the item itself says which account is signed in now. When that
+//! read **fails**, the Keychain is left alone for a while and the label
+//! stays off meanwhile ([`keychain_backoff`]): a locked keychain or a
+//! denied dialog would otherwise cost every render a 1.5 s wait and could
+//! put a fresh access dialog up each time.
+//!
+//! The backoff applies to the **Keychain read only**. Where a credentials
+//! file exists (Linux, Windows, and a Mac where Claude Code wrote one) the
+//! file is read on every render and is never held off: a file read costs
+//! no process and cannot put up a dialog.
+//!
+//! The backoff is kept on failures **only**, on purpose. While it holds
+//! there is no credential, so there is no label: the worst it can do is
+//! leave the label off. A success is never cached. Caching the identity a
+//! read found would label a newly switched account's numbers with the
+//! previous account's email until it expired, which is the bug this module
+//! exists to remove. Do not turn this into a success cache.
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -47,6 +67,19 @@ pub const RETRY_AFTER_S: u64 = 60;
 /// How long the status line may wait on `security` for the Keychain item
 /// (macOS, only where there is no credentials file).
 const KEYCHAIN_WAIT: Duration = Duration::from_millis(1500);
+/// After a Keychain read that failed without a refusal (`security` could
+/// not run, or did not answer within [`KEYCHAIN_WAIT`]; or there is no
+/// item): no read for five minutes. Short enough that a passing hiccup
+/// costs a few minutes of missing label, long enough that a stall is not
+/// paid on every render.
+pub const KEYCHAIN_FAILED_RETRY_S: u64 = 5 * 60;
+/// After a refusal (access denied, the dialog cancelled, the keychain
+/// locked): no read for an hour, the daemon's own wait after a denial
+/// (`claude::DENIED_RETRY`). Asking again every few hundred milliseconds is
+/// what would put up a dialog storm; the operator's answer is honoured.
+pub const KEYCHAIN_DENIED_RETRY_S: u64 = 60 * 60;
+// One rule, two windows, and a refusal's is the longer by far.
+const _: () = assert!(KEYCHAIN_DENIED_RETRY_S >= 10 * KEYCHAIN_FAILED_RETRY_S);
 /// Entries kept per list: a few profiles, never a growing file.
 const KEEP: usize = 16;
 
@@ -75,13 +108,6 @@ impl Credential {
         Some(Credential { token: token.to_string(), uuid })
     }
 
-    /// The one this process can see: `$CLAUDE_CONFIG_DIR` (the CLI's own,
-    /// for the status-line helper) or `~/.claude`, then the Keychain.
-    #[must_use]
-    pub fn live() -> Option<Credential> {
-        Credential::from_bytes(&super::claude::credentials::record(KEYCHAIN_WAIT)?)
-    }
-
     /// The cache key: the account's uuid, or for a record too old to carry
     /// one, a digest of the token (a new token is a new lookup, never a
     /// guess). The token itself is never written.
@@ -107,6 +133,26 @@ pub struct Cache {
     /// Key → when a lookup was last started for it.
     #[serde(default)]
     pub tried: Vec<Tried>,
+    /// The last Keychain read that failed, while it holds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keychain_backoff: Option<Backoff>,
+}
+
+/// A failed Keychain read: when, and how it failed.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Backoff {
+    pub at: u64,
+    pub denied: bool,
+}
+
+impl Backoff {
+    /// One rule, two windows: a refusal holds for an hour, any other
+    /// failure for five minutes.
+    #[must_use]
+    pub fn holds(self, now: u64) -> bool {
+        let window = if self.denied { KEYCHAIN_DENIED_RETRY_S } else { KEYCHAIN_FAILED_RETRY_S };
+        now.saturating_sub(self.at) < window
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -208,12 +254,51 @@ pub fn resolve(cred: Option<&Credential>, cache: &Cache, claude_json: Option<&Va
     Resolution::Unknown { lookup: !cache.tried_since(&key, now) }
 }
 
+/// The live credential: the credentials file when there is one (read every
+/// time, it costs no process), else the Keychain item through `keychain`,
+/// unless a failed read's backoff still holds ([`Backoff::holds`]). A
+/// failure starts a backoff in `cache` and gives no credential; a success
+/// ends one. `path` is where `cache` is saved when that changes.
+pub fn read_credential(
+    file: Option<&[u8]>,
+    keychain: impl FnOnce() -> super::claude::credentials::Item,
+    cache: &mut Cache,
+    path: Option<&Path>,
+    now: u64,
+) -> Option<Credential> {
+    use super::claude::credentials::Item;
+    if let Some(bytes) = file {
+        return Credential::from_bytes(bytes);
+    }
+    if cache.keychain_backoff.is_some_and(|b| b.holds(now)) {
+        // No read, so no credential and no label: never a remembered one.
+        return None;
+    }
+    let (cred, backoff) = match keychain() {
+        Item::Found(bytes) => match Credential::from_bytes(&bytes) {
+            Some(cred) => (Some(cred), None),
+            None => (None, Some(Backoff { at: now, denied: false })),
+        },
+        Item::Missing | Item::Failed => (None, Some(Backoff { at: now, denied: false })),
+        Item::Denied => (None, Some(Backoff { at: now, denied: true })),
+    };
+    if cache.keychain_backoff != backoff {
+        cache.keychain_backoff = backoff;
+        if let Some(path) = path {
+            let _ = cache.save(path);
+        }
+    }
+    cred
+}
+
 /// The status-line helper's label for this render, from the credential it
-/// can see. `caches` is deckd's caches directory (`None`: no cache, no
-/// lookup). `start` launches the lookup and must return at once; it is
-/// called only on a miss that has not been tried in the last minute.
+/// can see (`file`, else `keychain`, see [`read_credential`]). `caches` is
+/// deckd's caches directory (`None`: no cache, no lookup, no backoff).
+/// `start` launches the lookup and must return at once; it is called only
+/// on a miss that has not been tried in the last minute.
 pub fn statusline_label(
-    cred: Option<&Credential>,
+    file: Option<&[u8]>,
+    keychain: impl FnOnce() -> super::claude::credentials::Item,
     claude_json: Option<&Value>,
     caches: Option<&Path>,
     now: u64,
@@ -221,6 +306,8 @@ pub fn statusline_label(
 ) -> Option<String> {
     let path = caches.map(|dir| dir.join(CACHE_FILE));
     let mut cache = path.as_deref().map(Cache::load).unwrap_or_default();
+    let cred = read_credential(file, keychain, &mut cache, path.as_deref(), now);
+    let cred = cred.as_ref();
     match resolve(cred, &cache, claude_json, now) {
         Resolution::Known(email) => Some(email),
         Resolution::Unknown { lookup } => {
@@ -242,9 +329,15 @@ pub fn statusline_label(
 /// and the lookup as a detached `deckd hook claude-account`.
 #[must_use]
 pub fn statusline_account(caches: Option<&Path>) -> Option<String> {
-    let cred = Credential::live();
-    let claude_json = claude_json();
-    statusline_label(cred.as_ref(), claude_json.as_ref(), caches, unix_now(), spawn_lookup)
+    let file = super::claude::credentials::file_bytes();
+    statusline_label(
+        file.as_deref(),
+        || super::claude::credentials::keychain_item(KEYCHAIN_WAIT),
+        claude_json().as_ref(),
+        caches,
+        unix_now(),
+        spawn_lookup,
+    )
 }
 
 /// `~/.claude.json` (`$CLAUDE_CONFIG_DIR/.claude.json` when set).
@@ -279,11 +372,18 @@ fn spawn_lookup(caches: &Path) -> bool {
 /// account the live credential is, with that credential's token, and
 /// record the email under its key. Any failure records nothing.
 pub fn lookup_main(caches: Option<&str>) {
-    let (Some(dir), Some(cred)) = (caches.filter(|c| !c.is_empty()), Credential::live()) else {
+    let Some(dir) = caches.filter(|c| !c.is_empty()) else {
+        return;
+    };
+    let path = Path::new(dir).join(CACHE_FILE);
+    let mut cache = Cache::load(&path);
+    // The same read as the status line's, backoff included.
+    let file = super::claude::credentials::file_bytes();
+    let keychain = || super::claude::credentials::keychain_item(KEYCHAIN_WAIT);
+    let Some(cred) = read_credential(file.as_deref(), keychain, &mut cache, Some(&path), unix_now()) else {
         return;
     };
     let answer = super::claude::fetch_blocking(&cred.token, super::claude::PROFILE_URL, LOOKUP_TIMEOUT_S);
-    let path = Path::new(dir).join(CACHE_FILE);
     let mut cache = Cache::load(&path);
     if record_lookup(&mut cache, &cred, answer) {
         let _ = cache.save(&path);
@@ -317,6 +417,7 @@ pub fn record_lookup(cache: &mut Cache, cred: &Credential, answer: Result<(u16, 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::usage::claude::credentials::Item;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Instant;
 
@@ -324,6 +425,25 @@ mod tests {
 
     fn cred(uuid: &str) -> Credential {
         Credential { token: format!("tok-{uuid}"), uuid: Some(uuid.into()) }
+    }
+
+    /// The credentials file for `cred`.
+    fn file(cred: &Credential) -> Vec<u8> {
+        serde_json::json!({"claudeAiOauth": {"accessToken": cred.token, "accountUuid": cred.uuid}})
+            .to_string()
+            .into_bytes()
+    }
+
+    fn no_keychain() -> Item {
+        panic!("a credentials file is read, never the Keychain")
+    }
+
+    /// The Keychain, counted: what each read answers, and how many ran.
+    fn keychain<'a>(reads: &'a AtomicUsize, answer: &'a dyn Fn() -> Item) -> impl FnOnce() -> Item + 'a {
+        move || {
+            reads.fetch_add(1, Ordering::SeqCst);
+            answer()
+        }
     }
 
     fn temp_dir(name: &str) -> PathBuf {
@@ -364,7 +484,7 @@ mod tests {
         cache.save(&dir.join(CACHE_FILE)).unwrap();
         let new = cred("new-uuid");
         let started = AtomicUsize::new(0);
-        let label = statusline_label(Some(&new), Some(&stale_claude_json()), Some(&dir), NOW, |_| {
+        let label = statusline_label(Some(&file(&new)), no_keychain, Some(&stale_claude_json()), Some(&dir), NOW, |_| {
             started.fetch_add(1, Ordering::SeqCst);
             true
         });
@@ -373,7 +493,7 @@ mod tests {
         // The next renders, before the lookup answers: still no label, and
         // no second lookup.
         for _ in 0..3 {
-            let label = statusline_label(Some(&new), Some(&stale_claude_json()), Some(&dir), NOW + 5, |_| {
+            let label = statusline_label(Some(&file(&new)), no_keychain, Some(&stale_claude_json()), Some(&dir), NOW + 5, |_| {
                 started.fetch_add(1, Ordering::SeqCst);
                 true
             });
@@ -385,10 +505,10 @@ mod tests {
         let profile = r#"{"account":{"uuid":"new-uuid","email":"new@example.com"}}"#;
         assert!(record_lookup(&mut cache, &new, Ok((200, profile.into()))));
         cache.save(&dir.join(CACHE_FILE)).unwrap();
-        let label = statusline_label(Some(&new), Some(&stale_claude_json()), Some(&dir), NOW + 6, |_| panic!("no lookup"));
+        let label = statusline_label(Some(&file(&new)), no_keychain, Some(&stale_claude_json()), Some(&dir), NOW + 6, |_| panic!("no lookup"));
         assert_eq!(label.as_deref(), Some("new@example.com"));
         // And switching back finds the old one without a request.
-        let label = statusline_label(Some(&cred("old-uuid")), None, Some(&dir), NOW + 7, |_| panic!("no lookup"));
+        let label = statusline_label(Some(&file(&cred("old-uuid"))), no_keychain, None, Some(&dir), NOW + 7, |_| panic!("no lookup"));
         assert_eq!(label.as_deref(), Some("old@example.com"));
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -402,12 +522,12 @@ mod tests {
         let mut cache = Cache::default();
         cache.remember(&cred("u-1").key(), "me@example.com".into());
         cache.save(&dir.join(CACHE_FILE)).unwrap();
-        let label = statusline_label(Some(&cred("u-1")), None, Some(&dir), NOW, |_| panic!("no lookup on a hit"));
+        let label = statusline_label(Some(&file(&cred("u-1"))), no_keychain, None, Some(&dir), NOW, |_| panic!("no lookup on a hit"));
         assert_eq!(label.as_deref(), Some("me@example.com"));
 
         let empty = temp_dir("known-json");
         let json = serde_json::json!({"oauthAccount": {"accountUuid": "old-uuid", "emailAddress": "old@example.com"}});
-        let label = statusline_label(Some(&cred("old-uuid")), Some(&json), Some(&empty), NOW, |_| panic!("no lookup when .claude.json agrees"));
+        let label = statusline_label(Some(&file(&cred("old-uuid"))), no_keychain, Some(&json), Some(&empty), NOW, |_| panic!("no lookup when .claude.json agrees"));
         assert_eq!(label.as_deref(), Some("old@example.com"));
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::remove_dir_all(&empty);
@@ -448,7 +568,7 @@ mod tests {
     fn a_slow_lookup_does_not_block_the_status_line() {
         let dir = temp_dir("slow");
         let begun = Instant::now();
-        let label = statusline_label(Some(&cred("new-uuid")), None, Some(&dir), NOW, |_| {
+        let label = statusline_label(Some(&file(&cred("new-uuid"))), no_keychain, None, Some(&dir), NOW, |_| {
             // Stands in for the detached child stuck on the network.
             std::thread::spawn(|| std::thread::sleep(Duration::from_secs(30)));
             true
@@ -469,5 +589,109 @@ mod tests {
         assert_eq!(cache.tried.len(), KEEP);
         assert_eq!(cache.email("uuid:39"), Some("39@example.com"));
         assert_eq!(cache.email("uuid:0"), None);
+    }
+
+    /// A Keychain read that fails holds off the next one for its window:
+    /// no `security` while it is open, and no label either.
+    #[test]
+    fn a_failed_keychain_read_backs_off_and_labels_nothing() {
+        let dir = temp_dir("kc-failed");
+        let reads = AtomicUsize::new(0);
+        let failed = || Item::Failed;
+        for at in [NOW, NOW + 1, NOW + 60, NOW + KEYCHAIN_FAILED_RETRY_S - 1] {
+            let label = statusline_label(None, keychain(&reads, &failed), None, Some(&dir), at, |_| panic!("no lookup"));
+            assert_eq!(label, None);
+        }
+        assert_eq!(reads.load(Ordering::SeqCst), 1, "one read, then the window");
+        // The window closes: read again.
+        statusline_label(None, keychain(&reads, &failed), None, Some(&dir), NOW + KEYCHAIN_FAILED_RETRY_S, |_| true);
+        assert_eq!(reads.load(Ordering::SeqCst), 2);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A refusal is the case a storm of dialogs comes from: it holds far
+    /// longer than a passing failure, as long as the daemon's own wait.
+    #[test]
+    fn a_denied_keychain_read_backs_off_for_the_hour() {
+        let dir = temp_dir("kc-denied");
+        let reads = AtomicUsize::new(0);
+        let denied = || Item::Denied;
+        for at in [NOW, NOW + KEYCHAIN_FAILED_RETRY_S, NOW + KEYCHAIN_DENIED_RETRY_S - 1] {
+            assert_eq!(statusline_label(None, keychain(&reads, &denied), None, Some(&dir), at, |_| panic!("no lookup")), None);
+        }
+        assert_eq!(reads.load(Ordering::SeqCst), 1);
+        assert_eq!(KEYCHAIN_DENIED_RETRY_S, super::super::claude::DENIED_RETRY.as_secs());
+        statusline_label(None, keychain(&reads, &denied), None, Some(&dir), NOW + KEYCHAIN_DENIED_RETRY_S, |_| true);
+        assert_eq!(reads.load(Ordering::SeqCst), 2);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Once the window has closed, a read that succeeds ends the backoff,
+    /// and nothing of it is cached: the next render reads again.
+    #[test]
+    fn a_successful_read_after_the_window_clears_the_backoff() {
+        let dir = temp_dir("kc-recovered");
+        let mut cache = Cache::default();
+        cache.remember(&cred("u-1").key(), "me@example.com".into());
+        cache.save(&dir.join(CACHE_FILE)).unwrap();
+        let reads = AtomicUsize::new(0);
+        statusline_label(None, keychain(&reads, &|| Item::Failed), None, Some(&dir), NOW, |_| panic!("no lookup"));
+        assert!(Cache::load(&dir.join(CACHE_FILE)).keychain_backoff.is_some());
+        let found = || Item::Found(file(&cred("u-1")));
+        let after = NOW + KEYCHAIN_FAILED_RETRY_S;
+        let label = statusline_label(None, keychain(&reads, &found), None, Some(&dir), after, |_| panic!("no lookup"));
+        assert_eq!(label.as_deref(), Some("me@example.com"));
+        assert_eq!(Cache::load(&dir.join(CACHE_FILE)).keychain_backoff, None, "cleared");
+        // No success cache: every render reads the item.
+        statusline_label(None, keychain(&reads, &found), None, Some(&dir), after + 1, |_| panic!("no lookup"));
+        statusline_label(None, keychain(&reads, &found), None, Some(&dir), after + 2, |_| panic!("no lookup"));
+        assert_eq!(reads.load(Ordering::SeqCst), 4);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A failure never borrows the last good answer: with the email known
+    /// from deckd's cache and from `.claude.json`, a failed read (or the
+    /// backoff after it) still gives no label, never a stale one.
+    #[test]
+    fn a_failed_read_never_yields_a_remembered_label() {
+        let dir = temp_dir("kc-stale");
+        let mut cache = Cache::default();
+        cache.remember(&cred("old-uuid").key(), "old@example.com".into());
+        cache.save(&dir.join(CACHE_FILE)).unwrap();
+        let reads = AtomicUsize::new(0);
+        let found = || Item::Found(file(&cred("old-uuid")));
+        let label = statusline_label(None, keychain(&reads, &found), Some(&stale_claude_json()), Some(&dir), NOW, |_| panic!("no lookup"));
+        assert_eq!(label.as_deref(), Some("old@example.com"), "a good read labels");
+        for (at, answer) in [(NOW + 1, Item::Failed), (NOW + 2, Item::Denied)] {
+            let once = std::cell::Cell::new(Some(answer));
+            let answer = move || once.take().unwrap_or(Item::Missing);
+            let label = statusline_label(None, keychain(&reads, &answer), Some(&stale_claude_json()), Some(&dir), at, |_| panic!("no lookup"));
+            assert_eq!(label, None);
+            // Inside the backoff, too.
+            let label = statusline_label(None, keychain(&reads, &|| panic!("backing off")), Some(&stale_claude_json()), Some(&dir), at + 30, |_| panic!("no lookup"));
+            assert_eq!(label, None);
+            // (Let the next case read.)
+            let mut cache = Cache::load(&dir.join(CACHE_FILE));
+            cache.keychain_backoff = None;
+            cache.save(&dir.join(CACHE_FILE)).unwrap();
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// `security`'s answers, sorted into the two windows. A timeout is a
+    /// failure, not a refusal; an exit status that is not "not found" is.
+    #[test]
+    fn securitys_answer_sorts_into_found_missing_failed_or_denied() {
+        use crate::usage::claude::credentials::item_from_security;
+        assert_eq!(item_from_security(Some((Some(0), b"{}\n".to_vec()))), Item::Found(b"{}".to_vec()));
+        assert_eq!(item_from_security(Some((Some(44), Vec::new()))), Item::Missing);
+        for refusal in [Some(36), Some(51), Some(128), None] {
+            assert_eq!(item_from_security(Some((refusal, Vec::new()))), Item::Denied, "{refusal:?}");
+        }
+        assert_eq!(item_from_security(None), Item::Failed, "not run, or killed at the deadline");
+        // A credentials file is never throttled, nor ever falls to the Keychain.
+        let mut cache = Cache { keychain_backoff: Some(Backoff { at: NOW, denied: true }), ..Cache::default() };
+        let cred = read_credential(Some(&file(&cred("u-1"))), no_keychain, &mut cache, None, NOW);
+        assert_eq!(cred.and_then(|c| c.uuid).as_deref(), Some("u-1"));
     }
 }

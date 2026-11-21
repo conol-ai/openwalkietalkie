@@ -54,7 +54,7 @@ const BACKOFF_MAX: Duration = Duration::from_secs(15 * 60);
 /// expired and Claude Code has not refreshed it yet.
 const NO_LOGIN_RETRY: Duration = Duration::from_secs(10 * 60);
 /// After the operator denied the Keychain dialog.
-const DENIED_RETRY: Duration = Duration::from_secs(60 * 60);
+pub(crate) const DENIED_RETRY: Duration = Duration::from_secs(60 * 60);
 /// How long `security` may wait on a dialog before it counts as denied.
 #[cfg(target_os = "macos")]
 const SECURITY_TIMEOUT: Duration = Duration::from_secs(120);
@@ -424,7 +424,8 @@ pub mod credentials {
         }
     }
 
-    fn file_bytes() -> Option<Vec<u8>> {
+    /// The credentials file's bytes, when there is one.
+    pub fn file_bytes() -> Option<Vec<u8>> {
         let dir = std::env::var_os("CLAUDE_CONFIG_DIR")
             .filter(|v| !v.is_empty())
             .map(std::path::PathBuf::from)
@@ -453,28 +454,46 @@ pub mod credentials {
         }
     }
 
-    /// The raw `claudeAiOauth` record, for the account it names
-    /// (`super::super::claude_identity`): the file, else the Keychain,
-    /// waiting at most `keychain_wait` on `security`. `None` when there is
-    /// no record, or it could not be read in time.
-    pub fn record(keychain_wait: std::time::Duration) -> Option<Vec<u8>> {
-        if let Some(bytes) = file_bytes() {
-            return Some(bytes);
-        }
-        keychain_record(keychain_wait)
+    /// What reading the Keychain item came to, for the status line's
+    /// account label (`super::super::claude_identity`), which backs off on
+    /// the two kinds of failure differently.
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum Item {
+        Found(Vec<u8>),
+        /// No item (`errSecItemNotFound`), or no Keychain on this platform.
+        Missing,
+        /// `security` could not be run, or did not answer within the wait.
+        Failed,
+        /// `security` answered with a refusal: access denied, the dialog
+        /// cancelled, the keychain locked.
+        Denied,
     }
 
+    /// The `Claude Code-credentials` item, waiting at most `wait` on
+    /// `security`.
     #[cfg(target_os = "macos")]
-    fn keychain_record(wait: std::time::Duration) -> Option<Vec<u8>> {
-        match security(wait)? {
-            (Some(0), out) => Some(out.trim_ascii().to_vec()),
-            _ => None,
+    pub fn keychain_item(wait: std::time::Duration) -> Item {
+        if account().is_none() {
+            return Item::Missing;
         }
+        item_from_security(security(wait))
     }
 
     #[cfg(not(target_os = "macos"))]
-    fn keychain_record(_wait: std::time::Duration) -> Option<Vec<u8>> {
-        None
+    pub fn keychain_item(_wait: std::time::Duration) -> Item {
+        Item::Missing
+    }
+
+    /// [`keychain_item`] from what `security` came to (`None`: not run, or
+    /// killed at the deadline).
+    #[cfg(any(target_os = "macos", test))]
+    pub fn item_from_security(answer: Option<(Option<i32>, Vec<u8>)>) -> Item {
+        match answer {
+            Some((Some(0), out)) => Item::Found(out.trim_ascii().to_vec()),
+            Some((Some(44), _)) => Item::Missing,
+            Some(_) => Item::Denied,
+            None => Item::Failed,
+        }
     }
 
     /// Run `security find-generic-password -w` for the item, waiting at
