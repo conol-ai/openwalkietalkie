@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie v0.16.0: Dictation that knows the window · OpenWalkieTalkie</title>
+<meta name="description" content="Experimental and off by default: dictation at the cursor can be rewritten for the focused window, from its app name and title as plain text, through models you choose on a new Model access page." />
+<link rel="canonical" href="https://openwalkietalkie.org/blog/dictation-that-knows-the-window/" />
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.16.0: Dictation that knows the window · OpenWalkieTalkie" />
+<meta property="og:description" content="Experimental and off by default: dictation at the cursor can be rewritten for the focused window, from its app name and title as plain text, through models you choose on a new Model access page." />
+<meta property="og:url" content="https://openwalkietalkie.org/blog/dictation-that-knows-the-window/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie Blog" href="/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">Skip to content</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/" aria-label="OpenWalkieTalkie — home">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="Sections">
+      <a href="/#pile">The Pile</a>
+      <a href="/#features">Features</a>
+      <a href="/#demo">Try It</a>
+      <a href="/#faces">Faces</a>
+      <a href="/#blueprint">Blueprint</a>
+      <a href="/docs/">Docs</a>
+      <a href="/blog/" aria-current="true">Blog</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle day and night theme" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">DAY</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="Open menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">THE BLOG · RELEASE NOTES</p>
+  <h1>OpenWalkieTalkie v0.16.0: Dictation that knows the window</h1>
+  <p class="post-meta"><span>November 22, 2026</span><span>Experimental dictation and model access</span></p>
+</header>
+<article class="post-body">
+  <p>Version 0.16.0 adds one feature, and it is <strong>experimental</strong>: dictation at the cursor can be rewritten for the window it goes into. It is off until you turn it on. The deck's firmware is unchanged at 0.14.0.</p>
+  <h2>The problem</h2>
+  <p>Spoken text comes out as prose. Hold PTT over a terminal and say "system CTL status", and the words "System CTL status" are typed, not <code>systemctl status</code>. What you meant depends on where the words are going, and the dictation did not know.</p>
+  <h2>What it does</h2>
+  <p>With the feature on, a dictation at the cursor (the <strong>Dictate</strong> entry on Omarchy) is rewritten before it is typed. A <strong>window recognition model</strong> reads the focused window's app name and title, as plain text and nothing else: never a screenshot, never the window's contents. It names what kind of place that is: a shell, an agent, an editor, a chat or prose. A <strong>rewriting model</strong> then rewrites your words for it. Without a window recognition model, built-in rules decide from the app's name.</p>
+  <p>Your dictated words go to the rewriting model's provider, and the app name and title to the window recognition model's provider. The service's log records each dictation's outcome, lengths and timings, never the words. You turn it on and choose both models in the companion app, under <strong>Voice › Context aware transcription</strong>.</p>
+  <h2>Three seconds, then your words as heard</h2>
+  <p>A dictation using cloud models has 3 seconds for both calls together. If a model is slower than that, fails, or answers with something that does not look like a rewrite, your words are typed exactly as heard. A model on this computer or your own network is given longer, 15 seconds by default and never more than 60, and the pickers mark it <strong>Local · slower</strong>. A local model known not to be running is not waited for.</p>
+  <h2>Model access</h2>
+  <p>The models come from a new page under <strong>Voice</strong>, <strong>Model access</strong>: one list of providers, each with one key, kept in the operating system's key store and never in <code>config.toml</code>. The page shows a key only by its last four characters. Providers speak one of two protocols: OpenAI-compatible chat completions (OpenAI, OpenRouter, Ollama, or any compatible server at an address you give) or Anthropic's Messages API. ElevenLabs is listed for the cloud voice only. On Omarchy, its own local models are found by themselves.</p>
+  <h2>Why it is experimental</h2>
+  <p>Three things have not been shown yet. Until this release, the macOS and Windows parts had never been built; CI built and tested them on both systems for 0.16.0, but only the Hyprland window reader has read a real window. No model running on your own computer has been used yet, only stand-ins for one. And Anthropic's API has only been tried against a stand-in, never the real service. No real dictation on the deck has yet been shown to be rewritten correctly end to end with this code, and macOS and Windows have no <strong>Dictate</strong> entry yet, so there the feature has nothing to rewrite.</p>
+  <h2>Update</h2>
+  <p>On a Mac, choose <strong>Check for Updates…</strong>, or install the signed, notarized <strong>0.16.0</strong> app for Apple Silicon or Intel (macOS 13 or later). On Windows, download the ZIP from the release. On Omarchy, pull, build the service and the app, and run <code>install.sh</code> with both, as the <a href="/docs/omarchy/">Omarchy guide</a> shows. The deck needs no firmware update for this release.</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.16.0" rel="noopener">Get OpenWalkieTalkie v0.16.0 and checksums on GitHub →</a></p>
+  <p class="post-back"><a href="/blog/">← Back to the blog</a></p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · A COHDL project · MIT software · CERN-OHL-P hardware</span>
+    <nav aria-label="Footer">
+      <a href="/#waitlist">Join the waitlist</a>
+      <a href="/privacy/">Privacy Policy</a>
+      <a href="/cookies/">Cookie information</a>
+      <a href="/cookies/" data-privacy-open>Privacy notice</a>
+      <a href="/">Home</a>
+      <a href="/#demo">Try It</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Join the CoHDL and OpenWalkieTalkie community on Discord">Discord</a>
+      <a href="/blog/feed.xml">Feed</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

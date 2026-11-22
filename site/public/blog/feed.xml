@@ -5,8 +5,16 @@
   <id>https://openwalkietalkie.org/blog/</id>
   <link href="https://openwalkietalkie.org/blog/" />
   <link rel="self" type="application/atom+xml" href="https://openwalkietalkie.org/blog/feed.xml" />
-  <updated>2026-11-17T12:58:57Z</updated>
+  <updated>2026-11-22T09:04:46Z</updated>
   <author><name>Tony Huang</name></author>
+  <entry>
+    <title>OpenWalkieTalkie v0.16.0: Dictation that knows the window</title>
+    <id>https://openwalkietalkie.org/blog/dictation-that-knows-the-window/</id>
+    <link href="https://openwalkietalkie.org/blog/dictation-that-knows-the-window/" />
+    <published>2026-11-22T09:04:46Z</published>
+    <updated>2026-11-22T09:04:46Z</updated>
+    <summary>Experimental and off by default: dictation at the cursor can be rewritten for the focused window, from its app name and title as plain text, through models you choose on a new Model access page.</summary>
+  </entry>
   <entry>
     <title>OpenWalkieTalkie v0.15.0: The companion app on Omarchy</title>
     <id>https://openwalkietalkie.org/blog/companion-app-on-omarchy/</id>
