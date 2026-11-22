@@ -895,6 +895,8 @@ pub struct VoicePane {
     pub(crate) key: Entity<InputState>,
     pub(crate) provider: &'static str,
     pub(crate) key_open: bool,
+    /// The Context aware transcription section (`crate::context`).
+    pub(crate) context: crate::context::ContextPane,
     /// `config.get` has answered once; `busy` while it is asked.
     pub(crate) asked: bool,
     pub(crate) busy: bool,
@@ -918,6 +920,8 @@ impl VoicePane {
                 this.save_cloud_key(window, cx);
             }
         });
+        let (context, mut subscriptions) = crate::context::ContextPane::new(window, cx);
+        subscriptions.push(save);
         let pane = VoicePane {
             engines: None,
             stt_config: None,
@@ -937,11 +941,12 @@ impl VoicePane {
             key,
             provider: PROVIDERS[0].0,
             key_open: false,
+            context,
             asked: false,
             busy: false,
             writing: false,
         };
-        (pane, vec![save])
+        (pane, subscriptions)
     }
 
     /// Put a harness scene's replies in the pane, as if the service had
@@ -1029,6 +1034,7 @@ impl Shell {
                 .child(self.speech_language_card(dim, &p, cx))
                 .child(self.voice_engine_cards(dim, true, &p, cx))
                 .child(self.signal_path_section(dim, &p, cx))
+                .child(self.context_section(dim, &p, cx))
                 // macOS's grants; Windows asks for neither.
                 .when(cfg!(not(windows)), |page| {
                     page.child(self.permissions_section(dim, &p, cx))
@@ -1047,14 +1053,17 @@ impl Shell {
         id: &'static str,
         cx: &Context<Self>,
     ) -> Option<(AnyElement, f32)> {
-        (id == ADD_KEY).then(|| (self.render_add_key(cx), ADD_KEY_WIDTH))
+        (id == ADD_KEY)
+            .then(|| (self.render_add_key(cx), ADD_KEY_WIDTH))
+            .or_else(|| self.context_dialog(id, cx))
     }
 
     /// The key dialog went: the tick empties its field.
-    pub(crate) fn voice_dialog_closed(&mut self, id: &'static str, _cx: &mut Context<Self>) {
+    pub(crate) fn voice_dialog_closed(&mut self, id: &'static str, cx: &mut Context<Self>) {
         if id == ADD_KEY {
             self.voice.key_open = false;
         }
+        self.context_dialog_closed(id, cx);
     }
 
     /// The key field's placeholder, in the window's language.
@@ -1063,6 +1072,7 @@ impl Shell {
         self.voice.key.update(cx, |input, cx| {
             input.set_placeholder(placeholder, window, cx)
         });
+        self.localize_context(window, cx);
     }
 
     /// Nothing to do: the permissions the mirror has are read as they are

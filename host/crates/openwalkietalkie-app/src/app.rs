@@ -495,7 +495,11 @@ pub fn page_action(screen: Screen) -> Option<Box<dyn Action>> {
         Screen::Integrations => Some(Box::new(ShowIntegrations)),
         Screen::Voice => Some(Box::new(ShowVoice)),
         Screen::Service => Some(Box::new(ShowService)),
-        Screen::Footprint | Screen::LocalApi | Screen::Kit | Screen::MenuPreview => None,
+        Screen::Footprint
+        | Screen::LocalApi
+        | Screen::Models
+        | Screen::Kit
+        | Screen::MenuPreview => None,
     }
 }
 
