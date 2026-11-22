@@ -51,16 +51,29 @@ function stringsFor(lang, id) {
   return strings[key];
 }
 
-// Markup a translation must keep: every tag, with its href and src, in order.
+// Markup a translation must keep: every tag, with its href, src and other
+// attributes. Blocks (paragraphs, headings, list items, figures) stay in
+// order; inline elements (links, code, emphasis) must all be there but may
+// move within their sentence, as word order differs between languages.
 // Visible copy and the text attributes around it are what may change.
 const TEXT_ATTRS = new Set(['alt', 'title', 'aria-label', 'placeholder', 'content']);
+const INLINE = new Set(['a', 'abbr', 'b', 'br', 'cite', 'code', 'em', 'i', 'img', 'kbd', 'mark', 'q', 's', 'samp', 'small', 'span', 'strong', 'sub', 'sup', 'time', 'u', 'var', 'wbr']);
 export function skeleton(html) {
+  const tag = n => n.name + n.attrs.filter(a => !TEXT_ATTRS.has(a.name)).map(a => ` ${a.name}=${a.value ?? ''}`).join('');
   const out = [];
-  for (const n of walk(parse(html))) {
-    if (n.type !== 'element') continue;
-    out.push(n.name + n.attrs.filter(a => !TEXT_ATTRS.has(a.name)).map(a => ` ${a.name}=${a.value ?? ''}`).join(''));
-  }
-  return out.join('|');
+  const visit = (node, bag) => {
+    for (const n of node.children ?? []) {
+      if (n.type !== 'element') continue;
+      if (INLINE.has(n.name)) { bag.push(tag(n)); visit(n, bag); continue; }
+      out.push(tag(n));
+      const inner = [];
+      visit(n, inner);
+      out.push(`[${inner.sort().join(',')}]`);
+    }
+  };
+  const top = [];
+  visit(parse(html), top);
+  return out.join('|') + `|[${top.sort().join(',')}]`;
 }
 function checkTable(lang, id, merged) {
   const en = { ...table(EN, 'common'), ...(id === 'common' ? {} : table(EN, id)) };

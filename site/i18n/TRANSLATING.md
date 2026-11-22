@@ -103,3 +103,9 @@ full-width colon in Chinese and Japanese). The `title` field keeps its
 
 The post's markup, images and links stay exactly as in English; links to the
 site's own pages are pointed at the reader's language by the build.
+
+A few values begin right after an identifier that stays in the page, for
+example `<code>cmake</code> {{key}}` ("and `clang` build the local speech
+recogniser…"). Write those so the sentence reads with the identifier as its
+subject: `<code>cmake</code> 和 <code>clang</code> 用于…`,
+`<code>cmake</code> と <code>clang</code> は…`.
