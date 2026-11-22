@@ -329,6 +329,43 @@ pub enum UiAction {
     GrokbotTest {
         bot: String,
     },
+    /// `context.key.set{role, key}` — a context-aware dictation model's key
+    /// (`role`: `scene` or `edit`), kept by the service in the OS key store.
+    /// The reply is the key's hint, never the key.
+    ContextKeySet {
+        role: String,
+        key: crate::care::BotKey,
+    },
+    /// `context.key.clear{role}` — that key removed.
+    ContextKeyClear {
+        role: String,
+    },
+    /// `providers.list` — every provider, its models, and its key's hint.
+    ProvidersList,
+    /// `providers.add{id, kind, base_url?}` — set one up; `base_url` only
+    /// for a custom one.
+    ProvidersAdd {
+        id: String,
+        kind: String,
+        base_url: Option<String>,
+    },
+    /// `providers.remove{id, force}`.
+    ProvidersRemove { id: String, force: bool },
+    /// `providers.key.set{provider, key}` — the reply is the key's hint.
+    ProvidersKeySet {
+        provider: String,
+        key: crate::care::BotKey,
+    },
+    /// `providers.key.clear{provider}`.
+    ProvidersKeyClear { provider: String },
+    /// `providers.test{provider, model?}` — `ok`, `no_key`, `bad_key`,
+    /// `unreachable`, `wrong_model` or `failed`.
+    ProvidersTest {
+        provider: String,
+        model: Option<String>,
+    },
+    /// `providers.refresh{provider}` — its own model list, fetched.
+    ProvidersRefresh { provider: String },
     /// `care.test.question` — a test question on the deck. Answers at once
     /// with `sent` or `no_deck`; the outcome is read later with
     /// [`UiAction::TestStatus`].
@@ -470,6 +507,37 @@ impl UiAction {
             }
             UiAction::GrokbotRemove { bot } => ("grokbot.remove", serde_json::json!({"bot": bot})),
             UiAction::GrokbotTest { bot } => ("grokbot.test", serde_json::json!({"bot": bot})),
+            UiAction::ContextKeySet { role, key } => (
+                "context.key.set",
+                serde_json::json!({"role": role, "key": key.reveal()}),
+            ),
+            UiAction::ContextKeyClear { role } => {
+                ("context.key.clear", serde_json::json!({"role": role}))
+            }
+            UiAction::ProvidersList => ("providers.list", serde_json::json!({})),
+            UiAction::ProvidersAdd { id, kind, base_url } => {
+                let mut params = serde_json::json!({"id": id, "kind": kind});
+                if let Some(base_url) = base_url {
+                    params["base_url"] = base_url.clone().into();
+                }
+                ("providers.add", params)
+            }
+            UiAction::ProvidersRemove { id, force } => {
+                ("providers.remove", serde_json::json!({"id": id, "force": force}))
+            }
+            UiAction::ProvidersKeySet { provider, key } => (
+                "providers.key.set",
+                serde_json::json!({"provider": provider, "key": key.reveal()}),
+            ),
+            UiAction::ProvidersKeyClear { provider } => {
+                ("providers.key.clear", serde_json::json!({"provider": provider}))
+            }
+            UiAction::ProvidersTest { provider, model } => {
+                ("providers.test", serde_json::json!({"provider": provider, "model": model}))
+            }
+            UiAction::ProvidersRefresh { provider } => {
+                ("providers.refresh", serde_json::json!({"provider": provider}))
+            }
             UiAction::TestQuestion => ("care.test.question", serde_json::json!({})),
             UiAction::TestVoice => ("care.test.voice", serde_json::json!({})),
             UiAction::TestSay => ("care.test.say", serde_json::json!({})),
@@ -1435,6 +1503,28 @@ mod tests {
                 serde_json::json!({"name": "Research", "webhook": "https://example.com/hook"}),
             ),
             (UiAction::GrokbotRemove { bot: "research".into() }, "grokbot.remove", serde_json::json!({"bot": "research"})),
+            (
+                UiAction::ContextKeySet { role: "edit".into(), key: crate::care::BotKey::new(" k-2 ") },
+                "context.key.set",
+                serde_json::json!({"role": "edit", "key": "k-2"}),
+            ),
+            (UiAction::ContextKeyClear { role: "scene".into() }, "context.key.clear", serde_json::json!({"role": "scene"})),
+            (UiAction::ProvidersList, "providers.list", serde_json::json!({})),
+            (
+                UiAction::ProvidersAdd { id: "box".into(), kind: "custom".into(), base_url: Some("http://192.168.1.10:11434/v1".into()) },
+                "providers.add",
+                serde_json::json!({"id": "box", "kind": "custom", "base_url": "http://192.168.1.10:11434/v1"}),
+            ),
+            (UiAction::ProvidersAdd { id: "or".into(), kind: "openrouter".into(), base_url: None }, "providers.add", serde_json::json!({"id": "or", "kind": "openrouter"})),
+            (UiAction::ProvidersRemove { id: "or".into(), force: false }, "providers.remove", serde_json::json!({"id": "or", "force": false})),
+            (
+                UiAction::ProvidersKeySet { provider: "or".into(), key: crate::care::BotKey::new("k-3") },
+                "providers.key.set",
+                serde_json::json!({"provider": "or", "key": "k-3"}),
+            ),
+            (UiAction::ProvidersKeyClear { provider: "or".into() }, "providers.key.clear", serde_json::json!({"provider": "or"})),
+            (UiAction::ProvidersTest { provider: "or".into(), model: None }, "providers.test", serde_json::json!({"provider": "or", "model": null})),
+            (UiAction::ProvidersRefresh { provider: "or".into() }, "providers.refresh", serde_json::json!({"provider": "or"})),
             (UiAction::GrokbotTest { bot: "research".into() }, "grokbot.test", serde_json::json!({"bot": "research"})),
             (UiAction::TestQuestion, "care.test.question", serde_json::json!({})),
             (UiAction::TestVoice, "care.test.voice", serde_json::json!({})),

@@ -119,6 +119,16 @@ answers out of band. `params` links the type the request carries.
 | `grokbot.add` | `admin` | core | — (not in the `Request` enum) |
 | `grokbot.remove` | `admin` | core | — (not in the `Request` enum) |
 | `grokbot.test` | `admin` | core | — (not in the `Request` enum) |
+| `context.key.set` | `admin` | core | — (not in the `Request` enum) |
+| `context.key.clear` | `admin` | core | — (not in the `Request` enum) |
+| `providers.list` | `admin` | core | — (not in the `Request` enum) |
+| `providers.models` | `admin` | core | — (not in the `Request` enum) |
+| `providers.refresh` | `admin` | core | — (not in the `Request` enum) |
+| `providers.test` | `admin` | core | — (not in the `Request` enum) |
+| `providers.key.set` | `admin` | core | — (not in the `Request` enum) |
+| `providers.key.clear` | `admin` | core | — (not in the `Request` enum) |
+| `providers.add` | `admin` | core | — (not in the `Request` enum) |
+| `providers.remove` | `admin` | core | — (not in the `Request` enum) |
 | `hooks.claude` | `hooks:ingest` | core | — (not in the `Request` enum) |
 | `hooks.codex` | `hooks:ingest` | core | — (not in the `Request` enum) |
 | `hooks.gemini` | `hooks:ingest` | core | — (not in the `Request` enum) |

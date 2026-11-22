@@ -771,6 +771,22 @@ impl Store {
         }
     }
 
+    /// Whose the `n`th final the engine reports from now on will be, without
+    /// claiming it: the `n`th released session still waiting
+    /// ([`Store::claim_final`]'s order; `None` for a tombstone, whose final
+    /// nobody gets), else, right after them, the capture still open. For a
+    /// caller that holds finals back before handing them over in order
+    /// (`deckd`'s context-aware dictation), which needs to know which agent
+    /// a final is for.
+    #[must_use]
+    pub fn final_claimant(&self, n: usize) -> Option<&PttInfo> {
+        match self.finalizing.get(n) {
+            Some(waiting) => waiting.ptt.as_ref(),
+            None if n == self.finalizing.len() => self.snapshot.voice.ptt.as_ref(),
+            None => None,
+        }
+    }
+
     /// The final transcript: `transcript.final`, then §7.4's dispatch by
     /// `ctx`, then `voice.state{state:"ended", empty}` (B8).
     fn on_final(&mut self, text: &str) {

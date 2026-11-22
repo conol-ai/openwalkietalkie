@@ -1357,6 +1357,9 @@ All under `~/Library/Application Support/OpenWalkieTalkie/` (dir 0700; Linux: al
 | `port` | 0600 | daemon | the bound port (`47201`), empty while degraded and while the TCP door is off (§4.1) |
 | `deckd.sock`, `deckd.lock` | 0600 | daemon | UDS; `flock` single instance (second `deckd run` exits 0 "already running" so launchd does not loop — which needs the plist's `KeepAlive = {SuccessfulExit: false}`, corrected in week 6; it had been `true`, which restarts on any exit) |
 | `macropad/<src>.toml` | user | user | `[[key]] l, b?, action?` ×9 per Macropad instance; `src` is shown in the face header (P:120) |
+| `provider-keys.toml` | 0600 | `deckd providers set-key\|clear-key`, `providers.key.*` | each provider's key hint and store, and the key itself only where no OS key store is available (`deckd::providers::keys`); on Linux's own install this is also where the cloud voice's key lives now (its provider's item), moved out of `config.toml` at the service's start |
+| `caches/providers/models.json` | 0600 | `deckd providers refresh`, `providers.refresh` | each provider's own model list as last fetched, with when: model ids only, no key |
+| `context-keys.toml` | 0600 | `deckd context key set\|clear` (before the registry) | the hint (length and at most the last four characters) and the store of each context-aware dictation key, `[scene]` and `[edit]`, and the key itself only where no OS key store is available (`deckd::context::keys`); `config.get` publishes the hints from this file and never asks a store |
 | `backups/<file>.<ts>.bak` | | installer | pre-edit copies of the four integration files, pruned to 10 per file |
 | `~/Library/Logs/OpenWalkieTalkie/deckd.log`, `app.log` | | | `tracing-appender` daily rolling, 7 kept; content redacted unless `[privacy] log_content` |
 | `~/Library/Logs/OpenWalkieTalkie/deckd.launchd.log` | 0600 | `deckd run` itself | stdout/stderr of the agent (panics, pre-`tracing` output). launchd does not expand `~` in plist paths and an SMAppService plist inside the signed bundle is identical for every user, so the plist carries **no** `StandardOutPath`/`StandardErrorPath`; instead the first statements of `deckd run` open this file (`O_APPEND\|O_CREAT`, 0600, rotate at 10 MB) and `dup2` it onto fds 1 and 2, and a `std::panic::set_hook` writes panics through `tracing` with payload redaction (an `unwrap` on a hook value must not print the value). launchd spawn failures never reach any file: `deckd doctor` reads `launchctl print gui/$UID/ai.cohdl.openwalkietalkie.deckd` for the last exit status and spawn errors |
@@ -1464,7 +1467,7 @@ prompted = false                  # the app's one first-start question about a l
 [voice.tts]
 engine = "cloud"                  # "cloud": provider's model with your key, Apple's without one (hot) | "kokoro": a local voice, downloaded on opt-in (hot) | "mlx": the Qwen3-TTS sidecar (built at start) | "apple"
 announce_max_chars = 120
-provider = "openai"               # "openai" | "elevenlabs"
+provider = "openai"               # "openai" | "elevenlabs" — a provider id of [providers] (a kind's own word works without an entry); on Linux its key is that provider's, in the key store, never api_key here
 api_key = ""                      # bring your own key: `deckd tts key set --provider openai`; empty = Apple speaks; never logged, config.get shows a hint. On a Mac's own install the key is kept in the Keychain instead, and one found here moves there
 model = ""                        # empty = the engine's default: gpt-4o-mini-tts / eleven_flash_v2_5 / kokoro-multi-lang-v1_1 (or kokoro-int8-multi-lang-v1_1) / mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit
 voices = []                       # the engine's voices agents are assigned from; empty = its default four (kokoro: af_maple, zm_010, bf_vale, zf_001)
@@ -1499,6 +1502,52 @@ check = true                      # the service's own looks for a firmware and a
                                   # minutes, one request to the release feed on github.com each; off, it looks only
                                   # when asked (Check). Hot; hand-edited (no control offers it, so config.set refuses it)
 
+[context]                         # context-aware dictation (`deckd::context`): dictation at the cursor (the Dictate
+enabled = false                   # agent, `<host>:dictate`) rewritten into what the owner would have typed in the
+                                  # focused app. Off unless switched on; a file without this table is off and nothing
+                                  # runs. Every key is hot and managed (config.set)
+budget_ms = 3000                  # scene + edit calls together, 1000..8000 (config.set refuses anything else; a hand
+                                  # edit outside it is clamped). Past it, or on any error, the transcript is typed
+                                  # exactly as heard. Raising it lets a slow model finish more often, at the price of
+                                  # that much longer a wait before anything appears at the cursor when it does not.
+                                  # OpenAI-compatible chat/completions via curl, to any http:// or https:// host.
+                                  # PLAIN HTTP (a LAN model server) means the key and the dictated text cross that
+                                  # network readable by anyone on it; the owner chose to allow it (2026-11-20)
+                                  # One log line per dictation: outcome, scene and who chose it, lengths, salted
+                                  # fingerprints, timings; never the words. With [log] level =
+                                  # "info,deckd::context=debug" it also names the focused window's class (app=foot),
+                                  # never its title
+
+[context.scene]                   # the model that names the scene (shell|agent|editor|chat|prose) from the focused
+provider = ""                     # app's name and window title: text only, never a screenshot or the window's contents.
+model = ""                        # A provider of [providers] and one of its models; either empty: rules only, no call
+
+[context.edit]                    # the model that rewrites the dictated text; either empty: typed exactly as heard
+provider = ""
+model = ""
+                                  # No URL and no key here: the provider has them (below). A role written by an
+                                  # older service with its own `endpoint` (and its own key in context-keys.toml) still
+                                  # works, and moves into the registry when the service starts (deckd::providers::migrate):
+                                  # the endpoint becomes a provider (a built-in kind when it plainly is one, else
+                                  # custom), the key is carried to the provider's item, read back, and only then is
+                                  # the old item removed. A conflict or an unreadable key leaves the role as it was.
+                                  # config.get publishes context."scene.key"/"edit.key" as the provider key's hint
+
+[providers.openrouter]            # where models are reached, set up once and shared by every feature (deckd::providers)
+kind = "openrouter"               # openai | openrouter | anthropic | ollama | elevenlabs | custom (omarchy: below). A built-in kind knows
+# label = "OpenRouter"            # its own URL and protocol; anthropic speaks the Messages API, the rest OpenAI's chat
+                                  # completions. The key is in the OS key store (account providers.<id>.key), else in
+                                  # provider-keys.toml (0600): never in this file. `deckd providers add|remove|set-key|
+                                  # clear-key|list|models|refresh|test|migrate`; the app's page uses providers.* (same code)
+                                  # Omarchy's own local models (Omarchy 4.6+) are not added here: the service finds
+                                  # them (`omarchy-models status --json`, cached in caches/providers/omarchy.json) as
+                                  # provider "omarchy", each model at its own endpoint, with Omarchy's key file
+                                  # (~/.config/omarchy/agent-local/key); absent or unreadable, the provider is not shown
+# [providers.local]
+# kind = "custom"
+# base_url = "http://192.168.1.10:11434/v1"   # custom (and an ollama elsewhere) only
+# timeout_ms = 15000              # a local provider's call timeout (default 15 s; 1000..60000); see §9.1
+
 [scripts]                         # v1.1. optional user script hooks, async, rate-limited 20/s, event JSON on stdin
 scope = "observe"                 # "observe" | "observe:content" — the event is redacted by the same fan-out rules as any subscriber
 on_event = { types = ["card.set", "agent.changed"], command = ["/Users/tony/bin/deck-notify"] }
@@ -1507,11 +1556,35 @@ on_event = { types = ["card.set", "agent.changed"], command = ["/Users/tony/bin/
 level = "info"
 ```
 
-**The managed keys — what `config.set {patch}` may write** (week 6, `core::dispatch::MANAGED`): `api.port`, `hooks.enabled`, and the `[voice]` preferences `announce_questions`, `commands`, `device_uid`, `fallback_output`, `mic_warm`, `slow_sco_ms`, `speak_over_sco`, `stt.companion`, `stt.engine`, `stt.language`, `stt.locale`, `stt.model`, `stt.prompted`, `tts.announce_max_chars`, `tts.api_key`, `tts.engine`, `tts.provider`, `tts.model`, `tts.voices`, `tts.lang`, `tts.instruct`, `voices.default_pool` — each named, none taken as a `voice.*` wildcard. `fallback_input` left the list with decision 11 (`config::RETIRED_KEYS`): `config.get` no longer publishes it, a `config.set` of `"none"` or `null` is accepted and writes nothing, and any other value is `-32602` "voice.fallback_input was removed: …". The companion app's pages added seven more, each in the change that added its control: the Integrations page's source switches, `sources.paused`, `sources.claude`, `sources.claude_channels` and `sources.apps_paused`, and its Codex switch, `codex.daemon` (`codex.daemon_socket` stays the operator's); the Service page's Local API switch, `api.tcp`; and the Usage panel's `usage.providers`, whose Claude switch says where it is offered that it reads the Claude Code login, the rule `voice.tts.api_key` joined under. `sources.claude_channels` is an opt-in rather than a pause: it decides whether the Claude plugin carries the channel helper and the channel door serves it, both local, and Claude still asks each session to opt in itself. `tts.api_key` is what sends the announcements off the machine, and it joined the list in the same change as the Voice screen's **Spoken replies** control, which says so where the key is entered (the rule `voice.stt.allow_server` still waits on, below). `config.get` publishes it as a hint (`…abcd (51 chars)`, `""` for none), never the value, and `config.set`'s took-check compares a written key by its hint. On a Mac's own install `config.set` writes it to the Keychain instead of the file, on the keychain thread, and `config.get` publishes `voice."tts.key_store"` beside it (TTS `cloud` above). Everything else in this file is the operator's own to edit and is refused `-32602`, because `config.toml` is where the trust boundary is declared: `[trust] require_trusted_for_allow` is the whole of §4.2's guarded operations, `[trust] gui_requirement`/`dev_requirement` is what a peer is verified against (and is hot, so a write would land on the next connection), `[api] allowed_origins` and the two `uds_*_scope` keys are who gets in and with what, `[privacy] *` decides what of the operator's prompts and tool inputs is kept on disk, and `[voice.stt] allow_server` sends their speech off the machine. An `admin` caller that could write those would be granting itself trust rather than changing a setting. The list is a **whitelist** on purpose: a list of forbidden keys fails open the next time `[trust]` grows a field, and fails silently. A patch is applied **whole or not at all**, and the file that results is validated whole before it is published.
+**The managed keys — what `config.set {patch}` may write** (week 6, `core::dispatch::MANAGED`): `api.port`, `hooks.enabled`, and the `[voice]` preferences `announce_questions`, `commands`, `device_uid`, `fallback_output`, `mic_warm`, `slow_sco_ms`, `speak_over_sco`, `stt.companion`, `stt.engine`, `stt.language`, `stt.locale`, `stt.model`, `stt.prompted`, `tts.announce_max_chars`, `tts.api_key`, `tts.engine`, `tts.provider`, `tts.model`, `tts.voices`, `tts.lang`, `tts.instruct`, `voices.default_pool` — each named, none taken as a `voice.*` wildcard. `fallback_input` left the list with decision 11 (`config::RETIRED_KEYS`): `config.get` no longer publishes it, a `config.set` of `"none"` or `null` is accepted and writes nothing, and any other value is `-32602` "voice.fallback_input was removed: …". The companion app's pages added seven more, each in the change that added its control: the Integrations page's source switches, `sources.paused`, `sources.claude`, `sources.claude_channels` and `sources.apps_paused`, and its Codex switch, `codex.daemon` (`codex.daemon_socket` stays the operator's); the Service page's Local API switch, `api.tcp`; and the Usage panel's `usage.providers`, whose Claude switch says where it is offered that it reads the Claude Code login, the rule `voice.tts.api_key` joined under. Context-aware dictation added six, `context.enabled`, `context.budget_ms` (1000..8000, refused outside), `context.scene.endpoint`, `context.scene.model`, `context.edit.endpoint` and `context.edit.model`, so the owner can switch it on from a terminal (`deckd config set context.enabled=true …`) before any window offers it; its two keys are not config keys and `config.set` refuses them (`deckd context key set scene|edit` writes them to the key store). `sources.claude_channels` is an opt-in rather than a pause: it decides whether the Claude plugin carries the channel helper and the channel door serves it, both local, and Claude still asks each session to opt in itself. `tts.api_key` is what sends the announcements off the machine, and it joined the list in the same change as the Voice screen's **Spoken replies** control, which says so where the key is entered (the rule `voice.stt.allow_server` still waits on, below). `config.get` publishes it as a hint (`…abcd (51 chars)`, `""` for none), never the value, and `config.set`'s took-check compares a written key by its hint. On a Mac's own install `config.set` writes it to the Keychain instead of the file, on the keychain thread, and `config.get` publishes `voice."tts.key_store"` beside it (TTS `cloud` above). Everything else in this file is the operator's own to edit and is refused `-32602`, because `config.toml` is where the trust boundary is declared: `[trust] require_trusted_for_allow` is the whole of §4.2's guarded operations, `[trust] gui_requirement`/`dev_requirement` is what a peer is verified against (and is hot, so a write would land on the next connection), `[api] allowed_origins` and the two `uds_*_scope` keys are who gets in and with what, `[privacy] *` decides what of the operator's prompts and tool inputs is kept on disk, and `[voice.stt] allow_server` sends their speech off the machine. An `admin` caller that could write those would be granting itself trust rather than changing a setting. The list is a **whitelist** on purpose: a list of forbidden keys fails open the next time `[trust]` grows a field, and fails silently. A patch is applied **whole or not at all**, and the file that results is validated whole before it is published.
 
 `voice.stt.allow_server` is the one `[voice]` key held back rather than forbidden outright, and it is a **deferral with a condition**: §7.6 requires the GUI to say, wherever that key is offered, that turning it on sends the operator's speech off the machine. The Voice screen's one settings surface is the **Spoken replies** control (2026-10-11: provider chips, a masked API-key field with Save/Remove, a model field — `voice.tts.provider`/`api_key`/`model` through `config.set`, one key per call, with the paragraph over the field saying that a key sends the announcements' text to the provider; the key is emptied from the field once saved and is read back only as `config.get`'s hint); there is still no control that could carry `allow_server`'s warning, so that key stays hand-edited until one exists. It should join `MANAGED` in the same commit that adds that control, and not before.
 
 **Hot keys** (`config::HOT_KEYS`, applied without a restart): `api.allowed_origins`, `api.uds_default_scope`, `api.uds_max_scope`, `api.mailbox_ttl_s`, `api.max_held_hooks`, all of `[codex]`, all of `[trust]`, `privacy.log_content`, all of `[agents]` (pins included), `cards.ready_ttl_s`, `hooks.enabled`, `hooks.claude.hold_s`, `hooks.claude.settle_s`, `hooks.codex.hold_s`, `hooks.gemini.hold_s`, all of `[liveness]`, all of `[sources]`, all of `[voice]` but `voice.transport` (and, while the MLX sidecar is the synthesiser, the `[voice.tts]` keys it is started with), `log.level`, `usage.providers`, all of `[updates]`. Everything else is applied to the cell and logged "restart needed", and `config.reload`/`config.set` name it under `restart_needed` rather than reporting it applied.
+
+### 9.1 Context aware transcription is experimental
+
+The app shows an **Experimental** badge beside the section's title, a note the first time the switch is turned on (kept as read in the app's preferences, and behind "What does experimental mean?" afterwards), and `deckd context status` prints `experimental: true`. That label rests on what has and has not been shown to work, as of 2026-11-21:
+
+**Verified**, on the Omarchy machine (Linux, Hyprland) it was built on:
+- the switch, the two models' settings and the provider registry, through `config.set`, the CLI and the app; a config with no `[context]` or `[providers]` table loads unchanged and is off;
+- the provider keys in the Secret Service keyring, the 0600 file fallback, and the migration of Milestone 1's endpoint and key into the registry, on the owner's own install;
+- the window read from Hyprland at the press (`hyprctl`, the class and title only);
+- OpenAI-shaped chat completions against OpenRouter with a real key: rewrites of the reviewed phrases, 0.5–0.9 s each; a slow, dead, refusing or malformed endpoint typing the words as heard;
+- one real deck press end to end through the live service (`kept:unchanged`, the window not a terminal), before the word-based override existed.
+
+**Not verified:**
+- the three window readers (`host/crates/deckd/src/context/focus.rs`: Hyprland's `hyprctl`, the Mac's `lsappinfo` and Accessibility title, Windows' `GetForegroundWindow`) and the registry's Keychain and Credential Manager key paths exist in the working tree only: the `context` module has never been committed. CI builds and tests macOS (`runs-on: macos-15`) and Windows (`runs-on: windows-2025`) on every push, so once it lands CI is what will prove them; until then none of it has been compiled anywhere but Linux;
+- no model running on this computer has been used: Omarchy's local models (Omarchy 4.6, unreleased) only against a fake `omarchy-models`, Ollama and custom servers only against loopback stubs;
+- Anthropic's Messages API only against a stub speaking it, never the real API;
+- a real press rewritten end to end since the word-based override and the press-time window read;
+- the cloud voice's key moving out of `config.toml` on a machine that had one (tested, not seen on a real install);
+- the app's section and Model access page by eye on a Mac or Windows, and anywhere at the Chinese and Japanese text lengths;
+- no Dictate agent exists on macOS or Windows: there, the feature has nothing to rewrite.
+
+**The badge comes off when** all of these are true: CI compiles all three window readers (the `context` module committed and green on `macos-15` and `windows-2025`), and on each platform a dictation on real hardware is rewritten end to end; one local model (Omarchy's or Ollama) and Anthropic's real API have each rewritten a dictation end to end; the owner has used it in real dictation for two weeks with every `context:` line's `kept:` reason accounted for (no unexplained `timeout` or `slow_local`); and the settings' shape (`[context]`, `[providers]`) has gone one release without a change that needed a migration.
+
+**Local models and time.** A cloud provider gets the dictation budget (`[context] budget_ms`, 3 s). A provider on this computer or a private network (Omarchy's, Ollama, a custom address on loopback or a private range) declares a longer call timeout, 15 s by default or its entry's `timeout_ms` (1000..60000), and only such a provider raises the budget for a dictation that uses it, never past 60 s: a press always ends, and a cloud dictation is never slower for a local provider being set up. A local model known not to be running (Omarchy's discovery says so) is not waited for at all: the words go as heard at once (`kept:local_not_running`), since a cold start takes minutes. One that runs out of its time is logged `kept:slow_local`, not `timeout`. The app marks local models "Local · slower" wherever they are offered.
 
 ## 10. Packaging, install, updates, TCC, uninstall
 

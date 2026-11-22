@@ -17,6 +17,11 @@ use std::io::Write;
 pub const KEY_REFUSED: &str =
     "voice.tts.api_key is set with `deckd tts key set`, which reads it without echo";
 
+/// Why `deckd config set` does not take a context model's key.
+pub const CONTEXT_KEY_REFUSED: &str =
+    "the context models' keys are set with `deckd context key set scene|edit`, which reads them \
+     without echo";
+
 #[derive(Subcommand, Debug)]
 pub enum ConfigCmd {
     /// The settings the service manages (`config.get`), or one dotted key's
@@ -123,6 +128,9 @@ pub fn patch(pairs: &[String], unset: &[String]) -> Result<Value, String> {
         }
         if key == crate::secrets::ACCOUNT {
             return Err(KEY_REFUSED.into());
+        }
+        if crate::context::keys::Role::ALL.iter().any(|role| key == role.account()) {
+            return Err(CONTEXT_KEY_REFUSED.into());
         }
         if patch.insert(key.to_string(), value).is_some() {
             return Err(format!("{key} is given twice"));
@@ -380,5 +388,20 @@ mod tests {
         let ran = run(|out, err| super::run(&script, parse(&["reload"]).unwrap(), out, err));
         assert_eq!((ran.result, ran.out.as_str()), (Ok(0), "nothing changed\n"));
         assert_eq!(script.methods(), ["config.set", "config.reload"]);
+    }
+
+    /// A context model's key is never a `config set` argument: it would stay
+    /// in the shell's history and show in `ps`. Refused before the service
+    /// is asked.
+    #[test]
+    fn a_context_key_is_refused_on_the_command_line() {
+        for (pairs, unset) in [
+            (strings(&["context.scene.key=sk-1"]), vec![]),
+            (strings(&["context.edit.key=sk-1"]), vec![]),
+            (vec![], strings(&["context.edit.key"])),
+        ] {
+            assert_eq!(patch(&pairs, &unset), Err(CONTEXT_KEY_REFUSED.into()));
+        }
+        assert!(patch(&strings(&["context.enabled=true"]), &[]).is_ok());
     }
 }

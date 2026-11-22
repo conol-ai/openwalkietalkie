@@ -130,6 +130,7 @@ impl Shell {
                     Ok(value) => {
                         this.voice.stt_config = Some(SttConfig::parse(&value));
                         this.voice.tts = Some(TtsConfig::parse(&value));
+                        this.took_context_config(&value, window, cx);
                         this.voice.config_missing = false;
                         this.voice.asked = true;
                     }
@@ -835,7 +836,7 @@ impl Shell {
     /// A press's call came back refused: a service older than the method is
     /// said in one sentence and `None` handed back; otherwise the error's
     /// words, for the press's own sentence.
-    fn missing_or(
+    pub(crate) fn missing_or(
         &self,
         error: &ClientError,
         window: &mut Window,

@@ -16,6 +16,7 @@
 //! scanner stopped seeing cannot pass as a page with nothing to translate.
 use deck_gui_core::i18n::Entry;
 
+pub mod context;
 pub mod deck;
 pub mod faces;
 pub mod firstrun;
@@ -33,6 +34,7 @@ pub const TABLES: &[&[Entry]] = &[
     faces::STRINGS,
     integrations::STRINGS,
     voice::STRINGS,
+    context::STRINGS,
     service::STRINGS,
     firstrun::STRINGS,
 ];

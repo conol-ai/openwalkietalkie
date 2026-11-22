@@ -111,6 +111,9 @@ pub enum Screen {
     Service,
     Footprint,
     LocalApi,
+    /// Model access: the providers context aware transcription chooses its
+    /// models from, a sub-page of Voice (`crate::context`).
+    Models,
     /// The kit's parts in every state (the Tokens board).
     Kit,
     /// The status item's menu, drawn in the window (the MenuBar board).
@@ -118,7 +121,7 @@ pub enum Screen {
 }
 
 impl Screen {
-    pub const ALL: [Screen; 9] = [
+    pub const ALL: [Screen; 10] = [
         Screen::Deck,
         Screen::FacesKeys,
         Screen::Integrations,
@@ -126,6 +129,7 @@ impl Screen {
         Screen::Service,
         Screen::Footprint,
         Screen::LocalApi,
+        Screen::Models,
         Screen::Kit,
         Screen::MenuPreview,
     ];
@@ -149,6 +153,7 @@ impl Screen {
             Screen::Service => "Service",
             Screen::Footprint => "Footprint",
             Screen::LocalApi => "Local API",
+            Screen::Models => "Model access",
             Screen::Kit => "Tokens",
             Screen::MenuPreview => "Menu bar",
         }
@@ -164,6 +169,7 @@ impl Screen {
             Screen::Service => "service",
             Screen::Footprint => "footprint",
             Screen::LocalApi => "local-api",
+            Screen::Models => "models",
             Screen::Kit => "kit",
             Screen::MenuPreview => "menu",
         }
@@ -179,6 +185,7 @@ impl Screen {
             Screen::Service => "nav-service",
             Screen::Footprint => "nav-footprint",
             Screen::LocalApi => "nav-local-api",
+            Screen::Models => "nav-models",
             Screen::Kit => "nav-kit",
             Screen::MenuPreview => "nav-menu",
         }
@@ -190,7 +197,7 @@ impl Screen {
             Screen::Deck => ic::DECK,
             Screen::FacesKeys => ic::WIDGET,
             Screen::Integrations => ic::PLUG,
-            Screen::Voice => ic::MICROPHONE,
+            Screen::Voice | Screen::Models => ic::MICROPHONE,
             Screen::Service | Screen::Footprint | Screen::LocalApi => ic::SERVER,
             Screen::Kit => ic::TUNING,
             Screen::MenuPreview => ic::LIST,
@@ -208,6 +215,7 @@ impl Screen {
             | Screen::Voice
             | Screen::Service => Some(self),
             Screen::Footprint | Screen::LocalApi => Some(Screen::Service),
+            Screen::Models => Some(Screen::Voice),
             Screen::Kit | Screen::MenuPreview => None,
         }
     }
@@ -787,6 +795,7 @@ impl Shell {
             Screen::FacesKeys => self.refresh_faces(force, window, cx),
             Screen::Integrations => self.refresh_integrations(force, window, cx),
             Screen::Voice => self.refresh_voice(force, window, cx),
+            Screen::Models => self.refresh_voice(true, window, cx),
             Screen::Service | Screen::Footprint | Screen::LocalApi => {
                 self.refresh_service(force, window, cx);
             }
@@ -822,6 +831,7 @@ impl Shell {
             Screen::FacesKeys => self.render_faces(dim, cx),
             Screen::Integrations => self.render_integrations(dim, cx),
             Screen::Voice => self.render_voice(dim, cx),
+            Screen::Models => self.render_models(dim, cx),
             Screen::Service | Screen::Footprint | Screen::LocalApi => self.render_service(dim, cx),
             Screen::Kit => self.render_kit(cx),
             Screen::MenuPreview => self.render_menu_preview(cx),
@@ -1296,6 +1306,15 @@ fn action_name(action: &UiAction) -> &'static str {
         UiAction::SourcesList => "Read the sources",
         UiAction::GrokbotStatus => "Read the Grok bots",
         UiAction::GrokbotAdd { .. } => "Set up the bot",
+        UiAction::ContextKeySet { .. } => "Save the key",
+        UiAction::ContextKeyClear { .. } => "Remove the key",
+        UiAction::ProvidersList => "Read the providers",
+        UiAction::ProvidersAdd { .. } => "Add the provider",
+        UiAction::ProvidersRemove { .. } => "Remove the provider",
+        UiAction::ProvidersKeySet { .. } => "Save the key",
+        UiAction::ProvidersKeyClear { .. } => "Remove the key",
+        UiAction::ProvidersTest { .. } => "Check the provider",
+        UiAction::ProvidersRefresh { .. } => "Refresh the models",
         UiAction::GrokbotRemove { .. } => "Remove the bot",
         UiAction::GrokbotTest { .. } => "Test the bot",
         UiAction::TestQuestion => "Send a test question",

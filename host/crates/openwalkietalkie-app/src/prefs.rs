@@ -42,6 +42,7 @@ const CASE: &str = "case";
 const FIRST_RUN_DONE: &str = "first_run_done";
 const LANGUAGE: &str = "language";
 const DECK_SEEN: &str = "deck_seen";
+const CONTEXT_EXPERIMENTAL_SEEN: &str = "context_experimental_seen";
 
 /// The colour of the deck's case. The deck does not report it, so the owner
 /// says it once, in first run or on the Deck page, and the picture follows.
@@ -195,6 +196,20 @@ impl Prefs {
             .get(DECK_SEEN)
             .and_then(Value::as_bool)
             .unwrap_or(false)
+    }
+
+    /// Whether the owner has read what "experimental" means for context
+    /// aware transcription (the note the switch shows once).
+    pub fn context_experimental_seen(&self) -> bool {
+        self.values
+            .get(CONTEXT_EXPERIMENTAL_SEEN)
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+    }
+
+    /// The note has been read: it is not shown again by itself.
+    pub fn set_context_experimental_seen(&mut self) {
+        self.set(CONTEXT_EXPERIMENTAL_SEEN, Some(Value::Bool(true)));
     }
 
     pub fn set_case(&mut self, case: Case) {

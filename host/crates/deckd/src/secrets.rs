@@ -509,6 +509,34 @@ pub fn home_for(paths: &Paths, no_device: bool) -> KeyHome {
     KeyHome::File
 }
 
+/// Where the cloud voice's key lives for a service on `paths` whose voice is
+/// provider `provider` (`[voice.tts] provider`, OpenAI when empty).
+///
+/// On Linux's own install it is that provider's item of the registry
+/// (`crate::providers::keys::VoiceProviderKey`): the Secret Service, or
+/// `provider-keys.toml` (0600) where there is none — never `config.toml`,
+/// where it used to sit in clear. A key still in `config.toml` is moved
+/// there at start by [`VoiceKey::adopt`]. Everywhere else it is
+/// [`home_for`]'s answer, as before: the Keychain on a Mac and Credential
+/// Manager on Windows already keep it out of the file.
+#[must_use]
+pub fn voice_home(paths: &Paths, no_device: bool, provider: &str) -> KeyHome {
+    #[cfg(target_os = "linux")]
+    if !no_device && crate::context::keys::linux_own_install(paths) {
+        let id = match provider.trim() {
+            "" => "openai",
+            id => id,
+        };
+        return KeyHome::Store(Arc::new(crate::providers::keys::VoiceProviderKey::new(
+            crate::providers::keys::ProviderKeys::home(paths),
+            id,
+        )));
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = provider;
+    home_for(paths, no_device)
+}
+
 /// Windows' counterpart of [`keychain_applies`]: Credential Manager holds the
 /// key for the account's own install, `<%LOCALAPPDATA%>\OpenWalkieTalkie`
 /// (compared case-blind, as Windows names folders), and for no data folder

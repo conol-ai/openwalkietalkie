@@ -62,6 +62,7 @@ pub mod updater;
 pub mod frame;
 pub mod menu;
 
+pub mod context;
 pub mod deck;
 
 pub mod faces;
