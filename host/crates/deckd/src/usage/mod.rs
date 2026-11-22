@@ -32,6 +32,7 @@ use serde_json::Value;
 use crate::config::UsageCfg;
 
 pub mod claude;
+pub mod claude_identity;
 
 /// The longest `UsageItem.name` the wire line carries (`n` ≤ 20).
 const NAME_MAX: usize = 20;
@@ -469,6 +470,15 @@ impl Feeder {
 
     /// Status-line reports contain only a subset of the account's meters.
     /// Preserve model limits only for the same known account and before reset.
+    ///
+    /// Claude has two feeds, the daemon's usage probe and the CLI's status
+    /// line, and each labels its numbers with the account of the credential
+    /// that produced them. They can disagree (the CLI runs another
+    /// `CLAUDE_CONFIG_DIR`, or `/login` just switched it). The deck is never
+    /// shown two identities: windows and label are one slot, replaced
+    /// together, so it shows the account of the credential behind the
+    /// newest numbers, which is the one in use right now. An unknown or
+    /// different account merges nothing from the old one.
     pub fn set_partial(&mut self, provider: Provider, mut windows: Vec<Window>, account: Option<String>, now: u64) -> bool {
         let account = account_label(account.as_deref());
         if account.is_some() && self.accounts.get(&provider) == Some(&account) {

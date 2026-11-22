@@ -833,8 +833,10 @@ fn run(cli: Cli) -> Result<i32, String> {
     }
     let cmd = match cmd {
         Cmd::Hook { cli, rest } => {
-            let socket = paths(data_dir).ok().map(|p| p.socket);
-            return Ok(crate::hook::main(&cli, &rest, socket));
+            let paths = paths(data_dir).ok();
+            let socket = paths.as_ref().map(|p| p.socket.clone());
+            let caches = paths.map(|p| p.caches);
+            return Ok(crate::hook::main(&cli, &rest, socket, caches));
         }
         // The bench tools talk to the deck, not to the data directory, and
         // the probe only looks for it.
@@ -849,7 +851,7 @@ fn run(cli: Cli) -> Result<i32, String> {
         Cmd::ClaudeChannel => crate::claude_channel::main(&paths.data),
         // Answered above, where a missing data directory is a missing
         // socket rather than an error exit; kept so the match is total.
-        Cmd::Hook { cli, rest } => Ok(crate::hook::main(&cli, &rest, Some(paths.socket))),
+        Cmd::Hook { cli, rest } => Ok(crate::hook::main(&cli, &rest, Some(paths.socket), Some(paths.caches))),
         Cmd::Ble { cmd } => Ok(ble_cmd(cmd)),
         Cmd::Probe { json } => probe_cmd(crate::hid::instance_buses(), json, &mut std::io::stdout().lock()),
         Cmd::Run {
