@@ -15,6 +15,7 @@ pub mod claude_channel;
 pub mod cli;
 pub mod codexd;
 pub mod config;
+pub mod context;
 pub mod core;
 pub mod deliveries;
 pub mod demo;
@@ -38,6 +39,7 @@ pub mod state;
 pub mod stt;
 pub mod tokens;
 pub mod procs;
+pub mod providers;
 pub mod trust;
 #[cfg(windows)]
 pub mod winproc;

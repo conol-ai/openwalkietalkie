@@ -387,6 +387,19 @@ pub enum Cmd {
         #[command(subcommand)]
         cmd: crate::verbs::firmware::FirmwareCmd,
     },
+    /// Context-aware dictation: its status, and the two models' API keys
+    /// (`[context]`; its switch, endpoints and model names are managed keys:
+    /// `deckd config set context.enabled=true`).
+    Context {
+        #[command(subcommand)]
+        cmd: crate::verbs::context::ContextCmd,
+    },
+    /// Where models are reached: providers, their keys and their models
+    /// (`[providers]`), shared by context-aware dictation and the cloud voice.
+    Providers {
+        #[command(subcommand)]
+        cmd: crate::verbs::providers::ProvidersCmd,
+    },
     /// The settings the running service manages (`config.get`, `config.set`,
     /// `config.reload`).
     Config {
@@ -933,7 +946,8 @@ fn run(cli: Cli) -> Result<i32, String> {
         }
         Cmd::Tts { cmd } => {
             let mut out = std::io::stdout().lock();
-            let keys = crate::secrets::home_for(&paths, false);
+            let provider = Config::load(&paths.config).unwrap_or_default().voice.tts.provider;
+            let keys = crate::secrets::voice_home(&paths, false, &provider);
             tts_cmd(&paths, cmd, &keys, &mut out)
         }
         Cmd::Stt { cmd } => {
@@ -1007,6 +1021,27 @@ fn run(cli: Cli) -> Result<i32, String> {
         Cmd::Grokbot { cmd } => verb(&paths, cmd, crate::verbs::grokbot::run),
         Cmd::Firmware { cmd } => verb(&paths, cmd, crate::verbs::firmware::run),
         Cmd::Config { cmd } => verb(&paths, cmd, crate::verbs::config::run),
+        Cmd::Providers { cmd } => {
+            let mut out = std::io::stdout().lock();
+            crate::verbs::providers::run(
+                &paths,
+                &|| crate::providers::keys::ProviderKeys::home(&paths),
+                &|prompt| read_key(prompt),
+                cmd,
+                &mut out,
+            )
+        }
+        Cmd::Context { cmd } => {
+            let (mut out, mut err) = (std::io::stdout().lock(), std::io::stderr().lock());
+            crate::verbs::context::run(
+                &crate::verbs::Socket::new(&paths.socket),
+                &paths.data,
+                &|| crate::context::keys::ContextKeys::home(&paths),
+                cmd,
+                &mut out,
+                &mut err,
+            )
+        }
         Cmd::Service { cmd } => verb(&paths, cmd, crate::verbs::service::run),
         Cmd::Doctor { json } => {
             let report = doctor(&paths);

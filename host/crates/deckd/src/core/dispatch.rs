@@ -158,6 +158,18 @@ pub const MANAGED: &[&str] = &[
     "api.port",
     "api.tcp",
     "codex.daemon",
+    // Context-aware dictation (`crate::context`): the switch, and each
+    // model's endpoint and name. The two keys are not config keys at all:
+    // `deckd context key set` writes them to the key store, and
+    // `config.get` publishes their hints only (`context."scene.key"`).
+    "context.budget_ms",
+    "context.edit.endpoint",
+    "context.edit.model",
+    "context.edit.provider",
+    "context.enabled",
+    "context.scene.endpoint",
+    "context.scene.model",
+    "context.scene.provider",
     // The Integrations page's Grok Bot switch. The bots themselves are
     // written by `grokbot.add` and `grokbot.remove`, which check what they
     // write: a URL, a name, and an id of the shape a table may have.
@@ -474,6 +486,8 @@ impl Core {
             "config.get" => Reply::ok(self.config_get()),
             "config.set" => self.config_set(&params, now),
             "config.reload" => self.config_reload(&ctx, now),
+            "providers.add" => self.providers_add(&params, now),
+            "providers.remove" => self.providers_remove(&params, now),
             "service.restart" | "service.stop" => {
                 let voice = &self.store.snapshot().voice;
                 let busy_voice = voice.ptt.is_some() || voice.speaking.is_some() || self.store.is_finalizing();
@@ -613,7 +627,88 @@ impl Core {
         published["api"]["tcp"] = door.on.into();
         published["api"]["tcp_rule"] = door.rule.word().into();
         published["voice"]["tts.key_store"] = self.voice_key.word().into();
+        // The context keys' hints and stores, from `context-keys.toml`
+        // alone: never a key, and never a store call on this thread.
+        // A role on a provider shows that provider's key; one still on its
+        // own endpoint, its own.
+        for role in crate::context::keys::Role::ALL {
+            let provider = match role {
+                crate::context::keys::Role::Scene => &self.config().context.scene.provider,
+                crate::context::keys::Role::Edit => &self.config().context.edit.provider,
+            }
+            .trim()
+            .to_string();
+            let key = if provider.is_empty() {
+                crate::context::keys::recorded(&self.paths.data, role)
+            } else {
+                crate::providers::keys::recorded(&self.paths.data, &provider)
+            }
+            .unwrap_or_default();
+            published["context"][format!("{}.key", role.name())] = key.hint.into();
+            published["context"][format!("{}.key_store", role.name())] = key.store.into();
+        }
         published
+    }
+
+    /// `providers.add {id, kind, label?, base_url?}`: a `[providers.<id>]`
+    /// entry, written into `config.toml` on this thread as `config.set`
+    /// writes it (every other byte kept, validated whole), and in force
+    /// before the reply. A built-in kind takes no URL; `custom` needs one;
+    /// Omarchy's local models are found, never added. The key is
+    /// `providers.key.set`'s, off this thread.
+    fn providers_add(&mut self, params: &serde_json::Value, now: Instant) -> Reply {
+        let text = |field: &str| params.get(field).and_then(serde_json::Value::as_str).map(str::trim).unwrap_or("");
+        let id = text("id");
+        if !crate::providers::id_ok(id) || id == crate::providers::omarchy::ID {
+            return Reply::err(ApiError::invalid("id", "1 to 32 lowercase letters, digits, - and _, starting with a letter"));
+        }
+        let entry = crate::config::ProviderEntry {
+            kind: text("kind").to_ascii_lowercase(),
+            label: Some(text("label").to_string()).filter(|l| !l.is_empty()),
+            base_url: text("base_url").trim_end_matches('/').to_string(),
+            timeout_ms: None,
+        };
+        let provider = match crate::providers::Provider::from_entry(id, &entry) {
+            Ok(provider) => provider,
+            Err(why) => return Reply::err(ApiError::invalid("kind", &why.to_string())),
+        };
+        if provider.kind == crate::providers::Kind::Omarchy {
+            return Reply::err(ApiError::invalid("kind", "Omarchy's local models are found by themselves"));
+        }
+        if !entry.base_url.is_empty() && !matches!(provider.kind, crate::providers::Kind::Custom | crate::providers::Kind::Ollama) {
+            return Reply::err(ApiError::invalid("base_url", "a built-in provider's address is its own"));
+        }
+        self.providers_write(id, Some(&entry), now)
+    }
+
+    /// `providers.remove {id, force?}`: the entry out of `config.toml`;
+    /// refused while a feature uses it, unless `force`. Its key is
+    /// `providers.key.clear`'s.
+    fn providers_remove(&mut self, params: &serde_json::Value, now: Instant) -> Reply {
+        let id = params.get("id").and_then(serde_json::Value::as_str).unwrap_or("").trim().to_string();
+        if !self.config().providers.contains_key(&id) {
+            return Reply::err(ApiError::not_found("provider"));
+        }
+        let users = crate::verbs::providers::users_of(self.config(), &id);
+        let force = params.get("force").and_then(serde_json::Value::as_bool).unwrap_or(false);
+        if !users.is_empty() && !force {
+            return Reply::err(ApiError::invalid("id", &format!("{} uses it", users.join(" and "))));
+        }
+        self.providers_write(&id, None, now)
+    }
+
+    fn providers_write(&mut self, id: &str, entry: Option<&crate::config::ProviderEntry>, now: Instant) -> Reply {
+        if let Err(why) = crate::verbs::providers::write_entry(&self.paths, id, entry) {
+            return Reply::err(ApiError::invalid("config.toml", &why));
+        }
+        match Config::load(&self.paths.config) {
+            Ok(next) => {
+                self.take_config(std::sync::Arc::new(next), now);
+                tracing::info!(provider = %id, added = entry.is_some(), "providers: config.toml written");
+                Reply::ok(serde_json::json!({ "id": id, "added": entry.is_some() }))
+            }
+            Err(e) => Reply::err(ApiError::internal(&e.to_string())),
+        }
     }
 
     /// `config.set{patch}` (§4.11, §9): the **managed** keys of `config.toml`,
@@ -1912,6 +2007,9 @@ fn config_patch(
             return Err(ApiError::invalid_params(&retired.refusal()));
         }
     }
+    if let Some(value) = patch.get(BUDGET_KEY) {
+        budget_ms_value(value)?;
+    }
     let unmanaged: Vec<&str> = patch
         .keys()
         .map(String::as_str)
@@ -1929,6 +2027,25 @@ fn config_patch(
         )));
     }
     Ok(patch)
+}
+
+/// Context-aware dictation's budget, by its dotted name.
+const BUDGET_KEY: &str = "context.budget_ms";
+
+/// `context.budget_ms` as `config.set` takes it: a whole number of
+/// milliseconds in `BUDGET_MS_MIN..=BUDGET_MS_MAX`, or `null` for the
+/// default (3000).
+fn budget_ms_value(value: &serde_json::Value) -> Result<(), ApiError> {
+    use crate::config::{BUDGET_MS_MAX, BUDGET_MS_MIN};
+    if value.is_null() {
+        return Ok(());
+    }
+    match value.as_u64() {
+        Some(ms) if (u64::from(BUDGET_MS_MIN)..=u64::from(BUDGET_MS_MAX)).contains(&ms) => Ok(()),
+        _ => Err(ApiError::invalid_params(&format!(
+            "{BUDGET_KEY} takes whole milliseconds from {BUDGET_MS_MIN} (less cannot finish a              model call) to {BUDGET_MS_MAX} (more makes a dictation feel hung), or null for the              default, 3000"
+        ))),
+    }
 }
 
 /// The key a keyed `config.set` writes to the store: a string, trimmed
@@ -2112,7 +2229,30 @@ pub fn config_json(c: &Config) -> serde_json::Value {
         "macropad": macropad,
         "usage": {"providers": c.usage.providers},
         "updates": {"check": c.updates.check},
+        "context": context_json(&c.context),
+        // The provider registry, as `config.toml` has it: never a key (the
+        // keys' hints are `providers.list`'s).
+        "providers": c.providers.iter().map(|(id, entry)| (id.clone(), serde_json::json!({
+            "kind": entry.kind, "label": entry.label, "base_url": entry.base_url,
+        }))).collect::<serde_json::Map<String, serde_json::Value>>(),
         "log": {"level": c.log.level},
+    })
+}
+
+/// `[context]` as `config.get` publishes it: the switch, and each model's
+/// endpoint and name flat (`scene.endpoint`), as `voice` spells `stt.locale`.
+/// The keys' hints are added by `config.get` itself, from the key file.
+#[must_use]
+pub fn context_json(c: &crate::config::Context) -> serde_json::Value {
+    serde_json::json!({
+        "enabled": c.enabled,
+        "budget_ms": c.budget_ms,
+        "scene.provider": c.scene.provider,
+        "scene.endpoint": c.scene.endpoint,
+        "scene.model": c.scene.model,
+        "edit.provider": c.edit.provider,
+        "edit.endpoint": c.edit.endpoint,
+        "edit.model": c.edit.model,
     })
 }
 
@@ -4443,6 +4583,140 @@ mod tests {
         assert_eq!(err.code, ApiError::INTERNAL);
         assert_eq!(std::fs::read_to_string(&c.paths.config).unwrap(), before);
         assert_eq!(store.writes(), 0);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// Context-aware dictation through `config.set`/`config.get`: off with
+    /// no `[context]` table; the switch and each model's endpoint and name
+    /// are managed; the keys are no key of the file, `config.get` publishes
+    /// only their hints, and no key is anywhere in what it publishes.
+    #[test]
+    fn context_settings_are_managed_and_its_keys_are_only_ever_hints() {
+        use crate::context::keys::{ContextKeys, Role};
+        const SCENE: &str = "sk-scene-secret-0123456789-abcdef-WXYZ";
+        const EDIT: &str = "sk-edit-secret-9876543210-fedcba-QRST";
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("dispatch-config-context");
+        let t0 = Instant::now();
+        let admin = || ctx(2, &[Scope::Admin]);
+        let get = |c: &mut Core| {
+            c.call(admin(), "config.get", serde_json::json!({}), t0)
+                .result
+                .unwrap()
+        };
+        let published = get(&mut c);
+        assert_eq!(published["context"]["enabled"], false, "no table: off");
+        assert_eq!(published["context"]["scene.endpoint"], "");
+        assert_eq!(published["context"]["scene.key"], "");
+        assert_eq!(published["context"]["edit.key"], "");
+
+        let ok = c
+            .call(
+                admin(),
+                "config.set",
+                serde_json::json!({"patch": {
+                    "context.enabled": true,
+                    "context.scene.endpoint": "https://scene.example/v1",
+                    "context.scene.model": "scene-small",
+                    "context.edit.endpoint": "https://edit.example/v1",
+                    "context.edit.model": "edit-large",
+                }}),
+                t0,
+            )
+            .result
+            .unwrap();
+        assert_eq!(ok["applied"].as_array().unwrap().len(), 5, "{ok}");
+        assert!(c.config().context.enabled);
+        let text = std::fs::read_to_string(&c.paths.config).unwrap();
+        assert!(text.contains("[context]") && text.contains("[context.edit]"), "{text}");
+
+        // The budget: whole milliseconds within the bounds, or null.
+        let set = |c: &mut Core, value: serde_json::Value| {
+            c.call(admin(), "config.set", serde_json::json!({"patch": {"context.budget_ms": value}}), t0).result
+        };
+        assert!(set(&mut c, serde_json::json!(5000)).is_ok());
+        assert_eq!(c.config().context.budget_ms, 5000);
+        for ok in [crate::config::BUDGET_MS_MIN, crate::config::BUDGET_MS_MAX] {
+            assert!(set(&mut c, serde_json::json!(ok)).is_ok(), "{ok}");
+        }
+        for bad in [
+            serde_json::json!(999),
+            serde_json::json!(8001),
+            serde_json::json!(0),
+            serde_json::json!(-3000),
+            serde_json::json!(2500.5),
+            serde_json::json!("3000"),
+            serde_json::json!(true),
+        ] {
+            let refused = set(&mut c, bad.clone()).unwrap_err();
+            assert_eq!(refused.code, ApiError::INVALID_PARAMS, "{bad}");
+            assert!(refused.data["why"].as_str().unwrap().contains("1000"), "{bad}: {refused:?}");
+        }
+        assert_eq!(c.config().context.budget_ms, crate::config::BUDGET_MS_MAX, "a refusal writes nothing");
+        assert!(set(&mut c, serde_json::Value::Null).is_ok());
+        assert_eq!(c.config().context.budget_ms, 3000, "null: the default again");
+
+        // The keys go to the store (here the data directory's file, a test
+        // service's), never through config.set.
+        let keys = ContextKeys::file_only(&c.paths.data);
+        keys.set(Role::Scene, SCENE).unwrap();
+        keys.set(Role::Edit, EDIT).unwrap();
+        for key in ["context.scene.key", "context.edit.key", "context.scene.api_key"] {
+            let refused = c
+                .call(admin(), "config.set", serde_json::json!({"patch": {key: "sk-x"}}), t0)
+                .result
+                .unwrap_err();
+            assert_eq!(refused.code, ApiError::INVALID_PARAMS, "{key}");
+        }
+        let published = get(&mut c);
+        assert_eq!(published["context"]["scene.model"], "scene-small");
+        assert_eq!(published["context"]["scene.key"], "…WXYZ (38 chars)");
+        assert_eq!(published["context"]["edit.key"], "…QRST (37 chars)");
+        assert_eq!(published["context"]["edit.key_store"], "file");
+        // The grep: no key, nor any eight characters of one, anywhere in
+        // what config.get publishes, nor in the config file, nor in `{:?}`.
+        let everything = format!(
+            "{published} {} {:?}",
+            std::fs::read_to_string(&c.paths.config).unwrap(),
+            c.config()
+        );
+        for key in [SCENE, EDIT] {
+            for start in 0..key.len() - 8 {
+                let piece = &key[start..start + 8];
+                assert!(!everything.contains(piece), "{piece} of a key was published");
+            }
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// The app's model access page: a provider added is in force before the
+    /// reply, with every other byte of the file kept; the wrong ones are
+    /// refused; one in use is not removed without `force`.
+    #[test]
+    fn providers_are_added_and_removed_through_the_core() {
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("dispatch-providers");
+        let t0 = Instant::now();
+        std::fs::write(&c.paths.config, "# mine\n[api]\nport = 47201\n").unwrap();
+        let admin = || ctx(2, &[Scope::Admin]);
+        let call = |c: &mut Core, method: &str, params: serde_json::Value| c.call(admin(), method, params, t0).result;
+        call(&mut c, "providers.add", serde_json::json!({"id": "or", "kind": "openrouter"})).unwrap();
+        call(&mut c, "providers.add", serde_json::json!({"id": "box", "kind": "custom", "base_url": "http://192.168.1.10:11434/v1/", "label": "My box"})).unwrap();
+        assert_eq!(c.config().providers["box"].base_url, "http://192.168.1.10:11434/v1");
+        assert!(std::fs::read_to_string(&c.paths.config).unwrap().starts_with("# mine\n[api]\nport = 47201\n"));
+        for bad in [
+            serde_json::json!({"id": "omarchy", "kind": "custom", "base_url": "http://x/v1"}),
+            serde_json::json!({"id": "loc", "kind": "omarchy"}),
+            serde_json::json!({"id": "or2", "kind": "openrouter", "base_url": "https://x/v1"}),
+            serde_json::json!({"id": "c2", "kind": "custom"}),
+            serde_json::json!({"id": "Bad Id", "kind": "openai"}),
+        ] {
+            assert!(call(&mut c, "providers.add", bad.clone()).is_err(), "{bad}");
+        }
+        call(&mut c, "config.set", serde_json::json!({"patch": {"context.edit.provider": "or", "context.edit.model": "m"}})).unwrap();
+        assert!(call(&mut c, "providers.remove", serde_json::json!({"id": "or"})).is_err(), "in use");
+        call(&mut c, "providers.remove", serde_json::json!({"id": "box"})).unwrap();
+        assert!(!c.config().providers.contains_key("box"));
+        call(&mut c, "providers.remove", serde_json::json!({"id": "or", "force": true})).unwrap();
+        assert!(c.config().providers.is_empty());
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

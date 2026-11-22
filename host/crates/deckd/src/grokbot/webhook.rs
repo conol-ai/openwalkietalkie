@@ -134,7 +134,7 @@ pub fn url_problem(url: &str) -> Option<&'static str> {
 }
 
 /// A value inside the double quotes of a curl config line.
-fn quoted(value: &str) -> String {
+pub(crate) fn quoted(value: &str) -> String {
     let mut out = String::with_capacity(value.len() + 2);
     out.push('"');
     for ch in value.chars() {

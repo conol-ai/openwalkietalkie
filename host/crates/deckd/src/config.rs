@@ -27,7 +27,7 @@ pub const WATCH_DEBOUNCE: Duration = Duration::from_millis(300);
 const WATCH_POLL: Duration = Duration::from_millis(25);
 /// The keys a reload applies without a restart (`<table>.<key>`, or
 /// `<table>.*`); everything else is logged "restart needed".
-pub const HOT_KEYS: [&str; 22] = [
+pub const HOT_KEYS: [&str; 24] = [
     "api.allowed_origins",
     // `deckd::codexd` reads `[codex]` on every connect attempt, and a live
     // connection ends when `daemon` is switched off.
@@ -79,6 +79,11 @@ pub const HOT_KEYS: [&str; 22] = [
     // The service's own looks for a release: the core reads the switch on
     // every tick (`Core::check_for_updates`).
     "updates.*",
+    // Context-aware dictation (`crate::context`): read where it is used, at
+    // each dictation, so a switch or an endpoint changes the next one.
+    "context.*",
+    // The provider registry: read where it is used, at each call.
+    "providers.*",
 ];
 
 /// Keys inside a hot table that still need a restart: they are read once,
@@ -1480,6 +1485,102 @@ impl Sources {
     }
 }
 
+/// `[context]`: context-aware dictation (`crate::context`). **Off unless
+/// switched on**, and a file without the table is off, so an install from
+/// before it changes nothing. Dictation at the cursor only. Each model has
+/// its own endpoint, model name and key; the keys are never in this file
+/// (`crate::context::keys`: the OS key store, else `context-keys.toml`).
+/// Every key is hot. The rewrite itself is `crate::context::rewrite`.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(default)]
+pub struct Context {
+    /// The switch. Off: dictation types what was heard, as before.
+    pub enabled: bool,
+    /// The scene call and the edit call together may take this long, in
+    /// milliseconds; past it the transcript is typed as it was heard.
+    /// `config.set` takes [`BUDGET_MS_MIN`]..=[`BUDGET_MS_MAX`] and refuses
+    /// anything else; a hand-edited value outside them is clamped
+    /// ([`Context::budget`]).
+    pub budget_ms: u32,
+    /// `[context.scene]`: the model that names the scene from the focused
+    /// app's name and its window title — text only, never a screenshot or
+    /// the window's contents.
+    pub scene: ContextModel,
+    /// `[context.edit]`: the model that rewrites the dictated text.
+    pub edit: ContextModel,
+}
+
+impl Default for Context {
+    fn default() -> Self {
+        Context {
+            enabled: false,
+            budget_ms: 3000,
+            scene: ContextModel::default(),
+            edit: ContextModel::default(),
+        }
+    }
+}
+
+/// The least `[context] budget_ms` may be: a hosted model's HTTPS round
+/// trip alone is ~300 ms from the Omarchy box before the model has written
+/// a word, and focus, curl and the edit call come on top. Under a second,
+/// nearly every call would end in the budget and the setting would only
+/// cost time.
+pub const BUDGET_MS_MIN: u32 = 1000;
+/// The most: dictation is held while the models answer, and past ~8 s a
+/// press that types nothing reads as a hang rather than as slowness.
+pub const BUDGET_MS_MAX: u32 = 8000;
+
+impl Context {
+    /// The total budget for one dictation's model calls.
+    #[must_use]
+    pub fn budget(&self) -> Duration {
+        Duration::from_millis(u64::from(self.budget_ms.clamp(BUDGET_MS_MIN, BUDGET_MS_MAX)))
+    }
+}
+
+/// One model of `[context]`: which provider of `[providers]` and which of
+/// its models. An empty `provider` or `model` is "not set up".
+///
+/// `endpoint` is Milestone 1's own base URL, from before the registry. A
+/// role with no `provider` and an `endpoint` still works (its key is the
+/// role's own, `context-keys.toml`), and the service moves it into the
+/// registry when it starts (`crate::providers::migrate`), after which it is
+/// gone from the file.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(default)]
+pub struct ContextModel {
+    /// The id of a `[providers.<id>]` entry.
+    pub provider: String,
+    /// The model's id at that provider.
+    pub model: String,
+    /// Legacy: a base URL of the role's own (see above).
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub endpoint: String,
+}
+
+/// `[providers.<id>]`: one place models are reached, its key in the OS key
+/// store (`crate::providers::keys`), never here. A built-in `kind` knows its
+/// own URL and protocol; `custom` needs `base_url` and speaks the OpenAI
+/// shape.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(default)]
+pub struct ProviderEntry {
+    /// `openai`, `openrouter`, `anthropic`, `ollama`, `elevenlabs`, `custom`.
+    pub kind: String,
+    /// The name the owner gave it, shown instead of the kind's.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// `custom` (and an `ollama` elsewhere than this computer): the base URL.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub base_url: String,
+    /// How long one call to it may take, in milliseconds, when it needs
+    /// longer than the kind's own (`crate::providers::Provider::timeout`).
+    /// 1000..=60000; hand-edited.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u32>,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
 pub struct Config {
@@ -1501,6 +1602,9 @@ pub struct Config {
     pub macropad: BTreeMap<String, MacropadLayout>,
     pub usage: UsageCfg,
     pub updates: Updates,
+    /// `[providers.<id>]`: where models are reached ([`ProviderEntry`]).
+    pub providers: BTreeMap<String, ProviderEntry>,
+    pub context: Context,
     pub log: Log,
 }
 
@@ -2665,5 +2769,126 @@ enabled = false
         assert!(!adopt_legacy_dir(&legacy, &new), "the new directory wins");
         assert!(legacy.exists());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A config written before `[context]` existed: the same config with
+    /// the table absent as with its defaults spelled out, and off.
+    const BEFORE_CONTEXT: &str = r#"# the owner's own comment
+[api]
+port = 47299
+
+[voice]
+transport = "ble"
+
+[voice.stt]
+engine = "whisper"
+locale = "en-GB"
+
+[voice.tts]
+provider = "openai"
+
+[grokbot]
+enabled = false
+
+[sources]
+apps_paused = ["deck-gui"]
+
+[usage]
+providers = ["claude", "codex"]
+
+[log]
+level = "debug"
+"#;
+
+    #[test]
+    fn context_is_off_by_default_and_an_absent_table_is_off() {
+        assert!(!Config::default().context.enabled);
+        assert_eq!(Config::default().context, Context::default());
+        let before = Config::parse(BEFORE_CONTEXT).unwrap();
+        assert_eq!(before.context, Context::default());
+        assert!(!before.context.enabled);
+        // Everything else the file says is read as it always was.
+        assert_eq!(before.api.port, 47299);
+        assert_eq!(before.voice.stt.locale, "en-GB");
+        assert!(!before.grokbot.enabled);
+        assert_eq!(before.log.level, "debug");
+        // Absent is exactly the documented defaults written out.
+        let spelled = format!(
+            "{BEFORE_CONTEXT}\n[context]\nenabled = false\n\n[context.scene]\nendpoint = \"\"\nmodel = \"\"\n\n[context.edit]\nendpoint = \"\"\nmodel = \"\"\n"
+        );
+        assert_eq!(Config::parse(&spelled).unwrap(), before);
+        // An empty file and no file are off too.
+        assert!(!Config::parse("").unwrap().context.enabled);
+        // A partial table: the rest defaults.
+        let partial = Config::parse("[context]\nenabled = true\n").unwrap();
+        assert!(partial.context.enabled);
+        assert_eq!(partial.context.scene, ContextModel::default());
+    }
+
+    #[test]
+    fn context_round_trips_with_the_table_present() {
+        let text = r#"
+[context]
+enabled = true
+
+[context.scene]
+endpoint = "https://scene.example/v1"
+model = "scene-small"
+
+[context.edit]
+endpoint = "https://edit.example/v1"
+model = "edit-large"
+"#;
+        let config = Config::parse(text).unwrap();
+        assert_eq!(
+            config.context,
+            Context {
+                enabled: true,
+                budget_ms: 3000,
+                scene: ContextModel {
+                    endpoint: "https://scene.example/v1".into(),
+                    model: "scene-small".into(),
+                    ..ContextModel::default()
+                },
+                edit: ContextModel {
+                    endpoint: "https://edit.example/v1".into(),
+                    model: "edit-large".into(),
+                    ..ContextModel::default()
+                },
+            }
+        );
+        // Serialised and read back: the same config.
+        let written = toml::to_string(&config).unwrap();
+        assert_eq!(Config::parse(&written).unwrap(), config);
+        // And without the table, the same round trip keeps it off.
+        let plain = Config::parse(BEFORE_CONTEXT).unwrap();
+        let written = toml::to_string(&plain).unwrap();
+        assert_eq!(Config::parse(&written).unwrap().context, Context::default());
+        // The table is hot: the switch reaches the next dictation.
+        for key in ["context.enabled", "context.scene.endpoint", "context.edit.model"] {
+            assert!(is_hot(key), "{key}");
+        }
+        // Unknown keys in the table are ignored like everywhere else: a key
+        // pasted into the file is not an error, and is not read.
+        let pasted = Config::parse("[context.scene]\napi_key = \"sk-x\"\n").unwrap();
+        assert_eq!(pasted.context, Context::default());
+    }
+
+    /// `config.set`'s writer adds the table to an existing file and leaves
+    /// every byte of the file before it as it was.
+    #[test]
+    fn writing_the_switch_leaves_an_existing_file_as_it_was() {
+        let edited = edit(BEFORE_CONTEXT, "context.enabled", &serde_json::json!(true)).unwrap();
+        assert!(edited.starts_with(BEFORE_CONTEXT), "{edited}");
+        let edited = edit(&edited, "context.scene.endpoint", &serde_json::json!("https://s.example")).unwrap();
+        let config = Config::parse(&edited).unwrap();
+        assert!(config.context.enabled);
+        assert_eq!(config.context.scene.endpoint, "https://s.example");
+        let mut back = config.clone();
+        back.context = Context::default();
+        assert_eq!(back, Config::parse(BEFORE_CONTEXT).unwrap());
+        // `null` takes them out again.
+        let edited = edit(&edited, "context.enabled", &serde_json::Value::Null).unwrap();
+        assert!(!Config::parse(&edited).unwrap().context.enabled);
     }
 }

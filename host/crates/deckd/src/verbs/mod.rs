@@ -23,6 +23,8 @@
 //! through a scripted one, with no socket.
 pub mod care;
 pub mod config;
+pub mod context;
+pub mod providers;
 pub mod device;
 pub mod firmware;
 pub mod grokbot;

@@ -197,6 +197,15 @@ pub struct Core {
     /// run. The core never calls the store itself, because a Keychain call
     /// can wait on a dialog.
     keeper: crate::secrets::Keeper<dispatch::KeyWork>,
+    /// Context-aware dictation's worker (`crate::context::rewrite`): a
+    /// final for the Dictate agent is rewritten on a thread of its own.
+    pub(crate) context: crate::context::rewrite::Worker,
+    /// The finals the audio side reported, held back in their order while
+    /// one of them is being rewritten ([`Core::on_voice_report`]).
+    held: VecDeque<HeldFinal>,
+    /// The utterance of the last PTT session [`Core::capture_focus_at_press`]
+    /// looked at, so each session is looked at once, when it starts.
+    context_seen: Option<String>,
     /// `[voice.stt]` as the local recogniser reads it at every press
     /// (`audio::whisper`), refreshed the same way.
     pub stt_settings: Arc<arc_swap::ArcSwap<crate::stt::Settings>>,
@@ -341,6 +350,14 @@ struct AnswerWait {
     deadline: Instant,
 }
 
+/// One final the core holds back (`Core::held`): the report as the audio
+/// side made it, and, while it is being rewritten, the rewrite's id and the
+/// moment the transcript goes as it was heard whatever the worker says.
+struct HeldFinal {
+    voice: VoiceIn,
+    rewrite: Option<(u64, Instant)>,
+}
+
 impl Core {
     pub fn new(store: Store, state: State, hid: HidHandle, paths: Paths) -> Self {
         let bus = Arc::new(Bus::default());
@@ -383,6 +400,9 @@ impl Core {
             tts_settings: Arc::new(arc_swap::ArcSwap::from_pointee(crate::audio::cloud::Settings::default())),
             voice_key: crate::secrets::VoiceKey::file(),
             keeper: crate::secrets::Keeper::none(),
+            context: crate::context::rewrite::Worker::new(paths.clone()),
+            held: VecDeque::new(),
+            context_seen: None,
             stt_settings: Arc::new(arc_swap::ArcSwap::from_pointee(crate::stt::Settings::default())),
             stt_install,
             firmware,
@@ -2097,7 +2117,37 @@ impl Core {
     pub fn step(&mut self, cmd: Command, now: Instant) -> Vec<Event> {
         let mut events = self.apply(cmd, now);
         self.drain_followups(&mut events, now);
+        self.capture_focus_at_press();
         events
+    }
+
+    /// When a PTT session has just started for the Dictate agent with
+    /// context-aware dictation on, read the focused window now, at the
+    /// press, for its final's rewrite (`context::rewrite::Worker::capture`):
+    /// by the time the words are back, a second or more later, the owner may
+    /// be in another window. Every deck press reaches the store through
+    /// [`Core::step`], so this runs on the step that opened the session. A
+    /// session started by `voice.listen` takes another road into the store
+    /// and gets no capture: its rewrite reads the window when it starts,
+    /// and its log line says so (`focus_at=final`).
+    fn capture_focus_at_press(&mut self) {
+        let Some(ptt) = self.store.snapshot().voice.ptt.as_ref() else {
+            return;
+        };
+        if self.context_seen.as_deref() == Some(ptt.utterance.as_str()) {
+            return;
+        }
+        let (utterance, agent, ctx) = (ptt.utterance.clone(), ptt.agent.clone(), ptt.ctx);
+        self.context_seen = Some(utterance.clone());
+        if !self.config().context.enabled || ctx != deck_model::PttCtx::Talk {
+            return;
+        }
+        let dictate = agent
+            .and_then(|agent| self.store.snapshot().agents.get(&agent)?.session.key.clone())
+            .is_some_and(|key| crate::context::is_dictate(&key));
+        if dictate {
+            self.context.capture(&utterance);
+        }
     }
 
     /// Show on the deck that something the operator asked for did not
@@ -2717,9 +2767,7 @@ impl Core {
     /// one from the hid thread.
     pub fn on_from_audio(&mut self, msg: FromAudio, now: Instant) {
         match msg {
-            FromAudio::Voice(v) => {
-                self.step(Command::Voice(v), now);
-            }
+            FromAudio::Voice(v) => self.on_voice_report(v, now),
             // Not a `Command`: it changes nothing observable and moves no
             // `rev` — it is the answer to a question `voice.engines` asks,
             // cached here so that answering it never touches the run loop
@@ -2729,6 +2777,102 @@ impl Core {
                 self.engines = Some((stt, tts));
             }
             FromAudio::Transcribe { id } => self.offer_transcription(id),
+        }
+    }
+
+    /// One voice report from the audio side. Everything but a final goes to
+    /// the store at once. A final — from whichever recogniser made it: the
+    /// Mac's, whisper, or a companion's, which all end in the engine's
+    /// `VoiceIn::Final` — goes at once too, unless context-aware dictation
+    /// takes it ([`Core::start_rewrite`]) or an earlier final is still held:
+    /// then it waits in [`Core::held`], so the store claims finals in the
+    /// order the engine reported them, whatever order the rewrites end in.
+    /// This is the point between the final transcript and the order
+    /// dispatch (`Store::on_final` → `dispatch_order`), for every recogniser.
+    fn on_voice_report(&mut self, v: VoiceIn, now: Instant) {
+        if !matches!(v, VoiceIn::Final { .. } | VoiceIn::FinalFailed { .. }) {
+            self.step(Command::Voice(v), now);
+            return;
+        }
+        let rewrite = match &v {
+            VoiceIn::Final { text } => self.start_rewrite(self.held.len(), text, now),
+            _ => None,
+        };
+        if rewrite.is_none() && self.held.is_empty() {
+            self.step(Command::Voice(v), now);
+            return;
+        }
+        self.held.push_back(HeldFinal { voice: v, rewrite });
+    }
+
+    /// Start rewriting the `index`th final from now, when it is one context-
+    /// aware dictation takes: `[context] enabled`, for the Dictate agent
+    /// (`context::is_dictate`), a talk press, and not one of the spoken verbs
+    /// (`report`, `stop`). The id and the deadline, or `None`: the final
+    /// goes exactly as it was heard, and nothing else runs.
+    fn start_rewrite(&mut self, index: usize, text: &str, now: Instant) -> Option<(u64, Instant)> {
+        let config = self.config();
+        if !config.context.enabled {
+            return None;
+        }
+        let settings = crate::context::rewrite::Settings::of(config);
+        // A local provider may take longer; a cloud one never changes the
+        // budget (`rewrite::budget_for`).
+        let budget = crate::context::rewrite::budget_for(&settings, config.context.budget());
+        let ptt = self.store.final_claimant(index)?;
+        if ptt.ctx != deck_model::PttCtx::Talk {
+            return None;
+        }
+        let agent = ptt.agent.clone()?;
+        let key = self.store.snapshot().agents.get(&agent)?.session.key.clone()?;
+        if !crate::context::is_dictate(&key)
+            || deck_model::voice::talk_intent(text) != deck_model::voice::TalkIntent::Order
+        {
+            return None;
+        }
+        let utterance = ptt.utterance.clone();
+        let id = self.context.start(text, settings, budget, Some(&utterance))?;
+        Some((id, now + budget + crate::context::rewrite::GRACE))
+    }
+
+    /// A rewrite is done: its final takes the text to type, and the finals
+    /// that are ready go to the store in order.
+    pub(crate) fn on_rewritten(&mut self, done: crate::context::rewrite::Done, now: Instant) {
+        if let Some(held) = self
+            .held
+            .iter_mut()
+            .find(|held| held.rewrite.is_some_and(|(id, _)| id == done.id))
+        {
+            held.rewrite = None;
+            if done.outcome.rewritten {
+                held.voice = VoiceIn::Final { text: done.outcome.text };
+            }
+        }
+        self.release_held(now);
+    }
+
+    /// Past its deadline, a held final goes as it was heard (the worker's
+    /// answer, if it ever comes, finds nothing to change).
+    fn expire_held(&mut self, now: Instant) {
+        let mut expired = false;
+        for held in &mut self.held {
+            if held.rewrite.is_some_and(|(_, deadline)| now >= deadline) {
+                held.rewrite = None;
+                expired = true;
+            }
+        }
+        if expired {
+            tracing::info!("context: kept:core_deadline");
+            self.release_held(now);
+        }
+    }
+
+    /// Every held final at the front that waits for nothing, to the store.
+    fn release_held(&mut self, now: Instant) {
+        while self.held.front().is_some_and(|held| held.rewrite.is_none()) {
+            if let Some(held) = self.held.pop_front() {
+                self.step(Command::Voice(held.voice), now);
+            }
         }
     }
 
@@ -2867,6 +3011,7 @@ impl Core {
     /// Housekeeping on every tick: timers, the overflow re-projection, the
     /// debounced `state.json` write.
     pub fn tick(&mut self, now: Instant) {
+        self.expire_held(now);
         // Cancellation before the SetCardHeld reply is received has no
         // HoldGuard to report HoldGone. Reap its closed receiver as well.
         for (agent, card) in self.holds.take_abandoned() {
@@ -3095,8 +3240,18 @@ pub fn run(mut opts: RunOptions) -> Result<i32, CoreError> {
     // on a dialog, and a key still in config.toml moved into the store. The
     // config in force carries the stored key; the file, the watcher and the
     // doors do not.
-    let mut voice_key =
-        crate::secrets::VoiceKey::open(crate::secrets::home_for(&opts.paths, opts.no_device));
+    // Milestone 1's per-role endpoints and keys into the provider registry
+    // (`crate::providers::migrate`), before anything reads the config: a
+    // no-op once done, and a role whose key cannot be carried is left
+    // working as it was.
+    if let Some(migrated) = crate::providers::migrate::at_start(&opts.paths) {
+        opts.config = migrated;
+    }
+    let mut voice_key = crate::secrets::VoiceKey::open(crate::secrets::voice_home(
+        &opts.paths,
+        opts.no_device,
+        &opts.config.voice.tts.provider,
+    ));
     // The Grok Bot webhooks' keys, kept by the same rule as the voice key.
     let grokbot_keys = crate::grokbot::keys::home(&opts.paths, opts.no_device);
     opts.config = voice_key.adopt(&opts.paths, opts.config);
@@ -3534,6 +3689,11 @@ pub fn run_core(mut core: Core, msgs: Receiver<CoreMsg>) -> Core {
             // handle keeps a sender of its own too.
             recv(core.keeper.events) -> msg => if let Ok(done) = msg {
                 core.on_keeper(done, Instant::now());
+            },
+            // Context-aware dictation's rewrites. The worker keeps a sender
+            // of its own, so this arm is never permanently ready.
+            recv(core.context.events) -> msg => if let Ok(done) = msg {
+                core.on_rewritten(done, Instant::now());
             },
             recv(ticker) -> _ => core.tick(Instant::now()),
         }
@@ -7100,5 +7260,198 @@ mod tests {
         assert_ne!(a, 0);
         assert!(a != b || new_sid() != a);
         assert!(wall_now().millis() > 1_700_000_000_000);
+    }
+}
+
+/// Context-aware dictation in the core: a final for the Dictate agent is
+/// held while it is rewritten and released in order; everything else, and
+/// everything while the switch is off, goes straight through untouched.
+#[cfg(test)]
+mod context_tests {
+    use super::testkit::{detached_core, register};
+    use super::*;
+    use crate::context::rewrite::tests::{deps, server, Reply};
+    use deck_model::{DeviceLine, PttCtx};
+
+    const DICTATE: &str = "omarchy:test-host:dictate";
+
+    /// A core with one agent of `key` on a slot; the slot.
+    fn core_with(name: &str, key: &str) -> (Core, u8, std::path::PathBuf) {
+        let (mut c, _ops, _lines, _debug, dir) = detached_core(name);
+        let (audio, commands, events) = crate::audio::AudioHandle::detached();
+        c.set_audio(audio);
+        // The engine's ends stay open for the test's life: a closed one
+        // refuses the press.
+        std::mem::forget((commands, events));
+        let now = Instant::now();
+        let registered = c
+            .api_call(Principal::Uid(501), SessionId(2), false, Request::AgentRegister(register("Dictate", Some(key))), now)
+            .unwrap();
+        let agent: AgentId = serde_json::from_value(registered["agent"].clone()).unwrap();
+        let slot = c.store.snapshot().agents[&agent].slot.expect("on a slot").0;
+        (c, slot, dir)
+    }
+
+    fn switch_on(c: &mut Core, endpoint: &str) {
+        let mut config = (*c.config()).clone();
+        config.context = crate::config::Context {
+            enabled: true,
+            budget_ms: 3000,
+            scene: crate::config::ContextModel::default(),
+            edit: crate::config::ContextModel { endpoint: endpoint.into(), model: "m".into(), ..Default::default() },
+        };
+        c.take_config(Arc::new(config), Instant::now());
+        c.context = crate::context::rewrite::Worker::with(c.paths.clone(), deps(None, None));
+    }
+
+    fn press(c: &mut Core, slot: u8) {
+        let now = Instant::now();
+        for act in [1, 0] {
+            c.step(Command::Device(DeviceLine::Ptt { act, slot, ctx: PttCtx::Talk, card: None, abort: false, press: None }), now);
+        }
+        assert!(c.store.is_finalizing(), "the press was released and waits for its words");
+    }
+
+    /// The texts of `transcript.final`, in order.
+    fn finals(c: &mut Core) -> Vec<String> {
+        c.publish();
+        c.bus
+            .replay(0, 1000, None)
+            .0
+            .iter()
+            .filter(|e| e.kind == EventKind::TranscriptFinal)
+            .map(|e| e.data["text"].as_str().unwrap_or("").to_string())
+            .collect()
+    }
+
+    fn final_report(text: &str) -> FromAudio {
+        FromAudio::Voice(VoiceIn::Final { text: text.into() })
+    }
+
+    #[test]
+    fn off_or_not_dictate_the_final_goes_straight_through() {
+        let (url, seen) = server(vec![Reply::Says("git status")]);
+        let (mut c, slot, dir) = core_with("context-off", DICTATE);
+        press(&mut c, slot);
+        c.on_from_audio(final_report("get status"), Instant::now());
+        assert_eq!(finals(&mut c), ["get status"], "off: untouched, at once");
+        std::fs::remove_dir_all(dir).unwrap();
+
+        let (mut c, slot, dir) = core_with("context-other-agent", "claude:abc");
+        switch_on(&mut c, &url);
+        press(&mut c, slot);
+        c.on_from_audio(final_report("get status"), Instant::now());
+        assert_eq!(finals(&mut c), ["get status"], "not Dictate: untouched");
+        assert!(c.held.is_empty());
+        assert!(seen.lock().unwrap().is_empty(), "no call made");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_dictate_final_is_held_rewritten_and_later_finals_keep_their_order() {
+        // Answered by what each request asks, whichever connects first: the
+        // first dictation's answer is the slow one.
+        let (url, _) = server(vec![Reply::ByBody(vec![
+            // The transcript's own line in the JSON body (the prompt's
+            // examples say "get status" too).
+            ("Transcript:\\nget status", Reply::After(Duration::from_millis(300), Box::new(Reply::Says("git status")))),
+            ("Transcript:\\nL. S. dash a l", Reply::Says("ls -la")),
+        ])]);
+        let (mut c, slot, dir) = core_with("context-on", DICTATE);
+        switch_on(&mut c, &url);
+        press(&mut c, slot);
+        press(&mut c, slot);
+        c.on_from_audio(final_report("get status"), Instant::now());
+        c.on_from_audio(final_report("L. S. dash a l"), Instant::now());
+        assert!(finals(&mut c).is_empty(), "both held");
+        assert_eq!(c.held.len(), 2);
+        // The second rewrite (fast) ends first; nothing goes until the first.
+        for _ in 0..2 {
+            let done = c.context.events.recv_timeout(Duration::from_secs(5)).unwrap();
+            c.on_rewritten(done, Instant::now());
+        }
+        assert_eq!(finals(&mut c), ["git status", "ls -la"]);
+        assert!(c.held.is_empty());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_rewrite_past_its_deadline_lets_the_transcript_go_as_heard() {
+        let (url, _) = server(vec![Reply::After(Duration::from_secs(20), Box::new(Reply::Says("git status")))]);
+        let (mut c, slot, dir) = core_with("context-deadline", DICTATE);
+        switch_on(&mut c, &url);
+        // The stub is on loopback, so a local provider: given a short timeout
+        // of its own, it does not raise the 3 s budget (`budget_for`).
+        let mut config = (*c.config()).clone();
+        config.providers.insert(
+            "stub".into(),
+            crate::config::ProviderEntry { kind: "custom".into(), base_url: url.clone(), timeout_ms: Some(1000), ..Default::default() },
+        );
+        config.context.edit = crate::config::ContextModel { provider: "stub".into(), model: "m".into(), ..Default::default() };
+        c.take_config(Arc::new(config), Instant::now());
+        press(&mut c, slot);
+        let now = Instant::now();
+        c.on_from_audio(final_report("get status"), now);
+        c.tick(now + Duration::from_millis(2000));
+        assert!(finals(&mut c).is_empty(), "within the budget: still held");
+        c.tick(now + Duration::from_millis(3000) + crate::context::rewrite::GRACE);
+        assert_eq!(finals(&mut c), ["get status"]);
+        // The worker's late answer changes nothing.
+        let done = c.context.events.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(!done.outcome.rewritten);
+        c.on_rewritten(done, Instant::now());
+        assert_eq!(finals(&mut c), ["get status"]);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// The spoken verbs are not dictation: `stop` stays a verb.
+    #[test]
+    fn a_spoken_verb_is_never_rewritten() {
+        let (url, seen) = server(vec![Reply::Says("x")]);
+        let (mut c, slot, dir) = core_with("context-verb", DICTATE);
+        switch_on(&mut c, &url);
+        press(&mut c, slot);
+        c.on_from_audio(final_report("stop"), Instant::now());
+        assert!(c.held.is_empty());
+        assert!(seen.lock().unwrap().is_empty());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// The window is read when the press starts: switching windows while
+    /// the words are recognised does not change where they were meant for.
+    #[test]
+    fn the_scene_is_the_window_focused_at_the_press() {
+        use crate::context::focus::Focus;
+        let (url, _) = server(vec![Reply::ByBody(vec![
+            ("a shell command line", Reply::Says("git status")),
+            ("Transcript", Reply::Says("get status")),
+        ])]);
+        let (mut c, slot, dir) = core_with("context-press-focus", DICTATE);
+        switch_on(&mut c, &url);
+        let focused = Arc::new(std::sync::Mutex::new(Focus { app: "foot".into(), title: "tony@host:~".into() }));
+        let now_focused = focused.clone();
+        c.context = crate::context::rewrite::Worker::with(
+            c.paths.clone(),
+            crate::context::rewrite::Deps {
+                curl: std::path::PathBuf::from("curl"),
+                focus: Box::new(move || Some(now_focused.lock().unwrap().clone())),
+                keys: Box::new(|_| None),
+                local_endpoint: Box::new(|_| None),
+                local_running: Box::new(|_| None),
+            },
+        );
+        let now = Instant::now();
+        c.step(Command::Device(DeviceLine::Ptt { act: 1, slot, ctx: PttCtx::Talk, card: None, abort: false, press: None }), now);
+        // Let the press-time read land, then move to another window while
+        // the words are recognised.
+        std::thread::sleep(Duration::from_millis(100));
+        *focused.lock().unwrap() = Focus { app: "ai.cohdl.openwalkietalkie".into(), title: "OpenWalkieTalkie".into() };
+        c.step(Command::Device(DeviceLine::Ptt { act: 0, slot, ctx: PttCtx::Talk, card: None, abort: false, press: None }), now);
+        c.on_from_audio(final_report("get status"), Instant::now());
+        let done = c.context.events.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert_eq!((done.outcome.focus_at, done.outcome.app.as_str()), ("press", "foot"));
+        c.on_rewritten(done, Instant::now());
+        assert_eq!(finals(&mut c), ["git status"]);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

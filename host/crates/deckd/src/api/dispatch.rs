@@ -175,6 +175,23 @@ pub const METHODS: &[MethodSpec] = &[
     m("grokbot.add", Some(Scope::Admin), false),
     m("grokbot.remove", Some(Scope::Admin), false),
     m("grokbot.test", Some(Scope::Admin), false),
+    // Context-aware dictation's two keys, from the app (`crate::context::api`):
+    // `config.set` refuses keys, and a Keychain item is the service's to
+    // write. Answered on the blocking pool; the reply is the key's hint.
+    m("context.key.set", Some(Scope::Admin), false),
+    m("context.key.clear", Some(Scope::Admin), false),
+    // The provider registry (`crate::providers::api`): the app's page reads
+    // and checks providers and sets their keys. No call returns a key.
+    m("providers.list", Some(Scope::Admin), false),
+    m("providers.models", Some(Scope::Admin), false),
+    m("providers.refresh", Some(Scope::Admin), false),
+    m("providers.test", Some(Scope::Admin), false),
+    m("providers.key.set", Some(Scope::Admin), false),
+    m("providers.key.clear", Some(Scope::Admin), false),
+    // These two write config.toml, so the core answers them, as it does
+    // config.set: no second writer racing it.
+    m("providers.add", Some(Scope::Admin), false),
+    m("providers.remove", Some(Scope::Admin), false),
     m("hooks.claude", Some(Scope::HooksIngest), false),
     m("hooks.codex", Some(Scope::HooksIngest), false),
     m("hooks.gemini", Some(Scope::HooksIngest), false),
@@ -404,6 +421,23 @@ pub async fn dispatch(ctx: &ConnCtx, method: &str, params: serde_json::Value) ->
     if let Some(verb) = method.strip_prefix("grokbot.") {
         return Reply {
             result: crate::grokbot::api_dispatch(ctx, verb, params).await,
+            after_write: None,
+        };
+    }
+    // `context.key.*` writes the OS key store, which can wait on a dialog:
+    // on the blocking pool, never as a `CoreMsg`.
+    if let Some(verb) = method
+        .strip_prefix("providers.")
+        .filter(|verb| !matches!(*verb, "add" | "remove"))
+    {
+        return Reply {
+            result: crate::providers::api::api_dispatch(&ctx.core, verb, params).await,
+            after_write: None,
+        };
+    }
+    if let Some(verb) = method.strip_prefix("context.") {
+        return Reply {
+            result: crate::context::api::api_dispatch(&ctx.core, verb, params).await,
             after_write: None,
         };
     }
