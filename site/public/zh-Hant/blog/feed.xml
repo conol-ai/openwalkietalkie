@@ -5,8 +5,16 @@
   <id>https://openwalkietalkie.org/zh-Hant/blog/</id>
   <link href="https://openwalkietalkie.org/zh-Hant/blog/" />
   <link rel="self" type="application/atom+xml" href="https://openwalkietalkie.org/zh-Hant/blog/feed.xml" />
-  <updated>2026-11-17T12:58:57Z</updated>
+  <updated>2026-11-22T09:04:46Z</updated>
   <author><name>Tony Huang</name></author>
+  <entry>
+    <title>OpenWalkieTalkie v0.16.0：懂得視窗的口述</title>
+    <id>https://openwalkietalkie.org/zh-Hant/blog/dictation-that-knows-the-window/</id>
+    <link href="https://openwalkietalkie.org/zh-Hant/blog/dictation-that-knows-the-window/" />
+    <published>2026-11-22T09:04:46Z</published>
+    <updated>2026-11-22T09:04:46Z</updated>
+    <summary>實驗性功能，預設關閉：在游標處口述的內容，可以依聚焦的視窗改寫。只根據視窗的應用程式名稱與標題（純文字），並透過你在新的「模型接入」頁面中選擇的模型完成。</summary>
+  </entry>
   <entry>
     <title>OpenWalkieTalkie v0.15.0：配套應用程式登上 Omarchy</title>
     <id>https://openwalkietalkie.org/zh-Hant/blog/companion-app-on-omarchy/</id>
@@ -120,12 +128,12 @@
     <summary>在 Mac 與裝置上查看聊天圖片、更穩定的圖片預覽，還能在手持裝置上回答 Codex 的提問。</summary>
   </entry>
   <entry>
-    <title>OpenWalkieTalkie v0.2.1：我們的無線電，處處可見</title>
+    <title>OpenWalkieTalkie v0.2.1：我們的對講機，處處可見</title>
     <id>https://openwalkietalkie.org/zh-Hant/blog/radio-branding/</id>
     <link href="https://openwalkietalkie.org/zh-Hant/blog/radio-branding/" />
     <published>2026-10-15T09:00:00Z</published>
     <updated>2026-10-15T09:00:00Z</updated>
-    <summary>網站上的無線電來到應用程式圖像、選單列、裝置開機畫面和「關於」畫面。一個 COHDL 專案。</summary>
+    <summary>網站上的對講機來到應用程式圖像、選單列、裝置開機畫面和「關於」畫面。一個 COHDL 專案。</summary>
   </entry>
   <entry>
     <title>OpenWalkieTalkie v0.2.0：工作流程一目瞭然</title>

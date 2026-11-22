@@ -5,8 +5,16 @@
   <id>https://openwalkietalkie.org/ja/blog/</id>
   <link href="https://openwalkietalkie.org/ja/blog/" />
   <link rel="self" type="application/atom+xml" href="https://openwalkietalkie.org/ja/blog/feed.xml" />
-  <updated>2026-11-17T12:58:57Z</updated>
+  <updated>2026-11-22T09:04:46Z</updated>
   <author><name>Tony Huang</name></author>
+  <entry>
+    <title>OpenWalkieTalkie v0.16.0：ウィンドウがわかる口述</title>
+    <id>https://openwalkietalkie.org/ja/blog/dictation-that-knows-the-window/</id>
+    <link href="https://openwalkietalkie.org/ja/blog/dictation-that-knows-the-window/" />
+    <published>2026-11-22T09:04:46Z</published>
+    <updated>2026-11-22T09:04:46Z</updated>
+    <summary>試験的な機能で、既定ではオフ：カーソル位置への口述を、フォーカス中のウィンドウに合わせて書き直せます。使うのはアプリ名とタイトルのテキストだけで、新しい「モデルへの接続」ページで選んだモデルを通します。</summary>
+  </entry>
   <entry>
     <title>OpenWalkieTalkie v0.15.0：Omarchy で使えるアプリ</title>
     <id>https://openwalkietalkie.org/ja/blog/companion-app-on-omarchy/</id>
@@ -117,7 +125,7 @@
     <link href="https://openwalkietalkie.org/ja/blog/images-and-questions/" />
     <published>2026-10-15T14:20:00Z</published>
     <updated>2026-10-15T14:20:00Z</updated>
-    <summary>Mac とデバイスでのチャット画像、安定した画像プレビュー、ハンディ端末から答えられる Codex の質問。</summary>
+    <summary>Mac とデバイスでのチャット画像、安定した画像プレビュー、ハンディデバイスから答えられる Codex の質問。</summary>
   </entry>
   <entry>
     <title>OpenWalkieTalkie v0.2.1：どこにでも、あの無線機</title>
@@ -133,10 +141,10 @@
     <link href="https://openwalkietalkie.org/ja/blog/workflows-and-usage/" />
     <published>2026-10-13T14:00:00Z</published>
     <updated>2026-10-13T14:00:00Z</updated>
-    <summary>Mac とハンディ端末でのワークフローのリアルタイム進捗、Claude Fable の使用量上限、ワークフローページのちらつきの修正。</summary>
+    <summary>Mac とハンディデバイスでのワークフローのリアルタイム進捗、Claude Fable の使用量上限、ワークフローページのちらつきの修正。</summary>
   </entry>
   <entry>
-    <title>OpenWalkieTalkie v0.1.0：エージェントのためのハンディ端末</title>
+    <title>OpenWalkieTalkie v0.1.0：エージェントのためのハンディデバイス</title>
     <id>https://openwalkietalkie.org/ja/blog/introducing-openwalkietalkie/</id>
     <link href="https://openwalkietalkie.org/ja/blog/introducing-openwalkietalkie/" />
     <published>2026-10-13T00:00:00Z</published>

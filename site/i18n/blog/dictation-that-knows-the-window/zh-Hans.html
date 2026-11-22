@@ -1,0 +1,29 @@
+---
+title: OpenWalkieTalkie v0.16.0：懂得窗口的口述 · OpenWalkieTalkie
+description: 实验性功能，默认关闭：在光标处口述的内容，可以根据聚焦的窗口进行改写。只依据窗口的应用名称和标题（纯文本），并通过你在新的“模型接入”页面中选择的模型完成。
+heading: OpenWalkieTalkie v0.16.0：懂得窗口的口述
+kind: 实验性口述功能和模型接入
+date: 2026-11-22
+published: 2026-11-22T09:04:46Z
+updated: 2026-11-22T09:04:46Z
+summary: 实验性功能，默认关闭：在光标处口述的内容，可以根据聚焦的窗口进行改写。只依据窗口的应用名称和标题（纯文本），并通过你在新的“模型接入”页面中选择的模型完成。
+excerpt: 实验性功能，默认关闭：在光标处口述的内容，可以根据聚焦的窗口进行改写。只依据窗口的应用名称和标题（纯文本），并通过你在新的“模型接入”页面中选择的模型完成。
+lastmod: 2026-11-22
+navDocs: yes
+---
+  <p>0.16.0 版只增加了一项功能，而且是<strong>实验性</strong>的：在光标处口述的内容，可以按它要进入的窗口进行改写。在你打开之前它是关闭的。设备固件不变，仍是 0.14.0。</p>
+  <h2>问题</h2>
+  <p>说出来的话会变成普通文字。在终端上按住 PTT 说“system CTL status”，输入的就是“System CTL status”这几个词，而不是 <code>systemctl status</code>。你想要的是什么，取决于这些词要去哪里，而口述并不知道。</p>
+  <h2>它做什么</h2>
+  <p>打开这项功能后，在光标处的口述（Omarchy 上的 <strong>Dictate</strong> 条目）会在输入之前先被改写。<strong>窗口识别模型</strong>读取聚焦窗口的应用名称和标题，只有这两项纯文本，别无其他：从不截图，也从不读取窗口内容。它判断那是什么样的地方：shell、助手、编辑器、聊天，还是普通文字。然后<strong>改写模型</strong>为那里改写你的话。没有窗口识别模型时，由内置规则根据应用名称来判断。</p>
+  <p>你口述的话会发给改写模型的服务商，应用名称和标题会发给窗口识别模型的服务商。服务的日志只记录每次口述的结果、长度和耗时，从不记录内容。在配套应用的<strong>语音 › 按窗口改写听写</strong>中打开这项功能，并选择两个模型。</p>
+  <h2>三秒，否则按原话输入</h2>
+  <p>使用云端模型的口述，两次调用加起来只有 3 秒。如果模型比这慢、出错，或者回答的内容看起来不像改写，就会按你说的原话输入。在这台电脑或你自己网络上的模型会得到更长时间，默认 15 秒，最多 60 秒，选择器会把它标为<strong>本地 · 较慢</strong>。已知没有运行的本地模型不会被等待。</p>
+  <h2>模型接入</h2>
+  <p>这些模型来自<strong>语音</strong>下的一个新页面：<strong>模型接入</strong>。这里是一份服务商列表，每个服务商一个密钥，保存在操作系统的密钥存储中，从不写进 <code>config.toml</code>。页面只显示密钥的最后四个字符。服务商使用两种协议之一：兼容 OpenAI 的 chat completions（OpenAI、OpenRouter、Ollama，或你给出地址的任何兼容服务器），或 Anthropic 的 Messages API。ElevenLabs 只用于云端语音。在 Omarchy 上，它自己的本地模型会被自动发现。</p>
+  <h2>为什么是实验性的</h2>
+  <p>有三件事还没有得到证明。在这个版本之前，macOS 和 Windows 部分从未被构建过；0.16.0 的 CI 在这两个系统上构建并测试了它们，但只有 Hyprland 的窗口读取器读过真实的窗口。还没有用过在你自己电脑上运行的模型，只用过模拟替身。Anthropic 的 API 也只对替身试过，从未对真实服务试过。还没有证明设备上的真实口述能用这套代码从头到尾正确改写，而且 macOS 和 Windows 还没有 <strong>Dictate</strong> 条目，所以在那里这项功能没有东西可改写。</p>
+  <h2>更新</h2>
+  <p>在 Mac 上，选择<strong>检查更新…</strong>，或安装已签名并经过公证的 <strong>0.16.0</strong> 应用（Apple Silicon 或 Intel，macOS 13 或更高版本）。在 Windows 上，从发布页面下载 ZIP。在 Omarchy 上，拉取代码，构建服务和应用，再用这两者运行 <code>install.sh</code>，具体见 <a href="/docs/omarchy/">Omarchy 指南</a>。这个版本不需要更新设备固件。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.16.0" rel="noopener">在 GitHub 获取 OpenWalkieTalkie v0.16.0 和校验和 →</a></p>
+  <p class="post-back"><a href="/blog/">← 返回博客</a></p>

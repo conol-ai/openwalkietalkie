@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie v0.16.0：懂得視窗的口述 · OpenWalkieTalkie</title>
+<meta name="description" content="實驗性功能，預設關閉：在游標處口述的內容，可以依聚焦的視窗改寫。只根據視窗的應用程式名稱與標題（純文字），並透過你在新的「模型接入」頁面中選擇的模型完成。" />
+<link rel="canonical" href="https://openwalkietalkie.org/zh-Hant/blog/dictation-that-knows-the-window/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/dictation-that-knows-the-window/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/dictation-that-knows-the-window/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/dictation-that-knows-the-window/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/dictation-that-knows-the-window/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/dictation-that-knows-the-window/" />
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.16.0：懂得視窗的口述 · OpenWalkieTalkie" />
+<meta property="og:description" content="實驗性功能，預設關閉：在游標處口述的內容，可以依聚焦的視窗改寫。只根據視窗的應用程式名稱與標題（純文字），並透過你在新的「模型接入」頁面中選擇的模型完成。" />
+<meta property="og:url" content="https://openwalkietalkie.org/zh-Hant/blog/dictation-that-knows-the-window/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie 部落格" href="/zh-Hant/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/i18n/zh-Hant.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">跳至主要內容</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/zh-Hant/" aria-label="OpenWalkieTalkie — 首頁">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="網站區塊">
+      <a href="/zh-Hant/#pile">The Pile</a>
+      <a href="/zh-Hant/#features">功能</a>
+      <a href="/zh-Hant/#demo">試用</a>
+      <a href="/zh-Hant/#faces">頁面</a>
+      <a href="/zh-Hant/#blueprint">設計藍圖</a>
+      <a href="/zh-Hant/docs/">說明文件</a>
+      <a href="/zh-Hant/blog/" aria-current="true">部落格</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="語言: 繁體中文">繁體中文</summary>
+        <ul>
+          <li><a href="/blog/dictation-that-knows-the-window/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/dictation-that-knows-the-window/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/dictation-that-knows-the-window/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
+          <li><a href="/ja/blog/dictation-that-knows-the-window/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切換日間與夜間主題" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">日間</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="開啟選單" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">部落格 · 版本資訊</p>
+  <h1>OpenWalkieTalkie v0.16.0：懂得視窗的口述</h1>
+  <p class="post-meta"><span>2026年11月22日</span><span>實驗性口述功能與模型接入</span></p>
+</header>
+<article class="post-body">
+  <p>0.16.0 版只新增了一項功能，而且是<strong>實驗性</strong>的：在游標處口述的內容，可以依它要進入的視窗改寫。在你開啟之前，它是關閉的。裝置韌體不變，仍是 0.14.0。</p>
+  <h2>問題</h2>
+  <p>說出來的話會變成一般文字。在終端機上按住 PTT 說「system CTL status」，輸入的就是「System CTL status」這幾個字，而不是 <code>systemctl status</code>。你真正想要的，取決於這些字要去哪裡，而口述並不知道。</p>
+  <h2>它做什麼</h2>
+  <p>開啟這項功能後，在游標處的口述（Omarchy 上的 <strong>Dictate</strong> 項目）會在輸入之前先被改寫。<strong>視窗辨識模型</strong>會讀取聚焦視窗的應用程式名稱與標題，只有這兩項純文字，沒有別的：絕不截圖，也絕不讀取視窗內容。它判斷那是什麼樣的地方：shell、助理、編輯器、聊天，或一般文字。接著<strong>改寫模型</strong>會為那裡改寫你的話。沒有視窗辨識模型時，由內建規則依應用程式名稱判斷。</p>
+  <p>你口述的話會送給改寫模型的服務商，應用程式名稱與標題則送給視窗辨識模型的服務商。服務的記錄只會記下每次口述的結果、長度與耗時，絕不記錄內容。請在配套應用程式的<strong>語音 › 按視窗改寫聽寫</strong>中開啟這項功能，並選擇兩個模型。</p>
+  <h2>三秒，否則照原話輸入</h2>
+  <p>使用雲端模型的口述，兩次呼叫加起來只有 3 秒。如果模型比這更慢、發生錯誤，或回答的內容看起來不像改寫，就會照你說的原話輸入。在這台電腦或你自己網路上的模型會得到較長的時間，預設 15 秒，最多 60 秒，選擇器會把它標示為<strong>本機 · 較慢</strong>。已知沒有在執行的本機模型不會被等待。</p>
+  <h2>模型接入</h2>
+  <p>這些模型來自<strong>語音</strong>下的一個新頁面：<strong>模型接入</strong>。這裡是一份服務商清單，每個服務商一把金鑰，保存在作業系統的金鑰儲存區中，絕不寫進 <code>config.toml</code>。頁面只會顯示金鑰的最後四個字元。服務商使用兩種協定之一：相容 OpenAI 的 chat completions（OpenAI、OpenRouter、Ollama，或你提供位址的任何相容伺服器），或 Anthropic 的 Messages API。ElevenLabs 只用於雲端語音。在 Omarchy 上，它自己的本機模型會被自動找到。</p>
+  <h2>為什麼是實驗性的</h2>
+  <p>有三件事還沒有得到證實。在這個版本之前，macOS 與 Windows 的部分從未建置過；0.16.0 的 CI 在這兩個系統上建置並測試了它們，但只有 Hyprland 的視窗讀取器讀過真實的視窗。還沒有用過在你自己電腦上執行的模型，只用過模擬的替身。Anthropic 的 API 也只對替身試過，從未對真正的服務試過。還沒有證實裝置上真實的口述能用這套程式碼從頭到尾正確改寫，而且 macOS 與 Windows 還沒有 <strong>Dictate</strong> 項目，所以在那裡這項功能沒有東西可以改寫。</p>
+  <h2>更新</h2>
+  <p>在 Mac 上，選擇<strong>檢查更新…</strong>，或安裝已簽署並經過公證的 <strong>0.16.0</strong> 應用程式（Apple Silicon 或 Intel，macOS 13 或更新版本）。在 Windows 上，從版本頁面下載 ZIP。在 Omarchy 上，拉取程式碼，建置服務與應用程式，再用這兩者執行 <code>install.sh</code>，詳見 <a href="/zh-Hant/docs/omarchy/">Omarchy 指南</a>。這個版本不需要更新裝置韌體。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.16.0" rel="noopener">在 GitHub 取得 OpenWalkieTalkie v0.16.0 與總和檢查碼 →</a></p>
+  <p class="post-back"><a href="/zh-Hant/blog/">← 返回部落格</a></p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL 專案 · MIT 授權軟體 · CERN-OHL-P 授權硬體</span>
+    <nav aria-label="頁尾">
+      <a href="/zh-Hant/#waitlist">加入候補名單</a>
+      <a href="/zh-Hant/privacy/">隱私權政策</a>
+      <a href="/zh-Hant/cookies/">Cookie 說明</a>
+      <a href="/zh-Hant/cookies/" data-privacy-open>隱私權聲明</a>
+      <a href="/zh-Hant/">首頁</a>
+      <a href="/zh-Hant/#demo">試用</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="在 Discord 加入 CoHDL 與 OpenWalkieTalkie 社群">Discord</a>
+      <a href="/zh-Hant/blog/feed.xml">訂閱來源</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>
