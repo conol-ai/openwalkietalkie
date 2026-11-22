@@ -48,6 +48,22 @@
     <summary>按住 PTT 時可以停頓一下再繼續說。使用 Apple 本機執行的語音辨識時，先前說的句子現在會保留在預覽和最終轉寫中。</summary>
   </entry>
   <entry>
+    <title>OpenWalkieTalkie v0.11.0：Conol 與原生配套程式</title>
+    <id>https://openwalkietalkie.org/zh-Hant/blog/conol-and-native-companions/</id>
+    <link href="https://openwalkietalkie.org/zh-Hant/blog/conol-and-native-companions/" />
+    <published>2026-10-28T03:07:14Z</published>
+    <updated>2026-10-28T03:07:14Z</updated>
+    <summary>在裝置上查看 Conol 對話、口述建立新聊天、回答多步驟提問，並為其他應用程式提供開放的配套程式 API。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.10.0：在裝置上查看電腦資源</title>
+    <id>https://openwalkietalkie.org/zh-Hant/blog/computer-resources-on-the-deck/</id>
+    <link href="https://openwalkietalkie.org/zh-Hant/blog/computer-resources-on-the-deck/" />
+    <published>2026-10-26T06:52:06Z</published>
+    <updated>2026-10-26T06:52:06Z</updated>
+    <summary>一個即時顯示 Mac 的 CPU、記憶體、GPU 與儲存空間的頁面，更有效率的像素小鳥繪製，以及更長的原創遊戲音樂。</summary>
+  </entry>
+  <entry>
     <title>OpenWalkieTalkie v0.9.0：更清楚的 USB 語音與重設提醒</title>
     <id>https://openwalkietalkie.org/zh-Hant/blog/usb-audio-and-reset-reminders/</id>
     <link href="https://openwalkietalkie.org/zh-Hant/blog/usb-audio-and-reset-reminders/" />

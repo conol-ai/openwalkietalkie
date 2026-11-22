@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie v0.11.0：Conol 与原生配套程序 · OpenWalkieTalkie</title>
+<meta name="description" content="在设备上查看 Conol 对话、口述新建聊天、回答多步提问，并为其他应用提供开放的配套程序 API。" />
+<link rel="canonical" href="https://openwalkietalkie.org/zh-Hans/blog/conol-and-native-companions/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/conol-and-native-companions/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/conol-and-native-companions/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/conol-and-native-companions/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/conol-and-native-companions/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/conol-and-native-companions/" />
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.11.0：Conol 与原生配套程序 · OpenWalkieTalkie" />
+<meta property="og:description" content="在设备上查看 Conol 对话、口述新建聊天、回答多步提问，并为其他应用提供开放的配套程序 API。" />
+<meta property="og:url" content="https://openwalkietalkie.org/zh-Hans/blog/conol-and-native-companions/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie 博客" href="/zh-Hans/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/i18n/zh-Hans.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">跳至正文</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/zh-Hans/" aria-label="OpenWalkieTalkie — 首页">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="栏目">
+      <a href="/zh-Hans/#pile">The Pile</a>
+      <a href="/zh-Hans/#features">功能</a>
+      <a href="/zh-Hans/#demo">试用</a>
+      <a href="/zh-Hans/#faces">页面</a>
+      <a href="/zh-Hans/#blueprint">设计图纸</a>
+      <a href="/zh-Hans/docs/">文档</a>
+      <a href="/zh-Hans/blog/" aria-current="true">博客</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="语言: 简体中文">简体中文</summary>
+        <ul>
+          <li><a href="/blog/conol-and-native-companions/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/conol-and-native-companions/" hreflang="zh-Hans" lang="zh-Hans" aria-current="true">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/conol-and-native-companions/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/blog/conol-and-native-companions/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换日间和夜间主题" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">日间</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="打开菜单" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">博客 · 更新说明</p>
+  <h1>OpenWalkieTalkie v0.11.0：Conol 与原生配套程序</h1>
+  <p class="post-meta"><span>2026年10月28日</span><span>应用和固件更新</span></p>
+</header>
+<article class="post-body">
+  <p>0.11.0 版把设备连接到 Conol 桌面应用中的对话。在手持设备上打开一个聊天、阅读最近的消息、口述一条后续消息，或回答一个提问。同样的本地配套程序接口也开放给其他应用。</p>
+  <h2>你的 Conol 对话，集中在一起</h2>
+  <p>兼容的 Conol 桌面应用运行并登录后，聊天会出现在 <strong>Conol</strong> 下，带有它的机器人马赛克图案和一个 <strong>+ New chat</strong> 启动器。选择一个对话，即可查看最近公开的用户和助手消息。按住 PTT 口述一条后续消息，或对着启动器口述来新建聊天。</p>
+  <p>新建的聊天会在设备上打开，等着你的下一条消息。Conol 会自动发现本地的 OpenWalkieTalkie 服务；没有需要配置的终端钩子或单独的模型 API 密钥。这个连接需要带有 OpenWalkieTalkie 桥接的 Conol 桌面应用；浏览器版不会连接本地服务。</p>
+  <h2>在手持设备上回答整份表单</h2>
+  <p>Conol 可以把 AskUser 表单和工作流批准一次一个问题地呈现出来。翻看单选题、切换多选、口述自由文本回答，然后先检查和修改，再明确提交整份表单。配套程序的套接字重新连接后，草稿回答仍会保留。无法用这种方式完成的表单会在 Conol 中打开。</p>
+  <p>会话面板显示对话实际使用的模型和思考强度。对 Conol 来说，这些目前是只读的；请在 Conol 中更改。对话记录同步公开的用户和助手文字。图片、工具输出和私有的推理过程留在所属的应用中。</p>
+  <h2>对其他应用开放</h2>
+  <p>这个集成使用公开的 JSON-RPC 接口。应用可以通过 <code>agent.companion.set</code> 提供自己的分组和新建聊天启动器，发布消息和提问，并通过 <code>agent.session.set</code> 报告实际的模型和思考强度。支持可编辑设置的应用，会按确切的修订号确认每一次请求的更改。</p>
+  <p>新的<a href="/zh-Hans/docs/native-companions/">原生配套程序指南</a>介绍了发现、注册、对话记录、表单、设置和重新连接。试试<a href="/examples/native_companion.py">独立的 Python 示例</a>：它使用脚本化的回复，不需要模型 API 密钥，没有安装 Conol 也能运行。<a href="/docs/deckd-api.md">自动生成的 API 参考</a>记录了请求模式和权限。</p>
+  <h2>让新聊天保持焦点</h2>
+  <p>服务现在会在聚焦之前，先告知被替换槽位的新占用者。设备会在松开 PTT 后立即跟随配套程序的明确选择；有输入正被按住时会等待；如果你导航到别处，它会让步。未完成的提问保持打开。</p>
+  <p>八个共享槽位的上限不变。打开一个溢出的配套程序聊天，可以替换同一连接、同一应用和同一账户下一个未固定的同级聊天，同时保留启动器和其他账户正在忙的聊天。</p>
+  <h2>更新到 0.11.0</h2>
+  <p>安装已签名并经过公证的 Mac 应用（Apple Silicon 或 Intel），或选择<strong>检查更新</strong>。需要 macOS 13 或更高版本。通过 USB-C 连接设备，然后选择<strong>服务 → 更新 → 检查固件更新</strong>。原生配套程序支持需要 Mac 上的服务和固件都是 0.11.0。如果旧的服务还在运行，请选择<strong>服务 → 重新启动</strong>。另外请把 Conol 更新到带有 OpenWalkieTalkie 桥接的版本。</p>
+  <p>普通更新会保留设置和蓝牙配对。恢复协议 2 和闪存布局不变。单独的出厂 ZIP 用于生产，会覆盖设置和配对。</p>
+  <p>自动化测试覆盖了所有权、分组、槽位提升、设置确认、焦点顺序、按住的输入、协议解析、渲染，以及示例中的表单和重新连接。本版本没有重复进行实际的 Conol 对话测试和主板测试。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.11.0" rel="noopener">在 GitHub 获取 OpenWalkieTalkie v0.11.0、固件、出厂镜像和校验和 →</a></p>
+  <p class="post-back"><a href="/zh-Hans/blog/">← 返回博客</a></p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL 项目 · MIT 许可的软件 · CERN-OHL-P 许可的硬件</span>
+    <nav aria-label="页脚">
+      <a href="/zh-Hans/#waitlist">加入候补名单</a>
+      <a href="/zh-Hans/privacy/">隐私政策</a>
+      <a href="/zh-Hans/cookies/">Cookie 说明</a>
+      <a href="/zh-Hans/cookies/" data-privacy-open>隐私声明</a>
+      <a href="/zh-Hans/">首页</a>
+      <a href="/zh-Hans/#demo">试用</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="在 Discord 上加入 CoHDL 和 OpenWalkieTalkie 社区">Discord</a>
+      <a href="/zh-Hans/blog/feed.xml">订阅源</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

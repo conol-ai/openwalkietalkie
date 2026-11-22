@@ -1,0 +1,33 @@
+---
+title: OpenWalkieTalkie v0.10.0：在设备上查看电脑资源 · OpenWalkieTalkie
+description: 一个实时显示 Mac 的 CPU、内存、GPU 和存储空间的页面，更高效的像素小鸟渲染，以及更长的原创游戏音乐。
+heading: OpenWalkieTalkie v0.10.0：在设备上查看电脑资源
+kind: 应用和固件更新
+date: 2026-10-26
+published: 2026-10-26T06:52:06Z
+updated: 2026-10-26T06:52:06Z
+summary: 一个实时显示 Mac 的 CPU、内存、GPU 和存储空间的页面，更高效的像素小鸟渲染，以及更长的原创游戏音乐。
+excerpt: 一个实时显示 Mac 的 CPU、内存、GPU 和存储空间的页面，更高效的像素小鸟渲染，以及更长的原创游戏音乐。
+lastmod: 2026-10-26
+navDocs: no
+---
+  <p>0.10.0 版在订阅“用量”旁边，又给设备加了一个有用的页面：<strong>系统</strong>，实时显示正在干活的那台电脑。不用再开一个窗口挡住编辑器，就能查看 CPU 负载、内存、GPU 负载和剩余存储空间。</p>
+  <figure class="post-figure" style="max-width:480px;margin-left:auto;margin-right:auto"><img src="/assets/screens/system-status-0100.png" alt="设备上的“系统状态”，显示 CPU、内存、GPU 和剩余存储空间的仪表" width="480" height="480" loading="lazy" /><figcaption>真实的固件界面，用示意性的演示数据渲染。</figcaption></figure>
+  <h2>四项读数，每两秒一次</h2>
+  <p>Mac 上的服务会采样 CPU 总使用率、已用和总内存、图形处理器使用率，以及可写启动卷的剩余和总空间。CPU 按所有核心归一化。内存包括应用内存、联动内存和压缩内存。对于有多个图形加速器的 Mac，GPU 仪表显示最忙的那一个。</p>
+  <p>存储百分比表示<strong>剩余空间</strong>。空间不足时颜色会变化。缺少的计数显示<strong>不可用</strong>，超过十秒的读数会变灰并显示<strong>已过期</strong>，主机断开时显示<strong>离线</strong>。第一个 CPU 百分比需要两次采样。</p>
+  <p>读数每两秒送达一次，但没有变化的仪表不会重绘。这是只在设备上的页面；订阅额度仍在“用量”中，Mac 应用也没有新增页面。</p>
+  <h2>在哪里找到它</h2>
+  <p>在全新的布局中，“系统”排在“用量”后面。更新时会保留你已保存的布局，所以请通过<strong>连按两次 Shift → + → 系统 → Enter</strong>添加它。固件和 Mac 上的服务都需要更新。如果旧的服务还在运行，请选择<strong>服务 → 重新启动</strong>。</p>
+  <h2>像素小鸟的显示工作更少</h2>
+  <p>像素小鸟现在只刷新小鸟、管道和分数所在的区域，而不是在每个模拟步骤都让整个屏幕失效。显示路径会正确地打包局部矩形，包括旋转安装的 Rev A 和 Rev B 屏幕，帧计时器也会把已经花在渲染上的时间算进去。</p>
+  <p>一个包含多根管道和回收管道的 360 帧渲染测试中，传输的像素<strong>平均减少 51.5%</strong>。这是传输面积的测量，不是设备上的帧率承诺。局部帧在分数变化、暂停和游戏结束时都与完整重绘做了比对。TE 同步仍然关闭，所以这并不保证动画不撕裂。</p>
+  <h2>有发展空间的音乐</h2>
+  <p>三首原创合成曲现在各有 <strong>48 小节</strong>：像素小鸟 96 秒，贪吃蛇 115.2 秒，雷电 76.8 秒。前奏引出主题、应答旋律、较安静的段落和再现，低音型、打击乐和脉冲音色也在变化。</p>
+  <p>暂停或重玩同一个游戏，会保留音乐的进度。换游戏则从那个游戏的主题开始。声音仍由你通过<strong>游戏 → 声音 → Enter</strong>控制：关闭、仅音效，或音乐和音效。</p>
+  <h2>更新到 0.10.0</h2>
+  <p>安装已签名并经过公证的 Mac 应用（Apple Silicon 或 Intel），或选择<strong>检查更新</strong>。需要 macOS 13 或更高版本。通过 USB-C 连接设备，然后选择<strong>服务 → 更新 → 检查固件更新</strong>。应用、服务和固件都会显示 0.10.0。</p>
+  <p>普通的应用程序更新会保留设置和蓝牙配对。旧的引导程序沿用现有的引导式迁移。单独的出厂 ZIP 用于生产，会覆盖设置和配对。</p>
+  <p>0.10.0 固件已在 Rev A 上通过 USB 烧录、校验并重启，Mac 上的采样器返回了全部四项指标。自动检查覆盖了消息校验、兼容性、时效、渲染、模拟计时和音乐连续性。这项功能没有在 Rev B 硬件上重新测试，也没有重新测试实际断电后的恢复。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.10.0" rel="noopener">在 GitHub 获取 OpenWalkieTalkie v0.10.0、固件、出厂镜像和校验和 →</a></p>
+  <p class="post-back"><a href="/blog/">← 返回博客</a></p>

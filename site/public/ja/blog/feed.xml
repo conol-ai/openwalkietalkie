@@ -48,6 +48,22 @@
     <summary>PTT を押したまま間を置いて、話し続けられます。Apple のオンデバイス音声認識で、前に話した文がプレビューと最終的な文字起こしに残るようになりました。</summary>
   </entry>
   <entry>
+    <title>OpenWalkieTalkie v0.11.0：Conol とネイティブコンパニオン</title>
+    <id>https://openwalkietalkie.org/ja/blog/conol-and-native-companions/</id>
+    <link href="https://openwalkietalkie.org/ja/blog/conol-and-native-companions/" />
+    <published>2026-10-28T03:07:14Z</published>
+    <updated>2026-10-28T03:07:14Z</updated>
+    <summary>デバイスで Conol の会話、口述での新しいチャット、複数ステップの質問。ほかのアプリにも開かれたコンパニオン API。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.10.0：パソコンのリソースをデバイスに</title>
+    <id>https://openwalkietalkie.org/ja/blog/computer-resources-on-the-deck/</id>
+    <link href="https://openwalkietalkie.org/ja/blog/computer-resources-on-the-deck/" />
+    <published>2026-10-26T06:52:06Z</published>
+    <updated>2026-10-26T06:52:06Z</updated>
+    <summary>Mac の CPU、メモリー、GPU、ストレージをリアルタイムで表示するページ、より効率的なフラッピーバードの描画、より長いオリジナルのゲーム音楽。</summary>
+  </entry>
+  <entry>
     <title>OpenWalkieTalkie v0.9.0：聞き取りやすい USB 音声とリセットのリマインダー</title>
     <id>https://openwalkietalkie.org/ja/blog/usb-audio-and-reset-reminders/</id>
     <link href="https://openwalkietalkie.org/ja/blog/usb-audio-and-reset-reminders/" />

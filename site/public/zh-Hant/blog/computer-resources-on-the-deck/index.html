@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie v0.10.0：在裝置上查看電腦資源 · OpenWalkieTalkie</title>
+<meta name="description" content="一個即時顯示 Mac 的 CPU、記憶體、GPU 與儲存空間的頁面，更有效率的像素小鳥繪製，以及更長的原創遊戲音樂。" />
+<link rel="canonical" href="https://openwalkietalkie.org/zh-Hant/blog/computer-resources-on-the-deck/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/computer-resources-on-the-deck/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/computer-resources-on-the-deck/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/computer-resources-on-the-deck/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/computer-resources-on-the-deck/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/computer-resources-on-the-deck/" />
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.10.0：在裝置上查看電腦資源 · OpenWalkieTalkie" />
+<meta property="og:description" content="一個即時顯示 Mac 的 CPU、記憶體、GPU 與儲存空間的頁面，更有效率的像素小鳥繪製，以及更長的原創遊戲音樂。" />
+<meta property="og:url" content="https://openwalkietalkie.org/zh-Hant/blog/computer-resources-on-the-deck/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie 部落格" href="/zh-Hant/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/i18n/zh-Hant.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">跳至主要內容</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/zh-Hant/" aria-label="OpenWalkieTalkie — 首頁">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="網站區塊">
+      <a href="/zh-Hant/#pile">The Pile</a>
+      <a href="/zh-Hant/#features">功能</a>
+      <a href="/zh-Hant/#demo">試用</a>
+      <a href="/zh-Hant/#faces">頁面</a>
+      <a href="/zh-Hant/#blueprint">設計藍圖</a>
+      <a href="/zh-Hant/blog/" aria-current="true">部落格</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="語言: 繁體中文">繁體中文</summary>
+        <ul>
+          <li><a href="/blog/computer-resources-on-the-deck/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/computer-resources-on-the-deck/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/computer-resources-on-the-deck/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
+          <li><a href="/ja/blog/computer-resources-on-the-deck/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切換日間與夜間主題" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">日間</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="開啟選單" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">部落格 · 版本資訊</p>
+  <h1>OpenWalkieTalkie v0.10.0：在裝置上查看電腦資源</h1>
+  <p class="post-meta"><span>2026年10月26日</span><span>應用程式與韌體更新</span></p>
+</header>
+<article class="post-body">
+  <p>0.10.0 版在訂閱「用量」旁邊，又為裝置加了一個實用的頁面：<strong>系統</strong>，即時顯示正在工作的那台電腦。不必再開一個視窗擋住編輯器，就能查看 CPU 負載、記憶體、GPU 負載與剩餘的儲存空間。</p>
+  <figure class="post-figure" style="max-width:480px;margin-left:auto;margin-right:auto"><img src="/assets/screens/system-status-0100.png" alt="裝置上的「系統狀態」，顯示 CPU、記憶體、GPU 與剩餘儲存空間的量表" width="480" height="480" loading="lazy" /><figcaption>真實的韌體介面，以示意用的示範數值繪製。</figcaption></figure>
+  <h2>四項讀數，每兩秒一次</h2>
+  <p>Mac 上的服務會取樣 CPU 總使用率、已用與總記憶體、圖形處理器使用率，以及可寫入開機卷宗的剩餘與總空間。CPU 會依所有核心正規化。記憶體包括 App 記憶體、聯動記憶體與壓縮記憶體。對於有多個圖形加速器的 Mac，GPU 量表會顯示最忙碌的那一個。</p>
+  <p>儲存百分比代表<strong>剩餘空間</strong>。空間不足時顏色會改變。缺少的計數器顯示<strong>無法取得</strong>，超過十秒的讀數會變灰並顯示<strong>已過期</strong>，主機中斷時顯示<strong>離線</strong>。第一個 CPU 百分比需要兩次取樣。</p>
+  <p>讀數每兩秒送達一次，但沒有變化的量表不會重繪。這是只在裝置上的頁面；訂閱額度仍在「用量」中，Mac 應用程式也沒有新增頁面。</p>
+  <h2>在哪裡找到它</h2>
+  <p>在全新的配置中，「系統」排在「用量」後面。更新時會保留你已儲存的配置，所以請透過<strong>連按兩下 Shift → + → 系統 → Enter</strong>加入它。韌體與 Mac 上的服務都需要更新。如果舊的服務仍在執行，請選擇<strong>服務 → 重新啟動</strong>。</p>
+  <h2>像素小鳥的顯示工作更少</h2>
+  <p>像素小鳥現在只更新小鳥、水管與分數所在的區域，而不是在每個模擬步驟都讓整個螢幕失效。顯示路徑會正確地打包局部矩形，包括旋轉安裝的 Rev A 與 Rev B 面板，影格計時器也會把已經花在繪製上的時間算進去。</p>
+  <p>在一個包含多根水管與回收水管的 360 影格繪製測試中，傳輸的像素<strong>平均減少 51.5%</strong>。這是傳輸面積的量測，不是裝置上的影格率承諾。局部影格在分數變化、暫停與遊戲結束時都與完整重繪比對過。TE 同步仍然關閉，所以這並不保證動畫不會撕裂。</p>
+  <h2>有發展空間的音樂</h2>
+  <p>三首原創合成曲現在各有 <strong>48 小節</strong>：像素小鳥 96 秒，貪食蛇 115.2 秒，雷電 76.8 秒。前奏引出主題、應答旋律、較安靜的段落與再現，低音型、打擊樂與脈衝音色也在變化。</p>
+  <p>暫停或重玩同一個遊戲，會保留音樂的進度。換遊戲則從那個遊戲的主題開始。聲音仍由你透過<strong>遊戲 → 音效 → Enter</strong>控制：關閉、僅音效，或音樂與音效。</p>
+  <h2>更新到 0.10.0</h2>
+  <p>安裝已簽署並經過公證的 Mac 應用程式（Apple Silicon 或 Intel），或選擇<strong>檢查更新</strong>。需要 macOS 13 或更新版本。透過 USB-C 連接裝置，然後選擇<strong>服務 → 更新 → 檢查韌體更新</strong>。應用程式、服務與韌體都會顯示 0.10.0。</p>
+  <p>一般的應用程式更新會保留設定與藍牙配對。舊的開機載入程式沿用現有的引導式遷移。另外的原廠 ZIP 用於生產，會覆寫設定與配對。</p>
+  <p>0.10.0 韌體已在 Rev A 上透過 USB 燒錄、驗證並重新啟動，Mac 上的取樣器回傳了全部四項指標。自動檢查涵蓋訊息驗證、相容性、時效、繪製、模擬計時與音樂連續性。這項功能沒有在 Rev B 硬體上重新測試，也沒有重新測試實際斷電後的復原。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.10.0" rel="noopener">在 GitHub 取得 OpenWalkieTalkie v0.10.0、韌體、原廠映像檔與總和檢查碼 →</a></p>
+  <p class="post-back"><a href="/zh-Hant/blog/">← 返回部落格</a></p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL 專案 · MIT 授權軟體 · CERN-OHL-P 授權硬體</span>
+    <nav aria-label="頁尾">
+      <a href="/zh-Hant/#waitlist">加入候補名單</a>
+      <a href="/zh-Hant/privacy/">隱私權政策</a>
+      <a href="/zh-Hant/cookies/">Cookie 說明</a>
+      <a href="/zh-Hant/cookies/" data-privacy-open>隱私權聲明</a>
+      <a href="/zh-Hant/">首頁</a>
+      <a href="/zh-Hant/#demo">試用</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="在 Discord 加入 CoHDL 與 OpenWalkieTalkie 社群">Discord</a>
+      <a href="/zh-Hant/blog/feed.xml">訂閱來源</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>
