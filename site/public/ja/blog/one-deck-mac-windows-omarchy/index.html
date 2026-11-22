@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie v0.14.0：Mac、Windows、Omarchy で使える 1 台のデバイス · OpenWalkieTalkie</title>
+<meta name="description" content="Mac アプリがデバイスの管理アプリになり、サービスは Windows と Omarchy でも動くようになりました。Grok Bot が Claude Code と Codex に加わり、ファームウェアのインストールはデバイス自身が確認します。" />
+<link rel="canonical" href="https://openwalkietalkie.org/ja/blog/one-deck-mac-windows-omarchy/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/one-deck-mac-windows-omarchy/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/one-deck-mac-windows-omarchy/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/one-deck-mac-windows-omarchy/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/one-deck-mac-windows-omarchy/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/one-deck-mac-windows-omarchy/" />
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.14.0：Mac、Windows、Omarchy で使える 1 台のデバイス · OpenWalkieTalkie" />
+<meta property="og:description" content="Mac アプリがデバイスの管理アプリになり、サービスは Windows と Omarchy でも動くようになりました。Grok Bot が Claude Code と Codex に加わり、ファームウェアのインストールはデバイス自身が確認します。" />
+<meta property="og:url" content="https://openwalkietalkie.org/ja/blog/one-deck-mac-windows-omarchy/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie ブログ" href="/ja/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/i18n/ja.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">本文へスキップ</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/ja/" aria-label="OpenWalkieTalkie — ホーム">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="セクション">
+      <a href="/ja/#pile">The Pile</a>
+      <a href="/ja/#features">機能</a>
+      <a href="/ja/#demo">試す</a>
+      <a href="/ja/#faces">ページ</a>
+      <a href="/ja/#blueprint">設計図</a>
+      <a href="/ja/docs/">ドキュメント</a>
+      <a href="/ja/blog/" aria-current="true">ブログ</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="言語: 日本語">日本語</summary>
+        <ul>
+          <li><a href="/blog/one-deck-mac-windows-omarchy/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/one-deck-mac-windows-omarchy/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/one-deck-mac-windows-omarchy/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/blog/one-deck-mac-windows-omarchy/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="昼と夜のテーマを切り替える" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">昼</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="メニューを開く" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">ブログ · リリースノート</p>
+  <h1>OpenWalkieTalkie v0.14.0：Mac、Windows、Omarchy で使える 1 台のデバイス</h1>
+  <p class="post-meta"><span>2026年11月16日</span><span>Mac と Windows のアプリ、Omarchy、サービスとファームウェア</span></p>
+</header>
+<article class="post-body">
+  <p>バージョン 0.14.0 は、これまでで最大のリリースです。Mac アプリがデバイスの管理アプリになり、サービスは Windows と Omarchy でも動くようになりました。Grok Bot が Claude Code と Codex に加わり、ファームウェアのインストールはデバイス自身が確認します。</p>
+  <h2>デバイスの管理アプリ</h2>
+  <p>セッションはデバイスで読んで答えます。セッションの内容がアプリのウィンドウに届くことはありません。ウィンドウはデバイスとその周りのサービスを管理するもので、5 つのページがあります：<strong>デバイス</strong>、<strong>ページとキー</strong>、<strong>連携</strong>、<strong>音声</strong>、<strong>サービス</strong>。「連携」には各接続元からデータが届いているかが表示され、接続元ごとに<strong>テスト質問を送信</strong>と、<strong>設定する</strong>または<strong>修復</strong>があります。「サービス」には<strong>セットアップを確認</strong>、<strong>サポートファイルを書き出す</strong>、更新、インストールされたものすべてと<strong>アンインストール</strong>があります。初回起動では、<strong>これらを追加</strong>を選ぶまで何もインストールされません。</p>
+  <p>エージェント一覧、カードでの回答、指示の入力欄、「使用量」ページはウィンドウからなくなりました。デバイスにあるからです。セッションのカードで ENTER を押すと、そのセッションのアプリが前面に出ます。オートメーションの権限は要りません。設定はデバイスごとに保存され、サービスは自分で更新を確認し、デバイスの接続が切れてから 10 分後に収集を止めます。</p>
+  <h2>Grok Bot が Claude Code と Codex に加わる</h2>
+  <p>xAI のチームメイトアプリ Grok Bot が、最新の連携です。ボットはそれぞれ、デバイスの<strong>Grok Bot</strong>ページに 1 行ずつ、Grok のマーク付きで並びます。ボットを押すと、そのボットのルーティンの Webhook に届きます。ボットはパソコン上で <code>deckd grokbot say</code> を実行して答えます。答えの短い版がデバイスに表示されて読み上げられ、答えの全文はボットのチャットに残ります。ボットからデバイスで質問し、選んだ答えを受け取ることもできます。</p>
+  <p>Mac でボットを追加するには、<strong>連携 → Grok Bot → ボット…</strong>を開き、名前を入力して<strong>プロンプトをコピー</strong>を選びます。そのプロンプトを Grok Bot のチャットでボットに送ると、ボットが自分でルーティンを作ります。ルーティンの<strong>POST先</strong> URL と<strong>キー</strong>をダイアログにコピーし、Grok Bot の<strong>設定 → コンピューター</strong>で、ボットがコマンドを実行できるようにします。ボットが実行したコマンドはデバイスに報告できますが、ほかのセッションのカードに答えたり、設定を変えたりはできません。</p>
+  <h2>Windows（プレビュー版）</h2>
+  <p>サービスとアプリが Windows 10 と 11（x64）で動くようになりました。対応するのは「システム」ページ、Claude Code、Claude Channels、Codex、マクロパッド、音声、Grok Bot、タスクトレイのアイコン、サインイン時の起動、アプリ内アップデートです。各リリースには、署名なしの Windows 用 ZIP が含まれるようになりました。署名がないため、SmartScreen では<strong>詳細情報 → 実行</strong>を選ぶ必要があり、スマート アプリ コントロールではブロックされます。手順は<a href="/ja/docs/windows/">Windows インストールガイド</a>で説明しています。</p>
+  <h2>Omarchy</h2>
+  <p>Omarchy（Hyprland）のマシンでは、Linux のサービスと Omarchy ブリッジが、そのマシンの Claude Code、Codex、Kimi Code のセッションをデバイスに表示します。Omarchy のページではウィンドウとワークスペースを切り替えられ、音声での指示はそのセッションのターミナルに入力されます。Superwhisper がインストールされていれば、押している間の音声は Superwhisper が認識します。マクロパッドは uinput で入力するので、Omarchy の Super ショートカットも使えます。ビルドとインストールは<a href="/ja/docs/omarchy/">Omarchy ガイド</a>で説明しています。</p>
+  <h2>更新はデバイスが確認する</h2>
+  <p>ファームウェア 0.14.0 以降、ファームウェアの更新はデバイスで ENTER を押したときにだけ始まります。CANCEL、タイムアウト、音声、API では何もインストールされません。0.13 から 0.14 への更新は引き続きアプリで確認します。リカバリーモードのデバイスはすぐにインストールします。</p>
+  <p>質問の通知が次の ENTER を受け取るようになりました。次に押すと質問が開き、その次に押すと答えます。新しい質問に移っても、動いているタイマー、鳴っているアラーム、ゲームはそのままです。</p>
+  <h2>知っておきたい変更</h2>
+  <ul>
+    <li>親プロセスの制限が、ネイティブインストールした Claude Code も捉えるようになりました。Claude Code や Codex の中で実行した管理用の <code>deckd</code> コマンドは拒否されます。自分で開いたターミナルから実行してください。</li>
+    <li>ローカルの TCP の窓口は既定でオフになり、次のリリースで削除されます。</li>
+    <li>デバイスの「使用量」ページでの Claude の使用量は、オンにした場合だけ表示されます。また、デバイスのマイクが使えないときに、サービスが Mac のマイクで録音することはなくなりました。</li>
+  </ul>
+  <h2>アップデート</h2>
+  <p>Mac では<strong>アップデートを確認…</strong>を選ぶか、Apple Silicon または Intel（macOS 13 以降）用の、署名・公証済みの <strong>0.14.0</strong> アプリをインストールします。次に、デバイスを USB で接続したまま<strong>サービス → 更新</strong>を開き、デバイスの横の<strong>確認</strong>を選んでから、<strong>内容を確認…</strong>と<strong>インストール</strong>を選びます。通常の更新では、設定と Bluetooth のペアリングは保持されます。Windows では、リリースから ZIP をダウンロードし、Windows ガイドに従ってください。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.14.0" rel="noopener">GitHub で OpenWalkieTalkie v0.14.0 とチェックサムを入手 →</a></p>
+  <p class="post-back"><a href="/ja/blog/">← ブログに戻る</a></p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL のプロジェクト · ソフトウェアは MIT · ハードウェアは CERN-OHL-P</span>
+    <nav aria-label="フッター">
+      <a href="/ja/#waitlist">ウェイトリストに登録</a>
+      <a href="/ja/privacy/">プライバシーポリシー</a>
+      <a href="/ja/cookies/">Cookie について</a>
+      <a href="/ja/cookies/" data-privacy-open>プライバシーに関するお知らせ</a>
+      <a href="/ja/">ホーム</a>
+      <a href="/ja/#demo">試す</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Discord で CoHDL と OpenWalkieTalkie のコミュニティに参加">Discord</a>
+      <a href="/ja/blog/feed.xml">フィード</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

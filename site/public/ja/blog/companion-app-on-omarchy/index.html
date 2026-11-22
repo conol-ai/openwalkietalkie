@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie v0.15.0：Omarchy で使えるアプリ · OpenWalkieTalkie</title>
+<meta name="description" content="アプリが Omarchy で動くようになりました。Omarchy のページで PTT を押すとカーソル位置に口述入力でき、ホイールはウィンドウの行に沿って動き、Linux のサービスは 1 つのフォルダにまとまります。" />
+<link rel="canonical" href="https://openwalkietalkie.org/ja/blog/companion-app-on-omarchy/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/companion-app-on-omarchy/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/companion-app-on-omarchy/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/companion-app-on-omarchy/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/companion-app-on-omarchy/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/companion-app-on-omarchy/" />
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.15.0：Omarchy で使えるアプリ · OpenWalkieTalkie" />
+<meta property="og:description" content="アプリが Omarchy で動くようになりました。Omarchy のページで PTT を押すとカーソル位置に口述入力でき、ホイールはウィンドウの行に沿って動き、Linux のサービスは 1 つのフォルダにまとまります。" />
+<meta property="og:url" content="https://openwalkietalkie.org/ja/blog/companion-app-on-omarchy/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie ブログ" href="/ja/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/i18n/ja.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">本文へスキップ</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/ja/" aria-label="OpenWalkieTalkie — ホーム">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="セクション">
+      <a href="/ja/#pile">The Pile</a>
+      <a href="/ja/#features">機能</a>
+      <a href="/ja/#demo">試す</a>
+      <a href="/ja/#faces">ページ</a>
+      <a href="/ja/#blueprint">設計図</a>
+      <a href="/ja/docs/">ドキュメント</a>
+      <a href="/ja/blog/" aria-current="true">ブログ</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="言語: 日本語">日本語</summary>
+        <ul>
+          <li><a href="/blog/companion-app-on-omarchy/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/companion-app-on-omarchy/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/companion-app-on-omarchy/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/blog/companion-app-on-omarchy/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="昼と夜のテーマを切り替える" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">昼</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="メニューを開く" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">ブログ · リリースノート</p>
+  <h1>OpenWalkieTalkie v0.15.0：Omarchy で使えるアプリ</h1>
+  <p class="post-meta"><span>2026年11月17日</span><span>Omarchy のアプリ、口述とサービス</span></p>
+</header>
+<article class="post-body">
+  <p>バージョン 0.15.0 では、アプリが Omarchy で使えるようになり、デバイスを Omarchy での口述用マイクとして使えるようになりました。デバイスのファームウェアは 0.14.0 のままです。</p>
+  <h2>Omarchy で動くアプリ</h2>
+  <p>Mac と Windows にあるアプリが、Omarchy（Hyprland）でも動くようになりました。アプリランチャーでは <strong>OpenWalkieTalkie</strong> として表示され、同じ 5 つのページがあります：<strong>デバイス</strong>、<strong>ページとキー</strong>、<strong>連携</strong>、<strong>音声</strong>、<strong>サービス</strong>。サービスは自動で見つけます。<strong>サービス</strong>は systemd のユーザーユニットでサービスを起動・停止し、<strong>ログイン時に開く</strong>は XDG の自動起動エントリです。タスクトレイのアイコンはありません。それはデスクトップのバーの役目です。アプリ内アップデートもありません。アプリはソースからビルドするからです。</p>
+  <p><strong>ページとキー</strong>は、アプリの設計より狭いタイル表示のウィンドウにも収まります。ページ一覧は 2 行目に折り返し、キーの編集欄はキーの一覧の下に移ります。ビルドとインストールは<a href="/ja/docs/omarchy/">Omarchy ガイド</a>で説明しています。</p>
+  <h2>Omarchy のページで口述</h2>
+  <p>Omarchy のページでは、PTT は Superwhisper 自体の「押して話す」と同じように動きます。押したまま話して離すと、キーボード入力を受けているウィンドウのカーソル位置に、話した言葉が入力されます。Enter は押されません。押している間に CANCEL を押すと、録音は破棄されます。Superwhisper がインストールされていれば、Superwhisper が独自のモード、言語、語彙で認識します。なければローカルの Whisper モデルが認識します。このためにブリッジは一覧に <strong>Dictate</strong> 項目を追加します。「エージェント」ページでこれを選んでも、同じように口述できます。</p>
+  <h2>ホイールが行に沿って動く</h2>
+  <p>Omarchy のページで、ホイールはページに並んだ順にウィンドウの行を移動するようになりました。デバイスのほかの一覧と同じ動きで、最初と最後の行で止まります。以前は Hyprland 自体のウィンドウ順に従っていたため、回すと下の行を飛ばすことがありました。</p>
+  <h2>Linux でも 1 つのフォルダ</h2>
+  <p>Linux のサービスは、すべてを 1 つのフォルダ <code>~/.local/share/openwalkietalkie</code> に保存するようになりました。Mac で 1 つのフォルダにまとめているのと同じです。Omarchy でのインストールはもともとここで動いていたので、<code>deckd</code> コマンドに <code>DECKD_DATA_DIR=…</code> を付ける必要はなくなりました。以前の構成で Linux 上の <code>deckd</code> を手動で動かしていた場合は、そのファイルをこのフォルダに移すか、<code>DECKD_DATA_DIR</code> を設定してください。</p>
+  <h2>アップデート</h2>
+  <p>Mac では<strong>アップデートを確認…</strong>を選ぶか、Apple Silicon または Intel（macOS 13 以降）用の、署名・公証済みの <strong>0.15.0</strong> アプリをインストールします。Windows では、リリースから ZIP をダウンロードします。Omarchy では、pull してサービスとアプリをビルドし、その両方で <code>install.sh</code> を実行します。手順は <a href="/ja/docs/omarchy/">Omarchy ガイド</a>のとおりです。このリリースでは、デバイスのファームウェアを更新する必要はありません。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.15.0" rel="noopener">GitHub で OpenWalkieTalkie v0.15.0 とチェックサムを入手 →</a></p>
+  <p class="post-back"><a href="/ja/blog/">← ブログに戻る</a></p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL のプロジェクト · ソフトウェアは MIT · ハードウェアは CERN-OHL-P</span>
+    <nav aria-label="フッター">
+      <a href="/ja/#waitlist">ウェイトリストに登録</a>
+      <a href="/ja/privacy/">プライバシーポリシー</a>
+      <a href="/ja/cookies/">Cookie について</a>
+      <a href="/ja/cookies/" data-privacy-open>プライバシーに関するお知らせ</a>
+      <a href="/ja/">ホーム</a>
+      <a href="/ja/#demo">試す</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Discord で CoHDL と OpenWalkieTalkie のコミュニティに参加">Discord</a>
+      <a href="/ja/blog/feed.xml">フィード</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

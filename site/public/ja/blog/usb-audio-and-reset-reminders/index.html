@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie v0.9.0：聞き取りやすい USB 音声とリセットのリマインダー · OpenWalkieTalkie</title>
+<meta name="description" content="USB 経由で 48 kHz のスピーカー再生、16 kHz の音質改善、そして未使用の手動リセットが期限切れになる前に Mac とデバイスでお知らせします。" />
+<link rel="canonical" href="https://openwalkietalkie.org/ja/blog/usb-audio-and-reset-reminders/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/usb-audio-and-reset-reminders/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/usb-audio-and-reset-reminders/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/usb-audio-and-reset-reminders/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/usb-audio-and-reset-reminders/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/usb-audio-and-reset-reminders/" />
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.9.0：聞き取りやすい USB 音声とリセットのリマインダー · OpenWalkieTalkie" />
+<meta property="og:description" content="USB 経由で 48 kHz のスピーカー再生、16 kHz の音質改善、そして未使用の手動リセットが期限切れになる前に Mac とデバイスでお知らせします。" />
+<meta property="og:url" content="https://openwalkietalkie.org/ja/blog/usb-audio-and-reset-reminders/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie ブログ" href="/ja/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/i18n/ja.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">本文へスキップ</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/ja/" aria-label="OpenWalkieTalkie — ホーム">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="セクション">
+      <a href="/ja/#pile">The Pile</a>
+      <a href="/ja/#features">機能</a>
+      <a href="/ja/#demo">試す</a>
+      <a href="/ja/#faces">ページ</a>
+      <a href="/ja/#blueprint">設計図</a>
+      <a href="/ja/blog/" aria-current="true">ブログ</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="言語: 日本語">日本語</summary>
+        <ul>
+          <li><a href="/blog/usb-audio-and-reset-reminders/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/usb-audio-and-reset-reminders/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/usb-audio-and-reset-reminders/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/blog/usb-audio-and-reset-reminders/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="昼と夜のテーマを切り替える" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">昼</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="メニューを開く" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">ブログ · リリースノート</p>
+  <h1>OpenWalkieTalkie v0.9.0：聞き取りやすい USB 音声とリセットのリマインダー</h1>
+  <p class="post-meta"><span>2026年10月22日</span><span>アプリとファームウェアの更新</span></p>
+</header>
+<article class="post-body">
+  <p>バージョン 0.9.0 では USB での音声が聞き取りやすくなり、見落としやすいことのリマインダーが加わりました。期限切れが近い、未使用の手動の使用量リセットです。両方の改善を使うには、Mac アプリとデバイスのファームウェアを更新してください。</p>
+  <h2>言葉を聞く</h2>
+  <p>最初に音楽で 16 kHz と 48 kHz を聞き比べました。聞き手にははっきりした違いは分かりませんでした。英語の音声では結果が違いました。スピーカー EQ を有効にして音量をそろえると、48 kHz の一節のほうが聞き取りやすく、16 kHz 版で聞こえていたノイズも消えました。</p>
+  <p>接続中のファームウェアが対応していれば、デバイスは<strong>USB 経由で 48 kHz のスピーカー再生</strong>を使うようになりました。サービスがこの機能を自動で確認し、EQ を有効にしたまま、古いファームウェアでは 16 kHz に戻します。接続を切り替えたときや、押して話す機能を離したあとも、再生はネゴシエーションしたレートに従います。</p>
+  <p>これは再生経路の改善であり、元の音声になかった細部を作り出すものではありません。テストに使った Kokoro の音声は 24 kHz で出力されました。これを 48 kHz の経路に通すと、以前の 16 kHz への変換を避けられ、圧縮と再構成の経路も変わります。</p>
+  <h2>16 kHz の経路も改善</h2>
+  <p>ホストは量子化誤差を減らすために別の ADPCM エンコード経路を探し、元の結果のほうが良い場合は元の結果を残します。ファームウェアは、16 kHz の音声を 48 kHz の DAC に送る前の処理で、線形補間の代わりに帯域制限フィルターを使うようになりました。</p>
+  <p>同じ英語の一節で、改良したエンコーダーはエンコード誤差の二乗を約 30% 減らしました。これはデジタルでの測定値であり、聞こえるヒスノイズが完全に消えるという約束ではありません。改良した 16 kHz の経路は、まだ聞いての確認が必要です。</p>
+  <p><strong>BLE での再生とマイクの録音は 16 kHz のままです。</strong>USB での比較は、どちらのレートでも途切れ、アンダーラン、キューの破棄、シーケンスエラーなしで完了しました。BLE で 48 kHz の再生を続けた場合の検証はまだなので、このリリースでは高いレートを USB に限っています。</p>
+  <h2>期限切れの前にリセットを使う</h2>
+  <p>未使用の手動リセットのクレジットが <strong>72 時間</strong>以内に期限切れになるとき、Mac の「使用量」ページとデバイスの「使用量」ページで、週間バーの下に小さな琥珀色のヒントが表示されるようになりました。例：<strong>「2 回のリセットがあと 1日6時間で期限切れ」</strong></p>
+  <figure class="post-figure" style="max-width:480px;margin-left:auto;margin-right:auto"><img src="/assets/screens/usage-reset-expiring-090.png" alt="デバイスの「使用量」画面。Claude の週間バーの下に琥珀色のリマインダー：2 回のリセットがあと 1日6時間で期限切れ" width="480" height="480" loading="lazy" /><figcaption>実際のデバイス UI に表示したリセット期限のリマインダー。説明用のデモデータで描画しています。</figcaption></figure>
+  <p>これは、週ごとの上限が回復するまでの通常のカウントダウンとは別のものです。ヒントは最も近いクレジットの期限を使い、その期限のクレジットだけを数えます。クレジットを使うか期限が切れると消え、アカウントが変わると前のアカウントのクレジットを消し、未接続の間は表示されません。プロバイダーがこのデータを提供しない場合、リマインダーは表示されません。デバイスがリセットを代わりに使うことはありません。</p>
+  <h2>両方を更新する</h2>
+  <p>署名・公証済みの Mac アプリ（Apple Silicon または Intel）をインストールするか、<strong>アップデートを確認</strong>を選びます。macOS 13 以降が必要です。次にデバイスを USB-C で接続し、<strong>サービス → 更新 → ファームウェア更新を確認</strong>を使います。アプリ、サービス、ファームウェアがすべて 0.9.0 と表示されるはずです。</p>
+  <p>リカバリープロトコル 2 を使っているデバイスでは、通常の更新で設定と Bluetooth のペアリングが保持されます。それより古いリカバリーのバージョンでは、既存のガイド付き移行を使います。基板ごとの出荷時 ZIP は製造用に引き続き提供しますが、チップ全体のイメージが設定とペアリングを上書きするため、お使いのデバイスにはアプリのアップデーターを使ってください。</p>
+  <h2>ブログもリリースの一部</h2>
+  <p>リリースの検証ツールは、リリースを公開する前に、ブログ記事、そのフィード項目、ブログ一覧へのリンク、サイトマップの項目、最新の Mac 用ダウンロードがそろっていることを求めるようになりました。抜けていた <a href="/ja/blog/speaker-eq-and-less-hiss/">0.7.0</a> と <a href="/ja/blog/screen-lock-and-wheel-navigation/">0.8.0</a> の記事も公開しました。</p>
+  <p>開発版ファームウェアと音声の比較は Rev A で USB 経由で確認し、更新したサービスを再起動したあと、デーモンの通常の再生が 48 kHz であることも確認しました。自動チェックでは、レートのネゴシエーション、接続の切り替え、音声のエンコードとフィルター、リセットの期限とアカウントの切り替え、描画を確認しています。このセッションでは Rev B の音声を実機で試していません。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.9.0" rel="noopener">OpenWalkieTalkie v0.9.0、ファームウェア、出荷時ファームウェア、チェックサムを GitHub で入手 →</a></p>
+  <p class="post-back"><a href="/ja/blog/">← ブログに戻る</a></p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL のプロジェクト · ソフトウェアは MIT · ハードウェアは CERN-OHL-P</span>
+    <nav aria-label="フッター">
+      <a href="/ja/#waitlist">ウェイトリストに登録</a>
+      <a href="/ja/privacy/">プライバシーポリシー</a>
+      <a href="/ja/cookies/">Cookie について</a>
+      <a href="/ja/cookies/" data-privacy-open>プライバシーに関するお知らせ</a>
+      <a href="/ja/">ホーム</a>
+      <a href="/ja/#demo">試す</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Discord で CoHDL と OpenWalkieTalkie のコミュニティに参加">Discord</a>
+      <a href="/ja/blog/feed.xml">フィード</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

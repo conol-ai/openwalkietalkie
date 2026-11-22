@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie — AI エージェントのためのオープンソースのハンディ無線機。</title>
+<meta name="description" content="OpenWalkieTalkie は、複数の AI エージェントを同時に動かす人のためのオープンなハンディデバイスです。誰があなたを待っているかを表示する 480×480 のタッチスクリーン、スクロールホイール、そして声をそのエージェントに届ける押して話すキー。ハードウェアもファームウェアもホスト側もオープンです。" />
+<link rel="canonical" href="https://openwalkietalkie.org/ja/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie — AI エージェントのためのオープンソースのハンディ無線機。" />
+<meta property="og:description" content="タッチスクリーン、スクロールホイール、押して話すキーを備えた手のひらサイズのデバイス。どのエージェントがあなたを待っているかを示し、声はそのエージェントに届きます。ハードウェア、ファームウェア、ホスト側すべてオープン。" />
+<meta property="og:url" content="https://openwalkietalkie.org/ja/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="画面が点いた OpenWalkieTalkie の試作機が机の上に立ち、横に Open Walkie Talkie、AI エージェントのためのオープンソースのハンディ無線機という文字。" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="OpenWalkieTalkie — AI エージェントのためのオープンソースのハンディ無線機。" />
+<meta name="twitter:description" content="どのエージェントがあなたを待っているかを示すデバイス。PTT を押して話しかけるだけ。ハードウェア、ファームウェア、ホスト側すべてオープン。" />
+<meta name="twitter:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie ブログ" href="/ja/blog/feed.xml" />
+
+<!-- Self-hosted pixel fonts: Press Start 2P for headings/labels, VT323 for body copy -->
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<!-- Sets data-theme from localStorage/OS before first paint to avoid a theme flash -->
+<script src="/js/i18n/ja.js"></script>
+<script src="/js/theme-init.js"></script>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareSourceCode",
+  "name": "OpenWalkieTalkie",
+  "url": "https://openwalkietalkie.org/",
+  "codeRepository": "https://github.com/conol-ai/openwalkietalkie",
+  "license": ["https://opensource.org/license/mit/", "https://ohwr.org/cern_ohl_p_v2.txt"],
+  "programmingLanguage": [
+    "Rust",
+    {
+      "@type": "ComputerLanguage",
+      "name": "CoHDL",
+      "url": "https://cohdl.org/",
+      "sameAs": "https://github.com/conol-ai/cohdl"
+    }
+  ],
+  "description": "An open-source handheld for people who run several AI agents at once: a 480x480 touch screen that shows who needs you, a scroll wheel, and a push-to-talk key. MIT software, CERN-OHL-P hardware."
+}
+</script>
+
+<!-- No analytics scripts. Update the privacy notice before adding tracking. -->
+</head>
+<body>
+
+<a class="skip-link" href="#top">本文へスキップ</a>
+
+<!-- ============ SCROLL PROGRESS BAR ============ -->
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<!-- ============ NAV ============ -->
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="#top" aria-label="OpenWalkieTalkie — ホーム">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="セクション">
+      <a href="#waitlist">ウェイトリスト</a>
+      <a href="#demo">試す</a>
+      <a href="#download">ダウンロード</a>
+      <a href="/ja/docs/">ドキュメント</a>
+      <a href="/ja/blog/">ブログ</a>
+      <a href="#blueprint">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="言語: 日本語">日本語</summary>
+        <ul>
+          <li><a href="/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="昼と夜のテーマを切り替える" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">昼</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="メニューを開く" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- ============ 1. HERO ============ -->
+<section class="hero" id="hero">
+  <div class="hero__sky" aria-hidden="true">
+    <div class="clouds" data-parallax="0.12">
+      <span class="cloud cloud--1"></span>
+      <span class="cloud cloud--2"></span>
+      <span class="cloud cloud--3"></span>
+    </div>
+    <div class="clouds clouds--far" data-parallax="0.05">
+      <span class="cloud cloud--4"></span>
+      <span class="cloud cloud--5"></span>
+    </div>
+    <div class="stars" id="stars"></div>
+    <div class="hero__hills"><span class="hill hill--back"></span><span class="hill hill--front"></span></div>
+  </div>
+
+  <div class="hero__inner">
+    <div class="hero__copy">
+      <p class="hero__eyebrow">オープンハードウェア · オープンファームウェア · オープンホスト</p>
+      <h1 class="hero__title">
+        <span class="hero__title-line">OPEN</span>
+        <span class="hero__title-line">WALKIE</span>
+        <span class="hero__title-line hero__title-line--accent">TALKIE</span>
+      </h1>
+      <p class="press-start"><span class="blink">▮</span> PRESS START</p>
+      <p class="hero__tagline">AI エージェントのためのオープンソースのハンディ無線機。</p>
+      <p class="hero__sub">タッチスクリーン、スクロールホイール、押して話すキーを備えた手のひらサイズのデバイス。どのエージェントがあなたを待っているかを示し、声はそのエージェントに届きます。</p>
+      <div class="hero__cta">
+        <a class="btn btn--primary" href="#waitlist">ウェイトリストに登録</a>
+        <a class="btn btn--ghost" href="#demo">ライブで試す</a>
+        <!-- No Mac download in the hero while the deck is waitlist-only. Put "Download for Mac" (#download) back here when it is for sale. -->
+        <a class="btn btn--ghost" href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub で見る</a>
+      </div>
+      <p class="hero__platforms">macOS 13+ · Apple シリコン + Intel · オープンなファームウェア</p>
+      <ul class="hero__stats">
+        <li><b>2.16"</b><span>AMOLED</span></li>
+        <li><b>6+1</b><span>キー · ホイール</span></li>
+        <li><b>USB-C</b><span>または BLUETOOTH</span></li>
+        <li><b>100%</b><span>OPEN</span></li>
+      </ul>
+    </div>
+
+    <div class="hero__art" id="heroArt">
+      <div class="hero__art-frame hero-product">
+        <img class="swap-img swap-img--day" src="/assets/hero-radio-v93b-day-screen.png" alt="エージェントの一覧を表示した、白とオレンジの V9.3B OpenWalkieTalkie のピクセルイラスト" width="1254" height="1254" fetchpriority="high" />
+        <img class="swap-img swap-img--night" src="/assets/hero-radio-v93b-night-screen.png" alt="押して話すの聞き取り画面を表示した、黒とミントの V9.3B OpenWalkieTalkie のピクセルイラスト" width="1254" height="1254" />
+      </div>
+    </div>
+  </div>
+
+  <a class="scroll-hint" href="#pile" aria-label="下へスクロール">
+    <span class="scroll-hint__txt">スクロール</span>
+    <span class="scroll-hint__arrow" aria-hidden="true"></span>
+  </a>
+</section>
+
+<!-- ============ 2. TICKER ============ -->
+<div class="ticker" aria-hidden="true">
+  <div class="ticker__track">
+    <div class="ticker__group">
+      <span>ハードウェアはオープン</span><b>✦</b><span>ファームウェアはオープン</span><b>✦</b><span>ホストはオープン</span><b>✦</b><span>押す · 話す · 離す</span><b>✦</b><span>誰が待っているか、ひと目で</span><b>✦</b><span>誰でも再現できる設計図</span><b>✦</b>
+    </div>
+    <div class="ticker__group">
+      <span>ハードウェアはオープン</span><b>✦</b><span>ファームウェアはオープン</span><b>✦</b><span>ホストはオープン</span><b>✦</b><span>押す · 話す · 離す</span><b>✦</b><span>誰が待っているか、ひと目で</span><b>✦</b><span>誰でも再現できる設計図</span><b>✦</b>
+    </div>
+  </div>
+</div>
+<p class="sr-only">ハードウェアはオープン。ファームウェアはオープン。ホストはオープン。押して、話して、離す。誰が待っているか、ひと目で。誰でも再現できる設計図。</p>
+
+<!-- ============ 3. THE TAB PILE ============ -->
+<section class="section paradox" id="pile">
+  <div class="wrap">
+    <header class="section-head reveal">
+      <p class="section-kicker">第 1 章</p>
+      <h2 class="section-title">タブの山</h2>
+      <p class="section-lede">3 つのエージェントが動いていて、1 つは質問で止まっている。どれなのか、ターミナルをスクロールして探す。それを教えてくれる無線機がこのデバイスです。</p>
+    </header>
+
+    <div class="vs">
+      <article class="card card--rival reveal reveal--left">
+        <div class="card__tag">これまで</div>
+        <h3 class="card__title">ターミナルだらけの机</h3>
+        <p class="card__price card__price--bad">タブ N 個</p>
+        <ul class="speclist">
+          <li class="no">どのエージェントが待っている？スクロールしないとわからない。</li>
+          <li class="no">権限の確認がほかの作業に埋もれる</li>
+          <li class="no">プロンプトはすべて入力し、返信はすべて読む</li>
+          <li class="no">画面の前から離れられない</li>
+          <li class="no">分解も作り直しもできない</li>
+        </ul>
+        <p class="card__foot">エージェントは速い。あなたは遅い。</p>
+      </article>
+
+      <div class="vs__badge reveal" aria-hidden="true">
+        <span class="vs__badge-inner">VS</span>
+      </div>
+
+      <article class="card card--ours reveal reveal--right">
+        <div class="card__tag card__tag--good">これから</div>
+        <h3 class="card__title">Open Walkie Talkie</h3>
+        <p class="card__price card__price--good">デバイス 1 台</p>
+        <ul class="speclist">
+          <li class="yes">1 つの画面に、すべてのエージェント。誰が先にあなたを必要としているか</li>
+          <li class="yes">質問はカードになる。1 回押せば答えられる。</li>
+          <li class="yes">PTT を押して話す。返信を聞く。</li>
+          <li class="yes">Bluetooth で部屋を歩き、USB-C で机に戻る</li>
+          <li class="yes">ハードウェアもファームウェアもホストもオープン。あなたのものです。</li>
+        </ul>
+        <p class="card__foot">誰でも再現できる設計図。</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4. FEATURES ============ -->
+<section class="section features" id="features">
+  <div class="wrap">
+    <header class="section-head reveal">
+      <p class="section-kicker">第 2 章</p>
+      <h2 class="section-title">3 つのチャンネル、それぞれに 1 つの役目</h2>
+      <p class="section-lede">画面は状況を示すボード。PTT は無線。ボタンは決断。会話を読み、誰が待っているかを見て、デバイスから応えます。</p>
+    </header>
+
+    <!-- featured: the PTT key you can actually hold -->
+    <article class="feat feat--ptt reveal">
+      <div class="ptt-stage">
+        <button class="pttbtn" id="featPtt" type="button" aria-label="押して話すのデモ — ボタンかスペースキーを押している間に話します">PTT</button>
+        <p class="ptt-stage__hint" aria-hidden="true">▼ 押してみて ▼</p>
+      </div>
+
+      <div class="ptt-copy">
+        <div class="feat__icon icon-voice" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+        <h3 class="feat__title">押して話す</h3>
+        <p class="feat__body">作業用のページでキーを押すと、画面が「聞き取り中」の表示に変わります。離すと、認識が終わるまで文字起こしが表示されたままになります。デバイスのマイクの音声は Mac に送られ、言葉は次のプロンプトとして選択中のエージェントに届き、返信はデバイスのスピーカーで読み上げることもできます。</p>
+        <p class="ptt-readout" id="featPttReadout" role="status">待機中。キーを押すと始まります。</p>
+      </div>
+
+      <div class="ptt-out" id="featPttOut" aria-hidden="true">
+        <div class="ptt-out__idle">PTT を押している間のデバイスの画面</div>
+        <div class="ptt" id="featPttOverlay">
+          <div class="ptt__head"><span class="ptt__who">Claude · web-ui</span><span class="ptt__pill">聞き取り中</span></div>
+          <div class="ptt__wave" id="featPttWave"></div>
+          <p class="ptt__text"><span id="featPttText"></span><span class="caret">▮</span></p>
+          <p class="ptt__foot">PTT を離して送信</p>
+        </div>
+      </div>
+    </article>
+
+    <div class="feat-grid" data-stagger>
+      <article class="feat reveal" tabindex="0">
+        <div class="feat__icon icon-roster" aria-hidden="true"><i></i><i></i><i></i></div>
+        <h3 class="feat__title">一覧</h3>
+        <p class="feat__body">エージェントはそれぞれ 1 つのチャンネルです。赤い点は質問、緑は完了、青は実行中。質問は上に並ぶので、最初に目に入る行が、あなたを必要としている行です。</p>
+        <p class="feat__meta">質問 · 完了 · 実行中</p>
+      </article>
+
+      <article class="feat reveal" tabindex="0">
+        <div class="feat__icon icon-card" aria-hidden="true"><i class="frame"></i><i class="tick"></i></div>
+        <h3 class="feat__title">カード</h3>
+        <p class="feat__body">権限の確認や選択式の質問はカードになります。選択肢までスクロールして ENTER を押すか、タップするか、声で答えます。Claude Code や Codex の権限のカードを承認できるのは人だけです。</p>
+        <p class="feat__meta">1 回押すだけ · 文脈はすべて</p>
+      </article>
+
+      <article class="feat reveal" tabindex="0">
+        <div class="feat__icon icon-wheel" aria-hidden="true"><i class="drum"></i></div>
+        <h3 class="feat__title">ホイール</h3>
+        <p class="feat__body">1 段で 1 行。SHIFT を押すと、同じホイールでページを切り替えます。エージェント、Omarchy、マクロパッド、使用量、システム、ゲーム。SHIFT を 2 回押すと並べ替えられます。</p>
+        <p class="feat__meta">SCROLL · SHIFT+SCROLL</p>
+      </article>
+
+      <article class="feat reveal" tabindex="0">
+        <div class="feat__icon icon-pad" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <h3 class="feat__title">マクロパッドのページ</h3>
+        <p class="feat__body">タッチスクリーン上の 9 つのキーに、それぞれラベルとキー操作。ホストがその組み合わせをデスクトップに送ります。キーはデバイスの上で編集でき、ラベルは PTT で口述できます。</p>
+        <p class="feat__meta">⌘⇧4 · タップか割り当て</p>
+      </article>
+
+      <article class="feat reveal" tabindex="0">
+        <div class="feat__icon icon-usage" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+        <h3 class="feat__title">使用量のページ</h3>
+        <p class="feat__body">Claude と Codex のレート制限の枠を、使っているアカウントとリセットまでのカウントダウン付きのバーで表示します。ホストが読み取りに使うのは、すでにあるログインだけです。</p>
+        <p class="feat__meta">セッション · 週 · リセット</p>
+      </article>
+
+      <article class="feat reveal" tabindex="0">
+        <div class="feat__icon icon-link" aria-hidden="true"><i class="plug"></i><i class="wave"></i></div>
+        <h3 class="feat__title">ケーブルでも無線でも</h3>
+        <p class="feat__body">USB-C でつなぐと、ホストは 1 ミリ秒未満でレポートを書き込みます。外すと、音声も含めて同じ接続が Bluetooth LE に移ります。ケーブルがあれば、ホストはいつもケーブルを使います。</p>
+        <p class="feat__meta">USB HID · BLE · 1209:5754</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 5. INTERACTIVE DEMO ============ -->
+<section class="section demo" id="demo">
+  <div class="wrap">
+    <header class="section-head reveal">
+      <p class="section-kicker">第 3 章</p>
+      <h2 class="section-title">試してみる</h2>
+      <p class="section-lede demo-intro"><span>6 つのページ。1 台のデバイス。</span><span>モードを選んで、タップするかホイールを回します。</span><span><kbd>↑ ↓</kbd> スクロール · <kbd>↵</kbd> 開く · <kbd>esc</kbd> 戻る</span><span><kbd>shift</kbd> + スクロール：ページ · <kbd>space</kbd>：話す</span></p>
+    </header>
+
+    <div class="demo-tabs reveal" role="group" aria-label="デモのページを選ぶ">
+      <button type="button" class="demo-tab" data-demo-face="0" aria-pressed="true"><span>01</span>エージェント</button>
+      <button type="button" class="demo-tab" data-demo-face="1" aria-pressed="false"><span>02</span>Omarchy</button>
+      <button type="button" class="demo-tab" data-demo-face="2" aria-pressed="false"><span>03</span>マクロパッド</button>
+      <button type="button" class="demo-tab" data-demo-face="3" aria-pressed="false"><span>04</span>使用量</button>
+      <button type="button" class="demo-tab" data-demo-face="4" aria-pressed="false"><span>05</span>システム</button>
+      <button type="button" class="demo-tab" data-demo-face="5" aria-pressed="false"><span>06</span>ゲーム</button>
+    </div>
+    <p class="demo-disclaimer">インタラクティブなプレビュー · サンプルデータです。マイクへのアクセスやパソコンへの接続はしません。</p>
+
+    <div class="demo__grid reveal">
+      <!-- ---- the handheld replica ---- -->
+      <div class="pad-wrap">
+        <div class="deck" id="deck">
+          <div class="deck__top">
+            <div class="screen" id="screen">
+              <span class="screen__notch" aria-hidden="true"></span>
+              <div class="screen__head">
+                <span class="screen__title" id="screenTitle">エージェント</span>
+                <span class="screen__tag" id="screenTag">19:42</span>
+              </div>
+              <div class="screen__body">
+                <!-- face 1: Agents -->
+                <div class="face is-active" id="faceAgents">
+                  <ul class="roster" id="roster" data-view="roster" aria-label="エージェントの一覧"></ul>
+                  <div data-view="channel" hidden>
+                    <p class="chan__state" id="chanState">質問 · 2m</p>
+                    <p class="chan__reply" id="chanReply"></p>
+                    <div id="chanPending"></div>
+                    <span class="sr-only" id="chanWho"></span>
+                  </div>
+                  <div class="cardq" data-view="card" hidden>
+                    <span class="sr-only" id="cardWho"></span>
+                    <p class="cardq__q" id="cardQ"></p>
+                    <div id="cardChoices"></div>
+                  </div>
+                </div>
+                <!-- face 2: Omarchy -->
+                <div class="face" id="faceOmarchy">
+                  <div class="chips" id="wsChips"></div>
+                  <ul class="rows" id="wsWindows"></ul>
+                  <p class="workspace-status" id="wsStatus" role="status"></p>
+                </div>
+                <!-- face 3: Macropad -->
+                <div class="face" id="faceMacropad">
+                  <div class="mgrid" id="mgrid"></div>
+                  <button class="screen-button macro-edit-toggle" id="macroEditToggle" type="button" aria-pressed="false">キーを編集</button>
+                </div>
+                <!-- face 4: Usage -->
+                <div class="face" id="faceUsage">
+                  <div id="usage"></div>
+                </div>
+                <div class="face" id="faceSystem"><div id="systemMeters"></div><button type="button" class="screen-button" id="refreshSystem">サンプルを更新</button></div>
+                <div class="face" id="faceArcade">
+                  <div id="arcadeMenu"><button type="button" class="arcade-choice" data-game="flappy"><span>01</span> フラッピーバード <small>PTT で飛行</small></button><button type="button" class="arcade-choice" data-game="snake"><span>02</span> スネーク <small>ホイールで曲がる</small></button><button type="button" class="arcade-choice" data-game="raiden"><span>03</span> 雷電 <small>移動 · 自動で撃つ</small></button></div>
+                  <div id="arcadePlay" hidden><canvas id="arcadeCanvas" width="320" height="240" aria-label="ゲームの画面"></canvas><div class="arcade-status" id="arcadeStatus" role="status">準備完了</div><button type="button" class="screen-button" id="arcadeStart">ゲーム開始</button><button type="button" class="screen-button" id="arcadeBack">ゲーム一覧</button></div>
+                </div>
+              </div>
+              <form id="macroEditor" class="macro-editor" hidden>
+                <h3 id="macroEditorTitle">キーを編集</h3>
+                <label>ラベル<input id="macroLabel" maxlength="18" required autocomplete="off" /></label>
+                <label>ショートカット<input id="macroShortcut" maxlength="32" placeholder="cmd+shift+4" autocomplete="off" /></label>
+                <div><button type="submit" class="screen-button">キーを保存</button><button type="button" class="screen-button" id="macroRemove">削除</button><button type="button" class="screen-button" id="macroCancel">キャンセル</button></div>
+              </form>
+              <!-- the PTT overlay sits over whatever face is up -->
+              <div class="ptt" id="pttOverlay" aria-live="polite">
+                <div class="ptt__head"><span class="ptt__who" id="pttWho">Codex · cohdl-api</span><span class="ptt__pill">聞き取り中</span></div>
+                <div class="ptt__wave" id="pttWave" aria-hidden="true"></div>
+                <p class="ptt__text"><span id="pttText"></span><span class="caret">▮</span></p>
+                <p class="ptt__foot">PTT を離して送信</p>
+              </div>
+              <div class="screen__hint" id="screenHint" aria-hidden="true"></div>
+            </div>
+
+            <div class="wheel" id="wheel" role="slider" tabindex="0" aria-label="スクロールホイール — ドラッグ、スクロール、矢印キーで操作。Shift を押すとページを切り替え" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">
+              <span class="wheel__drum" id="wheelDrum" aria-hidden="true"></span>
+              <span class="wheel__lbl" aria-hidden="true">SCROLL</span>
+            </div>
+          </div>
+
+          <div class="deck__keys">
+            <button class="dkey" data-key="left" type="button" aria-label="左前面のキー"><span class="dkey__cap">‹</span></button>
+            <button class="dkey" data-key="cancel" type="button"><span class="dkey__cap">ESC</span></button>
+            <button class="dkey dkey--ptt" data-key="ptt" type="button" aria-label="押して話す — 押し続ける"><span class="dkey__cap">PTT</span></button>
+            <button class="dkey" data-key="enter" type="button"><span class="dkey__cap">ENTER</span></button>
+            <button class="dkey" data-key="right" type="button" aria-label="右前面のキー"><span class="dkey__cap">›</span></button>
+          </div>
+          <div class="deck__keys" style="grid-template-columns: 1fr 5fr;">
+            <button class="dkey" data-key="shift" type="button" aria-label="Shift — クリックで押したままに" aria-pressed="false"><span class="dkey__cap">SHIFT</span></button>
+            <p class="deck__hint" style="align-self:center;margin:0">タッチスクリーン · スクロールホイール · PTT · ENTER · ESC · SHIFT · 前面のキー 2 つ</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---- the host console: what deckd sees ---- -->
+      <div class="demo-companion">
+        <div class="demo-guide"><p class="demo-guide__eyebrow" id="demoEyebrow">01 / エージェント</p><h3 id="demoTitle">エージェントへの直通回線。</h3><p id="demoDescription">セッションを選び、質問カードを開くか、PTT を押してサンプルの音声プロンプトを送ります。</p><p class="demo-guide__tip" id="demoTip">試す：ENTER を 2 回押して最初の質問に答えます。</p></div>
+      <div class="monitor">
+        <div class="monitor__bezel">
+          <div class="monitor__screen" id="hostScreen">
+            <div class="monitor__bar">
+              <span class="monitor__dot"></span>
+              <span class="monitor__title">デバイスの動作 · デモ</span>
+              <span class="monitor__ver">v0.1</span>
+            </div>
+            <div class="monitor__body">
+              <ul class="log" id="hostLog" aria-live="polite"></ul>
+            </div>
+          </div>
+        </div>
+        <div class="monitor__foot">
+          <button class="pxbtn pxbtn--sound" id="soundToggle" type="button" aria-pressed="true">
+            <span class="spk" aria-hidden="true"></span><span id="soundLabel">サウンド：オン</span>
+          </button>
+          <span class="monitor__log" id="lastEvent" role="status">—</span>
+        </div>
+      </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 6. TALKS TO YOUR AGENTS ============ -->
+<section class="section works" id="works">
+  <div class="wrap">
+    <header class="section-head reveal">
+      <p class="section-kicker">第 4 章</p>
+      <h2 class="section-title">エージェントと話す</h2>
+      <p class="section-lede">ホスト側のサービス deckd が Mac で動き、接続を受け持ちます。エージェントは、フックか、ローカルソケット上のオープンな API を通じてデバイスにつながります。</p>
+    </header>
+
+    <p class="row-label reveal">エージェント</p>
+    <div class="badge-row" data-stagger>
+      <div class="badge reveal"><span class="badge__mark badge__mark--claude-code" aria-hidden="true"></span><b>Claude Code</b><i>フック付きのプラグイン</i></div>
+      <div class="badge reveal"><span class="badge__mark badge__mark--codex" aria-hidden="true"></span><b>Codex CLI</b><i>アプリサーバー経由</i></div>
+      <div class="badge reveal"><span class="badge__mark badge__mark--api" aria-hidden="true"></span><b>あなたのスクリプト</b><i>ローカルソケット上の JSON-RPC</i></div>
+      <div class="badge badge--wild reveal"><span class="badge__mark badge__mark--any" aria-hidden="true"></span><b>+ どんなエージェントでも</b><i>curl の 1 行でもかまわない</i></div>
+    </div>
+
+    <p class="row-label reveal">机の上のほかのものも</p>
+    <div class="badge-row" data-stagger>
+      <div class="badge badge--alt reveal"><span class="badge__mark badge__mark--omarchy" aria-hidden="true"></span><b>Omarchy</b><i>Hyprland のリモコンのページ</i></div>
+      <div class="badge badge--alt reveal"><span class="badge__mark badge__mark--keys" aria-hidden="true"></span><b>キー入力</b><i>macOS でのマクロパッドの組み合わせ</i></div>
+      <div class="badge badge--alt reveal"><span class="badge__mark badge__mark--voice" aria-hidden="true"></span><b>返信の読み上げ</b><i>Apple の音声か、自分の API キー</i></div>
+      <div class="badge badge--alt badge--wild reveal"><span class="badge__mark badge__mark--whisper" aria-hidden="true"></span><b>オンデバイスの音声認識</b><i>Apple の認識、Whisper も選べる</i></div>
+    </div>
+
+    <p class="works__punch reveal">音声認識は Mac 上で動きます。文字起こしは選んだエージェントに送られます。</p>
+  </div>
+</section>
+
+<!-- ============ 7. THE FACES ============ -->
+<section class="section faces" id="faces">
+  <div class="wrap">
+    <header class="section-head reveal"><p class="section-kicker">第 5 章 · 画面の図鑑</p><h2 class="section-title">ページ</h2><p class="section-lede">小さな画面に、机ひとつ分の可能性。<br>実際のファームウェアの画面を、ページごとに見てください。</p></header>
+    <div class="face-atlas reveal">
+      <div class="face-atlas__index" role="tablist" aria-label="ファームウェアの画面" aria-orientation="vertical"><button class="face-atlas__tab" type="button" role="tab" id="atlasTab0" aria-controls="atlasPanel0" aria-selected="true" tabindex="0"><span>01</span><b>エージェント · ホーム</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab1" aria-controls="atlasPanel1" aria-selected="false" tabindex="-1"><span>02</span><b>質問カード</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab2" aria-controls="atlasPanel2" aria-selected="false" tabindex="-1"><span>03</span><b>聞き取り中</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab3" aria-controls="atlasPanel3" aria-selected="false" tabindex="-1"><span>04</span><b>マクロパッド</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab4" aria-controls="atlasPanel4" aria-selected="false" tabindex="-1"><span>05</span><b>使用量</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab5" aria-controls="atlasPanel5" aria-selected="false" tabindex="-1"><span>06</span><b>OMARCHY</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab6" aria-controls="atlasPanel6" aria-selected="false" tabindex="-1"><span>07</span><b>ページ管理</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab7" aria-controls="atlasPanel7" aria-selected="false" tabindex="-1"><span>08</span><b>ゲーム · スネーク</b><span aria-hidden="true">↗</span></button></div><div class="face-atlas__stage"><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel0" aria-labelledby="atlasTab0" tabindex="0" ><div class="face-atlas__image"><img src="/assets/screens/roster.png" alt="エージェントの一覧：色付きの状態の点を持つ 4 つのエージェント。先頭のエージェントが質問しています" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">01 / 08</span><h3>エージェント · ホーム</h3><p>誰が最初にあなたを必要としているか。質問は上に並び、左のバーが選択中のチャンネルを示します。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel1" aria-labelledby="atlasTab1" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/card-question.png" alt="3 つの選択肢があり、1 つ目がおすすめの質問カード" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">02 / 08</span><h3>質問カード</h3><p>スクロール、ENTER、またはタップ。ホストが確認する間カードはロックされ、そのあと画面はチャンネルに戻ります。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel2" aria-labelledby="atlasTab2" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/ptt-roster.png" alt="波形と、入力されていく文字起こしを表示した「聞き取り中」の画面" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">03 / 08</span><h3>聞き取り中</h3><p>作業用のページで PTT を押し、離して送信します。最後の返信が下に残るので、何に答えているかがわかります。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel3" aria-labelledby="atlasTab3" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/macropad.png" alt="マクロパッドのページ：ラベルとキー操作の記号が付いた 3×3 のキー" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">04 / 08</span><h3>マクロパッド</h3><p>9 つのタッチキーに、それぞれラベルと組み合わせ。SHIFT+CANCEL でデバイス上のキーエディターが開きます。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel4" aria-labelledby="atlasTab4" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/usage.png" alt="使用量のページ：割合とリセットまでのカウントダウンが付いたプロバイダーごとのバー" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">05 / 08</span><h3>使用量</h3><p>レート制限の枠ごとに 1 本のバーと、リセットまでのカウントダウン。ENTER で両方のプロバイダーを一度に問い合わせます。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel5" aria-labelledby="atlasTab5" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/omarchy.png" alt="Omarchy のページ：ワークスペースのチップとウィンドウの一覧" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">06 / 08</span><h3>OMARCHY</h3><p>Hyprland のデスクトップのリモコン。ホストが送ってくるワークスペースとウィンドウです。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel6" aria-labelledby="atlasTab6" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/manager.png" alt="ページ管理：タイルとして並んだページ。並べ替えができます" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">07 / 08</span><h3>ページ管理</h3><p>SHIFT を 2 回押します。ページの並べ替え、追加、削除ができ、最大 8 ページです。エージェントと設定は固定です。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel7" aria-labelledby="atlasTab7" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/arcade-snake-1920.png" alt="デバイスで動くスネーク：フィールド上の緑のヘビとエサ" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">08 / 08</span><h3>ゲーム · スネーク</h3><p>内蔵のちょっとした休憩。スネーク、フラッピーバード、雷電がデバイス上で動きます。PTT がゲームのボタンになります。</p></figcaption></figure></div></div><div class="face-atlas__specs"><span><b>480 × 480</b> AMOLED</span><span><b>タッチ + ホイール</b> 手のために</span><span><b>本物のファームウェア</b> をピクセル単位で</span></div>
+  </div>
+</section>
+
+<!-- ============ 8. THE BLUEPRINT ============ -->
+<section class="section blueprint" id="blueprint">
+  <div class="wrap">
+    <header class="section-head reveal">
+      <p class="section-kicker">第 6 章</p>
+      <h2 class="section-title">設計図</h2>
+      <p class="section-lede">オープンな設計から自分で作るか、完成品のためにウェイトリストに登録してください。基板、ファームウェア、ホスト側のサービス、通信プロトコルがすべて 1 つのツリーにあります。</p>
+    </header>
+
+    <div class="inv reveal">
+      <div class="inv__bar">
+        <span class="inv__bar-title">一覧 · openwalkietalkie</span>
+        <span class="inv__bar-meta">MIT + CERN-OHL-P</span>
+      </div>
+      <ul class="tree">
+        <li class="tree__row tree__row--root">
+          <span class="tree__glyph glyph-folder" aria-hidden="true"></span>
+          <span class="tree__name">openwalkietalkie/</span>
+          <span class="tree__desc">基板、ファームウェア、Mac アプリがまとめて入っています。クローンしてすぐ始められます。</span>
+        </li>
+        <li class="tree__row">
+          <span class="tree__branch" aria-hidden="true">├─</span>
+          <span class="tree__glyph glyph-folder" aria-hidden="true"></span>
+          <span class="tree__name">hardware/rev-b/</span>
+          <span class="tree__desc">メイン基板 Rev B：ガーバー、BOM、実装座標付きの KiCad プロジェクト。CERN-OHL-P 2.0。</span>
+        </li>
+        <li class="tree__row">
+          <span class="tree__branch" aria-hidden="true">├─</span>
+          <span class="tree__glyph glyph-folder" aria-hidden="true"></span>
+          <span class="tree__name">hardware/rev-a/</span>
+          <span class="tree__desc">始まりの場所：CoHDL の回路図のソース、製造した 4 つのリリース、ケースの CAD。</span>
+        </li>
+        <li class="tree__row">
+          <span class="tree__branch" aria-hidden="true">├─</span>
+          <span class="tree__glyph glyph-folder" aria-hidden="true"></span>
+          <span class="tree__name">src/</span>
+          <span class="tree__desc">embassy 上の Rust ファームウェア：各ページ、BLE と USB による HID 接続、ペアリングの記録、電源管理。</span>
+        </li>
+        <li class="tree__row">
+          <span class="tree__branch" aria-hidden="true">├─</span>
+          <span class="tree__glyph glyph-folder" aria-hidden="true"></span>
+          <span class="tree__name">native/</span>
+          <span class="tree__desc">Bluetooth オーディオ付きの RT-Thread イメージ。同じ UI のコアを載せています。</span>
+        </li>
+        <li class="tree__row">
+          <span class="tree__branch" aria-hidden="true">├─</span>
+          <span class="tree__glyph glyph-folder" aria-hidden="true"></span>
+          <span class="tree__name">host/</span>
+          <span class="tree__desc">deckd と Mac アプリ、Rust + gpui：接続、Claude Code と Codex のアダプター、音声、オープンな API。</span>
+        </li>
+        <li class="tree__row">
+          <span class="tree__branch" aria-hidden="true">└─</span>
+          <span class="tree__glyph glyph-file" aria-hidden="true"></span>
+          <span class="tree__name">docs/deck-protocol.md</span>
+          <span class="tree__desc">チャンネル 5 の通信の取り決め。これを読めば、あなたのスクリプトもデバイス上のエージェントになります。</span>
+        </li>
+      </ul>
+      <div class="inv__foot">
+        <p>ソフトウェアは MIT。基板、ケース、すべての設計ファイルは、制約の少ない CERN オープンハードウェアライセンス。作るのも、改造するのも、売るのも、許可はいりません。</p>
+        <p class="inv__cohdl"><strong>ハードウェアの設計は CoHDL から始まりました。</strong>Rev A の回路図は、オープンソースのハードウェア言語で書かれたソースコードで（<a href="https://cohdl.org/" target="_blank" rel="noopener">cohdl.org</a>）、そのコンパイラーで検査しています。Rev B はその流れを受けて、KiCad で手作業で配置・配線しました。</p>
+        <div class="inv__ctas">
+          <a class="btn btn--primary btn--big" href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">★ GitHub で設計図を入手</a>
+          <a class="btn btn--ghost btn--big" href="#download">▼ Mac 版をダウンロード</a>
+          <a class="btn btn--ghost btn--big" href="https://discord.gg/x7DXPvK66" target="_blank" rel="noopener" aria-label="Discord に参加 — CoHDL と OpenWalkieTalkie のコミュニティ">Discord に参加</a>
+        </div>
+        <p class="inv__note">Mac アプリには deckd、アプリの自動更新、Rev A と Rev B のファームウェア更新が含まれます。ソースには、最初の USB-C または UART での書き込みに使うツールも含まれます。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 9. THE REAL THING ============ -->
+<section class="section real" id="real">
+  <div class="wrap">
+    <header class="section-head reveal">
+      <p class="section-kicker">第 7 章</p>
+      <h2 class="section-title">実物</h2>
+      <p class="section-lede">作り直した本体を 2 色で、2026年11月に撮影しました。続いて Rev A 基板のレンダリング。基板の設計と、以前の BodyV6.13 のケースはリポジトリにあります。</p>
+    </header>
+
+    <div class="polaroid-wrap reveal">
+      <div class="shots-col">
+        <div class="shots" role="group" aria-label="試作機の写真と、オープンハードウェアの設計からのレンダリング">
+          <figure class="shot">
+            <div class="shot__win"><img class="shot__img" src="/assets/photos/fully-open.webp" alt="白いテーブルに置かれた黒と緑のデバイス。周りに基板、ばらばらの緑のキーキャップ、Fully open source と書かれたメモ" width="750" height="1000" loading="lazy" /></div>
+            <figcaption class="shot__cap"><span class="shot__cap-title">すべてオープン</span><span class="shot__cap-body">デバイス、その基板とキーを並べました。回路図からケースまで、どれもリポジトリにあります。</span></figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="shot__win"><img class="shot__img" src="/assets/photos/black-front.webp" alt="立てた黒と緑のデバイス。画面は Codex のワークフローを追っていて、3 つのコマンドを実行し、詳細はワンプッシュで見られます" width="750" height="1000" loading="lazy" /></div>
+            <figcaption class="shot__cap"><span class="shot__cap-title">開いたセッション</span><span class="shot__cap-body">行を開くと、デバイスはそのセッションを追います。これは Codex のワークフローで、実行したコマンドと、ワンプッシュで見られる詳細です。</span></figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="shot__win"><img class="shot__img" src="/assets/photos/white-front.webp" alt="立てた白とオレンジのデバイス。画面に完了した Codex のコマンド" width="750" height="1000" loading="lazy" /></div>
+            <figcaption class="shot__cap"><span class="shot__cap-title">ホワイト · オレンジ</span><span class="shot__cap-body">同じ本体とキーを、白とオレンジで。画面下の帯が、それぞれのキーが今何をするかを示します。</span></figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="shot__win"><img class="shot__img" src="/assets/photos/faces.webp" alt="基板とオレンジのスクロールホイールの横に置いた白とオレンジのデバイス。画面にページの選択：エージェント、Omarchy、使用量、設定" width="750" height="1000" loading="lazy" /></div>
+            <figcaption class="shot__cap"><span class="shot__cap-title">すべてのページ</span><span class="shot__cap-body">SHIFT を押すと、ホイールでページを切り替えます。エージェント、Omarchy、使用量、設定。</span></figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="shot__win"><img class="shot__img" src="/assets/photos/pair-top.webp" alt="白いテーブルに置いた 2 台を上から。黒と緑、白とオレンジが並び、周りにキーキャップと基板" width="750" height="1000" loading="lazy" /></div>
+            <figcaption class="shot__cap"><span class="shot__cap-title">2 台</span><span class="shot__cap-body">上面にホイールと USB-C、左に長いキーが 1 つ、右に 3 つ、画面の下に 2 つ。その下にマイクの穴とスピーカー。</span></figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="shot__win"><img class="shot__img" src="/assets/photos/white-top.webp" alt="上から見た白とオレンジのデバイス。横に黒い基板と、ばらばらのオレンジのキー" width="750" height="1000" loading="lazy" /></div>
+            <figcaption class="shot__cap"><span class="shot__cap-title">上から</span><span class="shot__cap-body">上から見たところ。横にあるのは基板の 1 枚です。基板のレイアウトは 2 枚先にあります。</span></figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="shot__win"><img class="shot__img" src="/assets/main-board.png" alt="KiCad の設計からレンダリングした Rev A のメイン基板" loading="lazy" style="object-fit:contain" /></div>
+            <figcaption class="shot__cap"><span class="shot__cap-title">メイン基板 · REV A</span><span class="shot__cap-body">Rev A のメイン基板の KiCad レンダリング。編集できるレイアウトと製造用のデータはソースにあります。</span></figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="shot__win"><img class="shot__img" src="/assets/encoder-board.png" alt="KiCad の設計からレンダリングした Rev A のエンコーダー基板" loading="lazy" style="object-fit:contain" /></div>
+            <figcaption class="shot__cap"><span class="shot__cap-title">エンコーダー基板</span><span class="shot__cap-body">スクロールホイールは独立したエンコーダー基板に載っていて、フレキシブルケーブルでメイン基板につながっています。</span></figcaption>
+          </figure>
+        </div>
+        <div class="shots-bar">
+          <button class="pxbtn shots__nav shots__prev" type="button" aria-label="前の写真">◂ 前へ</button>
+          <span class="shots__count" role="status">1 / 8</span>
+          <button class="pxbtn shots__nav shots__next" type="button" aria-label="次の写真">次へ ▸</button>
+        </div>
+      </div>
+
+      <ul class="build-notes">
+        <li><b>頭脳</b><span>SiFli SF32LB52x、Cortex-M33、16 MB フラッシュ、8 MB PSRAM。embassy 上で Rust が動きます</span></li>
+        <li><b>画面</b><span>2.16 インチ CO5300 AMOLED、480 × 480、CST9220 タッチ</span></li>
+        <li><b>基板</b><span>4 層のメイン基板と 2 層のエンコーダー基板。どちらもリポジトリにあります</span></li>
+        <li><b>ケース</b><span>3D プリント。2026年11月に作り直しました。以前の BodyV6.13 の Fusion のソースはハードウェアに同梱しています</span></li>
+        <li><b>オーディオ</b><span>MP34DT05 PDM マイクと NS4150B スピーカーアンプ</span></li>
+        <li><b>接続</b><span>USB-C と Bluetooth LE、1 つの HID デバイス：VID 1209、PID 5754</span></li>
+        <li><b>バッテリー</b><span>3.7 V、500 mAh のセル。USB-C で充電</span></li>
+        <li><b>状況</b><span>Rev A の試作機が作業台に · Rev B のメイン基板は設計済み</span></li>
+      </ul>
+    </div>
+
+    <!-- One studio photo per colourway (tools/photos.sh crops them from ../ref/OpenWalkieTalkie) -->
+    <div class="colourways reveal" id="colourways">
+      <p class="section-kicker">デザイン · 2 つのカラー</p>
+      <div class="colourways__grid">
+        <figure class="colourway">
+          <img class="colourway__img" src="/assets/photos/black-green.webp" alt="黒と緑のデバイスの正面：画面、左の緑の長いキー、右の 3 つのキー、画面の下の 2 つの緑のキー、丸いスピーカーグリル" width="1536" height="1024" loading="lazy" />
+          <figcaption class="colourway__cap"><span class="shot__cap-title">ブラック · グリーン</span><span class="shot__cap-body">チャコールの本体に、緑のキーとホイール。上面にホイールと USB-C、左に長いキーが 1 つ、右に 3 つ、画面の下に 2 つ。その下にマイクの穴とスピーカー。</span></figcaption>
+        </figure>
+        <figure class="colourway">
+          <img class="colourway__img" src="/assets/photos/white-orange.webp" alt="白とオレンジのデバイスの正面：画面、オレンジの側面のキー、画面の下の 2 つのオレンジのキー、丸いスピーカーグリル" width="1536" height="1024" loading="lazy" />
+          <figcaption class="colourway__cap"><span class="shot__cap-title">ホワイト · オレンジ</span><span class="shot__cap-body">同じ本体とキーを白とオレンジで。黒と一緒に作り、一緒に撮影しました。</span></figcaption>
+        </figure>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ HARDWARE WAITLIST ============ -->
+<section class="section waitlist" id="waitlist" aria-labelledby="waitlist-title">
+  <div class="wrap">
+    <div class="waitlist__panel">
+      <div class="waitlist__intro">
+        <p class="section-kicker">次のハンディデバイス</p>
+        <h2 class="section-title" id="waitlist-title">机の上に<br />1 台いかが？</h2>
+        <p>完成品の OpenWalkieTalkie のウェイトリストに登録してください。購入できるようになったらメールでお知らせします。</p>
+        <p class="waitlist__note">支払いも購入の約束も不要です。価格と出荷日は決まりしだいお知らせします。</p>
+        <a class="waitlist__source" href="https://github.com/conol-ai/openwalkietalkie">自分で作りたいなら、ソースはこちら →</a>
+      </div>
+      <form class="waitlist__form" id="waitlist-form" action="/api/waitlist" method="post">
+        <input type="hidden" name="lang" value="ja" />
+        <label for="waitlist-email">メールアドレス</label>
+        <input id="waitlist-email" name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" maxlength="254" required aria-describedby="waitlist-note" />
+        <div class="waitlist__trap" aria-hidden="true">
+          <label for="waitlist-company">この欄は空のままにしてください</label>
+          <input id="waitlist-company" name="company" type="text" tabindex="-1" autocomplete="off" />
+        </div>
+        <label class="waitlist__consent" for="waitlist-consent">
+          <input id="waitlist-consent" name="consent" type="checkbox" value="yes" required />
+          <span>デバイスの販売開始をメールで知らせてください。<a href="/ja/privacy/">プライバシーポリシー</a>を読みました。</span>
+        </label>
+        <button class="btn btn--primary btn--big" type="submit">ウェイトリストに登録</button>
+        <p class="waitlist__note" id="waitlist-note">送るのはデバイスの販売開始のお知らせだけです。<a href="mailto:privacy@cohdl.ai">privacy@cohdl.ai</a> にメールすれば、いつでもリストから外れられます。</p>
+        <p class="waitlist__status" id="waitlist-status" role="status" aria-live="polite" aria-atomic="true"></p>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DOWNLOAD ============ -->
+<section class="section" id="download">
+  <div class="wrap">
+    <header class="section-head reveal">
+      <p class="section-kicker">話す準備はできた</p>
+      <h2 class="section-title">アプリを入手</h2>
+      <p class="section-lede">v0.16.0。macOS 13 以降、署名・公証済み。Mac、Windows、Omarchy で使える、デバイスのコンパニオンアプリです。Windows 10 と 11 は署名なしのプレビュー版です。</p>
+    </header>
+    <div class="inv reveal">
+      <div class="inv__foot">
+        <div class="inv__ctas">
+          <a class="btn btn--primary btn--big" href="https://github.com/conol-ai/openwalkietalkie/releases/download/v0.16.0/OpenWalkieTalkie-0.16.0-macos-aarch64.dmg">↓ Mac · Apple シリコン</a>
+          <a class="btn btn--ghost btn--big" href="https://github.com/conol-ai/openwalkietalkie/releases/download/v0.16.0/OpenWalkieTalkie-0.16.0-macos-x86_64.dmg">↓ Mac · Intel</a>
+            <a class="btn btn--ghost btn--big" href="https://github.com/conol-ai/openwalkietalkie/releases/download/v0.16.0/OpenWalkieTalkie-0.16.0-windows-x86_64.zip">↓ Windows · x64 プレビュー版</a>
+          <a class="btn btn--ghost btn--big" href="/ja/docs/omarchy/">Omarchy · Linux</a>
+        </div>
+        <p>ディスクイメージを開き、OpenWalkieTalkie をアプリケーションにドラッグして、アプリのセットアップに従います。M シリーズの Mac は Apple シリコンを、Intel の Mac は Intel を選んでください。</p>
+          <p>Windows 10 または 11（x64）では、署名なしのプレビュー版が音声、Claude Code、Codex CLI、Grok Bot に対応しています。セットアップと SmartScreen については <a href="/ja/docs/windows/">Windows のインストールガイド</a>を読み、<a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/windows-preview-20261116">プレビュー版のリリースノートとチェックサムを確認</a>してください。</p>
+        <p>Omarchy（Hyprland）のノートパソコンでは、サービスと Omarchy ブリッジをソースからビルドします。デスクトップのリモコン、エージェントのセッション、音声の指示については <a href="/ja/docs/omarchy/">Omarchy のガイドに従ってください</a>。</p>
+        <p class="inv__note">アプリには、自動更新と、基板に合わせた Rev A・Rev B の USB でのファームウェア更新が含まれます。最初の書き込みには対応するブートローダーが必要です。<a href="https://github.com/conol-ai/openwalkietalkie/releases/latest">リリースノート、ファームウェア、チェックサム →</a></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ============ 10. FOOTER ============ -->
+<footer class="footer" id="footer">
+  <div class="footer__banner" aria-hidden="true">
+    <img class="swap-img swap-img--day" src="/assets/landscape_day.webp" alt="" width="1536" height="1024" loading="lazy" />
+    <img class="swap-img swap-img--night" src="/assets/landscape_night.webp" alt="" width="1536" height="1024" loading="lazy" />
+    <span class="footer__banner-fade"></span>
+  </div>
+
+  <div class="footer__inner">
+    <div class="footer__panel">
+      <p class="footer__slogan">AI エージェントのためのオープンソースのハンディ無線機。</p>
+      <div class="footer__cta">
+        <a class="btn btn--primary" href="#waitlist">ウェイトリストに登録</a>
+        <a class="btn btn--ghost" href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub で見る</a>
+        <a class="btn btn--ghost" href="#demo">試す</a>
+        <a class="btn btn--ghost" href="#top">ページの先頭へ ▲</a>
+      </div>
+      <nav class="footer__links" aria-label="フッター">
+      <a href="/ja/manual/">取扱説明書</a>
+        <a href="/ja/privacy/">プライバシーポリシー</a>
+        <a href="/ja/cookies/">Cookie について</a>
+        <a href="/ja/cookies/" data-privacy-open>プライバシーに関するお知らせ</a>
+        <a href="https://github.com/conol-ai/openwalkietalkie/tree/main/hardware" target="_blank" rel="noopener">hardware/</a>
+        <a href="https://github.com/conol-ai/openwalkietalkie/tree/main/src" target="_blank" rel="noopener">src/</a>
+        <a href="https://github.com/conol-ai/openwalkietalkie/tree/main/host" target="_blank" rel="noopener">host/</a>
+        <a href="https://github.com/conol-ai/openwalkietalkie#readme" target="_blank" rel="noopener">README.md</a>
+        <a href="https://openmicrokbd.org/" target="_blank" rel="noopener">OpenMicroKbd</a>
+        <a href="https://cohdl.org/" target="_blank" rel="noopener">CoHDL</a>
+        <a href="https://discord.gg/x7DXPvK66" target="_blank" rel="noopener" aria-label="Discord で CoHDL と OpenWalkieTalkie のコミュニティに参加">Discord</a>
+        <a href="/ja/blog/">ブログ</a>
+      </nav>
+      <p class="footer__fine">ソフトウェアは MIT · ハードウェアは CERN-OHL-P · 許可は不要</p>
+      <p class="footer__heart"><a class="project-credit" href="https://cohdl.org/"><img src="/assets/cohdl-mark.svg" alt="" width="20" height="25" />COHDL のプロジェクト</a></p>
+    </div>
+  </div>
+</footer>
+
+<script src="/js/arcade.js"></script>
+<script src="/js/main.js"></script>
+<script src="/js/waitlist.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie v0.15.0：配套應用程式登上 Omarchy · OpenWalkieTalkie</title>
+<meta name="description" content="配套應用程式可以在 Omarchy 上執行，在 Omarchy 頁面上按住 PTT 可在游標處聽寫，滾輪依視窗列的順序移動，Linux 服務把所有內容放在同一個資料夾。" />
+<link rel="canonical" href="https://openwalkietalkie.org/zh-Hant/blog/companion-app-on-omarchy/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/companion-app-on-omarchy/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/companion-app-on-omarchy/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/companion-app-on-omarchy/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/companion-app-on-omarchy/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/companion-app-on-omarchy/" />
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.15.0：配套應用程式登上 Omarchy · OpenWalkieTalkie" />
+<meta property="og:description" content="配套應用程式可以在 Omarchy 上執行，在 Omarchy 頁面上按住 PTT 可在游標處聽寫，滾輪依視窗列的順序移動，Linux 服務把所有內容放在同一個資料夾。" />
+<meta property="og:url" content="https://openwalkietalkie.org/zh-Hant/blog/companion-app-on-omarchy/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie 部落格" href="/zh-Hant/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/i18n/zh-Hant.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">跳至主要內容</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/zh-Hant/" aria-label="OpenWalkieTalkie — 首頁">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="網站區塊">
+      <a href="/zh-Hant/#pile">The Pile</a>
+      <a href="/zh-Hant/#features">功能</a>
+      <a href="/zh-Hant/#demo">試用</a>
+      <a href="/zh-Hant/#faces">頁面</a>
+      <a href="/zh-Hant/#blueprint">設計藍圖</a>
+      <a href="/zh-Hant/docs/">說明文件</a>
+      <a href="/zh-Hant/blog/" aria-current="true">部落格</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="語言: 繁體中文">繁體中文</summary>
+        <ul>
+          <li><a href="/blog/companion-app-on-omarchy/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/companion-app-on-omarchy/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/companion-app-on-omarchy/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
+          <li><a href="/ja/blog/companion-app-on-omarchy/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切換日間與夜間主題" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">日間</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="開啟選單" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">部落格 · 版本資訊</p>
+  <h1>OpenWalkieTalkie v0.15.0：配套應用程式登上 Omarchy</h1>
+  <p class="post-meta"><span>2026年11月17日</span><span>Omarchy 應用程式、聽寫與服務</span></p>
+</header>
+<article class="post-body">
+  <p>0.15.0 版把配套應用程式帶到 Omarchy，並讓裝置在那裡成為聽寫用的麥克風。裝置韌體維持 0.14.0 不變。</p>
+  <h2>Omarchy 上的配套應用程式</h2>
+  <p>Mac 和 Windows 上的應用程式，現在也能在 Omarchy（Hyprland）上執行，在應用程式啟動器中名為 <strong>OpenWalkieTalkie</strong>，同樣有五個頁面：<strong>裝置</strong>、<strong>頁面與按鍵</strong>、<strong>整合</strong>、<strong>語音</strong>和<strong>服務</strong>。它會自己找到服務。<strong>服務</strong>透過服務的 systemd 使用者單元來啟動和停止服務，<strong>登入時開啟</strong>則是一個 XDG 自動啟動項目。沒有系統匣圖示，那是桌面狀態列的工作；也沒有應用程式內更新，因為應用程式是從原始碼建置的。</p>
+  <p><strong>頁面與按鍵</strong>也能配合比應用程式設計寬度更窄的並排視窗：頁面清單會換到第二列，按鍵編輯區會移到按鍵方格下方。<a href="/zh-Hant/docs/omarchy/">Omarchy 指南</a>說明了如何建置和安裝。</p>
+  <h2>在 Omarchy 頁面上聽寫</h2>
+  <p>在 Omarchy 頁面上，PTT 的用法就像 Superwhisper 本身的按住說話。按住並說話，放開，你說的話就會輸入到目前取得鍵盤的視窗的游標處，不會按下 Enter。按住時按 CANCEL 會捨棄這段錄音。裝有 Superwhisper 時由它辨識，並使用它自己的模式、語言和詞彙；否則由本機的 Whisper 模型辨識。為此，橋接程式會在清單中加入一個 <strong>Dictate</strong> 項目，在「助理」頁面上選取它，也能用同樣的方式聽寫。</p>
+  <h2>滾輪跟著列移動</h2>
+  <p>在 Omarchy 頁面上，滾輪現在會依頁面列出的順序在視窗列之間移動，就像它在裝置其他清單中移動一樣，並在第一列和最後一列停住。以前它依照 Hyprland 本身的視窗順序，所以轉一下可能會跳過下一列。</p>
+  <h2>Linux 上只用一個資料夾</h2>
+  <p>Linux 服務現在把所有內容放在同一個資料夾 <code>~/.local/share/openwalkietalkie</code>，就像在 Mac 上由一個資料夾存放一樣。Omarchy 的安裝原本就在那裡執行，<code>deckd</code> 指令也不再需要 <code>DECKD_DATA_DIR=…</code> 前綴。如果你曾在 Linux 上依照舊的配置手動執行 <code>deckd</code>，請把它的檔案移到該資料夾，或設定 <code>DECKD_DATA_DIR</code>。</p>
+  <h2>更新</h2>
+  <p>在 Mac 上，選擇<strong>檢查更新…</strong>，或安裝已簽署並經過公證的 <strong>0.15.0</strong> 應用程式，支援 Apple Silicon 或 Intel（macOS 13 或更新版本）。在 Windows 上，請從發行頁面下載 ZIP 檔。在 Omarchy 上，拉取程式碼，建置服務和應用程式，再用兩者執行 <code>install.sh</code>，做法請見 <a href="/zh-Hant/docs/omarchy/">Omarchy 指南</a>。這次發行不需要更新裝置韌體。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.15.0" rel="noopener">在 GitHub 上取得 OpenWalkieTalkie v0.15.0 與總和檢查碼 →</a></p>
+  <p class="post-back"><a href="/zh-Hant/blog/">← 返回部落格</a></p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL 專案 · MIT 授權軟體 · CERN-OHL-P 授權硬體</span>
+    <nav aria-label="頁尾">
+      <a href="/zh-Hant/#waitlist">加入候補名單</a>
+      <a href="/zh-Hant/privacy/">隱私權政策</a>
+      <a href="/zh-Hant/cookies/">Cookie 說明</a>
+      <a href="/zh-Hant/cookies/" data-privacy-open>隱私權聲明</a>
+      <a href="/zh-Hant/">首頁</a>
+      <a href="/zh-Hant/#demo">試用</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="在 Discord 加入 CoHDL 與 OpenWalkieTalkie 社群">Discord</a>
+      <a href="/zh-Hant/blog/feed.xml">訂閱來源</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

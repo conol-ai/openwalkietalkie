@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie v0.13.0：四種語言，一個設定 · OpenWalkieTalkie</title>
+<meta name="description" content="Mac 應用程式和裝置支援 English、简体中文、繁體中文和日本語，儲存的語言選擇會雙向同步。另有百分之一秒顯示和有聲的計時結束提醒。" />
+<link rel="canonical" href="https://openwalkietalkie.org/zh-Hant/blog/four-languages-one-setting/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/four-languages-one-setting/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/four-languages-one-setting/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/four-languages-one-setting/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/four-languages-one-setting/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/four-languages-one-setting/" />
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.13.0：四種語言，一個設定 · OpenWalkieTalkie" />
+<meta property="og:description" content="Mac 應用程式和裝置支援 English、简体中文、繁體中文和日本語，儲存的語言選擇會雙向同步。另有百分之一秒顯示和有聲的計時結束提醒。" />
+<meta property="og:url" content="https://openwalkietalkie.org/zh-Hant/blog/four-languages-one-setting/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie 部落格" href="/zh-Hant/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/i18n/zh-Hant.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">跳至主要內容</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/zh-Hant/" aria-label="OpenWalkieTalkie — 首頁">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="網站區塊">
+      <a href="/zh-Hant/#pile">The Pile</a>
+      <a href="/zh-Hant/#features">功能</a>
+      <a href="/zh-Hant/#demo">試用</a>
+      <a href="/zh-Hant/#faces">頁面</a>
+      <a href="/zh-Hant/#blueprint">設計藍圖</a>
+      <a href="/zh-Hant/docs/">說明文件</a>
+      <a href="/zh-Hant/blog/" aria-current="true">部落格</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="語言: 繁體中文">繁體中文</summary>
+        <ul>
+          <li><a href="/blog/four-languages-one-setting/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/four-languages-one-setting/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/four-languages-one-setting/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
+          <li><a href="/ja/blog/four-languages-one-setting/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切換日間與夜間主題" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">日間</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="開啟選單" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">部落格 · 版本資訊</p>
+  <h1>OpenWalkieTalkie v0.13.0：四種語言，一個設定</h1>
+  <p class="post-meta"><span>2026年11月8日</span><span>Mac 應用程式、服務與韌體</span></p>
+</header>
+<article class="post-body">
+  <p>0.13.0 版讓 Mac 應用程式和裝置都支援 English、简体中文、繁體中文和日本語。在任一端選擇語言；選擇在重新啟動後仍會保留，兩端連線時也會共用。</p>
+  <h2>在你手邊的那一端選擇語言</h2>
+  <p>在 Mac 上，開啟<strong>服務 → 語言</strong>。在裝置上，開啟<strong>設定 → 顯示 → 語言</strong>，需要在「顯示」中向下捲動才會看到。四個選項一律以各自的文字顯示名稱：<strong>English</strong>、<strong>简体中文</strong>、<strong>繁體中文</strong>和<strong>日本語</strong>。</p>
+  <p>介面會立即切換：列表與對話中的控制項、安裝、設定、權限、通知、螢幕鎖定、教學、遊戲和計時器。聊天、工具輸出、自訂名稱、檔案路徑和實體按鍵上的標籤則保留原文。語音辨識和語音回覆仍使用各自設定的引擎與語言。</p>
+  <h2>兩端都會記得</h2>
+  <p>在未連線的裝置上選擇的語言會儲存在裝置本機。重新連線時，會與 Mac 上儲存的選擇進行協調。儲存的語言修訂版本較高的一方為準；相同時以 Mac 應用程式為準。還原舊的頁面清單或設定，不會蓋掉較新的語言選擇。你也可以在連接裝置之前先選擇應用程式的語言。雙向同步需要搭配 0.13.0 版的應用程式和韌體。</p>
+  <h2>百分之一秒與有聲提醒</h2>
+  <p>碼錶現在會顯示到百分之一秒。倒數計時結束時，裝置揚聲器會發出嗶聲；番茄鐘在專注結束時播放上升的提示音，在休息結束時播放下降的提示音，音量為揚聲器設定的音量。</p>
+  <p>提醒會在 30 秒後停止，或在第一次按下按鍵、轉動滾輪或觸控螢幕時停止，包括喚醒裝置的那次操作。重新開始或重設計時器，或開始下一個番茄鐘階段，也會讓它停止。切到其他頁面或螢幕休眠時，計時器仍會繼續執行。</p>
+  <h2>更多工作階段，更少過時的提問</h2>
+  <p>「助理」列表現在是輪播式：大尺寸的所選工作階段卡片、相鄰工作階段的預覽，以及依專案翻頁。在 PSRAM 工作階段表可用時，Rev A 和 Rev B 最多支援 255 個工作階段，並優先處理提問。</p>
+  <p>已在其他地方決定的 Claude 權限請求不會出現在裝置上，已完成或被中斷的請求會清除過時的卡片。自動核准後，若 Codex 本身沒有等待核准的請求，就會回到執行中。Mac 應用程式也會修復應用程式被移動或取代後留下的過時服務註冊，服務診斷也能辨識由應用程式註冊的 launchd 工作。</p>
+  <p>韌體程式碼現在在每一款主機板上都從 NOR 執行。Rev A 不再把程式碼複製到 PSRAM；PSRAM 仍可用於工作階段資料。</p>
+  <h2>更新</h2>
+  <p>選擇<strong>檢查更新</strong>，或安裝已簽署並經過公證的 <strong>0.13.0</strong> 版 Mac 應用程式（Apple Silicon 或 Intel）。需要 macOS 13 或更新版本。如果服務仍回報舊版本，請選擇<strong>服務 → 重新啟動</strong>。</p>
+  <p>以 USB 連接裝置後，開啟<strong>服務 → 更新 → 檢查韌體更新</strong>，安裝韌體 <strong>0.13.0</strong>。一般更新會保留設定和藍牙配對。原廠韌體用於生產製造，會覆寫這些資料。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.13.0" rel="noopener">在 GitHub 上取得 OpenWalkieTalkie v0.13.0 及總和檢查碼 →</a></p>
+  <p class="post-back"><a href="/zh-Hant/blog/">← 返回部落格</a></p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL 專案 · MIT 授權軟體 · CERN-OHL-P 授權硬體</span>
+    <nav aria-label="頁尾">
+      <a href="/zh-Hant/#waitlist">加入候補名單</a>
+      <a href="/zh-Hant/privacy/">隱私權政策</a>
+      <a href="/zh-Hant/cookies/">Cookie 說明</a>
+      <a href="/zh-Hant/cookies/" data-privacy-open>隱私權聲明</a>
+      <a href="/zh-Hant/">首頁</a>
+      <a href="/zh-Hant/#demo">試用</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="在 Discord 加入 CoHDL 與 OpenWalkieTalkie 社群">Discord</a>
+      <a href="/zh-Hant/blog/feed.xml">訂閱來源</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

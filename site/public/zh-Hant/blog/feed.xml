@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="zh-Hant">
+  <title>OpenWalkieTalkie 部落格</title>
+  <subtitle>為你的 AI 助理打造的開源手持對講機：開發日誌與文章。</subtitle>
+  <id>https://openwalkietalkie.org/zh-Hant/blog/</id>
+  <link href="https://openwalkietalkie.org/zh-Hant/blog/" />
+  <link rel="self" type="application/atom+xml" href="https://openwalkietalkie.org/zh-Hant/blog/feed.xml" />
+  <updated>2026-11-17T12:58:57Z</updated>
+  <author><name>Tony Huang</name></author>
+  <entry>
+    <title>OpenWalkieTalkie v0.15.0：配套應用程式登上 Omarchy</title>
+    <id>https://openwalkietalkie.org/zh-Hant/blog/companion-app-on-omarchy/</id>
+    <link href="https://openwalkietalkie.org/zh-Hant/blog/companion-app-on-omarchy/" />
+    <published>2026-11-17T12:58:57Z</published>
+    <updated>2026-11-17T12:58:57Z</updated>
+    <summary>配套應用程式可以在 Omarchy 上執行，在 Omarchy 頁面上按住 PTT 可在游標處聽寫，滾輪依視窗列的順序移動，Linux 服務把所有內容放在同一個資料夾。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.14.0：一台裝置，支援 Mac、Windows 與 Omarchy</title>
+    <id>https://openwalkietalkie.org/zh-Hant/blog/one-deck-mac-windows-omarchy/</id>
+    <link href="https://openwalkietalkie.org/zh-Hant/blog/one-deck-mac-windows-omarchy/" />
+    <published>2026-11-16T05:04:33Z</published>
+    <updated>2026-11-16T05:04:33Z</updated>
+    <summary>Mac 應用程式成為裝置的配套應用程式，服務也能在 Windows 和 Omarchy 上執行，Grok Bot 與 Claude Code、Codex 一起出現在裝置上，韌體安裝由裝置自己確認。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.13.0：四種語言，一個設定</title>
+    <id>https://openwalkietalkie.org/zh-Hant/blog/four-languages-one-setting/</id>
+    <link href="https://openwalkietalkie.org/zh-Hant/blog/four-languages-one-setting/" />
+    <published>2026-11-08T02:41:16Z</published>
+    <updated>2026-11-08T02:41:16Z</updated>
+    <summary>Mac 應用程式和裝置支援 English、简体中文、繁體中文和日本語，儲存的語言選擇會雙向同步。另有百分之一秒顯示和有聲的計時結束提醒。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.12.0：Conol 聽得見你，還有番茄鐘</title>
+    <id>https://openwalkietalkie.org/zh-Hant/blog/conol-speech-and-pomodoro/</id>
+    <link href="https://openwalkietalkie.org/zh-Hant/blog/conol-speech-and-pomodoro/" />
+    <published>2026-11-05T03:40:00Z</published>
+    <updated>2026-11-05T03:40:00Z</updated>
+    <summary>Conol 用自己的語音模型轉寫你對它的聊天說的話，裝置顯示即時的錄音時間軸，新的「計時器」頁面提供碼錶、倒數計時和番茄鐘。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.11.1：停頓時保留你說過的話</title>
+    <id>https://openwalkietalkie.org/zh-Hant/blog/ptt-pauses-keep-your-words/</id>
+    <link href="https://openwalkietalkie.org/zh-Hant/blog/ptt-pauses-keep-your-words/" />
+    <published>2026-10-28T06:26:49Z</published>
+    <updated>2026-10-28T06:26:49Z</updated>
+    <summary>按住 PTT 時可以停頓一下再繼續說。使用 Apple 本機執行的語音辨識時，先前說的句子現在會保留在預覽和最終轉寫中。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.9.0：更清楚的 USB 語音與重設提醒</title>
+    <id>https://openwalkietalkie.org/zh-Hant/blog/usb-audio-and-reset-reminders/</id>
+    <link href="https://openwalkietalkie.org/zh-Hant/blog/usb-audio-and-reset-reminders/" />
+    <published>2026-10-22T08:23:08Z</published>
+    <updated>2026-10-22T08:23:08Z</updated>
+    <summary>透過 USB 以 48 kHz 在揚聲器播放，16 kHz 音訊也有改進；未使用的手動用量重設快要到期前，Mac 和裝置上都會提醒。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.8.0：螢幕鎖定與一致的滾輪操作</title>
+    <id>https://openwalkietalkie.org/zh-Hant/blog/screen-lock-and-wheel-navigation/</id>
+    <link href="https://openwalkietalkie.org/zh-Hant/blog/screen-lock-and-wheel-navigation/" />
+    <published>2026-10-21T09:02:39Z</published>
+    <updated>2026-10-21T09:02:39Z</updated>
+    <summary>自動螢幕鎖定避免 PTT 在包包裡被誤按，逆時針轉四格即可解鎖；切換頁面與選擇項目都用同一個方向。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.6.0：裝置上的小遊戲</title>
+    <id>https://openwalkietalkie.org/zh-Hant/blog/arcade-on-the-deck/</id>
+    <link href="https://openwalkietalkie.org/zh-Hant/blog/arcade-on-the-deck/" />
+    <published>2026-10-19T08:27:59Z</published>
+    <updated>2026-10-19T08:27:59Z</updated>
+    <summary>三款全螢幕遊戲、實體按鍵操作，以及原創 8-bit 音樂與音效，而且可以關閉。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.4.0：復原過程顯示在螢幕上，保留成長空間</title>
+    <id>https://openwalkietalkie.org/zh-Hant/blog/recovery-and-more-room/</id>
+    <link href="https://openwalkietalkie.org/zh-Hant/blog/recovery-and-more-room/" />
+    <published>2026-10-18T05:00:00Z</published>
+    <updated>2026-10-18T05:00:00Z</updated>
+    <summary>引導式的開機載入程式升級、裝置上的復原進度、更快的 USB 傳輸，以及中文文字支援。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.3.0：圖片與待回答的提問</title>
+    <id>https://openwalkietalkie.org/zh-Hant/blog/images-and-questions/</id>
+    <link href="https://openwalkietalkie.org/zh-Hant/blog/images-and-questions/" />
+    <published>2026-10-15T14:20:00Z</published>
+    <updated>2026-10-15T14:20:00Z</updated>
+    <summary>在 Mac 與裝置上查看聊天圖片、更穩定的圖片預覽，還能在手持裝置上回答 Codex 的提問。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.2.1：我們的無線電，處處可見</title>
+    <id>https://openwalkietalkie.org/zh-Hant/blog/radio-branding/</id>
+    <link href="https://openwalkietalkie.org/zh-Hant/blog/radio-branding/" />
+    <published>2026-10-15T09:00:00Z</published>
+    <updated>2026-10-15T09:00:00Z</updated>
+    <summary>網站上的無線電來到應用程式圖像、選單列、裝置開機畫面和「關於」畫面。一個 COHDL 專案。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.2.0：工作流程一目瞭然</title>
+    <id>https://openwalkietalkie.org/zh-Hant/blog/workflows-and-usage/</id>
+    <link href="https://openwalkietalkie.org/zh-Hant/blog/workflows-and-usage/" />
+    <published>2026-10-13T14:00:00Z</published>
+    <updated>2026-10-13T14:00:00Z</updated>
+    <summary>在 Mac 與手持裝置上即時查看工作流程進度、Claude Fable 用量上限，並修正工作流程頁面閃爍的問題。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.1.0：給你的助理一台手持裝置</title>
+    <id>https://openwalkietalkie.org/zh-Hant/blog/introducing-openwalkietalkie/</id>
+    <link href="https://openwalkietalkie.org/zh-Hant/blog/introducing-openwalkietalkie/" />
+    <published>2026-10-13T00:00:00Z</published>
+    <updated>2026-10-13T00:00:00Z</updated>
+    <summary>首個正式的 Mac 應用程式與韌體版本：按住說話、在裝置上查看對話，以及應用程式與裝置更新。</summary>
+  </entry>
+</feed>

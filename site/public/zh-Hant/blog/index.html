@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>部落格 · OpenWalkieTalkie</title>
+<meta name="description" content="OpenWalkieTalkie 的開發日誌與文章 — 為你的 AI 助理打造的開源手持對講機。" />
+<link rel="canonical" href="https://openwalkietalkie.org/zh-Hant/blog/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="部落格 · OpenWalkieTalkie" />
+<meta property="og:description" content="OpenWalkieTalkie 的開發日誌與文章 — 為你的 AI 助理打造的開源手持對講機。" />
+<meta property="og:url" content="https://openwalkietalkie.org/zh-Hant/blog/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie 部落格" href="/zh-Hant/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/i18n/zh-Hant.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">跳至主要內容</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/zh-Hant/" aria-label="OpenWalkieTalkie — 首頁">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="網站區塊">
+      <a href="/zh-Hant/#pile">The Pile</a>
+      <a href="/zh-Hant/#features">功能</a>
+      <a href="/zh-Hant/#demo">試用</a>
+      <a href="/zh-Hant/#faces">頁面</a>
+      <a href="/zh-Hant/#blueprint">設計藍圖</a>
+      <a href="/zh-Hant/docs/">說明文件</a>
+      <a href="/zh-Hant/blog/" aria-current="true">部落格</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="語言: 繁體中文">繁體中文</summary>
+        <ul>
+          <li><a href="/blog/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
+          <li><a href="/ja/blog/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切換日間與夜間主題" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">日間</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="開啟選單" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+
+<header class="blog-head">
+  <p class="section-kicker">開發日誌</p>
+  <h1 class="section-title">部落格</h1>
+  <p class="section-lede">開發日誌與文章。每一篇都和電路板一樣公開。</p>
+</header>
+
+<a class="post-card" href="/zh-Hant/blog/companion-app-on-omarchy/">
+  <p class="post-card__date">2026 · 11 · 17</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.15.0：配套應用程式登上 Omarchy</p>
+  <p class="post-card__excerpt">配套應用程式可以在 Omarchy 上執行，在 Omarchy 頁面上按住 PTT 可在游標處聽寫，滾輪依視窗列的順序移動，Linux 服務把所有內容放在同一個資料夾。</p>
+  <p class="post-card__read">閱讀版本資訊 →</p>
+</a>
+
+<a class="post-card" href="/zh-Hant/blog/one-deck-mac-windows-omarchy/">
+  <p class="post-card__date">2026 · 11 · 16</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.14.0：一台裝置，支援 Mac、Windows 與 Omarchy</p>
+  <p class="post-card__excerpt">Mac 應用程式成為裝置的配套應用程式，服務也能在 Windows 和 Omarchy 上執行，Grok Bot 與 Claude Code、Codex 一起出現在裝置上，韌體安裝由裝置自己確認。</p>
+  <p class="post-card__read">閱讀版本資訊 →</p>
+</a>
+
+<a class="post-card" href="/zh-Hant/blog/four-languages-one-setting/">
+  <p class="post-card__date">2026 · 11 · 08</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.13.0：四種語言，一個設定</p>
+  <p class="post-card__excerpt">Mac 應用程式和裝置支援 English、简体中文、繁體中文和日本語，儲存的語言選擇會雙向同步。另有百分之一秒顯示和有聲的計時結束提醒。</p>
+  <p class="post-card__read">閱讀版本資訊 →</p>
+</a>
+
+<a class="post-card" href="/zh-Hant/blog/conol-speech-and-pomodoro/">
+  <p class="post-card__date">2026 · 11 · 05</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.12.0：Conol 聽得見你，還有番茄鐘</p>
+  <p class="post-card__excerpt">Conol 用自己的語音模型轉寫你對它的聊天說的話，裝置顯示即時的錄音時間軸，新的「計時器」頁面提供碼錶、倒數計時和番茄鐘。</p>
+  <p class="post-card__read">閱讀版本資訊 →</p>
+</a>
+
+<a class="post-card" href="/zh-Hant/blog/ptt-pauses-keep-your-words/">
+  <p class="post-card__date">2026 · 10 · 28</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.11.1：停頓時保留你說過的話</p>
+  <p class="post-card__excerpt">按住 PTT 時可以停頓一下再繼續說。使用 Apple 本機執行的語音辨識時，先前說的句子現在會保留在預覽和最終轉寫中。</p>
+  <p class="post-card__read">閱讀版本資訊 →</p>
+</a>
+
+<a class="post-card" href="/zh-Hant/blog/usb-audio-and-reset-reminders/">
+  <p class="post-card__date">2026 · 10 · 22</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.9.0：更清楚的 USB 語音與重設提醒</p>
+  <p class="post-card__excerpt">透過 USB 以 48 kHz 在揚聲器播放，16 kHz 音訊也有改進；未使用的手動用量重設快要到期前，Mac 和裝置上都會提醒。</p>
+  <p class="post-card__read">閱讀版本資訊 →</p>
+</a>
+
+<a class="post-card" href="/zh-Hant/blog/screen-lock-and-wheel-navigation/">
+  <p class="post-card__date">2026 · 10 · 21</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.8.0：螢幕鎖定與一致的滾輪操作</p>
+  <p class="post-card__excerpt">自動螢幕鎖定避免 PTT 在包包裡被誤按，逆時針轉四格即可解鎖；切換頁面與選擇項目都用同一個方向。</p>
+  <p class="post-card__read">閱讀版本資訊 →</p>
+</a>
+
+<a class="post-card" href="/zh-Hant/blog/arcade-on-the-deck/">
+  <p class="post-card__date">2026 · 10 · 19</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.6.0：裝置上的小遊戲</p>
+  <p class="post-card__excerpt">三款全螢幕遊戲、實體按鍵操作，以及原創 8-bit 音樂與音效，而且可以關閉。</p>
+  <p class="post-card__read">閱讀版本資訊 →</p>
+</a>
+
+<a class="post-card" href="/zh-Hant/blog/recovery-and-more-room/">
+  <p class="post-card__date">2026 · 10 · 18</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.4.0：復原過程顯示在螢幕上，保留成長空間</p>
+  <p class="post-card__excerpt">引導式的開機載入程式升級、裝置上的復原進度、更快的 USB 傳輸，以及中文文字支援。</p>
+  <p class="post-card__read">閱讀版本資訊 →</p>
+</a>
+
+<a class="post-card" href="/zh-Hant/blog/images-and-questions/">
+  <p class="post-card__date">2026 · 10 · 15</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.3.0：圖片與待回答的提問</p>
+  <p class="post-card__excerpt">在 Mac 與裝置上查看聊天圖片、更穩定的圖片預覽，還能在手持裝置上回答 Codex 的提問。</p>
+  <p class="post-card__read">閱讀版本資訊 →</p>
+</a>
+
+<a class="post-card" href="/zh-Hant/blog/radio-branding/">
+  <p class="post-card__date">2026 · 10 · 15</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.2.1：我們的無線電，處處可見</p>
+  <p class="post-card__excerpt">網站上的無線電來到應用程式圖像、選單列、裝置開機畫面和「關於」畫面。一個 COHDL 專案。</p>
+  <p class="post-card__read">閱讀版本資訊 →</p>
+</a>
+
+<a class="post-card" href="/zh-Hant/blog/workflows-and-usage/">
+  <p class="post-card__date">2026 · 10 · 13</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.2.0：工作流程一目瞭然</p>
+  <p class="post-card__excerpt">在 Mac 與手持裝置上即時查看工作流程進度、Claude Fable 用量上限，並修正工作流程頁面閃爍的問題。</p>
+  <p class="post-card__read">閱讀版本資訊 →</p>
+</a>
+
+<a class="post-card" href="/zh-Hant/blog/introducing-openwalkietalkie/">
+  <p class="post-card__date">2026 · 10 · 13</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.1.0：給你的助理一台手持裝置</p>
+  <p class="post-card__excerpt">首個正式的 Mac 應用程式與韌體版本：按住說話、在裝置上查看對話，以及應用程式與裝置更新。</p>
+  <p class="post-card__read">閱讀版本資訊 →</p>
+</a>
+
+<p class="blog-feedline">訂閱 <a href="/zh-Hant/blog/feed.xml">Atom 訂閱來源</a>，取得之後的版本發布與開發日誌。</p>
+
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL 專案 · MIT 授權軟體 · CERN-OHL-P 授權硬體</span>
+    <nav aria-label="頁尾">
+      <a href="/zh-Hant/#waitlist">加入候補名單</a>
+      <a href="/zh-Hant/privacy/">隱私權政策</a>
+      <a href="/zh-Hant/cookies/">Cookie 說明</a>
+      <a href="/zh-Hant/cookies/" data-privacy-open>隱私權聲明</a>
+      <a href="/zh-Hant/">首頁</a>
+      <a href="/zh-Hant/#demo">試用</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="在 Discord 加入 CoHDL 與 OpenWalkieTalkie 社群">Discord</a>
+      <a href="/zh-Hant/blog/feed.xml">訂閱來源</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>
