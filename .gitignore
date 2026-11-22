@@ -9,6 +9,11 @@
 /dist
 /host/target
 /native/core/target/
+/tests/host/target/
+# local reference material kept beside the tree
+/ref/
+# local build and export output
+/output/
 __pycache__/
 # superseded working snapshots kept next to a release while it settles
 **/_to_delete/
