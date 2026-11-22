@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie v0.7.0：声はより明瞭に、ノイズはより少なく · OpenWalkieTalkie</title>
+<meta name="description" content="音声と通知音向けのスピーカー EQ を追加し、Rev A を RAM から実行してフラッシュに起因するノイズを減らしました。設定と Bluetooth のペアリングはそのままです。" />
+<link rel="canonical" href="https://openwalkietalkie.org/ja/blog/speaker-eq-and-less-hiss/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/speaker-eq-and-less-hiss/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/speaker-eq-and-less-hiss/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/speaker-eq-and-less-hiss/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/speaker-eq-and-less-hiss/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/speaker-eq-and-less-hiss/" />
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.7.0：声はより明瞭に、ノイズはより少なく · OpenWalkieTalkie" />
+<meta property="og:description" content="音声と通知音向けのスピーカー EQ を追加し、Rev A を RAM から実行してフラッシュに起因するノイズを減らしました。設定と Bluetooth のペアリングはそのままです。" />
+<meta property="og:url" content="https://openwalkietalkie.org/ja/blog/speaker-eq-and-less-hiss/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie ブログ" href="/ja/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/i18n/ja.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">本文へスキップ</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/ja/" aria-label="OpenWalkieTalkie — ホーム">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="セクション">
+      <a href="/ja/#pile">The Pile</a>
+      <a href="/ja/#features">機能</a>
+      <a href="/ja/#demo">試す</a>
+      <a href="/ja/#faces">ページ</a>
+      <a href="/ja/#blueprint">設計図</a>
+      <a href="/ja/blog/" aria-current="true">ブログ</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="言語: 日本語">日本語</summary>
+        <ul>
+          <li><a href="/blog/speaker-eq-and-less-hiss/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/speaker-eq-and-less-hiss/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/speaker-eq-and-less-hiss/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/blog/speaker-eq-and-less-hiss/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="昼と夜のテーマを切り替える" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">昼</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="メニューを開く" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">ブログ · リリースノート</p>
+  <h1>OpenWalkieTalkie v0.7.0：声はより明瞭に、ノイズはより少なく</h1>
+  <p class="post-meta"><span>2026年10月20日</span><span>アプリとファームウェアの更新</span></p>
+</header>
+<article class="post-body">
+  <p>0.7.0 はデバイスの音に焦点を当てたバージョンです。Mac のサービスは音声と通知音に固定のスピーカー EQ をかけるようになり、Rev A はフラッシュへのアクセスに伴うノイズを減らすため、再びコードとフォントのデータを RAM から実行します。</p>
+  <h2>スピーカーに届く前に EQ</h2>
+  <p>サービスは、ミックスした音声と通知音を USB または Bluetooth LE で送る前に処理します。プリセットは 250 Hz のハイパスフィルターに、1.1 kHz で 5 dB、6.3 kHz で 6 dB のカットを組み合わせたものです。3 dB のヘッドルームを残し、サンプルを −1 dBFS に制限します。</p>
+  <p>フィルターの状態は音声のブロックや無音の間も引き継がれ、出力が開き直されるとリセットされます。不正なサンプルがあとの音声を損なうことはありません。</p>
+  <p>このプリセットは、独自の 16 kHz のデバイス音声出力で自動的に有効になります。このリリースに EQ のオン・オフはありません。スピーカーの深い低音や狭い帯域の落ち込みは持ち上げないため、低音の多い音は小さく聞こえることがあります。ローカルで生成するゲームの音、従来の CoreAudio 出力、測定用の生のトーンは変わりません。</p>
+  <h2>Rev A でのフラッシュの動作を減らす</h2>
+  <p>Rev A のコード、定数、フォントのデータは起動時に PSRAM にコピーされ、割り込みベクターは SRAM に置かれます。起動時にコピーを検証し、3 回失敗すると USB のリカバリーに戻ります。Rev B と LilyGo は引き続き NOR フラッシュから実行します。</p>
+  <p>フラッシュのパーティションと 2 つの Bluetooth の保存領域はそのままで、PSRAM の最後の 1 MiB は引き続き診断用に予約されています。</p>
+  <h2>聞いたこと、確認したこと</h2>
+  <p>EQ と RAM からの実行の変更は、Rev A の基板で USB 経由で試しました。音声の再生はホストの音声フレームを落とさずに最後まで再生され、操作した人はノイズが大幅に減ったと報告し、同じ EQ の実装を使ったラベル付きの低音の比較では EQ ありの方が好まれました。</p>
+  <p>これは聞いた結果であって、新たに校正した音響測定ではありません。このときは Rev B のハードウェアと、Bluetooth だけでの試聴はテストしていません。自動テストは、基板ごとの実行配置、起動時のコピーの範囲、ベクターの配置、保護されたフラッシュの保存領域、そして EQ がエンコードされたデバイスの音声ストリームに届いていることを確認しています。</p>
+  <h2>両方を更新する</h2>
+  <p>Apple シリコン用または Intel 用の、署名・公証済みの Mac アプリをインストールするか、<strong>アップデートを確認</strong>を使ってください。macOS 13 以降が必要です。アプリとサービスがどちらも 0.7.0 であることを確かめ、デバイスを 1 台 USB-C で接続して、<strong>サービス → 更新 → ファームウェア更新を確認</strong>を使います。</p>
+  <p>すでにリカバリープロトコル 2 を使っているデバイスには、通常のアプリケーションの更新が届きます。古いブートローダーのデバイスには、既存のガイド付きの移行が必要です。アプリの電源と USB の指示に従い、警告を受け入れてから進めてください。使用中のデバイスはアプリの更新機能を使ってください。チップ全体の出荷時イメージは設定とペアリングのデータを上書きします。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.7.0" rel="noopener">GitHub で OpenWalkieTalkie v0.7.0、ファームウェア、出荷時イメージ、チェックサムを入手 →</a></p>
+  <p class="post-back"><a href="/ja/blog/">← ブログに戻る</a></p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL のプロジェクト · ソフトウェアは MIT · ハードウェアは CERN-OHL-P</span>
+    <nav aria-label="フッター">
+      <a href="/ja/#waitlist">ウェイトリストに登録</a>
+      <a href="/ja/privacy/">プライバシーポリシー</a>
+      <a href="/ja/cookies/">Cookie について</a>
+      <a href="/ja/cookies/" data-privacy-open>プライバシーに関するお知らせ</a>
+      <a href="/ja/">ホーム</a>
+      <a href="/ja/#demo">試す</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Discord で CoHDL と OpenWalkieTalkie のコミュニティに参加">Discord</a>
+      <a href="/ja/blog/feed.xml">フィード</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

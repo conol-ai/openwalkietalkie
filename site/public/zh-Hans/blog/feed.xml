@@ -64,6 +64,14 @@
     <summary>自动锁屏防止 PTT 在包里被误按，逆时针转四格即可解锁；切换页面和选择项目使用同一个方向。</summary>
   </entry>
   <entry>
+    <title>OpenWalkieTalkie v0.7.0：语音更清楚，底噪更少</title>
+    <id>https://openwalkietalkie.org/zh-Hans/blog/speaker-eq-and-less-hiss/</id>
+    <link href="https://openwalkietalkie.org/zh-Hans/blog/speaker-eq-and-less-hiss/" />
+    <published>2026-10-20T15:08:13Z</published>
+    <updated>2026-10-20T15:08:13Z</updated>
+    <summary>为语音和提示音加入扬声器均衡，并让 Rev A 从 RAM 运行，以减少与闪存相关的底噪，同时保留设置和蓝牙配对。</summary>
+  </entry>
+  <entry>
     <title>OpenWalkieTalkie v0.6.0：设备上的小游戏</title>
     <id>https://openwalkietalkie.org/zh-Hans/blog/arcade-on-the-deck/</id>
     <link href="https://openwalkietalkie.org/zh-Hans/blog/arcade-on-the-deck/" />

@@ -1,0 +1,33 @@
+---
+title: OpenWalkieTalkie v0.5.0：Desktop 連上了，原廠燒錄也準備好了 · OpenWalkieTalkie
+description: 修正 Codex Desktop 的連線、讓簡短回覆穩定送達、支援替代的快閃記憶體晶片，並提供原廠燒錄映像檔。
+heading: OpenWalkieTalkie v0.5.0：Desktop 連上了，原廠燒錄也準備好了
+kind: 應用程式與韌體更新
+date: 2026-10-19
+published: 2026-10-19T05:00:00Z
+updated: 2026-10-19T05:00:00Z
+summary: 修正 Codex Desktop 的連線、讓簡短回覆穩定送達、支援替代的快閃記憶體晶片，並提供原廠燒錄映像檔。
+excerpt: 修正 Codex Desktop 的連線、讓簡短回覆穩定送達、支援替代的快閃記憶體晶片，並提供原廠燒錄映像檔。
+lastmod: 2026-10-19
+navDocs: no
+---
+  <p>OpenWalkieTalkie 0.5.0 修正了 Codex Desktop 與你的裝置之間的連線。它也讓韌體支援兩款替代的快閃記憶體晶片，並為原廠燒錄打包了全晶片映像檔。</p>
+  <h2>Desktop 的任務送達共用服務</h2>
+  <p>先前的啟動器可以順利開啟 Desktop，但它的對話卻不會出現在 OpenWalkieTalkie 中。Desktop 預設的外掛設定，讓它隱含的共用服務模式退回到私人伺服器。更新後的啟動器會明確選用共用的本機連線。</p>
+  <p>名為 ChatGPT.app 或 Codex.app 的相容安裝都能偵測到。啟動器會重複使用現有的 Codex 服務，不會干擾正在執行的 Desktop 任務。另一項修正讓簡短任務的回覆恢復正常：這些任務可能在 OpenWalkieTalkie 訂閱它們的對話之前就已完成。</p>
+  <h2>更新後修復整合</h2>
+  <p>安裝 0.5.0 應用程式，並確認它的服務也顯示 0.5.0。開啟<strong>整合 → Codex Desktop</strong>，安裝或修復整合。等 Desktop 任務都閒置時，結束 Codex Desktop / ChatGPT，再開啟 <code>~/Applications/Codex with OpenWalkieTalkie.app</code>。</p>
+  <p>這是為你已安裝的 Desktop 應用程式準備的小型啟動器。之後也請用它來啟動：直接開啟原本的應用程式不會啟用共用連線。不支援的 Desktop 版本會顯示錯誤，而不是悄悄開啟一個沒有連線的工作階段。</p>
+  <h2>更多快閃記憶體選擇與原廠映像檔</h2>
+  <p>除了現有的 Winbond W25Q128JVSIQ（C97521），韌體現在也接受 Puya PY25Q128HA-SUH-IR（C5354566）與 GigaDevice GD25Q128ESIGR（C2928891）。設定、配對與開機載入程式的寫入程式，會先確認讀到穩定且支援的晶片 ID，才啟用寫入。使用替代零件的電路板仍需要實體驗證。</p>
+  <p>這個版本附有一個原廠 ZIP，內含 Rev A 與 Rev B 各自的 16 MiB 映像檔。每個映像檔都結合了確切的已發布應用程式與復原二進位檔、全新的快閃記憶體分割表與空白的單機儲存區。另附中文說明、元件雜湊值與獨立的驗證工具。</p>
+  <p><strong>原廠映像檔會覆寫所有快閃記憶體內容，包括設定與配對資料。</strong>它們是給空白電路板佈建使用的。現有的裝置請使用應用程式一般的 USB 更新功能。</p>
+  <h2>更新現有的裝置</h2>
+  <p>透過 USB-C 連接一台裝置，開啟<strong>服務 → 更新 → 檢查韌體更新</strong>。分割配置與復原協定都與 0.4.0 相同，所以已使用復原協定 2 的裝置會收到一般的應用程式更新。</p>
+  <p><strong>仍使用舊開機載入程式的裝置需要引導式遷移。請保持電源連接，並讓 Mac 保持喚醒：在更換開機載入程式時斷電，可能導致無法開機與 USB 復原，需要硬體維修。</strong>應用程式會在遷移前顯示這項警告。請不要把 bootstrap 或復原檔案當成應用程式韌體手動安裝。</p>
+  <h2>我們驗證了什麼</h2>
+  <p>啟動器與傳輸的回歸測試都通過了。在開發用 Mac 上的實際測試中，Desktop 連上了共用服務，它的 <code>DESKTOP-LINK-OK</code> 回覆出現在 OpenWalkieTalkie 的介面中。對已連接 Rev A 的 USB 傳送正常；最後在實體螢幕上的檢查沒有記錄下來。</p>
+  <p>兩種主機板版本都通過軟體檢查。具有相同快閃記憶體支援的前一版 0.4.1 開發韌體，在現有的 Rev A 上完成了舊開機載入程式的遷移。那次測試沒有燒錄 CI 建置的 0.5.0 檔案。出貨的 Rev B、使用替代晶片的電路板，以及空白電路板的原廠燒錄，仍需要硬體驗證。沒有進行裝置音訊測試。</p>
+  <h2>取得 v0.5.0</h2>
+  <p>使用<strong>檢查更新</strong>，或<a href="/#download">下載已簽署並經過公證的 Mac 應用程式</a>（Apple Silicon 或 Intel）。需要 macOS 13 或更新版本。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.5.0">GitHub 上的版本</a>包含韌體、原廠映像檔、總和檢查碼、建置證明與中文升級指南。每個 DMG 中也附有這份指南。</p>

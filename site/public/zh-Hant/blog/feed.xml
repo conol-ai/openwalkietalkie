@@ -64,12 +64,28 @@
     <summary>自動螢幕鎖定避免 PTT 在包包裡被誤按，逆時針轉四格即可解鎖；切換頁面與選擇項目都用同一個方向。</summary>
   </entry>
   <entry>
+    <title>OpenWalkieTalkie v0.7.0：語音更清楚，底噪更少</title>
+    <id>https://openwalkietalkie.org/zh-Hant/blog/speaker-eq-and-less-hiss/</id>
+    <link href="https://openwalkietalkie.org/zh-Hant/blog/speaker-eq-and-less-hiss/" />
+    <published>2026-10-20T15:08:13Z</published>
+    <updated>2026-10-20T15:08:13Z</updated>
+    <summary>為語音與提示音加入揚聲器等化，並讓 Rev A 從 RAM 執行，以減少與快閃記憶體相關的底噪，同時保留設定與藍牙配對。</summary>
+  </entry>
+  <entry>
     <title>OpenWalkieTalkie v0.6.0：裝置上的小遊戲</title>
     <id>https://openwalkietalkie.org/zh-Hant/blog/arcade-on-the-deck/</id>
     <link href="https://openwalkietalkie.org/zh-Hant/blog/arcade-on-the-deck/" />
     <published>2026-10-19T08:27:59Z</published>
     <updated>2026-10-19T08:27:59Z</updated>
     <summary>三款全螢幕遊戲、實體按鍵操作，以及原創 8-bit 音樂與音效，而且可以關閉。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.5.0：Desktop 連上了，原廠燒錄也準備好了</title>
+    <id>https://openwalkietalkie.org/zh-Hant/blog/desktop-connection-and-factory-images/</id>
+    <link href="https://openwalkietalkie.org/zh-Hant/blog/desktop-connection-and-factory-images/" />
+    <published>2026-10-19T05:00:00Z</published>
+    <updated>2026-10-19T05:00:00Z</updated>
+    <summary>修正 Codex Desktop 的連線、讓簡短回覆穩定送達、支援替代的快閃記憶體晶片，並提供原廠燒錄映像檔。</summary>
   </entry>
   <entry>
     <title>OpenWalkieTalkie v0.4.0：復原過程顯示在螢幕上，保留成長空間</title>

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie v0.7.0：語音更清楚，底噪更少 · OpenWalkieTalkie</title>
+<meta name="description" content="為語音與提示音加入揚聲器等化，並讓 Rev A 從 RAM 執行，以減少與快閃記憶體相關的底噪，同時保留設定與藍牙配對。" />
+<link rel="canonical" href="https://openwalkietalkie.org/zh-Hant/blog/speaker-eq-and-less-hiss/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/speaker-eq-and-less-hiss/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/speaker-eq-and-less-hiss/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/speaker-eq-and-less-hiss/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/speaker-eq-and-less-hiss/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/speaker-eq-and-less-hiss/" />
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.7.0：語音更清楚，底噪更少 · OpenWalkieTalkie" />
+<meta property="og:description" content="為語音與提示音加入揚聲器等化，並讓 Rev A 從 RAM 執行，以減少與快閃記憶體相關的底噪，同時保留設定與藍牙配對。" />
+<meta property="og:url" content="https://openwalkietalkie.org/zh-Hant/blog/speaker-eq-and-less-hiss/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie 部落格" href="/zh-Hant/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/i18n/zh-Hant.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">跳至主要內容</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/zh-Hant/" aria-label="OpenWalkieTalkie — 首頁">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="網站區塊">
+      <a href="/zh-Hant/#pile">The Pile</a>
+      <a href="/zh-Hant/#features">功能</a>
+      <a href="/zh-Hant/#demo">試用</a>
+      <a href="/zh-Hant/#faces">頁面</a>
+      <a href="/zh-Hant/#blueprint">設計藍圖</a>
+      <a href="/zh-Hant/blog/" aria-current="true">部落格</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="語言: 繁體中文">繁體中文</summary>
+        <ul>
+          <li><a href="/blog/speaker-eq-and-less-hiss/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/speaker-eq-and-less-hiss/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/speaker-eq-and-less-hiss/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
+          <li><a href="/ja/blog/speaker-eq-and-less-hiss/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切換日間與夜間主題" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">日間</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="開啟選單" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">部落格 · 版本資訊</p>
+  <h1>OpenWalkieTalkie v0.7.0：語音更清楚，底噪更少</h1>
+  <p class="post-meta"><span>2026年10月20日</span><span>應用程式與韌體更新</span></p>
+</header>
+<article class="post-body">
+  <p>0.7.0 版著重在裝置的聲音。Mac 上的服務現在會對語音與提示音套用固定的揚聲器等化，Rev A 也重新從 RAM 執行程式碼與字型資源，以減少與快閃記憶體存取相關的底噪。</p>
+  <h2>音訊到達揚聲器之前先做等化</h2>
+  <p>服務在透過 USB 或低功耗藍牙傳送之前，會先處理混合後的語音與提示音。預設把 250 Hz 高通濾波器，與 1.1 kHz 衰減 5 dB、6.3 kHz 衰減 6 dB 結合起來。它保留 3 dB 的餘裕，並把取樣限制在 −1 dBFS。</p>
+  <p>濾波器狀態在音訊區塊之間與靜音期間保持連續，並在輸出重新開啟時重設。無效的取樣不會影響之後的音訊。</p>
+  <p>對於自訂的 16 kHz 裝置音訊輸出，這個預設會自動啟用；本版本沒有等化開關。它不會增強揚聲器的低音，也不會補平狹窄的響應凹陷，所以低音較重的內容聽起來可能比較小聲。本機產生的遊戲音效、舊的 CoreAudio 輸出與原始量測音則維持不變。</p>
+  <h2>Rev A 上的快閃記憶體活動更少</h2>
+  <p>Rev A 的程式碼、常數與字型資源會在啟動時複製到 PSRAM，中斷向量則放在 SRAM。啟動時會驗證這些複本，連續三次失敗後回到 USB 復原模式。Rev B 與 LilyGo 仍從 NOR 快閃記憶體執行。</p>
+  <p>快閃記憶體分割區與兩份藍牙儲存都維持原位，PSRAM 的最後 1 MiB 仍保留給診斷使用。</p>
+  <h2>我們聽到與檢查了什麼</h2>
+  <p>等化與從 RAM 執行的變更，在一塊 Rev A 板上透過 USB 實際測試過。語音播放完整，沒有遺失主機端的音訊影格；操作者回報底噪明顯減少；在一次使用同一等化實作、標示清楚的低音比較中，開啟等化的版本較受青睞。</p>
+  <p>這些是聽感結果，不是新的校準聲學量測。那次測試沒有測 Rev B 硬體，也沒有只用藍牙聆聽。自動檢查涵蓋各主機板的執行配置、啟動時的複製邊界、向量位置、受保護的快閃記憶體儲存，以及等化是否進入編碼後的裝置音訊串流。</p>
+  <h2>兩邊都要更新</h2>
+  <p>安裝已簽署並經過公證的 Mac 應用程式（Apple Silicon 或 Intel），或使用<strong>檢查更新</strong>。需要 macOS 13 或更新版本。確認應用程式與服務都顯示 0.7.0，透過 USB-C 連接一台裝置，然後使用<strong>服務 → 更新 → 檢查韌體更新</strong>。</p>
+  <p>已使用復原協定 2 的裝置會收到一般的應用程式更新。使用舊開機載入程式的裝置需要沿用現有的引導式遷移：依照應用程式中的電源與 USB 說明操作，並在繼續之前接受它的警告。已有的裝置請使用應用程式的更新功能；全晶片原廠映像檔會覆寫設定與配對資料。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.7.0" rel="noopener">在 GitHub 取得 OpenWalkieTalkie v0.7.0、韌體、原廠映像檔與總和檢查碼 →</a></p>
+  <p class="post-back"><a href="/zh-Hant/blog/">← 返回部落格</a></p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL 專案 · MIT 授權軟體 · CERN-OHL-P 授權硬體</span>
+    <nav aria-label="頁尾">
+      <a href="/zh-Hant/#waitlist">加入候補名單</a>
+      <a href="/zh-Hant/privacy/">隱私權政策</a>
+      <a href="/zh-Hant/cookies/">Cookie 說明</a>
+      <a href="/zh-Hant/cookies/" data-privacy-open>隱私權聲明</a>
+      <a href="/zh-Hant/">首頁</a>
+      <a href="/zh-Hant/#demo">試用</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="在 Discord 加入 CoHDL 與 OpenWalkieTalkie 社群">Discord</a>
+      <a href="/zh-Hant/blog/feed.xml">訂閱來源</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

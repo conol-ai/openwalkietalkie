@@ -64,12 +64,28 @@
     <summary>自動の画面ロックがバッグの中の PTT を守ります。反時計回りに4クリックで解除でき、ページと項目の選択は同じ方向で動きます。</summary>
   </entry>
   <entry>
+    <title>OpenWalkieTalkie v0.7.0：声はより明瞭に、ノイズはより少なく</title>
+    <id>https://openwalkietalkie.org/ja/blog/speaker-eq-and-less-hiss/</id>
+    <link href="https://openwalkietalkie.org/ja/blog/speaker-eq-and-less-hiss/" />
+    <published>2026-10-20T15:08:13Z</published>
+    <updated>2026-10-20T15:08:13Z</updated>
+    <summary>音声と通知音向けのスピーカー EQ を追加し、Rev A を RAM から実行してフラッシュに起因するノイズを減らしました。設定と Bluetooth のペアリングはそのままです。</summary>
+  </entry>
+  <entry>
     <title>OpenWalkieTalkie v0.6.0：デバイスでゲーム</title>
     <id>https://openwalkietalkie.org/ja/blog/arcade-on-the-deck/</id>
     <link href="https://openwalkietalkie.org/ja/blog/arcade-on-the-deck/" />
     <published>2026-10-19T08:27:59Z</published>
     <updated>2026-10-19T08:27:59Z</updated>
     <summary>全画面のゲーム 3 本、本体のキーによる操作、オリジナルの 8-bit 音楽と効果音（オフにできます）。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.5.0：Desktop がつながり、工場での書き込みにも対応</title>
+    <id>https://openwalkietalkie.org/ja/blog/desktop-connection-and-factory-images/</id>
+    <link href="https://openwalkietalkie.org/ja/blog/desktop-connection-and-factory-images/" />
+    <published>2026-10-19T05:00:00Z</published>
+    <updated>2026-10-19T05:00:00Z</updated>
+    <summary>Codex Desktop の接続の修正、短い返信の確実な配信、代替のフラッシュチップへの対応、工場での書き込み用のイメージ。</summary>
   </entry>
   <entry>
     <title>OpenWalkieTalkie v0.4.0：画面でわかるリカバリーと、広がった容量</title>
