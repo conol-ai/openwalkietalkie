@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="{{=lang}}" data-theme="day"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{manual.head.title1}}</title><meta name="description" content="{{manual.head.meta-content1}}">
+<link rel="canonical" href="https://openwalkietalkie.org/manual/">{{=alternates}}<meta property="og:type" content="website"><meta property="og:site_name" content="OpenWalkieTalkie"><meta property="og:title" content="{{manual.head.title1}}"><meta property="og:description" content="{{manual.head.meta-content1}}"><meta property="og:url" content="https://openwalkietalkie.org/manual/"><meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg"><meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/manual.css?v=015-focus-night-2">{{=i18nScript}}<script src="/js/theme-init.js"></script></head><body class="manual-page"><a class="skip-link" href="#manual">{{manual.page.body1}}</a><header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/#top" aria-label="{{common.openwalkietalkie-home}}">
+      {{common.open-walkie-talkie}}
+    </a>
+
+    <nav class="nav__links" aria-label="{{common.sections}}">
+      <a href="/#waitlist">{{common.waitlist}}</a>
+      <a href="/#demo">{{common.try-it}}</a>
+      <a href="/#download">{{common.download}}</a>
+      <a href="/docs/">{{common.docs}}</a>
+      <a href="/manual/" aria-current="page">{{manual.nav.nav1}}</a>
+      <a href="/#blueprint">{{common.github}}</a>
+{{=switcher}}    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="{{common.toggle-day-and-night-theme}}" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">{{common.day}}</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="{{common.open-menu}}" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+<main id="manual" class="manual-wrap">
+<div class="manual-toolbar"><a href="/">{{manual.manual.div1}}</a><span>{{manual.manual.div2}}</span><button id="printManual" type="button">{{manual.printManual.button1}}</button></div>
+<nav class="manual-index" aria-label="{{manual.manual.nav-aria-label1}}"><a href="#start">{{manual.manual.nav1}}</a><a href="#connect">{{manual.manual.nav2}}</a><a href="#codex">{{manual.manual.nav3}}</a><a href="#claude">{{manual.manual.nav4}}</a><a href="#first-task">{{manual.manual.nav5}}</a><a href="#controls">{{manual.manual.nav6}}</a><a href="#app-settings">{{manual.manual.nav7}}</a><a href="#reference">{{manual.manual.nav8}}</a></nav>
+<section class="manual-sheet" id="start" aria-labelledby="manual-title">
+<div class="sheet-meta"><span>{{manual.start.div1}}</span><span>{{manual.start.div2}}</span></div>
+<header class="manual-cover manual-cover--diagram"><div class="map-heading"><div><p class="manual-eyebrow">{{manual.start.p1}}</p><h1 id="manual-title">{{manual.manual-title.h11}}</h1></div><p>{{manual.start.p2}}</p></div><figure class="control-figure"><svg class="device-map" viewBox="0 0 960 530" role="img" aria-labelledby="device-map-title device-map-desc" xmlns="http://www.w3.org/2000/svg">
+<title id="device-map-title">OpenWalkieTalkie front view and control map</title>
+<desc id="device-map-desc">Front view: scroll wheel at the upper left, PTT on the left edge, LEFT and RIGHT below the screen. On the right edge, ENTER, CANCEL and SHIFT run from top to bottom. Leader lines connect each control to its name and function.</desc>
+<image class="diagram-device--day" href="/assets/manual-radio-front.png" x="283" y="-14" width="363" height="544.5" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated"/><image class="diagram-device--night" href="/assets/manual-radio-front-night.png" x="283" y="-14" width="363" height="544.5" preserveAspectRatio="xMidYMid meet" style="image-rendering:pixelated"/>
+<g class="map-leaders"><path d="M342 69H306V53H30M342 206H294V176H30M425 303V397H286V347H30M534 303V400H674V414H944M608 128H656V69H944M608 183H686V181H944M608 237H664V293H944M379 244H272V460H30"/></g><g class="map-callout"><text class="map-callout-title" x="30" y="29">SCROLL WHEEL</text><text x="30" y="76">Turn to browse rows and choices.</text><text x="30" y="96">Hold SHIFT + turn to switch faces.</text></g><g class="map-callout"><text class="map-callout-title" x="30" y="152">PTT · PUSH TO TALK</text><text x="30" y="199">Hold: talk to the active agent.</text><text x="30" y="219">Release: send. Arcade: game key.</text></g><g class="map-callout"><text class="map-callout-title" x="30" y="323">LEFT</text><text x="30" y="370">Previous project in the roster.</text><text x="30" y="390">Previous agent in a conversation.</text></g><g class="map-callout"><text class="map-callout-title" x="704" y="390">RIGHT</text><text x="704" y="437">Next project in the roster.</text><text x="704" y="457">Next agent in a conversation.</text></g><g class="map-callout"><text class="map-callout-title" x="704" y="45">ENTER</text><text x="704" y="92">Open the highlighted item.</text><text x="704" y="112">Confirm a selection or answer.</text></g><g class="map-callout"><text class="map-callout-title" x="704" y="157">CANCEL / ESC</text><text x="704" y="204">Go back. At a face’s top level,</text><text x="704" y="224">return to the Agents roster.</text></g><g class="map-callout"><text class="map-callout-title" x="704" y="269">SHIFT</text><text x="704" y="316">Hold with the wheel to switch faces.</text><text x="704" y="336">Double-tap to manage your faces.</text></g><g class="map-callout"><text class="map-callout-title" x="30" y="436">TOUCH SCREEN</text><text x="30" y="483">Rows in Agents and Settings: tap</text><text x="30" y="503">to select, tap again to open.</text></g></svg><figcaption>{{manual.start.figcaption1}}</figcaption></figure><dl class="device-map-legend"><div><dt>{{manual.start.dt1}}</dt><dd>{{manual.start.dd1}}</dd></div><div><dt>{{manual.start.dt2}}</dt><dd>{{manual.start.dd2}}</dd></div><div><dt>{{manual.start.dt3}}</dt><dd>{{manual.start.dd3}}</dd></div><div><dt>{{manual.start.dt4}}</dt><dd>{{manual.start.dd4}}</dd></div><div><dt>{{common.enter}}</dt><dd>{{manual.start.dd5}}</dd></div><div><dt>{{manual.start.dt5}}</dt><dd>{{manual.start.dd6}}</dd></div><div><dt>{{common.shift}}</dt><dd>{{manual.start.dd7}}</dd></div><div><dt>{{manual.start.dt6}}</dt><dd>{{manual.start.dd8}}</dd></div></dl><p class="map-context">{{manual.start.p3}}</p></header>
+<div class="manual-band"><span>{{manual.start.div3}}</span><p>{{manual.start.p4}}</p></div>
+<div class="setup-grid">
+<article><b class="step-number">01</b><h2>{{manual.start.h21}}</h2><p>{{manual.start.p5}}</p></article>
+<article><b class="step-number">02</b><h2>{{manual.start.h22}}</h2><p>{{manual.start.p6}}</p></article>
+<article><b class="step-number">03</b><h2>{{manual.start.h23}}</h2><p>{{manual.start.p7}}</p></article>
+</div>
+<aside class="manual-note"><strong>{{manual.start.aside1}}</strong><p>{{manual.start.p8}}</p></aside>
+<footer class="sheet-footer"><span>{{manual.start.footer1}}</span><span>01 / 08</span></footer>
+</section>
+
+<section class="manual-sheet tutorial-sheet" id="connect" aria-labelledby="connect-title">
+<div class="sheet-meta"><span>{{manual.connect.div1}}</span><span>{{manual.connect.div2}}</span></div>
+<h2 class="sheet-title" id="connect-title">{{manual.connect-title.h21}}</h2>
+<p class="tutorial-intro">{{manual.connect.p1}}</p>
+<div class="connection-path" aria-label="{{manual.connect.div-aria-label1}}"><div><b>{{manual.connect.div3}}</b><span>{{manual.connect.div4}}</span></div><span aria-hidden="true">↔</span><div><b>{{manual.connect.div5}}</b><span>{{manual.connect.div6}}</span></div><span aria-hidden="true">↔</span><div><b>{{manual.connect.div7}}</b><span>{{manual.connect.div8}}</span></div></div>
+<figure class="focus-panel "><div class="focus-heading"><span>{{manual.connect.div9}}</span><b>{{manual.connect.div10}}</b></div><div class="focus-detail"><div class="focus-location">{{manual.connect.div11}}</div><div class="focus-row"><svg class="focus-crop" viewBox="490 890 558 268" role="img" aria-label="Look for Cable — cropped English app screenshot" xmlns="http://www.w3.org/2000/svg"><image href="/assets/manual-app-deck-v015.jpg" width="2080" height="1562"/><rect class="focus-outline" x="913" y="908" width="119" height="57" rx="0"/><path class="focus-leader" d="M1032 936.5H1040V1024H1048"/></svg><div class="focus-copy"><strong>{{manual.connect.div12}}</strong><p>{{manual.connect.p2}}</p></div></div></div><div class="focus-detail"><div class="focus-location">{{manual.connect.div13}}</div><div class="focus-row"><svg class="focus-crop" viewBox="1100 1143 910 96" role="img" aria-label="Choose English — cropped English app screenshot" xmlns="http://www.w3.org/2000/svg"><image href="/assets/manual-app-deck-v015.jpg" width="2080" height="1562"/><rect class="focus-outline" x="1801" y="1156" width="190" height="69" rx="0"/><path class="focus-leader" d="M1991 1190.5H2002V1191H2010"/></svg><div class="focus-copy"><strong>{{manual.connect.div14}}</strong><p>{{manual.connect.p3}}</p></div></div></div><figcaption>{{manual.connect.figcaption1}}</figcaption></figure>
+<ol class="tutorial-steps compact-steps">
+<li><h3>{{manual.connect.h31}}</h3><p>{{manual.connect.p4}}</p></li>
+<li><h3>{{manual.connect.h32}}</h3><p>{{manual.connect.p5}}</p><p class="step-check">{{manual.connect.p6}}</p></li>
+<li><h3>{{manual.connect.h33}}</h3><p>{{manual.connect.p7}}</p><p class="step-check">{{manual.connect.p8}}</p></li>
+<li><h3>{{manual.connect.h34}}</h3><p>{{manual.connect.p9}}</p></li>
+</ol>
+<aside class="manual-note"><strong>{{manual.connect.aside1}}</strong><p>{{manual.connect.p10}}</p></aside>
+<footer class="sheet-footer"><span>{{manual.connect.footer1}}</span><span>02 / 08</span></footer></section>
+
+<section class="manual-sheet tutorial-sheet" id="codex" aria-labelledby="codex-title">
+<div class="sheet-meta"><span>{{manual.codex.div1}}</span><span>{{manual.codex.div2}}</span></div>
+<h2 class="sheet-title" id="codex-title">{{manual.codex-title.h21}}</h2>
+<p class="tutorial-intro">{{manual.codex.p1}}</p>
+<figure class="focus-panel "><div class="focus-heading"><span>{{manual.connect.div9}}</span><b>{{manual.codex.div3}}</b></div><div class="focus-detail"><div class="focus-location">{{manual.codex.div4}}</div><div class="focus-row"><svg class="focus-crop" viewBox="1530 645 478 118" role="img" aria-label="Turn Codex CLI on — cropped English app screenshot" xmlns="http://www.w3.org/2000/svg"><image href="/assets/manual-app-integrations-v015.jpg" width="2080" height="1562"/><rect class="focus-outline" x="1844" y="667" width="144" height="74" rx="0"/><path class="focus-leader" d="M1988 704H2000V704H2008"/></svg><div class="focus-copy"><strong>{{manual.codex.div5}}</strong><p>{{manual.codex.p2}}</p></div></div></div><div class="focus-detail"><div class="focus-location">{{manual.codex.div6}}</div><div class="focus-row"><svg class="focus-crop" viewBox="1530 780 478 108" role="img" aria-label="Check the launcher — cropped English app screenshot" xmlns="http://www.w3.org/2000/svg"><image href="/assets/manual-app-integrations-v015.jpg" width="2080" height="1562"/><rect class="focus-outline" x="1545" y="800" width="168" height="66" rx="0"/><path class="focus-leader" d="M1713 833H2000V834H2008"/></svg><div class="focus-copy"><strong>{{manual.codex.div7}}</strong><p>{{manual.codex.p3}}</p></div></div></div><figcaption>{{manual.codex.figcaption1}}</figcaption></figure>
+<h3 class="tutorial-route">{{manual.codex.h31}}</h3>
+<ol class="tutorial-steps compact-steps">
+<li><h3>{{manual.codex.h32}}</h3><p>{{manual.codex.p4}}</p></li>
+<li><h3>{{manual.codex.h33}}</h3><p>{{manual.codex.p5}}</p></li>
+<li><h3>{{manual.codex.h34}}</h3><p>{{manual.codex.p6}}</p><p class="step-check">{{manual.codex.p7}}</p></li>
+</ol>
+<aside class="route-alternative"><h3>{{manual.codex.h35}}</h3><ol><li>{{manual.codex.li1}}</li><li>{{manual.codex.li2}}</li><li>{{manual.codex.li3}}</li></ol><p>{{manual.codex.p8}}</p></aside>
+<footer class="sheet-footer"><span>{{manual.codex.footer1}}</span><span>03 / 08</span></footer></section>
+
+<section class="manual-sheet tutorial-sheet" id="claude" aria-labelledby="claude-title">
+<div class="sheet-meta"><span>{{manual.codex.div1}}</span><span>{{manual.claude.div1}}</span></div>
+<h2 class="sheet-title" id="claude-title">{{manual.claude-title.h21}}</h2>
+<p class="tutorial-intro">{{manual.claude.p1}}</p>
+<div class="connection-path" aria-label="{{manual.claude.div-aria-label1}}"><div><b>{{manual.claude.div2}}</b><span>{{manual.claude.div3}}</span></div><span aria-hidden="true">→</span><div><b>{{manual.claude.div4}}</b><span>{{manual.claude.div5}}</span></div><span aria-hidden="true">→</span><div><b>{{manual.claude.div6}}</b><span>{{manual.claude.div7}}</span></div></div>
+<ol class="tutorial-steps">
+<li><h3>{{manual.claude.h31}}</h3><p>{{manual.claude.p2}}</p></li>
+<li><h3>{{manual.claude.h32}}</h3><p>{{manual.claude.p3}}</p><p class="step-check">{{manual.claude.p4}}</p></li>
+<li><h3>{{manual.claude.h33}}</h3><p>{{manual.claude.p5}}</p><pre class="manual-command"><code>claude --dangerously-load-development-channels plugin:openwalkietalkie@openwalkietalkie</code></pre><p>{{manual.claude.p6}}</p></li>
+<li><h3>{{manual.claude.h34}}</h3><p>{{manual.claude.p7}}</p><p class="step-check">{{manual.claude.p8}}</p></li>
+<li><h3>{{manual.claude.h35}}</h3><p>{{manual.claude.p9}}</p></li>
+</ol>
+<aside class="manual-note"><strong>{{manual.claude.aside1}}</strong><p>{{manual.claude.p10}}</p></aside>
+<footer class="sheet-footer"><span>{{manual.codex.footer1}}</span><span>04 / 08</span></footer></section>
+
+<section class="manual-sheet tutorial-sheet" id="first-task" aria-labelledby="first-task-title">
+<div class="sheet-meta"><span>{{manual.first-task.div1}}</span><span>{{manual.first-task.div2}}</span></div>
+<h2 class="sheet-title" id="first-task-title">{{manual.first-task-title.h21}}</h2>
+<p class="tutorial-intro">{{manual.first-task.p1}}</p>
+<div class="task-walkthrough">
+<article><img src="/assets/screens/roster.png" width="480" height="480" alt="{{manual.first-task.img-alt1}}" loading="lazy"><div><h3>{{manual.first-task.h31}}</h3><p>{{manual.first-task.p2}}</p><p class="step-check">{{manual.first-task.p3}}</p></div></article>
+<article><img src="/assets/screens/ptt-roster.png" width="480" height="480" alt="{{manual.first-task.img-alt2}}" loading="lazy"><div><h3>{{manual.first-task.h32}}</h3><p>{{manual.first-task.p4}}</p><p class="step-check">{{manual.first-task.p5}}</p></div></article>
+<article><img src="/assets/screens/channel.png" width="480" height="480" alt="{{manual.first-task.img-alt3}}" loading="lazy"><div><h3>{{manual.first-task.h33}}</h3><p>{{manual.first-task.p6}}</p><p class="step-check">{{manual.first-task.p7}}</p></div></article>
+<article><img src="/assets/screens/card-question.png" width="480" height="480" alt="{{manual.first-task.img-alt4}}" loading="lazy"><div><h3>{{manual.first-task.h34}}</h3><p>{{manual.first-task.p8}}</p><p class="step-check">{{manual.first-task.p9}}</p></div></article>
+</div>
+<aside class="manual-note"><strong>{{manual.first-task.aside1}}</strong><p>{{manual.first-task.p10}}</p></aside>
+<footer class="sheet-footer"><span>{{manual.first-task.footer1}}</span><span>05 / 08</span></footer></section>
+
+<section class="manual-sheet" id="controls" aria-labelledby="controls-title">
+<div class="sheet-meta"><span>{{manual.controls.div1}}</span><span>{{manual.controls.div2}}</span></div><h2 class="sheet-title" id="controls-title">{{manual.controls-title.h21}}</h2>
+<div class="controls-grid">
+<div class="key-row"><kbd>SCROLL</kbd><p>{{manual.controls.p1}}</p></div>
+<div class="key-row"><kbd>PTT</kbd><p>{{manual.controls.p2}}</p></div>
+<div class="key-row"><kbd>SHIFT + ↕</kbd><p>{{manual.controls.p3}}</p></div>
+<div class="key-row"><kbd>CANCEL</kbd><p>{{manual.controls.p4}}</p></div>
+<div class="key-row"><kbd>ENTER</kbd><p>{{manual.controls.p5}}</p></div>
+<div class="key-row"><kbd>LEFT / RIGHT</kbd><p>{{manual.controls.p6}}</p></div>
+</div>
+<div class="section-rule"><h3>{{manual.controls.h31}}</h3><span>{{manual.controls.div3}}</span></div>
+<div class="manual-faces"><article class="manual-face"><img src="/assets/screens/roster.png" width="480" height="480" alt="{{manual.controls.img-alt1}}"><div><span class="face-number">{{manual.controls.div4}}</span><h3>{{manual.controls.h32}}</h3><p>{{manual.controls.p7}}</p></div></article><article class="manual-face"><img src="/assets/screens/omarchy.png" width="480" height="480" alt="{{manual.controls.img-alt2}}"><div><span class="face-number">{{manual.controls.div5}}</span><h3>{{common.omarchy}}</h3><p>{{manual.controls.p8}}</p></div></article><article class="manual-face"><img src="/assets/screens/macropad.png" width="480" height="480" alt="{{manual.controls.img-alt3}}"><div><span class="face-number">{{manual.controls.div6}}</span><h3>{{manual.controls.h33}}</h3><p>{{manual.controls.p9}}</p></div></article><article class="manual-face"><img src="/assets/screens/usage.png" width="480" height="480" alt="{{manual.controls.img-alt4}}"><div><span class="face-number">{{manual.controls.div7}}</span><h3>{{manual.controls.h34}}</h3><p>{{manual.controls.p10}}</p></div></article><article class="manual-face"><img src="/assets/screens/system-status-0100.png" width="480" height="480" alt="{{manual.controls.img-alt5}}"><div><span class="face-number">{{manual.controls.div8}}</span><h3>{{manual.controls.h35}}</h3><p>{{manual.controls.p11}}</p></div></article><article class="manual-face"><img src="/assets/screens/arcade-snake-1920.png" width="480" height="480" alt="{{manual.controls.img-alt6}}"><div><span class="face-number">{{manual.controls.div9}}</span><h3>{{manual.controls.h36}}</h3><p>{{manual.controls.p12}}</p></div></article></div>
+<aside class="manual-note"><strong>{{manual.controls.aside1}}</strong><p>{{manual.controls.p13}}</p></aside>
+<footer class="sheet-footer"><span>{{manual.controls.footer1}}</span><span>06 / 08</span></footer></section>
+<section class="manual-sheet tutorial-sheet" id="app-settings" aria-labelledby="app-settings-title">
+<div class="sheet-meta"><span>{{manual.app-settings.div1}}</span><span>{{manual.app-settings.div2}}</span></div>
+<h2 class="sheet-title" id="app-settings-title">{{manual.app-settings-title.h21}}</h2>
+<p class="tutorial-intro">{{manual.app-settings.p1}}</p>
+<div class="app-guide-grid">
+<article><figure class="focus-panel focus-panel--stack"><div class="focus-heading"><span>{{manual.connect.div9}}</span><b>{{manual.app-settings.div3}}</b></div><div class="focus-detail"><div class="focus-location">{{manual.app-settings.div4}}</div><div class="focus-row"><svg class="focus-crop" viewBox="490 400 740 240" role="img" aria-label="Finish the download — cropped English app screenshot" xmlns="http://www.w3.org/2000/svg"><image href="/assets/manual-app-voice-v015.jpg" width="2080" height="1562"/><rect class="focus-outline" x="926" y="544" width="277" height="66" rx="0"/><path class="focus-leader" d="M1203 577H1222V520H1230"/></svg><div class="focus-copy"><strong>{{manual.app-settings.div5}}</strong><p>{{manual.app-settings.p2}}</p></div></div></div><div class="focus-detail"><div class="focus-location">{{manual.app-settings.div6}}</div><div class="focus-row"><svg class="focus-crop" viewBox="1298 1018 696 76" role="img" aria-label="Test input, then output — cropped English app screenshot" xmlns="http://www.w3.org/2000/svg"><image href="/assets/manual-app-voice-v015.jpg" width="2080" height="1562"/><rect class="focus-outline" x="1306" y="1025" width="184" height="62" rx="0"/><path class="focus-leader" d="M1490 1056H1986V1056H1994"/></svg><div class="focus-copy"><strong>{{manual.app-settings.div7}}</strong><p>{{manual.app-settings.p3}}</p></div></div></div><figcaption>{{manual.app-settings.figcaption1}}</figcaption></figure>
+<h3>{{manual.app-settings.h31}}</h3><ol class="tutorial-steps compact-steps">
+<li><h3>{{manual.app-settings.h32}}</h3><p>{{manual.app-settings.p4}}</p></li>
+<li><h3>{{manual.app-settings.h33}}</h3><p>{{manual.app-settings.p5}}</p></li>
+<li><h3>{{manual.app-settings.h34}}</h3><p>{{manual.app-settings.p6}}</p></li>
+</ol></article>
+<article><figure class="focus-panel focus-panel--stack"><div class="focus-heading"><span>{{manual.connect.div9}}</span><b>{{manual.app-settings.div8}}</b></div><div class="focus-detail"><div class="focus-location">{{manual.app-settings.div9}}</div><div class="focus-row"><svg class="focus-crop" viewBox="578 650 365 235" role="img" aria-label="Select Macropad — cropped English app screenshot" xmlns="http://www.w3.org/2000/svg"><image href="/assets/manual-app-add-face-v015.jpg" width="2080" height="1562"/><rect class="focus-outline" x="585" y="657" width="173" height="174" rx="0"/><path class="focus-leader" d="M758 744H935V767.5H943"/></svg><div class="focus-copy"><strong>{{manual.app-settings.div10}}</strong><p>{{manual.app-settings.p7}}</p></div></div></div><figcaption>{{manual.app-settings.figcaption2}}</figcaption></figure>
+<h3>{{manual.app-settings.h35}}</h3><ol class="tutorial-steps compact-steps">
+<li><h3>{{manual.app-settings.h36}}</h3><p>{{manual.app-settings.p8}}</p></li>
+<li><h3>{{manual.app-settings.h37}}</h3><p>{{manual.app-settings.p9}}</p></li>
+<li><h3>{{manual.app-settings.h38}}</h3><p>{{manual.app-settings.p10}}</p></li>
+</ol></article></div>
+<aside class="manual-note"><strong>{{manual.app-settings.aside1}}</strong><p>{{manual.app-settings.p11}}</p></aside>
+<footer class="sheet-footer"><span>{{manual.app-settings.footer1}}</span><span>07 / 08</span></footer></section>
+<section class="manual-sheet" id="reference" aria-labelledby="reference-title">
+<div class="sheet-meta"><span>{{manual.reference.div1}}</span><span>{{manual.reference.div2}}</span></div><h2 class="sheet-title" id="reference-title">{{manual.reference-title.h21}}</h2>
+<div class="reference-grid"><article><h3>{{manual.reference.h31}}</h3><ol><li>{{manual.reference.li1}}</li><li>{{manual.reference.li2}}</li><li>{{manual.reference.li3}}</li></ol><p>{{manual.reference.p1}}</p></article><article><h3>{{manual.reference.h32}}</h3><ol><li>{{manual.reference.li4}}</li><li>{{manual.reference.li5}}</li><li>{{manual.reference.li6}}</li></ol><p>{{manual.reference.p2}}</p></article></div>
+<div class="section-rule"><h3>{{manual.reference.h33}}</h3></div>
+<dl class="troubleshooting"><div><dt>{{manual.reference.dt1}}</dt><dd>{{manual.reference.dd1}}</dd></div><div><dt>{{manual.reference.dt2}}</dt><dd>{{manual.reference.dd2}}</dd></div><div><dt>{{manual.reference.dt3}}</dt><dd>{{manual.reference.dd3}}</dd></div><div><dt>{{manual.reference.dt4}}</dt><dd>{{manual.reference.dd4}}</dd></div><div><dt>{{manual.reference.dt5}}</dt><dd>{{manual.reference.dd5}}</dd></div></dl>
+<div class="reference-bottom"><article><h3>{{manual.reference.h34}}</h3><p>{{manual.reference.p3}}</p></article><article><h3>{{manual.reference.h35}}</h3><p>{{manual.reference.p4}}</p></article></div>
+<aside class="manual-note resources"><strong>{{manual.reference.aside1}}</strong><p>{{manual.reference.p5}}</p></aside>
+<footer class="sheet-footer"><span>{{manual.reference.footer1}}</span><span>08 / 08</span></footer></section>
+<p class="manual-end">{{manual.manual.p1}}</p></main>
+<script src="/js/main.js"></script><script src="/js/manual.js"></script></body></html>

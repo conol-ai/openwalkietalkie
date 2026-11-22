@@ -1,0 +1,33 @@
+---
+title: OpenWalkieTalkie v0.10.0: Computer resources on the deck · OpenWalkieTalkie
+description: A live CPU, memory, GPU and storage page for your Mac, more efficient Flappy Bird rendering, and longer original Arcade music.
+heading: OpenWalkieTalkie v0.10.0: Computer resources on the deck
+kind: App and firmware update
+date: 2026-10-26
+published: 2026-10-26T06:52:06Z
+updated: 2026-10-26T06:52:06Z
+summary: A live CPU, memory, GPU and storage page for your Mac, more efficient Flappy Bird rendering, and longer original Arcade music.
+excerpt: A live CPU, memory, GPU and storage page for your Mac, more efficient Flappy Bird rendering, and longer original Arcade music.
+lastmod: 2026-10-26
+navDocs: no
+---
+  <p>Version 0.10.0 gives the deck another useful page beside subscription Usage: <strong>System</strong>, a live view of the computer doing the work. Check CPU load, memory, GPU load and free storage without covering your editor with another window.</p>
+  <figure class="post-figure" style="max-width:480px;margin-left:auto;margin-right:auto"><img src="/assets/screens/system-status-0100.png" alt="System Status on the deck, with CPU, memory, GPU and free-storage meters" width="480" height="480" loading="lazy" /><figcaption>The actual firmware UI, rendered with illustrative demo readings.</figcaption></figure>
+  <h2>Four readings, every two seconds</h2>
+  <p>The Mac service samples total CPU utilization, used and total memory, graphics utilization, and free and total space on the writable startup volume. CPU is normalized across all cores. Memory includes app, wired and compressed memory. For Macs with multiple graphics accelerators, the GPU meter shows the busiest one.</p>
+  <p>The storage percentage means <strong>free space</strong>. It changes color as space runs low. Missing counters show <strong>Not available</strong>, readings older than ten seconds turn gray and show <strong>STALE</strong>, and a lost host shows <strong>OFFLINE</strong>. The first CPU percentage needs two samples.</p>
+  <p>Readings arrive every two seconds, but unchanged meters do not redraw. This is a deck-only page; subscription allowances stay on Usage, and there is no extra Mac app page.</p>
+  <h2>Where to find it</h2>
+  <p>On a fresh layout, System follows Usage. Your saved layout is preserved during an update, so add it with <strong>double-tap Shift → + → System → Enter</strong>. Both the firmware and Mac service need the update. If an older service is still running, choose <strong>Service → Restart</strong>.</p>
+  <h2>Less display work in Flappy Bird</h2>
+  <p>Flappy Bird now refreshes the bird, pipe and score regions instead of invalidating the whole screen on each simulation step. The display path packs partial rectangles correctly, including the rotated Rev A and Rev B panels, and the frame timer accounts for time already spent rendering.</p>
+  <p>A 360-frame renderer test with multiple and recycled pipes transfers <strong>51.5% fewer pixels on average</strong>. That is a transfer-area measurement, not an on-device frame-rate claim. Partial frames are checked against full redraws through score changes, pause and game over. TE synchronization remains disabled, so this is not a promise of tear-free animation.</p>
+  <h2>Music that has room to develop</h2>
+  <p>The three original synthesized tracks now run for <strong>48 bars</strong> each: 96 seconds in Flappy Bird, 115.2 seconds in Snake and 76.8 seconds in Raiden. Intros lead into themes, answering melodies, quieter passages and a return, with changing bass patterns, percussion and pulse timbres.</p>
+  <p>Pausing or retrying the same game keeps your place in the music. Changing games starts that game's theme. Sound stays under your control through <strong>Arcade → Sound → Enter</strong>: Off, SFX only, or Music + SFX.</p>
+  <h2>Update to 0.10.0</h2>
+  <p>Install the signed, notarized Mac app for Apple Silicon or Intel, or choose <strong>Check for Updates</strong>. macOS 13 or later is required. Connect your deck over USB-C and choose <strong>Service → Updates → Check firmware</strong>. The app, service and firmware all report 0.10.0.</p>
+  <p>Normal application updates retain settings and Bluetooth pairing. Older bootloaders use the existing guided migration. The separate factory ZIPs are for manufacturing and overwrite settings and pairing.</p>
+  <p>The 0.10.0 firmware was flashed, verified and rebooted over USB on Rev A, and the Mac sampler returned all four metrics. Automated checks cover message validation, compatibility, freshness, rendering, simulation timing and music continuity. Rev B hardware and physical power-loss recovery were not re-tested for this feature.</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.10.0" rel="noopener">Get OpenWalkieTalkie v0.10.0, firmware, factory images and checksums on GitHub →</a></p>
+  <p class="post-back"><a href="/blog/">← Back to the blog</a></p>

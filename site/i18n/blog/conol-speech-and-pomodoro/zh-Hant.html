@@ -1,0 +1,29 @@
+---
+title: OpenWalkieTalkie v0.12.0：Conol 聽得見你，還有番茄鐘 · OpenWalkieTalkie
+description: Conol 用自己的語音模型轉寫你對它的聊天說的話，裝置顯示即時的錄音時間軸，新的「計時器」頁面提供碼錶、倒數計時和番茄鐘。
+heading: OpenWalkieTalkie v0.12.0：Conol 聽得見你，還有番茄鐘
+kind: Mac 應用程式、服務與韌體
+date: 2026-11-05
+published: 2026-11-05T03:40:00Z
+updated: 2026-11-05T03:40:00Z
+summary: Conol 用自己的語音模型轉寫你對它的聊天說的話，裝置顯示即時的錄音時間軸，新的「計時器」頁面提供碼錶、倒數計時和番茄鐘。
+excerpt: Conol 用自己的語音模型轉寫你對它的聊天說的話，裝置顯示即時的錄音時間軸，新的「計時器」頁面提供碼錶、倒數計時和番茄鐘。
+lastmod: 2026-11-05
+navDocs: yes
+---
+  <p>當你從裝置對 Conol 聊天說話時，得到的文字應該和你直接在 Conol 裡輸入時它聽到的一樣。0.12.0 版把這些按鍵錄音交給 Conol 自己的語音模型，在你說話時顯示錄音時間軸，同步呈現 Conol 正在做的事，並新增含番茄鐘的「計時器」頁面。</p>
+  <h2>Conol 轉寫自己的聊天</h2>
+  <p>在 Conol 聊天或 <strong>+ New chat</strong> 上按住 PTT，Mac 上的服務會錄下這次按鍵，並交給 Conol 桌面應用程式。Conol 以其輸入框麥克風背後的雲端語音模型轉寫，放開後裝置顯示的、實際送出的都是這段文字，包括對 Conol 提問的口述回答。</p>
+  <p>按住期間，Mac 本身的辨識器也會持續執行。如果 Conol 無法回應、發生錯誤或超過 20 秒仍未回傳，就會改用 Mac 的轉寫，因此按下的內容不會遺失。其他助理以及裝置上的語音命名仍留在你的 Mac 上。只有傳給 Conol 聊天的錄音會離開 Mac，而且只會傳到你已登入的 Conol 應用程式；設定 <code>[voice.stt] companion = false</code> 即可讓所有錄音都留在本機。這需要更新後的 Conol 桌面版和網頁版；若 Conol 應用程式是舊版，一切維持不變。</p>
+  <h2>說話時的時間軸</h2>
+  <p>Mac 即時辨識出的文字不是 Conol 將聽到的內容，所以這類按鍵錄音時，裝置不再顯示那些文字。裝置會改為顯示<strong>正在錄音</strong>、大字的經過時間和一條時間軸：紅色播放頭由左往右移動，後方填入由裝置本身麥克風測得的你的聲音波形。按得較久時會捲動。放開後，裝置顯示<strong>正在轉寫</strong>，接著顯示 Conol 的轉寫。</p>
+  <h2>看見 Conol 正在做什麼</h2>
+  <p>執行中的 Conol 聊天現在會在裝置上顯示目前公開的步驟，例如「Running a command」加上簡短預覽，列表和對話中都會顯示。它會就地更新，步驟結束時清除。完整的工具輸入和結果仍留在 Conol 中。</p>
+  <h2>計時器與番茄鐘</h2>
+  <p>從頁面管理的 <strong>+</strong> 範本庫新增<strong>計時器</strong>，就能使用含計圈的碼錶、含預設時間的倒數計時，以及番茄鐘：專注 25 分鐘、休息 5 分鐘，每四段專注後休息 15 分鐘。每個階段都會等你按下<strong>下一步 / Enter</strong>。計時器在裝置本身上執行，切到其他頁面或螢幕休眠時也會繼續，結束時會喚醒螢幕並跳出提示。</p>
+  <h2>給配套應用程式開發者</h2>
+  <p>任何具備自己辨識器的原生配套應用程式，都可以註冊 <code>caps.transcribe: "push"</code>、接收 <code>agent.transcribe</code> 請求、以 <code>agent.transcribe.audio</code> 分頁讀取 16 kHz WAV，再以 <code>agent.transcribe.result</code> 回覆。活動列使用 <code>agent.reply</code> 上的 <code>message.summary</code>。<a href="/docs/native-companions/">原生配套應用程式指南</a>和 <a href="/docs/deckd-api.md">API 參考文件</a>說明了這兩項。</p>
+  <h2>更新</h2>
+  <p>選擇<strong>檢查更新</strong>，或安裝已簽署並經過公證的 0.12.0 版 Mac 應用程式（Apple Silicon 或 Intel）。需要 macOS 13 或更新版本。錄音時間軸和「計時器」頁面需要韌體 <strong>0.12.0</strong>：以 USB 連接裝置後，開啟<strong>服務 → 更新 → 檢查韌體更新</strong>。設定和藍牙配對都會保留。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.12.0" rel="noopener">在 GitHub 上取得 OpenWalkieTalkie v0.12.0 及總和檢查碼 →</a></p>
+  <p class="post-back"><a href="/blog/">← 返回部落格</a></p>

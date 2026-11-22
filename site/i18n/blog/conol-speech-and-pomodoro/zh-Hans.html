@@ -1,0 +1,29 @@
+---
+title: OpenWalkieTalkie v0.12.0：Conol 听得懂你，还有番茄钟 · OpenWalkieTalkie
+description: Conol 用自己的语音模型转写你对它的聊天说的话，设备显示实时的录音时间线，新的“计时器”页面提供秒表、倒计时和番茄钟。
+heading: OpenWalkieTalkie v0.12.0：Conol 听得懂你，还有番茄钟
+kind: Mac 应用、服务和固件
+date: 2026-11-05
+published: 2026-11-05T03:40:00Z
+updated: 2026-11-05T03:40:00Z
+summary: Conol 用自己的语音模型转写你对它的聊天说的话，设备显示实时的录音时间线，新的“计时器”页面提供秒表、倒计时和番茄钟。
+excerpt: Conol 用自己的语音模型转写你对它的聊天说的话，设备显示实时的录音时间线，新的“计时器”页面提供秒表、倒计时和番茄钟。
+lastmod: 2026-11-05
+navDocs: yes
+---
+  <p>当你在设备上对 Conol 聊天说话时，得到的文字应该和你直接在 Conol 里输入时它听到的一样。0.12.0 版把这些按键录音交给 Conol 自己的语音模型，在你说话时显示录音时间线，同步显示 Conol 正在做的事，并新增带番茄钟的“计时器”页面。</p>
+  <h2>Conol 转写自己的聊天</h2>
+  <p>在 Conol 聊天或 <strong>+ New chat</strong> 上按住 PTT，Mac 上的服务会录下这次按键，并交给 Conol 桌面应用。Conol 用其输入框麦克风背后的云端语音模型进行转写，松开后设备显示的、最终发送的都是这段文字，包括对 Conol 提问的口述回答。</p>
+  <p>按住期间，Mac 自己的识别器也在运行。如果 Conol 无法响应、出错或超过 20 秒仍未返回，就使用 Mac 的转写，所以按下的内容不会丢失。其他助手和设备上的语音命名仍留在你的 Mac 上。只有发给 Conol 聊天的录音会离开 Mac，而且只发送到你已登录的 Conol 应用；设置 <code>[voice.stt] companion = false</code> 可让所有录音都留在本地。这需要更新后的 Conol 桌面版和网页版；如果 Conol 应用是旧版本，一切照旧。</p>
+  <h2>说话时的时间线</h2>
+  <p>Mac 实时识别出的文字并不是 Conol 将听到的内容，所以对于这类按键，设备不再显示它们。设备会显示<strong>正在录音</strong>、一个大号的已用时间和一条时间线：红色播放头从左向右移动，后面填入由设备自己的麦克风测得的你的声音波形。按得久了会滚动。松开后，设备显示<strong>正在转写</strong>，然后显示 Conol 的转写。</p>
+  <h2>看到 Conol 在做什么</h2>
+  <p>正在运行的 Conol 聊天现在会在设备上显示当前的公开步骤，例如“Running a command”加上简短预览，在列表和对话中都会显示。它会原地更新，步骤结束时清除。完整的工具输入和结果仍留在 Conol 中。</p>
+  <h2>计时器和番茄钟</h2>
+  <p>在页面管理的 <strong>+</strong> 模板库中添加<strong>计时器</strong>，即可使用带计圈的秒表、带预设的倒计时，以及番茄钟：专注 25 分钟、休息 5 分钟，每四段专注后休息 15 分钟。每个阶段都会等你按<strong>下一步 / Enter</strong>。计时器在设备本身上运行，切到其他页面或屏幕休眠时也继续计时，结束时会唤醒屏幕并弹出提示。</p>
+  <h2>面向配套应用开发者</h2>
+  <p>任何有自己识别器的原生配套应用都可以注册 <code>caps.transcribe: "push"</code>，接收 <code>agent.transcribe</code> 请求，用 <code>agent.transcribe.audio</code> 分页读取 16 kHz WAV，并用 <code>agent.transcribe.result</code> 回答。活动行使用 <code>agent.reply</code> 上的 <code>message.summary</code>。<a href="/docs/native-companions/">原生配套应用指南</a>和 <a href="/docs/deckd-api.md">API 参考</a>介绍了这两项。</p>
+  <h2>更新</h2>
+  <p>选择<strong>检查更新</strong>，或安装已签名并经过公证的 0.12.0 版 Mac 应用（Apple Silicon 或 Intel）。需要 macOS 13 或更高版本。录音时间线和“计时器”页面需要固件 <strong>0.12.0</strong>：通过 USB 连接设备后，打开<strong>服务 → 更新 → 检查固件更新</strong>。设置和蓝牙配对都会保留。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.12.0" rel="noopener">在 GitHub 上获取 OpenWalkieTalkie v0.12.0 及校验和 →</a></p>
+  <p class="post-back"><a href="/blog/">← 返回博客</a></p>

@@ -1,0 +1,27 @@
+---
+title: OpenWalkieTalkie v0.15.0：Omarchy で使えるアプリ · OpenWalkieTalkie
+description: アプリが Omarchy で動くようになりました。Omarchy のページで PTT を押すとカーソル位置に口述入力でき、ホイールはウィンドウの行に沿って動き、Linux のサービスは 1 つのフォルダにまとまります。
+heading: OpenWalkieTalkie v0.15.0：Omarchy で使えるアプリ
+kind: Omarchy のアプリ、口述とサービス
+date: 2026-11-17
+published: 2026-11-17T12:58:57Z
+updated: 2026-11-17T12:58:57Z
+summary: アプリが Omarchy で動くようになりました。Omarchy のページで PTT を押すとカーソル位置に口述入力でき、ホイールはウィンドウの行に沿って動き、Linux のサービスは 1 つのフォルダにまとまります。
+excerpt: アプリが Omarchy で動くようになりました。Omarchy のページで PTT を押すとカーソル位置に口述入力でき、ホイールはウィンドウの行に沿って動き、Linux のサービスは 1 つのフォルダにまとまります。
+lastmod: 2026-11-17
+navDocs: yes
+---
+  <p>バージョン 0.15.0 では、アプリが Omarchy で使えるようになり、デバイスを Omarchy での口述用マイクとして使えるようになりました。デバイスのファームウェアは 0.14.0 のままです。</p>
+  <h2>Omarchy で動くアプリ</h2>
+  <p>Mac と Windows にあるアプリが、Omarchy（Hyprland）でも動くようになりました。アプリランチャーでは <strong>OpenWalkieTalkie</strong> として表示され、同じ 5 つのページがあります：<strong>デバイス</strong>、<strong>ページとキー</strong>、<strong>連携</strong>、<strong>音声</strong>、<strong>サービス</strong>。サービスは自動で見つけます。<strong>サービス</strong>は systemd のユーザーユニットでサービスを起動・停止し、<strong>ログイン時に開く</strong>は XDG の自動起動エントリです。タスクトレイのアイコンはありません。それはデスクトップのバーの役目です。アプリ内アップデートもありません。アプリはソースからビルドするからです。</p>
+  <p><strong>ページとキー</strong>は、アプリの設計より狭いタイル表示のウィンドウにも収まります。ページ一覧は 2 行目に折り返し、キーの編集欄はキーの一覧の下に移ります。ビルドとインストールは<a href="/docs/omarchy/">Omarchy ガイド</a>で説明しています。</p>
+  <h2>Omarchy のページで口述</h2>
+  <p>Omarchy のページでは、PTT は Superwhisper 自体の「押して話す」と同じように動きます。押したまま話して離すと、キーボード入力を受けているウィンドウのカーソル位置に、話した言葉が入力されます。Enter は押されません。押している間に CANCEL を押すと、録音は破棄されます。Superwhisper がインストールされていれば、Superwhisper が独自のモード、言語、語彙で認識します。なければローカルの Whisper モデルが認識します。このためにブリッジは一覧に <strong>Dictate</strong> 項目を追加します。「エージェント」ページでこれを選んでも、同じように口述できます。</p>
+  <h2>ホイールが行に沿って動く</h2>
+  <p>Omarchy のページで、ホイールはページに並んだ順にウィンドウの行を移動するようになりました。デバイスのほかの一覧と同じ動きで、最初と最後の行で止まります。以前は Hyprland 自体のウィンドウ順に従っていたため、回すと下の行を飛ばすことがありました。</p>
+  <h2>Linux でも 1 つのフォルダ</h2>
+  <p>Linux のサービスは、すべてを 1 つのフォルダ <code>~/.local/share/openwalkietalkie</code> に保存するようになりました。Mac で 1 つのフォルダにまとめているのと同じです。Omarchy でのインストールはもともとここで動いていたので、<code>deckd</code> コマンドに <code>DECKD_DATA_DIR=…</code> を付ける必要はなくなりました。以前の構成で Linux 上の <code>deckd</code> を手動で動かしていた場合は、そのファイルをこのフォルダに移すか、<code>DECKD_DATA_DIR</code> を設定してください。</p>
+  <h2>アップデート</h2>
+  <p>Mac では<strong>アップデートを確認…</strong>を選ぶか、Apple Silicon または Intel（macOS 13 以降）用の、署名・公証済みの <strong>0.15.0</strong> アプリをインストールします。Windows では、リリースから ZIP をダウンロードします。Omarchy では、pull してサービスとアプリをビルドし、その両方で <code>install.sh</code> を実行します。手順は <a href="/docs/omarchy/">Omarchy ガイド</a>のとおりです。このリリースでは、デバイスのファームウェアを更新する必要はありません。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.15.0" rel="noopener">GitHub で OpenWalkieTalkie v0.15.0 とチェックサムを入手 →</a></p>
+  <p class="post-back"><a href="/blog/">← ブログに戻る</a></p>

@@ -1,0 +1,19 @@
+{
+  "docs.head.title1": "OpenWalkieTalkie 向けに開発する · OpenWalkieTalkie",
+  "docs.head.meta-content1": "OpenWalkieTalkie とネイティブに連携するエージェントのための開発者ガイドと API リファレンス。",
+  "docs.content.h11": "OpenWalkieTalkie 向けに開発する",
+  "docs.content.p1": "エージェントの会話をデバイスに表示しましょう。セッションとモデルへの接続はあなたのアプリが管理し、物理的な操作、音声入力、小さな画面の表示は OpenWalkieTalkie が受け持ちます。",
+  "docs.content.p2": "アプリ + サービス + ファームウェア 0.11.0+",
+  "docs.content.p3": "グループ化されたセッション、新しいチャットの起動、リアルタイムのメッセージ、複数ステップの質問、モデルと思考の深さの設定、そして Omarchy のページへのフィード。Conol と Omarchy ブリッジが使うのと同じインターフェースを、どのエージェントでも使えます。",
+  "docs.content.a1": "ガイドを読む →",
+  "docs.content.p4": "プレビュー版 · 0.14.0+",
+  "docs.content.p5": "署名なしの Windows プレビュー版のアプリとサービスをインストールし、SmartScreen を通過して、USB-C でデバイスのファームウェアを更新します。",
+  "docs.content.p6": "LINUX · OMARCHY · 0.13.0+",
+  "docs.content.p7": "サービスと Omarchy ブリッジをビルドしてインストールします。デバイスは Hyprland のリモコンになり、Claude Code、Codex、Kimi Code のセッションが一覧に並び、音声の指示がそれぞれのターミナルに届きます。",
+  "docs.content.h21": "デバイスを使うだけなら",
+  "docs.content.p8": "セットアップ、操作、トラブルシューティングは<a href=\"/manual/\">イラスト付きの取扱説明書</a>をご覧ください。印刷して手元に置いておくこともできます。",
+  "docs.content.h22": "動くサンプルから始める",
+  "docs.content.p9": "<a href=\"/examples/native_companion.py\" download>Python のコンパニオンのサンプルをダウンロード</a>。OpenWalkieTalkie を開いた状態で Python 3.10 以降で実行します。返信はあらかじめ用意したもので、パッケージ、モデルの API キー、Conol のアカウントは不要です。",
+  "docs.content.h23": "仕様を調べる",
+  "docs.content.p10": "<a href=\"/docs/deckd-api.md\">JSON-RPC API の完全なリファレンス（Markdown）</a>。デーモンのリクエストスキーマとメソッドの権限から生成しています。<a href=\"https://github.com/conol-ai/openwalkietalkie\">ソースリポジトリ</a>にはサンプルと連携テストも含まれます。"
+}

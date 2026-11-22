@@ -1,0 +1,30 @@
+---
+title: OpenWalkieTalkie v0.8.0: Screen lock and consistent wheel navigation · OpenWalkieTalkie
+description: An automatic screen lock protects PTT in your bag, with four counterclockwise ticks to unlock and a consistent direction for page and item selection.
+heading: OpenWalkieTalkie v0.8.0: Screen lock and consistent wheel navigation
+kind: App and firmware update
+date: 2026-10-21
+published: 2026-10-21T09:02:39Z
+updated: 2026-10-21T09:02:39Z
+summary: An automatic screen lock protects PTT in your bag, with four counterclockwise ticks to unlock and a consistent direction for page and item selection.
+excerpt: An automatic screen lock protects PTT in your bag, with four counterclockwise ticks to unlock and a consistent direction for page and item selection.
+lastmod: 2026-10-21
+navDocs: no
+---
+  <p>A handheld should be ready when you pick it up, without sending an accidental voice message from inside your bag. Version 0.8.0 adds an automatic screen lock and makes the wheel behave consistently when moving between pages and through lists.</p>
+  <h2>Two minutes to lock, four ticks to unlock</h2>
+  <p>After two minutes without local input, the display sleeps and every local control locks, including push-to-talk. Pressing a button, touching the screen, or turning the wheel lights the lock screen without activating the control underneath.</p>
+  <p>To unlock, turn the wheel <strong>counterclockwise four consecutive ticks</strong>. If the first tick wakes the display, it counts toward the four. Turning clockwise or letting the display sleep again resets your progress.</p>
+  <p>The final unlocking tick only unlocks the deck; it does not also move the selection. A button held while locked must be released and pressed again before it can act, so a trapped PTT cannot start transmitting as the deck unlocks. Notifications can light the display, but cannot unlock it, and a held button cannot keep the locked display awake indefinitely.</p>
+  <h2>One direction for pages and lists</h2>
+  <p>The physical encoder direction is corrected. <strong>Counterclockwise selects next or down; clockwise selects previous or up.</strong> That applies both to Shift + wheel page selection and to menu items, agent and session lists, card choices, and list scrolling. The tutorial follows the same page direction.</p>
+  <p>Numeric settings, including volume, still increase clockwise. Assigned Macropad bindings and in-game turns keep their physical direction.</p>
+  <h2>Keep the audio improvements</h2>
+  <p>This release retains the <a href="/blog/speaker-eq-and-less-hiss/">speaker EQ and Rev A RAM execution introduced in 0.7.0</a>. Rev B continues to run from NOR flash. Flash partitions and the recovery protocol are unchanged.</p>
+  <h2>Update the app and the deck</h2>
+  <p>Install the signed, notarized Mac app for Apple Silicon or Intel, or choose <strong>Check for Updates</strong> in the app. macOS 13 or later is required. Connect the deck over USB-C, then use <strong>Service → Updates → Check firmware</strong>. The app, service, and firmware should all report 0.8.0.</p>
+  <p>Devices already using recovery protocol 2 receive a normal application update that preserves settings and Bluetooth pairing. Older recovery versions use the app's existing guided migration. Use the app updater for an existing device: the separate Rev A and Rev B factory ZIPs contain full-chip images that overwrite settings and pairing.</p>
+  <h2>What we checked</h2>
+  <p>Development firmware was flashed and verified on a Rev A deck over USB, and the operator confirmed the physical wheel-direction correction. Automated checks cover lock timing, held and queued inputs, PTT suppression, wheel selection and boundaries, rendering, and board-specific execution layouts. Rev B hardware was not field-tested in that session.</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.8.0" rel="noopener">Get OpenWalkieTalkie v0.8.0, firmware, factory images, and checksums on GitHub →</a></p>
+  <p class="post-back"><a href="/blog/">← Back to the blog</a></p>

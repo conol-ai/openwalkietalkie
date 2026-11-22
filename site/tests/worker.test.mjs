@@ -156,3 +156,40 @@ test('daily retention removes old signups and preserves recent ones', async t =>
   await worker.scheduled({}, env);
   assert.deepEqual(db.prepare('SELECT email FROM waitlist').all().map(r => r.email), ['person@example.com']);
 });
+
+test('a translated page gets its language back: JSON messages, the thanks page and error pages', async t => {
+  const { env, db } = fixture(t);
+  const { MESSAGES } = await import('../src/messages.ts');
+  for (const lang of ['zh-Hans', 'zh-Hant', 'ja']) {
+    const ok = await worker.fetch(request({ email: `${lang}@example.com`, lang }), env);
+    assert.deepEqual(await ok.json(), { ok: true, message: MESSAGES[lang].success });
+    assert.notEqual(MESSAGES[lang].success, MESSAGES.en.success, `${lang} success message is translated`);
+    const bad = await worker.fetch(request({ email: 'nope', lang }), env);
+    assert.deepEqual(await bad.json(), { ok: false, error: 'invalid_email', message: MESSAGES[lang].invalid_email });
+    const form = email => new Request('https://openwalkietalkie.org/api/waitlist', {
+      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', origin: 'https://openwalkietalkie.org' },
+      body: new URLSearchParams({ email, consent: 'yes', lang }).toString()
+    });
+    const thanks = await worker.fetch(form(`form-${lang}@example.com`), env);
+    assert.equal(thanks.status, 303);
+    assert.equal(thanks.headers.get('location'), `/${lang}/waitlist/thanks/`);
+    const page = await (await worker.fetch(form('<script>'), env)).text();
+    assert.match(page, new RegExp(`<html lang="${lang}">`));
+    assert.ok(page.includes(MESSAGES[lang].invalid_email) && page.includes(`href="/${lang}/#waitlist"`) && page.includes(`href="/${lang}/privacy/"`));
+    assert.ok(!page.includes('<script>'));
+  }
+  assert.equal(count(db), 6);
+});
+
+test('an unknown or missing language falls back to English and never reaches the redirect', async t => {
+  const { env } = fixture(t);
+  for (const lang of [undefined, 'fr', '../evil', '__proto__', 'constructor', 42]) {
+    const result = await worker.fetch(request({ email: 'x', lang }), env);
+    assert.equal((await result.json()).message, 'Please enter a valid email address.');
+  }
+  const form = new Request('https://openwalkietalkie.org/api/waitlist', {
+    method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', origin: 'https://openwalkietalkie.org' },
+    body: 'email=person%40example.com&consent=yes&lang=%2F%2Fevil.example'
+  });
+  assert.equal((await worker.fetch(form, env)).headers.get('location'), '/waitlist/thanks/');
+});

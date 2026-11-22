@@ -1,0 +1,29 @@
+---
+title: OpenWalkieTalkie v0.7.0: Clearer speech, less hiss · OpenWalkieTalkie
+description: Speaker EQ for speech and chimes, plus RAM execution on Rev A to reduce flash-coupled hiss while keeping settings and Bluetooth pairing intact.
+heading: OpenWalkieTalkie v0.7.0: Clearer speech, less hiss
+kind: App and firmware update
+date: 2026-10-20
+published: 2026-10-20T15:08:13Z
+updated: 2026-10-20T15:08:13Z
+summary: Speaker EQ for speech and chimes, plus RAM execution on Rev A to reduce flash-coupled hiss while keeping settings and Bluetooth pairing intact.
+excerpt: Speaker EQ for speech and chimes, plus RAM execution on Rev A to reduce flash-coupled hiss while keeping settings and Bluetooth pairing intact.
+lastmod: 2026-10-20
+navDocs: no
+---
+  <p>Version 0.7.0 focuses on how the deck sounds. The Mac service now applies a fixed speaker EQ to speech and chimes, and Rev A runs its code and font assets from RAM again to reduce hiss associated with flash activity.</p>
+  <h2>EQ before audio reaches the speaker</h2>
+  <p>The service processes mixed speech and chimes before sending them over USB or Bluetooth LE. The preset combines a 250 Hz high-pass filter with cuts of 5 dB at 1.1 kHz and 6 dB at 6.3 kHz. It leaves 3 dB of headroom and limits samples to −1 dBFS.</p>
+  <p>Filter state carries across audio blocks and silence, then resets when the output reopens. Invalid samples cannot spoil subsequent audio.</p>
+  <p>The preset is enabled automatically for the custom 16 kHz device audio output; there is no EQ toggle in this release. It does not boost the speaker's deep bass or narrow response dips, so bass-heavy material can sound quieter. Locally generated Arcade audio, legacy CoreAudio output, and raw measurement tones are unchanged.</p>
+  <h2>Less flash activity on Rev A</h2>
+  <p>Rev A's code, constants, and font assets are copied into PSRAM at startup, with interrupt vectors in SRAM. Startup verifies the copies and returns to USB recovery after three failed attempts. Rev B and LilyGo continue to execute from NOR flash.</p>
+  <p>The flash partitions and both Bluetooth stores stay in place, and the final MiB of PSRAM remains reserved for diagnostics.</p>
+  <h2>What we heard and checked</h2>
+  <p>The EQ and RAM-execution changes were exercised on a Rev A board over USB. Speech playback completed without dropped host audio frames, the operator reported substantially reduced hiss, and a labeled bass comparison using the same EQ implementation was preferred with EQ enabled.</p>
+  <p>Those are listening results, not a new calibrated acoustic measurement. Rev B hardware and Bluetooth-only listening were not tested in that session. Automated checks cover the board-specific execution layout, startup copy boundaries, vector placement, protected flash storage, and the EQ reaching the encoded device stream.</p>
+  <h2>Update both sides</h2>
+  <p>Install the signed, notarized Mac app for Apple Silicon or Intel, or use <strong>Check for Updates</strong>. macOS 13 or later is required. Confirm the app and service both report 0.7.0, connect one deck over USB-C, then use <strong>Service → Updates → Check firmware</strong>.</p>
+  <p>Devices already using recovery protocol 2 receive a normal application update. Devices with the old bootloader need the existing guided migration: follow the app's power and USB instructions and accept its warning before proceeding. Use the app updater for an existing device; full-chip factory images overwrite settings and pairing data.</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.7.0" rel="noopener">Get OpenWalkieTalkie v0.7.0, firmware, factory images, and checksums on GitHub →</a></p>
+  <p class="post-back"><a href="/blog/">← Back to the blog</a></p>

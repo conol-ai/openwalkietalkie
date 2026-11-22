@@ -16,8 +16,9 @@ npm run db:init:local
 npm run dev
 ```
 
-Static pages have no build step. A plain file server can preview the design,
-but cannot process waitlist submissions:
+Pages are generated from `i18n/` (see [Languages](#languages)); everything
+they produce is committed, so previewing needs no build. A plain file server
+can preview the design, but cannot process waitlist submissions:
 
 ```bash
 python3 -m http.server 8787 -d public
@@ -34,6 +35,7 @@ The `wrangler.jsonc` routes provision HTTPS for `openwalkietalkie.org` and
 cd site
 npx wrangler login --browser=false  # only when the login has expired
 npm run db:init
+npm run build:i18n -- --check
 npm run types
 npm run typecheck
 npm test
@@ -89,6 +91,86 @@ available without JavaScript. If tracking, embedded media, data processors,
 or waitlist purposes change, update the disclosure and consent behavior
 before enabling them. Bump the notice version when it should be shown again.
 
+## Languages
+
+The site speaks the app's four languages: English at the root (`/`,
+`/blog/x/`), and 简体中文, 繁體中文 and 日本語 under `/zh-Hans/`, `/zh-Hant/`
+and `/ja/`. Every page exists in all four, with `hreflang` alternates, a
+language menu in the header, a feed per language (`/ja/blog/feed.xml`) and one
+sitemap listing them all. Nothing is translated twice by hand: one template per
+page, one string table per language, one generator.
+
+```
+i18n/
+  site.json                  languages, product pages, sitemap dates
+  templates/<page>.html      a page's markup; each piece of copy is {{key}}
+  templates/blog-post.html   the shell every post shares
+  strings/<lang>/<page>.json the copy of one page; common.json for header and footer
+  strings/<lang>/js.json     what public/js/*.js shows (→ public/js/i18n/<lang>.js)
+  strings/<lang>/worker.json the waitlist API's replies (→ src/messages.ts)
+  blog/<slug>/<lang>.html    a post: front matter, then the article
+  GLOSSARY.md                the app's terminology in each language
+  TRANSLATING.md             voice, markup and punctuation rules for translators
+tools/i18n/
+  build.mjs                  writes the pages, feeds, sitemap, js/i18n and src/messages.ts
+  extract.mjs                turns a finished English page into a template + table
+  check.mjs                  checks one translation without building
+```
+
+Rebuild after any change under `i18n/`, and commit `public/` with it:
+
+```bash
+npm run build:i18n           # writes public/; a second run changes nothing
+npm run build:i18n -- --check  # fails if public/ is not what i18n/ builds
+```
+
+The build fails on a missing key, a missing language, or a translation whose
+markup (tags, `href`, `src`, classes) differs from English. English pages come
+out byte for byte as written, plus their alternates and the language menu.
+Links to the site's own pages are pointed at the reader's language by the
+build; assets (`/css/`, `/assets/`, `/fonts/`, `/js/`, `/examples/`, the API
+reference) stay shared. Do not edit generated files under `public/` (the
+pages, `blog/feed.xml`, `sitemap.xml`, `js/i18n/`) or `src/messages.ts`.
+
+**Change copy:** edit `i18n/strings/en/<page>.json` and the same key in the
+three other languages, then rebuild. **Change markup:** edit the template.
+
+**Add a page:** write it in English under `public/` as before, then
+
+```bash
+node tools/i18n/extract.mjs support=support/index.html
+```
+
+writes `i18n/templates/support.html` and `i18n/strings/en/support.json`
+(copy already in `common.json` is reused). Add `{{=lang}}`, `{{=alternates}}`,
+`{{=switcher}}` and `{{=i18nScript}}` where the other templates have them (the
+`<html>` tag, after the canonical link, before the header's closing `</nav>`,
+before the first script), add the page to `i18n/site.json`, translate the
+table into each language (`node tools/i18n/check.mjs strings ja support`) and
+rebuild. `tests/i18n.test.mjs` fails until every English page has its three
+counterparts.
+
+**Add a blog post:** write `i18n/blog/<slug>/en.html` (copy a recent post for
+the front matter) and its `zh-Hans.html`, `zh-Hant.html` and `ja.html`, then
+rebuild. The build adds it to each blog index, feed and the sitemap; nothing
+under `public/blog/` is edited by hand any more.
+
+**Add a language:** add it to `languages` in `i18n/site.json` (code, URL
+prefix, its own name), copy `i18n/strings/en/` to `i18n/strings/<code>/` and
+translate every table and post, add the code to `LANGS` in
+`tests/i18n.test.mjs` and `tests/browser/i18n.spec.mjs`, extend `GLOSSARY.md`
+from the app's tables, then rebuild. The menu, alternates, feeds and the
+Worker's replies follow from `site.json`. Use the date format in
+`formatDate` in `tools/i18n/build.mjs` if the language needs another one.
+
+`tests/i18n.test.mjs` checks that `public/` matches the source, that every
+page has all four versions with a complete and reciprocal `hreflang` set and a
+working language menu, that every link and asset resolves without leaving the
+reader's language, that translated pages carry none of a set of English
+sentinel sentences, and that feeds and the sitemap list everything.
+`tests/browser/i18n.spec.mjs` checks routing, the per-language 404 page, the
+menu and the translated waitlist on a local Worker.
+
 ## Content and releases
 
 - `public/index.html`: product information, interactive deck, gallery, downloads.
@@ -103,7 +185,8 @@ before enabling them. Bump the notice version when it should be shown again.
 - `public/js/privacy.js`: dismissible privacy notice on all pages.
 - `public/docs/`: native companion guide and generated JSON-RPC reference.
   `public/examples/native_companion.py` must match `host/examples/native_companion.py`.
-- `public/blog/`: posts and Atom feed. Update `sitemap.xml` when adding a post.
+- `i18n/blog/`: posts in every language; `npm run build:i18n` writes
+  `public/blog/`, the Atom feeds and `sitemap.xml` from them.
 - `public/assets/screens/`: firmware renders from `tools/preview-all.py`.
 - `public/assets/photos/`: product photos (hero, the hardware stack and the
   two colourway cards), generated by `sh tools/photos.sh` from the studio set
@@ -119,13 +202,14 @@ before enabling them. Bump the notice version when it should be shown again.
 GitHub releases and the website are published separately. The release
 workflow does not generate blog posts or deploy this Worker. For each release:
 
-1. Add a post under `public/blog/` based on `docs/releases/<version>.md`,
-   linking to that version's GitHub release.
-2. Add the post to `public/blog/index.html`, `public/blog/feed.xml`, and
-   `public/sitemap.xml`. Keep the newest post first and update the feed and
-   sitemap dates.
-3. Update the home page's release copy and both versioned Mac download URLs.
-   Versioned URLs keep old website copies working after a newer release.
+1. Add a post under `i18n/blog/<slug>/` based on `docs/releases/<version>.md`,
+   linking to that version's GitHub release, in all four languages.
+2. Run `npm run build:i18n`. It adds the post to every blog index, feed and
+   the sitemap, newest first. Update the page dates in `i18n/site.json` when
+   a page changes.
+3. Update the home page's release copy (`i18n/strings/*/home.json`) and both
+   versioned Mac download URLs (`i18n/templates/home.html`), then rebuild. Versioned URLs keep old website copies
+   working after a newer release.
 4. Include those changes in the release commit before tagging. The existing
    `python3 tools/release.py validate v<version>` release check now rejects
    a missing post, feed entry, index link, sitemap entry, or Mac download.

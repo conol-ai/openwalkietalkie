@@ -1,0 +1,34 @@
+---
+title: OpenWalkieTalkie v0.9.0: Clearer USB speech and reset reminders · OpenWalkieTalkie
+description: 48 kHz USB speaker playback, improved 16 kHz audio, and reminders before unused manual usage resets expire on your Mac and deck.
+heading: OpenWalkieTalkie v0.9.0: Clearer USB speech and reset reminders
+kind: App and firmware update
+date: 2026-10-22
+published: 2026-10-22T08:23:08Z
+updated: 2026-10-22T08:23:08Z
+summary: 48 kHz USB speaker playback, improved 16 kHz audio, and reminders before unused manual usage resets expire on your Mac and deck.
+excerpt: 48 kHz USB speaker playback, improved 16 kHz audio, and reminders before unused manual usage resets expire on your Mac and deck.
+lastmod: 2026-10-22
+navDocs: no
+---
+  <p>Version 0.9.0 makes USB speech clearer and adds a reminder for something easy to miss: unused manual usage resets that are about to expire. Update the Mac app and deck firmware to get both improvements.</p>
+  <h2>Listen to the words</h2>
+  <p>We started with a music comparison at 16 kHz and 48 kHz. The listener heard no clear difference. English speech told a different story: with speaker EQ enabled and matched levels, the 48 kHz passage sounded clearer, and noise audible in the 16 kHz version went away.</p>
+  <p>The deck now uses <strong>48 kHz speaker playback over USB</strong> when the connected firmware supports it. The service checks that capability automatically, keeps EQ enabled, and falls back to 16 kHz for older firmware. Playback follows the negotiated rate when switching connections and after releasing push-to-talk.</p>
+  <p>This improves the playback path; it does not create detail that was absent from the source voice. Our Kokoro test voice produced 24 kHz audio. Sending it through the 48 kHz path avoids the earlier reduction to 16 kHz and changes the compression and reconstruction path as well.</p>
+  <h2>A better 16 kHz path, too</h2>
+  <p>The host now searches alternative ADPCM encoding paths to reduce quantization error, keeping the original result whenever it is better. The firmware replaces linear interpolation with a band-limited filter before sending 16 kHz audio to the 48 kHz DAC.</p>
+  <p>On the same English passage, the revised encoder reduced squared encoding error by about 30%. That is a digital measurement, not a promise of complete audible hiss removal: the revised 16 kHz path still needs that listening confirmation.</p>
+  <p><strong>BLE playback and microphone capture remain at 16 kHz.</strong> The USB comparison completed without gaps, underruns, queue drops, or sequence errors at either rate. Sustained 48 kHz playback over BLE has not been validated, so this release keeps the higher rate specific to USB.</p>
+  <h2>Use a reset before it expires</h2>
+  <p>The Usage page on your Mac and the Usage face on the deck now show a small amber tip beneath the weekly bar when unused manual reset credits expire within <strong>72 hours</strong>. For example: <strong>“2 resets expire in 1d 6h.”</strong></p>
+  <figure class="post-figure" style="max-width:480px;margin-left:auto;margin-right:auto"><img src="/assets/screens/usage-reset-expiring-090.png" alt="Deck Usage screen showing an amber reminder beneath the Claude weekly bar: 2 resets expire in 1d 6h" width="480" height="480" loading="lazy" /><figcaption>Reset-expiry reminders on the actual deck UI, rendered with illustrative demo data.</figcaption></figure>
+  <p>This is separate from the usual countdown until your weekly allowance refreshes. The tip uses the nearest credit expiry and counts only credits with that deadline. It clears when credits are spent or expire, clears the previous account's credits when accounts change, and hides while disconnected. If the provider does not supply the data, no reminder appears. The deck does not redeem a reset for you.</p>
+  <h2>Update both sides</h2>
+  <p>Install the signed, notarized Mac app for Apple Silicon or Intel, or choose <strong>Check for Updates</strong>. macOS 13 or later is required. Then connect the deck over USB-C and use <strong>Service → Updates → Check firmware</strong>. The app, service, and firmware should all report 0.9.0.</p>
+  <p>A normal update preserves settings and Bluetooth pairing on devices using recovery protocol 2. Older recovery versions use the existing guided migration. The board-specific factory ZIPs remain available for manufacturing; their full-chip images overwrite settings and pairing, so use the app updater for an existing device.</p>
+  <h2>The blog is part of the release</h2>
+  <p>The release validator now requires a blog post, its feed entry, blog index link, sitemap entry, and current Mac downloads before publishing the release. The missing <a href="/blog/speaker-eq-and-less-hiss/">0.7.0</a> and <a href="/blog/screen-lock-and-wheel-navigation/">0.8.0</a> posts are also available.</p>
+  <p>Development firmware and the speech comparisons were checked on Rev A over USB, and normal daemon playback was confirmed at 48 kHz after restarting the updated service. Automated checks cover rate negotiation, connection changes, audio encoding and filtering, reset expiry and account changes, and rendering. Rev B audio was not field-tested in this session.</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.9.0" rel="noopener">Get OpenWalkieTalkie v0.9.0, firmware, factory images, and checksums on GitHub →</a></p>
+  <p class="post-back"><a href="/blog/">← Back to the blog</a></p>

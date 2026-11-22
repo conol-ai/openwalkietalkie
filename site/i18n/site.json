@@ -1,0 +1,23 @@
+{
+  "origin": "https://openwalkietalkie.org",
+  "author": "Tony Huang",
+  "languages": [
+    { "code": "en", "prefix": "", "label": "English" },
+    { "code": "zh-Hans", "prefix": "/zh-Hans", "label": "简体中文" },
+    { "code": "zh-Hant", "prefix": "/zh-Hant", "label": "繁體中文" },
+    { "code": "ja", "prefix": "/ja", "label": "日本語" }
+  ],
+  "pages": [
+    { "id": "home", "out": "index.html", "lastmod": "2026-11-16", "changefreq": "monthly", "priority": "1.0" },
+    { "id": "blog-index", "out": "blog/index.html", "lastmod": "2026-11-16", "changefreq": "weekly", "priority": "0.7" },
+    { "id": "manual", "out": "manual/index.html", "lastmod": "2026-11-19" },
+    { "id": "docs", "out": "docs/index.html", "lastmod": "2026-10-28" },
+    { "id": "native-companions", "out": "docs/native-companions/index.html", "lastmod": "2026-10-28" },
+    { "id": "windows", "out": "docs/windows/index.html", "lastmod": "2026-11-14" },
+    { "id": "omarchy", "out": "docs/omarchy/index.html", "lastmod": "2026-11-15" },
+    { "id": "privacy", "out": "privacy/index.html", "lastmod": "2026-10-16" },
+    { "id": "cookies", "out": "cookies/index.html", "lastmod": "2026-10-16" },
+    { "id": "waitlist-thanks", "out": "waitlist/thanks/index.html", "sitemap": false },
+    { "id": "404", "out": "404.html", "sitemap": false, "switcher": "links" }
+  ]
+}

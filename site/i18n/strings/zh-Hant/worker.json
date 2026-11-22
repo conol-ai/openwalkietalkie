@@ -1,0 +1,18 @@
+{
+  "success": "你已加入候補名單。OpenWalkieTalkie 開賣時，我們會寄電子郵件通知你。",
+  "method_not_allowed": "請透過候補名單表單加入。",
+  "cross_origin": "請在 OpenWalkieTalkie 網站上送出表單。",
+  "content_type": "請透過候補名單表單加入。",
+  "too_large": "送出的內容太大。請使用電子郵件表單。",
+  "invalid_body": "無法讀取送出的內容。請再試一次。",
+  "invalid_email": "請輸入有效的電子郵件地址。",
+  "consent_required": "請確認你願意收到裝置開賣通知的電子郵件。",
+  "rate_limited": "這個連線的嘗試次數過多。請一分鐘後再試。",
+  "unavailable": "目前無法儲存你的電子郵件。請稍後再試。",
+  "not_found": "這個端點不存在。",
+  "page_title": "候補名單登記 · OpenWalkieTalkie",
+  "page_heading": "暫時無法將你加入",
+  "page_return": "返回候補名單表單",
+  "privacy_policy": "隱私權政策",
+  "cookie_information": "Cookie 說明"
+}

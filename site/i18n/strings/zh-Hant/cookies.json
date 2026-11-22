@@ -1,0 +1,16 @@
+{
+  "cookies.head.title1": "Cookie 說明 · OpenWalkieTalkie",
+  "cookies.head.meta-content1": "openwalkietalkie.org 上的 Cookie、本機儲存空間與隱私權選項。",
+  "cookies.content.p1": "本網站目前沒有任何廣告或分析指令碼。你不需要接受選用的追蹤，就能瀏覽網站並加入候補名單。",
+  "cookies.content.h21": "你的瀏覽器會記住什麼",
+  "cookies.content.li1": "<strong>日間／夜間主題：</strong>本機儲存空間中的 <code>owt-theme</code> 會記住你選擇的主題。它會一直保留在這個瀏覽器中，直到你清除為止。如果沒有儲存選擇，我們會採用你作業系統的偏好設定。",
+  "cookies.content.li2": "<strong>隱私權聲明：</strong>選擇「我知道了」會在本機儲存空間中儲存 <code>owt-privacy-notice</code>，讓聲明在 180 天內保持關閉。它包含聲明版本與到期時間，不含識別碼。確認聲明並不代表同意追蹤。",
+  "cookies.content.p2": "這些偏好不會傳送到候補名單 API。本機儲存空間和 Cookie 一樣會在你的裝置上儲存資訊，但不會自動附加到請求中。",
+  "cookies.content.h22": "Cloudflare 安全性 Cookie",
+  "cookies.content.p3": "Cloudflare 代管並保護本網站，在使用安全性功能或驗證挑戰時可能會設定 Cookie。會出現哪些 Cookie、保留多久，取決於這些功能。詳情請參閱 <a href=\"https://developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/\" rel=\"noopener\">Cloudflare 的 Cookie 說明</a>。",
+  "cookies.content.h23": "管理瀏覽器儲存空間",
+  "cookies.content.p4": "你可以在瀏覽器的網站資料設定中移除本網站的 Cookie 與本機儲存空間。清除儲存空間會重設主題，並再次顯示隱私權聲明。封鎖安全性 Cookie 可能會讓 Cloudflare 的安全性驗證挑戰無法完成。",
+  "cookies.content.p5": "<a href=\"/cookies/\" data-privacy-open>再次顯示隱私權聲明</a>。如果已停用 JavaScript，本頁仍會說明本網站使用的所有儲存空間。",
+  "cookies.content.h24": "你的候補名單電子郵件",
+  "cookies.content.p6": "你送出候補名單表單時，電子郵件會安全地儲存在伺服器上。清除瀏覽器儲存空間不會移除登記。如要退出名單，請寄信至 <a href=\"mailto:privacy@cohdl.ai\">privacy@cohdl.ai</a>。關於蒐集、保留及其他請求，請參閱<a href=\"/privacy/\">隱私權政策</a>。"
+}

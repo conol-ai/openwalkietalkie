@@ -2,6 +2,8 @@
    Source: src/ui/state/arcade/{mod.rs,games.rs}. No audio capture or host traffic. */
 (function () {
   'use strict';
+  var STRINGS = window.OWT_STRINGS || {};
+  var t = function (s, a) { var out = Object.prototype.hasOwnProperty.call(STRINGS, s) ? STRINGS[s] : s; return out.split('{0}').join(a); };
   window.OWTArcade = function (options) {
     var $ = function (id) { return document.getElementById(id); };
     var canvas = $('arcadeCanvas'), ctx = canvas.getContext('2d');
@@ -17,8 +19,8 @@
     }
     function stopLoop() { cancelAnimationFrame(frame); frame = null; previous = 0; }
     function updateStatus() {
-      status.textContent = names[game] + ' · ' + score + ' pts · ' + (phase === 'over' ? 'GAME OVER' : phase === 'paused' ? 'PAUSED' : phase === 'ready' ? 'READY' : 'PLAYING');
-      $('arcadeStart').textContent = phase === 'playing' ? 'Pause' : phase === 'paused' ? 'Resume' : phase === 'over' ? 'Play again' : 'Start game';
+      status.textContent = names[game] + ' · ' + t('{0} pts', score) + ' · ' + t(phase === 'over' ? 'GAME OVER' : phase === 'paused' ? 'PAUSED' : phase === 'ready' ? 'READY' : 'PLAYING');
+      $('arcadeStart').textContent = t(phase === 'playing' ? 'Pause' : phase === 'paused' ? 'Resume' : phase === 'over' ? 'Play again' : 'Start game');
     }
     function newFood() {
       var empty = [];

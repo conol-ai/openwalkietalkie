@@ -1,0 +1,34 @@
+---
+title: OpenWalkieTalkie v0.6.0：裝置上的小遊戲 · OpenWalkieTalkie
+description: 三款全螢幕遊戲、實體按鍵操作，以及原創 8-bit 音樂與音效，而且可以關閉。
+heading: OpenWalkieTalkie v0.6.0：裝置上的小遊戲
+kind: 應用程式與韌體更新
+date: 2026-10-19
+published: 2026-10-19T08:27:59Z
+updated: 2026-10-19T08:27:59Z
+summary: 三款全螢幕遊戲、實體按鍵操作，以及原創 8-bit 音樂與音效，而且可以關閉。
+excerpt: 三款全螢幕遊戲、實體按鍵操作，以及原創 8-bit 音樂與音效，而且可以關閉。
+lastmod: 2026-10-19
+navDocs: no
+---
+  <p>裝置有一個滾輪、幾顆實體按鍵和一塊 480×480 的螢幕。在 0.6.0 中，這些操作元件有了新任務：新的「遊戲」頁面上的三款離線小遊戲。</p>
+  <h2>三款遊戲，熟悉的操作</h2>
+  <ul>
+    <li><strong>像素小鳥：</strong>按 PTT 拍動翅膀，穿過水管。在「遊戲」頁面上，PTT 交給遊戲使用，不會開啟麥克風。</li>
+    <li><strong>貪食蛇：</strong>用滾輪轉向，或使用左右鍵。順時針向右轉，逆時針向左轉。格子一路延伸到螢幕邊緣，圓角周圍有牆，讓食物始終看得到。</li>
+    <li><strong>雷電（Raiden）：</strong>用左右鍵移動，飛機會自動射擊。閃避往下飛的敵機和它們的子彈。你有三條命。</li>
+  </ul>
+  <figure class="post-figure" style="max-width:480px;margin:2.2em auto"><img src="/assets/screens/arcade-060.png" alt="「遊戲」選單，列出像素小鳥、貪食蛇、雷電，音效設為「關閉」" width="480" height="480" loading="lazy" /><figcaption>新的「遊戲」頁面。音效預設為關閉。</figcaption></figure>
+  <h2>整個螢幕都是遊戲區</h2>
+  <p>遊戲會佔滿螢幕，上方疊加一個精簡的分數顯示。放大的像素圖拿在手上也看得清楚。開始或暫停時會顯示操作說明：Enter 用來開始、暫停、繼續或重試；Cancel 回到遊戲清單。切換到其他頁面時，遊戲會暫停。</p>
+  <figure class="post-figure" style="max-width:480px;margin:2.2em auto"><img src="/assets/screens/arcade-raiden-060.png" alt="雷電佔滿整個螢幕，紅色敵機朝下對著藍色的玩家飛機" width="480" height="480" loading="lazy" /><figcaption>雷電使用整個螢幕。敵機朝向玩家。</figcaption></figure>
+  <h2>原創 8-bit 音效，想聽時再開</h2>
+  <p>每款遊戲都有自己的合成音樂循環，並為操作、得分、被擊中和遊戲結束配上簡短音效。不需要下載任何音訊。開啟 <strong>遊戲 → 音效</strong>，可以選擇 <strong>關閉</strong>、<strong>僅音效</strong> 或 <strong>音樂與音效</strong>。預設為關閉，音量跟隨「揚聲器」設定。</p>
+  <p>遊戲音效會讓位給電腦的語音播放與收音。連線到對應版本的 Mac 服務時，你的音效偏好會被儲存並還原。離線時的變更只在這次開機期間有效；重新開機後會回到關閉。最高分也會在裝置重新啟動時歸零。</p>
+  <h2>把「遊戲」加到你的裝置上</h2>
+  <p>把 Mac 應用程式和裝置韌體都更新到 0.6.0。現有的頁面排列會保留。要新增「遊戲」，請 <strong>快速按兩次 Shift → + → 遊戲 → Enter</strong>，然後再快速按兩次 Shift 離開頁面管理。新的預設排列已經包含它，位於「設定」之前。</p>
+  <p>使用 <strong>檢查更新</strong>，或<a href="/#download">下載已簽署並經過公證的 Mac 應用程式</a>，支援 Apple Silicon 與 Intel。需要 macOS 13 或更新版本。透過 USB-C 連接一台裝置，然後開啟 <strong>服務 → 更新 → 檢查韌體更新</strong>。</p>
+  <p>已使用 0.4.0/0.5.0 分割配置與復原協定 2 的裝置，會收到一般的應用程式更新。<strong>較舊的開機載入程式需要進行引導式遷移。請保持 USB-C 供電，並讓 Mac 維持喚醒：替換開機載入程式時斷電，可能讓裝置無法開機、無法透過 USB 復原，必須送硬體維修。</strong>繼續之前，請閱讀應用程式顯示的警告。</p>
+  <h2>我們測試了什麼</h2>
+  <p>遊戲模擬、音效合成、通訊協定、已儲存的設定與保留畫格的繪製都有軟體測試涵蓋。開發期間燒錄並測試了 Rev A 的開發版本，包括全螢幕遊玩與修正後的敵機方向。Rev B 上的遊戲玩法，以及音樂與音效實際播放出來的聲音，仍需要在實機上測試。這項工作期間沒有在裝置上播放過音訊。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.6.0">0.6.0 版本</a>包含兩個 Mac 安裝套件、Rev A/B 的韌體與遷移檔案、原廠韌體、總和檢查碼、建置證明以及中文升級指南。<strong>原廠韌體會覆寫整顆晶片，包括設定與配對資料；已在使用的裝置請用圖形介面的更新程式。</strong></p>

@@ -1,0 +1,34 @@
+---
+title: OpenWalkieTalkie v0.6.0: Arcade on the deck · OpenWalkieTalkie
+description: Three full-screen games, physical controls, and original 8-bit music and effects with an Off switch.
+heading: OpenWalkieTalkie v0.6.0: Arcade on the deck
+kind: App and firmware update
+date: 2026-10-19
+published: 2026-10-19T08:27:59Z
+updated: 2026-10-19T08:27:59Z
+summary: Three full-screen games, physical controls, and original 8-bit music and effects with an Off switch.
+excerpt: Three full-screen games, physical controls, and original 8-bit music and effects with an Off switch.
+lastmod: 2026-10-19
+navDocs: no
+---
+  <p>The deck has a wheel, physical buttons, and a 480×480 screen. In 0.6.0, those controls get a new job: three small offline games on a new Arcade page.</p>
+  <h2>Three games, familiar controls</h2>
+  <ul>
+    <li><strong>Flappy Bird:</strong> press PTT to flap through the pipes. On Arcade, PTT belongs to the game and never opens the microphone.</li>
+    <li><strong>Snake:</strong> turn with the wheel, or use Left and Right. Clockwise turns right; counterclockwise turns left. The grid reaches the display edges, with walls around the rounded corners so food stays visible.</li>
+    <li><strong>Raiden (雷电):</strong> use Left and Right to move while the plane fires automatically. Dodge descending enemy aircraft and their shots. You have three lives.</li>
+  </ul>
+  <figure class="post-figure" style="max-width:480px;margin:2.2em auto"><img src="/assets/screens/arcade-060.png" alt="Arcade menu with Flappy Bird, Snake, Raiden and Sound set to Off" width="480" height="480" loading="lazy" /><figcaption>The new Arcade face. Sound starts Off.</figcaption></figure>
+  <h2>The whole display is the playfield</h2>
+  <p>Games fill the display, with a compact score overlaid at the top. Enlarged pixel art stays legible in the hand. Instructions appear when starting or pausing: Enter starts, pauses, resumes, or retries; Cancel returns to the game list. Switching to another face pauses play.</p>
+  <figure class="post-figure" style="max-width:480px;margin:2.2em auto"><img src="/assets/screens/arcade-raiden-060.png" alt="Raiden across the whole display, with red enemy planes facing down toward the blue player plane" width="480" height="480" loading="lazy" /><figcaption>Raiden uses the full screen. Enemy aircraft face toward the player.</figcaption></figure>
+  <h2>Original 8-bit sound, when you want it</h2>
+  <p>Each game has its own synthesized music loop, with short effects for actions, scores, hits, and game over. There are no audio downloads. Open <strong>Arcade → Sound</strong> to choose <strong>Off</strong>, <strong>SFX only</strong>, or <strong>Music + SFX</strong>. Off is the default, and volume follows the Speaker setting.</p>
+  <p>Game audio yields to host speech and capture. With the matching Mac service connected, your sound preference is saved and restored. Offline changes last for the current boot; a new boot starts Off. Best scores also reset when the device restarts.</p>
+  <h2>Add Arcade to your deck</h2>
+  <p>Update both the Mac app and device firmware to 0.6.0. Your existing face layout is preserved. To add Arcade, <strong>double-tap Shift → + → Arcade → Enter</strong>, then double-tap Shift to leave the manager. New default layouts already include it before Settings.</p>
+  <p>Use <strong>Check for Updates</strong> or <a href="/#download">download the signed and notarized Mac app</a> for Apple Silicon or Intel. macOS 13 or later is required. Connect one deck by USB-C and open <strong>Service → Updates → Check firmware</strong>.</p>
+  <p>Devices on the 0.4.0/0.5.0 partition layout and recovery protocol 2 receive a normal application update. <strong>Older bootloaders need the guided migration. Keep USB-C power connected and the Mac awake: losing power while replacing the bootloader can prevent startup and USB recovery and require hardware repair.</strong> Read the app's warning before proceeding.</p>
+  <h2>What we tested</h2>
+  <p>Game simulation, sound synthesis, protocol, saved settings, and retained-frame rendering have software coverage. Rev A development builds were flashed and tested during development, including full-screen play and the corrected enemy orientation. Rev B gameplay and audible music/effects still need physical testing. No device audio was played during this work.</p>
+  <p>The <a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.6.0">0.6.0 release</a> includes both Mac packages, Rev A/B firmware and migration files, factory images, checksums, build attestations, and a Chinese upgrade guide. <strong>Factory images overwrite the entire chip, including settings and pairing data; use the GUI updater for an existing device.</strong></p>

@@ -1,0 +1,27 @@
+---
+title: OpenWalkieTalkie v0.15.0: The companion app on Omarchy · OpenWalkieTalkie
+description: The companion app runs on Omarchy, PTT on the Omarchy face dictates at your cursor, the wheel follows the window rows, and the Linux service keeps one folder.
+heading: OpenWalkieTalkie v0.15.0: The companion app on Omarchy
+kind: Omarchy app, dictation and service
+date: 2026-11-17
+published: 2026-11-17T12:58:57Z
+updated: 2026-11-17T12:58:57Z
+summary: The companion app runs on Omarchy, PTT on the Omarchy face dictates at your cursor, the wheel follows the window rows, and the Linux service keeps one folder.
+excerpt: The companion app runs on Omarchy, PTT on the Omarchy face dictates at your cursor, the wheel follows the window rows, and the Linux service keeps one folder.
+lastmod: 2026-11-17
+navDocs: yes
+---
+  <p>Version 0.15.0 brings the companion app to Omarchy and makes the deck a dictation microphone there. The deck's firmware is unchanged at 0.14.0.</p>
+  <h2>The companion app on Omarchy</h2>
+  <p>The app the Mac and Windows have now runs on Omarchy (Hyprland), as <strong>OpenWalkieTalkie</strong> in the app launcher, with the same five pages: <strong>Deck</strong>, <strong>Faces &amp; Keys</strong>, <strong>Integrations</strong>, <strong>Voice</strong> and <strong>Service</strong>. It finds the service by itself. <strong>Service</strong> starts and stops the service through its systemd user unit, and <strong>Open at login</strong> is an XDG autostart entry. There is no tray icon, which is the desktop bar's job, and no in-app update, because the app is built from source.</p>
+  <p><strong>Faces &amp; Keys</strong> also fits a tiled window narrower than the app's design: the face strip wraps onto a second row and the key editor goes under the key grid. The <a href="/docs/omarchy/">Omarchy guide</a> covers building and installing it.</p>
+  <h2>Dictation on the Omarchy face</h2>
+  <p>On the Omarchy face, PTT works like Superwhisper's own push-to-talk. Hold it and talk, release, and your words are typed at the cursor of whatever window has the keyboard, with no Enter. CANCEL while you hold throws the recording away. Superwhisper does the recognition when it is installed, in its own mode, language and vocabulary; otherwise the local Whisper model does. The bridge puts a <strong>Dictate</strong> entry on the roster for this, and selecting it on the Agents face dictates the same way.</p>
+  <h2>The wheel follows the rows</h2>
+  <p>On the Omarchy face the wheel now moves through the window rows in the order the face lists them, the way it moves through the deck's other lists, and stops at the first and last row. It used to follow Hyprland's own window order, so a turn could skip the row below.</p>
+  <h2>One folder on Linux</h2>
+  <p>The Linux service now keeps everything in one folder, <code>~/.local/share/openwalkietalkie</code>, as one folder holds it on a Mac. Omarchy installs already ran there, and <code>deckd</code> commands no longer need the <code>DECKD_DATA_DIR=…</code> prefix. If you ran <code>deckd</code> by hand on Linux with the earlier layout, move its files to that folder or set <code>DECKD_DATA_DIR</code>.</p>
+  <h2>Update</h2>
+  <p>On a Mac, choose <strong>Check for Updates…</strong>, or install the signed, notarized <strong>0.15.0</strong> app for Apple Silicon or Intel (macOS 13 or later). On Windows, download the ZIP from the release. On Omarchy, pull, build the service and the app, and run <code>install.sh</code> with both, as the <a href="/docs/omarchy/">Omarchy guide</a> shows. The deck needs no firmware update for this release.</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.15.0" rel="noopener">Get OpenWalkieTalkie v0.15.0 and checksums on GitHub →</a></p>
+  <p class="post-back"><a href="/blog/">← Back to the blog</a></p>

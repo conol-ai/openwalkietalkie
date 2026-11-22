@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="{{=lang}}" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>{{home.head.title1}}</title>
+<meta name="description" content="{{home.head.meta-content1}}" />
+<link rel="canonical" href="https://openwalkietalkie.org/" />{{=alternates}}
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="{{home.head.title1}}" />
+<meta property="og:description" content="{{home.head.meta-content2}}" />
+<meta property="og:url" content="https://openwalkietalkie.org/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="{{home.head.meta-content3}}" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="{{home.head.title1}}" />
+<meta name="twitter:description" content="{{home.head.meta-content4}}" />
+<meta name="twitter:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="{{common.openwalkietalkie-blog}}" href="/blog/feed.xml" />
+
+<!-- Self-hosted pixel fonts: Press Start 2P for headings/labels, VT323 for body copy -->
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<!-- Sets data-theme from localStorage/OS before first paint to avoid a theme flash -->
+{{=i18nScript}}<script src="/js/theme-init.js"></script>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareSourceCode",
+  "name": "OpenWalkieTalkie",
+  "url": "https://openwalkietalkie.org/",
+  "codeRepository": "https://github.com/conol-ai/openwalkietalkie",
+  "license": ["https://opensource.org/license/mit/", "https://ohwr.org/cern_ohl_p_v2.txt"],
+  "programmingLanguage": [
+    "Rust",
+    {
+      "@type": "ComputerLanguage",
+      "name": "CoHDL",
+      "url": "https://cohdl.org/",
+      "sameAs": "https://github.com/conol-ai/cohdl"
+    }
+  ],
+  "description": "An open-source handheld for people who run several AI agents at once: a 480x480 touch screen that shows who needs you, a scroll wheel, and a push-to-talk key. MIT software, CERN-OHL-P hardware."
+}
+</script>
+
+<!-- No analytics scripts. Update the privacy notice before adding tracking. -->
+</head>
+<body>
+
+<a class="skip-link" href="#top">{{common.skip-to-content}}</a>
+
+<!-- ============ SCROLL PROGRESS BAR ============ -->
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<!-- ============ NAV ============ -->
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="#top" aria-label="{{common.openwalkietalkie-home}}">
+      {{common.open-walkie-talkie}}
+    </a>
+
+    <nav class="nav__links" aria-label="{{common.sections}}">
+      <a href="#waitlist">{{common.waitlist}}</a>
+      <a href="#demo">{{common.try-it}}</a>
+      <a href="#download">{{common.download}}</a>
+      <a href="/docs/">{{common.docs}}</a>
+      <a href="/blog/">{{common.blog}}</a>
+      <a href="#blueprint">{{common.github}}</a>
+{{=switcher}}    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="{{common.toggle-day-and-night-theme}}" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">{{common.day}}</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="{{common.open-menu}}" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- ============ 1. HERO ============ -->
+<section class="hero" id="hero">
+  <div class="hero__sky" aria-hidden="true">
+    <div class="clouds" data-parallax="0.12">
+      <span class="cloud cloud--1"></span>
+      <span class="cloud cloud--2"></span>
+      <span class="cloud cloud--3"></span>
+    </div>
+    <div class="clouds clouds--far" data-parallax="0.05">
+      <span class="cloud cloud--4"></span>
+      <span class="cloud cloud--5"></span>
+    </div>
+    <div class="stars" id="stars"></div>
+    <div class="hero__hills"><span class="hill hill--back"></span><span class="hill hill--front"></span></div>
+  </div>
+
+  <div class="hero__inner">
+    <div class="hero__copy">
+      <p class="hero__eyebrow">{{home.hero.p1}}</p>
+      <h1 class="hero__title">
+        <span class="hero__title-line">{{home.hero.h11}}</span>
+        <span class="hero__title-line">{{home.hero.h12}}</span>
+        <span class="hero__title-line hero__title-line--accent">{{home.hero.h13}}</span>
+      </h1>
+      <p class="press-start">{{home.hero.p2}}</p>
+      <p class="hero__tagline">{{home.hero.p3}}</p>
+      <p class="hero__sub">{{home.hero.p4}}</p>
+      <div class="hero__cta">
+        <a class="btn btn--primary" href="#waitlist">{{common.join-the-waitlist}}</a>
+        <a class="btn btn--ghost" href="#demo">{{home.hero.div1}}</a>
+        <!-- No Mac download in the hero while the deck is waitlist-only. Put "Download for Mac" (#download) back here when it is for sale. -->
+        <a class="btn btn--ghost" href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">{{home.hero.div2}}</a>
+      </div>
+      <p class="hero__platforms">{{home.hero.p5}}</p>
+      <ul class="hero__stats">
+        <li><b>2.16"</b><span>{{home.hero.li1}}</span></li>
+        <li><b>6+1</b><span>{{home.hero.li2}}</span></li>
+        <li><b>{{home.hero.li3}}</b><span>{{home.hero.li4}}</span></li>
+        <li><b>100%</b><span>{{home.hero.h11}}</span></li>
+      </ul>
+    </div>
+
+    <div class="hero__art" id="heroArt">
+      <div class="hero__art-frame hero-product">
+        <img class="swap-img swap-img--day" src="/assets/hero-radio-v93b-day-screen.png" alt="{{home.heroArt.img-alt1}}" width="1254" height="1254" fetchpriority="high" />
+        <img class="swap-img swap-img--night" src="/assets/hero-radio-v93b-night-screen.png" alt="{{home.heroArt.img-alt2}}" width="1254" height="1254" />
+      </div>
+    </div>
+  </div>
+
+  <a class="scroll-hint" href="#pile" aria-label="{{home.hero.a-aria-label1}}">
+    {{home.hero.section1}}
+  </a>
+</section>
+
+<!-- ============ 2. TICKER ============ -->
+<div class="ticker" aria-hidden="true">
+  <div class="ticker__track">
+    <div class="ticker__group">
+      <span>{{home.top.div1}}</span><b>✦</b><span>{{home.top.div2}}</span><b>✦</b><span>{{home.top.div3}}</span><b>✦</b><span>{{home.top.div4}}</span><b>✦</b><span>{{home.top.div5}}</span><b>✦</b><span>{{home.top.div6}}</span><b>✦</b>
+    </div>
+    <div class="ticker__group">
+      <span>{{home.top.div1}}</span><b>✦</b><span>{{home.top.div2}}</span><b>✦</b><span>{{home.top.div3}}</span><b>✦</b><span>{{home.top.div4}}</span><b>✦</b><span>{{home.top.div5}}</span><b>✦</b><span>{{home.top.div6}}</span><b>✦</b>
+    </div>
+  </div>
+</div>
+<p class="sr-only">{{home.top.p1}}</p>
+
+<!-- ============ 3. THE TAB PILE ============ -->
+<section class="section paradox" id="pile">
+  <div class="wrap">
+    <header class="section-head reveal">
+      <p class="section-kicker">{{home.pile.p1}}</p>
+      <h2 class="section-title">{{home.pile.h21}}</h2>
+      <p class="section-lede">{{home.pile.p2}}</p>
+    </header>
+
+    <div class="vs">
+      <article class="card card--rival reveal reveal--left">
+        <div class="card__tag">{{home.pile.div1}}</div>
+        <h3 class="card__title">{{home.pile.h31}}</h3>
+        <p class="card__price card__price--bad">{{home.pile.p3}}</p>
+        <ul class="speclist">
+          <li class="no">{{home.pile.li1}}</li>
+          <li class="no">{{home.pile.li2}}</li>
+          <li class="no">{{home.pile.li3}}</li>
+          <li class="no">{{home.pile.li4}}</li>
+          <li class="no">{{home.pile.li5}}</li>
+        </ul>
+        <p class="card__foot">{{home.pile.p4}}</p>
+      </article>
+
+      <div class="vs__badge reveal" aria-hidden="true">
+        <span class="vs__badge-inner">{{home.pile.div2}}</span>
+      </div>
+
+      <article class="card card--ours reveal reveal--right">
+        <div class="card__tag card__tag--good">{{home.pile.div3}}</div>
+        <h3 class="card__title">{{home.pile.h32}}</h3>
+        <p class="card__price card__price--good">{{home.pile.p5}}</p>
+        <ul class="speclist">
+          <li class="yes">{{home.pile.li6}}</li>
+          <li class="yes">{{home.pile.li7}}</li>
+          <li class="yes">{{home.pile.li8}}</li>
+          <li class="yes">{{home.pile.li9}}</li>
+          <li class="yes">{{home.pile.li10}}</li>
+        </ul>
+        <p class="card__foot">{{home.pile.p6}}</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4. FEATURES ============ -->
+<section class="section features" id="features">
+  <div class="wrap">
+    <header class="section-head reveal">
+      <p class="section-kicker">{{home.features.p1}}</p>
+      <h2 class="section-title">{{home.features.h21}}</h2>
+      <p class="section-lede">{{home.features.p2}}</p>
+    </header>
+
+    <!-- featured: the PTT key you can actually hold -->
+    <article class="feat feat--ptt reveal">
+      <div class="ptt-stage">
+        <button class="pttbtn" id="featPtt" type="button" aria-label="{{home.featPtt.button-aria-label1}}">{{home.featPtt.button1}}</button>
+        <p class="ptt-stage__hint" aria-hidden="true">{{home.features.p3}}</p>
+      </div>
+
+      <div class="ptt-copy">
+        <div class="feat__icon icon-voice" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+        <h3 class="feat__title">{{home.features.h31}}</h3>
+        <p class="feat__body">{{home.features.p4}}</p>
+        <p class="ptt-readout" id="featPttReadout" role="status">{{home.featPttReadout.p1}}</p>
+      </div>
+
+      <div class="ptt-out" id="featPttOut" aria-hidden="true">
+        <div class="ptt-out__idle">{{home.featPttOut.div1}}</div>
+        <div class="ptt" id="featPttOverlay">
+          <div class="ptt__head"><span class="ptt__who">{{home.featPttOverlay.div1}}</span><span class="ptt__pill">{{home.featPttOverlay.div2}}</span></div>
+          <div class="ptt__wave" id="featPttWave"></div>
+          <p class="ptt__text"><span id="featPttText"></span><span class="caret">▮</span></p>
+          <p class="ptt__foot">{{home.featPttOverlay.p1}}</p>
+        </div>
+      </div>
+    </article>
+
+    <div class="feat-grid" data-stagger>
+      <article class="feat reveal" tabindex="0">
+        <div class="feat__icon icon-roster" aria-hidden="true"><i></i><i></i><i></i></div>
+        <h3 class="feat__title">{{home.features.h32}}</h3>
+        <p class="feat__body">{{home.features.p5}}</p>
+        <p class="feat__meta">{{home.features.p6}}</p>
+      </article>
+
+      <article class="feat reveal" tabindex="0">
+        <div class="feat__icon icon-card" aria-hidden="true"><i class="frame"></i><i class="tick"></i></div>
+        <h3 class="feat__title">{{home.features.h33}}</h3>
+        <p class="feat__body">{{home.features.p7}}</p>
+        <p class="feat__meta">{{home.features.p8}}</p>
+      </article>
+
+      <article class="feat reveal" tabindex="0">
+        <div class="feat__icon icon-wheel" aria-hidden="true"><i class="drum"></i></div>
+        <h3 class="feat__title">{{home.features.h34}}</h3>
+        <p class="feat__body">{{home.features.p9}}</p>
+        <p class="feat__meta">{{home.features.p10}}</p>
+      </article>
+
+      <article class="feat reveal" tabindex="0">
+        <div class="feat__icon icon-pad" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <h3 class="feat__title">{{home.features.h35}}</h3>
+        <p class="feat__body">{{home.features.p11}}</p>
+        <p class="feat__meta">{{home.features.p12}}</p>
+      </article>
+
+      <article class="feat reveal" tabindex="0">
+        <div class="feat__icon icon-usage" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+        <h3 class="feat__title">{{home.features.h36}}</h3>
+        <p class="feat__body">{{home.features.p13}}</p>
+        <p class="feat__meta">{{home.features.p14}}</p>
+      </article>
+
+      <article class="feat reveal" tabindex="0">
+        <div class="feat__icon icon-link" aria-hidden="true"><i class="plug"></i><i class="wave"></i></div>
+        <h3 class="feat__title">{{home.features.h37}}</h3>
+        <p class="feat__body">{{home.features.p15}}</p>
+        <p class="feat__meta">{{home.features.p16}}</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 5. INTERACTIVE DEMO ============ -->
+<section class="section demo" id="demo">
+  <div class="wrap">
+    <header class="section-head reveal">
+      <p class="section-kicker">{{home.demo.p1}}</p>
+      <h2 class="section-title">{{home.demo.h21}}</h2>
+      <p class="section-lede demo-intro"><span>{{home.demo.p2}}</span><span>{{home.demo.p3}}</span><span>{{home.demo.p4}}</span><span>{{home.demo.p5}}</span></p>
+    </header>
+
+    <div class="demo-tabs reveal" role="group" aria-label="{{home.demo.div-aria-label1}}">
+      <button type="button" class="demo-tab" data-demo-face="0" aria-pressed="true">{{home.demo.button1}}</button>
+      <button type="button" class="demo-tab" data-demo-face="1" aria-pressed="false">{{home.demo.button2}}</button>
+      <button type="button" class="demo-tab" data-demo-face="2" aria-pressed="false">{{home.demo.button3}}</button>
+      <button type="button" class="demo-tab" data-demo-face="3" aria-pressed="false">{{home.demo.button4}}</button>
+      <button type="button" class="demo-tab" data-demo-face="4" aria-pressed="false">{{home.demo.button5}}</button>
+      <button type="button" class="demo-tab" data-demo-face="5" aria-pressed="false">{{home.demo.button6}}</button>
+    </div>
+    <p class="demo-disclaimer">{{home.demo.p6}}</p>
+
+    <div class="demo__grid reveal">
+      <!-- ---- the handheld replica ---- -->
+      <div class="pad-wrap">
+        <div class="deck" id="deck">
+          <div class="deck__top">
+            <div class="screen" id="screen">
+              <span class="screen__notch" aria-hidden="true"></span>
+              <div class="screen__head">
+                <span class="screen__title" id="screenTitle">{{home.screen.div1}}</span>
+                <span class="screen__tag" id="screenTag">19:42</span>
+              </div>
+              <div class="screen__body">
+                <!-- face 1: Agents -->
+                <div class="face is-active" id="faceAgents">
+                  <ul class="roster" id="roster" data-view="roster" aria-label="{{home.roster.ul-aria-label1}}"></ul>
+                  <div data-view="channel" hidden>
+                    <p class="chan__state" id="chanState">{{home.chanState.p1}}</p>
+                    <p class="chan__reply" id="chanReply"></p>
+                    <div id="chanPending"></div>
+                    <span class="sr-only" id="chanWho"></span>
+                  </div>
+                  <div class="cardq" data-view="card" hidden>
+                    <span class="sr-only" id="cardWho"></span>
+                    <p class="cardq__q" id="cardQ"></p>
+                    <div id="cardChoices"></div>
+                  </div>
+                </div>
+                <!-- face 2: Omarchy -->
+                <div class="face" id="faceOmarchy">
+                  <div class="chips" id="wsChips"></div>
+                  <ul class="rows" id="wsWindows"></ul>
+                  <p class="workspace-status" id="wsStatus" role="status"></p>
+                </div>
+                <!-- face 3: Macropad -->
+                <div class="face" id="faceMacropad">
+                  <div class="mgrid" id="mgrid"></div>
+                  <button class="screen-button macro-edit-toggle" id="macroEditToggle" type="button" aria-pressed="false">{{home.macroEditToggle.button1}}</button>
+                </div>
+                <!-- face 4: Usage -->
+                <div class="face" id="faceUsage">
+                  <div id="usage"></div>
+                </div>
+                <div class="face" id="faceSystem"><div id="systemMeters"></div><button type="button" class="screen-button" id="refreshSystem">{{home.refreshSystem.button1}}</button></div>
+                <div class="face" id="faceArcade">
+                  <div id="arcadeMenu"><button type="button" class="arcade-choice" data-game="flappy">{{home.arcadeMenu.button1}}</button><button type="button" class="arcade-choice" data-game="snake">{{home.arcadeMenu.button2}}</button><button type="button" class="arcade-choice" data-game="raiden">{{home.arcadeMenu.button3}}</button></div>
+                  <div id="arcadePlay" hidden><canvas id="arcadeCanvas" width="320" height="240" aria-label="{{home.arcadeCanvas.canvas-aria-label1}}"></canvas><div class="arcade-status" id="arcadeStatus" role="status">{{home.arcadeStatus.div1}}</div><button type="button" class="screen-button" id="arcadeStart">{{home.arcadeStart.button1}}</button><button type="button" class="screen-button" id="arcadeBack">{{home.arcadeBack.button1}}</button></div>
+                </div>
+              </div>
+              <form id="macroEditor" class="macro-editor" hidden>
+                <h3 id="macroEditorTitle">{{home.macroEditorTitle.h31}}</h3>
+                <label>{{home.macroEditor.label1}}<input id="macroLabel" maxlength="18" required autocomplete="off" /></label>
+                <label>{{home.macroEditor.label2}}<input id="macroShortcut" maxlength="32" placeholder="{{home.macroShortcut.input-placeholder1}}" autocomplete="off" /></label>
+                <div><button type="submit" class="screen-button">{{home.macroEditor.button1}}</button><button type="button" class="screen-button" id="macroRemove">{{home.macroRemove.button1}}</button><button type="button" class="screen-button" id="macroCancel">{{home.macroCancel.button1}}</button></div>
+              </form>
+              <!-- the PTT overlay sits over whatever face is up -->
+              <div class="ptt" id="pttOverlay" aria-live="polite">
+                <div class="ptt__head"><span class="ptt__who" id="pttWho">{{home.pttOverlay.div1}}</span><span class="ptt__pill">{{home.featPttOverlay.div2}}</span></div>
+                <div class="ptt__wave" id="pttWave" aria-hidden="true"></div>
+                <p class="ptt__text"><span id="pttText"></span><span class="caret">▮</span></p>
+                <p class="ptt__foot">{{home.featPttOverlay.p1}}</p>
+              </div>
+              <div class="screen__hint" id="screenHint" aria-hidden="true"></div>
+            </div>
+
+            <div class="wheel" id="wheel" role="slider" tabindex="0" aria-label="{{home.wheel.div-aria-label1}}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">
+              <span class="wheel__drum" id="wheelDrum" aria-hidden="true"></span>
+              <span class="wheel__lbl" aria-hidden="true">{{home.wheel.div1}}</span>
+            </div>
+          </div>
+
+          <div class="deck__keys">
+            <button class="dkey" data-key="left" type="button" aria-label="{{home.deck.button-aria-label1}}"><span class="dkey__cap">‹</span></button>
+            <button class="dkey" data-key="cancel" type="button"><span class="dkey__cap">{{home.deck.button1}}</span></button>
+            <button class="dkey dkey--ptt" data-key="ptt" type="button" aria-label="{{home.deck.button-aria-label2}}"><span class="dkey__cap">{{home.featPtt.button1}}</span></button>
+            <button class="dkey" data-key="enter" type="button"><span class="dkey__cap">{{common.enter}}</span></button>
+            <button class="dkey" data-key="right" type="button" aria-label="{{home.deck.button-aria-label3}}"><span class="dkey__cap">›</span></button>
+          </div>
+          <div class="deck__keys" style="grid-template-columns: 1fr 5fr;">
+            <button class="dkey" data-key="shift" type="button" aria-label="{{home.deck.button-aria-label4}}" aria-pressed="false"><span class="dkey__cap">{{common.shift}}</span></button>
+            <p class="deck__hint" style="align-self:center;margin:0">{{home.deck.p1}}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---- the host console: what deckd sees ---- -->
+      <div class="demo-companion">
+        <div class="demo-guide"><p class="demo-guide__eyebrow" id="demoEyebrow">{{home.demoEyebrow.p1}}</p><h3 id="demoTitle">{{home.demoTitle.h31}}</h3><p id="demoDescription">{{home.demoDescription.p1}}</p><p class="demo-guide__tip" id="demoTip">{{home.demoTip.p1}}</p></div>
+      <div class="monitor">
+        <div class="monitor__bezel">
+          <div class="monitor__screen" id="hostScreen">
+            <div class="monitor__bar">
+              <span class="monitor__dot"></span>
+              <span class="monitor__title">{{home.hostScreen.div1}}</span>
+              <span class="monitor__ver">{{home.hostScreen.div2}}</span>
+            </div>
+            <div class="monitor__body">
+              <ul class="log" id="hostLog" aria-live="polite"></ul>
+            </div>
+          </div>
+        </div>
+        <div class="monitor__foot">
+          <button class="pxbtn pxbtn--sound" id="soundToggle" type="button" aria-pressed="true">
+            <span class="spk" aria-hidden="true"></span><span id="soundLabel">{{home.soundToggle.button1}}</span>
+          </button>
+          <span class="monitor__log" id="lastEvent" role="status">—</span>
+        </div>
+      </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 6. TALKS TO YOUR AGENTS ============ -->
+<section class="section works" id="works">
+  <div class="wrap">
+    <header class="section-head reveal">
+      <p class="section-kicker">{{home.works.p1}}</p>
+      <h2 class="section-title">{{home.works.h21}}</h2>
+      <p class="section-lede">{{home.works.p2}}</p>
+    </header>
+
+    <p class="row-label reveal">{{home.screen.div1}}</p>
+    <div class="badge-row" data-stagger>
+      <div class="badge reveal"><span class="badge__mark badge__mark--claude-code" aria-hidden="true"></span><b>{{home.works.div1}}</b><i>{{home.works.div2}}</i></div>
+      <div class="badge reveal"><span class="badge__mark badge__mark--codex" aria-hidden="true"></span><b>{{home.works.div3}}</b><i>{{home.works.div4}}</i></div>
+      <div class="badge reveal"><span class="badge__mark badge__mark--api" aria-hidden="true"></span><b>{{home.works.div5}}</b><i>{{home.works.div6}}</i></div>
+      <div class="badge badge--wild reveal"><span class="badge__mark badge__mark--any" aria-hidden="true"></span><b>{{home.works.div7}}</b><i>{{home.works.div8}}</i></div>
+    </div>
+
+    <p class="row-label reveal">{{home.works.p3}}</p>
+    <div class="badge-row" data-stagger>
+      <div class="badge badge--alt reveal"><span class="badge__mark badge__mark--omarchy" aria-hidden="true"></span><b>{{common.omarchy}}</b><i>{{home.works.div9}}</i></div>
+      <div class="badge badge--alt reveal"><span class="badge__mark badge__mark--keys" aria-hidden="true"></span><b>{{home.works.div10}}</b><i>{{home.works.div11}}</i></div>
+      <div class="badge badge--alt reveal"><span class="badge__mark badge__mark--voice" aria-hidden="true"></span><b>{{home.works.div12}}</b><i>{{home.works.div13}}</i></div>
+      <div class="badge badge--alt badge--wild reveal"><span class="badge__mark badge__mark--whisper" aria-hidden="true"></span><b>{{home.works.div14}}</b><i>{{home.works.div15}}</i></div>
+    </div>
+
+    <p class="works__punch reveal">{{home.works.p4}}</p>
+  </div>
+</section>
+
+<!-- ============ 7. THE FACES ============ -->
+<section class="section faces" id="faces">
+  <div class="wrap">
+    <header class="section-head reveal"><p class="section-kicker">{{home.faces.p1}}</p><h2 class="section-title">{{home.faces.h21}}</h2><p class="section-lede">{{home.faces.p2}}</p></header>
+    <div class="face-atlas reveal">
+      <div class="face-atlas__index" role="tablist" aria-label="{{home.faces.div-aria-label1}}" aria-orientation="vertical"><button class="face-atlas__tab" type="button" role="tab" id="atlasTab0" aria-controls="atlasPanel0" aria-selected="true" tabindex="0"><span>01</span><b>{{home.atlasTab0.button1}}</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab1" aria-controls="atlasPanel1" aria-selected="false" tabindex="-1"><span>02</span><b>{{home.atlasTab1.button1}}</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab2" aria-controls="atlasPanel2" aria-selected="false" tabindex="-1"><span>03</span><b>{{home.featPttOverlay.div2}}</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab3" aria-controls="atlasPanel3" aria-selected="false" tabindex="-1"><span>04</span><b>{{home.atlasTab3.button1}}</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab4" aria-controls="atlasPanel4" aria-selected="false" tabindex="-1"><span>05</span><b>{{home.atlasTab4.button1}}</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab5" aria-controls="atlasPanel5" aria-selected="false" tabindex="-1"><span>06</span><b>{{home.atlasTab5.button1}}</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab6" aria-controls="atlasPanel6" aria-selected="false" tabindex="-1"><span>07</span><b>{{home.atlasTab6.button1}}</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab7" aria-controls="atlasPanel7" aria-selected="false" tabindex="-1"><span>08</span><b>{{home.atlasTab7.button1}}</b><span aria-hidden="true">↗</span></button></div><div class="face-atlas__stage"><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel0" aria-labelledby="atlasTab0" tabindex="0" ><div class="face-atlas__image"><img src="/assets/screens/roster.png" alt="{{home.atlasPanel0.img-alt1}}" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">01 / 08</span><h3>{{home.atlasTab0.button1}}</h3><p>{{home.atlasPanel0.p1}}</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel1" aria-labelledby="atlasTab1" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/card-question.png" alt="{{home.atlasPanel1.img-alt1}}" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">02 / 08</span><h3>{{home.atlasTab1.button1}}</h3><p>{{home.atlasPanel1.p1}}</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel2" aria-labelledby="atlasTab2" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/ptt-roster.png" alt="{{home.atlasPanel2.img-alt1}}" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">03 / 08</span><h3>{{home.featPttOverlay.div2}}</h3><p>{{home.atlasPanel2.p1}}</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel3" aria-labelledby="atlasTab3" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/macropad.png" alt="{{home.atlasPanel3.img-alt1}}" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">04 / 08</span><h3>{{home.atlasTab3.button1}}</h3><p>{{home.atlasPanel3.p1}}</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel4" aria-labelledby="atlasTab4" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/usage.png" alt="{{home.atlasPanel4.img-alt1}}" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">05 / 08</span><h3>{{home.atlasTab4.button1}}</h3><p>{{home.atlasPanel4.p1}}</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel5" aria-labelledby="atlasTab5" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/omarchy.png" alt="{{home.atlasPanel5.img-alt1}}" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">06 / 08</span><h3>{{home.atlasTab5.button1}}</h3><p>{{home.atlasPanel5.p1}}</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel6" aria-labelledby="atlasTab6" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/manager.png" alt="{{home.atlasPanel6.img-alt1}}" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">07 / 08</span><h3>{{home.atlasTab6.button1}}</h3><p>{{home.atlasPanel6.p1}}</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel7" aria-labelledby="atlasTab7" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/arcade-snake-1920.png" alt="{{home.atlasPanel7.img-alt1}}" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">08 / 08</span><h3>{{home.atlasTab7.button1}}</h3><p>{{home.atlasPanel7.p1}}</p></figcaption></figure></div></div><div class="face-atlas__specs"><span>{{home.faces.div1}}</span><span>{{home.faces.div2}}</span><span>{{home.faces.div3}}</span></div>
+  </div>
+</section>
+
+<!-- ============ 8. THE BLUEPRINT ============ -->
+<section class="section blueprint" id="blueprint">
+  <div class="wrap">
+    <header class="section-head reveal">
+      <p class="section-kicker">{{home.blueprint.p1}}</p>
+      <h2 class="section-title">{{home.blueprint.h21}}</h2>
+      <p class="section-lede">{{home.blueprint.p2}}</p>
+    </header>
+
+    <div class="inv reveal">
+      <div class="inv__bar">
+        <span class="inv__bar-title">{{home.blueprint.div1}}</span>
+        <span class="inv__bar-meta">{{home.blueprint.div2}}</span>
+      </div>
+      <ul class="tree">
+        <li class="tree__row tree__row--root">
+          <span class="tree__glyph glyph-folder" aria-hidden="true"></span>
+          <span class="tree__name">{{home.blueprint.li1}}</span>
+          <span class="tree__desc">{{home.blueprint.li2}}</span>
+        </li>
+        <li class="tree__row">
+          <span class="tree__branch" aria-hidden="true">├─</span>
+          <span class="tree__glyph glyph-folder" aria-hidden="true"></span>
+          <span class="tree__name">{{home.blueprint.li3}}</span>
+          <span class="tree__desc">{{home.blueprint.li4}}</span>
+        </li>
+        <li class="tree__row">
+          <span class="tree__branch" aria-hidden="true">├─</span>
+          <span class="tree__glyph glyph-folder" aria-hidden="true"></span>
+          <span class="tree__name">{{home.blueprint.li5}}</span>
+          <span class="tree__desc">{{home.blueprint.li6}}</span>
+        </li>
+        <li class="tree__row">
+          <span class="tree__branch" aria-hidden="true">├─</span>
+          <span class="tree__glyph glyph-folder" aria-hidden="true"></span>
+          <span class="tree__name">{{home.blueprint.li7}}</span>
+          <span class="tree__desc">{{home.blueprint.li8}}</span>
+        </li>
+        <li class="tree__row">
+          <span class="tree__branch" aria-hidden="true">├─</span>
+          <span class="tree__glyph glyph-folder" aria-hidden="true"></span>
+          <span class="tree__name">{{home.blueprint.li9}}</span>
+          <span class="tree__desc">{{home.blueprint.li10}}</span>
+        </li>
+        <li class="tree__row">
+          <span class="tree__branch" aria-hidden="true">├─</span>
+          <span class="tree__glyph glyph-folder" aria-hidden="true"></span>
+          <span class="tree__name">{{home.blueprint.li11}}</span>
+          <span class="tree__desc">{{home.blueprint.li12}}</span>
+        </li>
+        <li class="tree__row">
+          <span class="tree__branch" aria-hidden="true">└─</span>
+          <span class="tree__glyph glyph-file" aria-hidden="true"></span>
+          <span class="tree__name">{{home.blueprint.li13}}</span>
+          <span class="tree__desc">{{home.blueprint.li14}}</span>
+        </li>
+      </ul>
+      <div class="inv__foot">
+        <p>{{home.blueprint.p3}}</p>
+        <p class="inv__cohdl">{{home.blueprint.p4}}</p>
+        <div class="inv__ctas">
+          <a class="btn btn--primary btn--big" href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">{{home.blueprint.div3}}</a>
+          <a class="btn btn--ghost btn--big" href="#download">{{home.blueprint.div4}}</a>
+          <a class="btn btn--ghost btn--big" href="https://discord.gg/x7DXPvK66" target="_blank" rel="noopener" aria-label="{{home.blueprint.a-aria-label1}}">{{home.blueprint.div5}}</a>
+        </div>
+        <p class="inv__note">{{home.blueprint.p5}}</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 9. THE REAL THING ============ -->
+<section class="section real" id="real">
+  <div class="wrap">
+    <header class="section-head reveal">
+      <p class="section-kicker">{{home.real.p1}}</p>
+      <h2 class="section-title">{{home.real.h21}}</h2>
+      <p class="section-lede">{{home.real.p2}}</p>
+    </header>
+
+    <div class="polaroid-wrap reveal">
+      <div class="shots-col">
+        <div class="shots" role="group" aria-label="{{home.real.div-aria-label1}}">
+          <figure class="shot">
+            <div class="shot__win"><img class="shot__img" src="/assets/photos/fully-open.webp" alt="{{home.real.img-alt1}}" width="750" height="1000" loading="lazy" /></div>
+            <figcaption class="shot__cap"><span class="shot__cap-title">{{home.real.figcaption1}}</span><span class="shot__cap-body">{{home.real.figcaption2}}</span></figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="shot__win"><img class="shot__img" src="/assets/photos/black-front.webp" alt="{{home.real.img-alt2}}" width="750" height="1000" loading="lazy" /></div>
+            <figcaption class="shot__cap"><span class="shot__cap-title">{{home.real.figcaption3}}</span><span class="shot__cap-body">{{home.real.figcaption4}}</span></figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="shot__win"><img class="shot__img" src="/assets/photos/white-front.webp" alt="{{home.real.img-alt3}}" width="750" height="1000" loading="lazy" /></div>
+            <figcaption class="shot__cap"><span class="shot__cap-title">{{home.real.figcaption5}}</span><span class="shot__cap-body">{{home.real.figcaption6}}</span></figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="shot__win"><img class="shot__img" src="/assets/photos/faces.webp" alt="{{home.real.img-alt4}}" width="750" height="1000" loading="lazy" /></div>
+            <figcaption class="shot__cap"><span class="shot__cap-title">{{home.real.figcaption7}}</span><span class="shot__cap-body">{{home.real.figcaption8}}</span></figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="shot__win"><img class="shot__img" src="/assets/photos/pair-top.webp" alt="{{home.real.img-alt5}}" width="750" height="1000" loading="lazy" /></div>
+            <figcaption class="shot__cap"><span class="shot__cap-title">{{home.real.figcaption9}}</span><span class="shot__cap-body">{{home.real.figcaption10}}</span></figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="shot__win"><img class="shot__img" src="/assets/photos/white-top.webp" alt="{{home.real.img-alt6}}" width="750" height="1000" loading="lazy" /></div>
+            <figcaption class="shot__cap"><span class="shot__cap-title">{{home.real.figcaption11}}</span><span class="shot__cap-body">{{home.real.figcaption12}}</span></figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="shot__win"><img class="shot__img" src="/assets/main-board.png" alt="{{home.real.img-alt7}}" loading="lazy" style="object-fit:contain" /></div>
+            <figcaption class="shot__cap"><span class="shot__cap-title">{{home.real.figcaption13}}</span><span class="shot__cap-body">{{home.real.figcaption14}}</span></figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="shot__win"><img class="shot__img" src="/assets/encoder-board.png" alt="{{home.real.img-alt8}}" loading="lazy" style="object-fit:contain" /></div>
+            <figcaption class="shot__cap"><span class="shot__cap-title">{{home.real.figcaption15}}</span><span class="shot__cap-body">{{home.real.figcaption16}}</span></figcaption>
+          </figure>
+        </div>
+        <div class="shots-bar">
+          <button class="pxbtn shots__nav shots__prev" type="button" aria-label="{{home.real.button-aria-label1}}">{{home.real.button1}}</button>
+          <span class="shots__count" role="status">1 / 8</span>
+          <button class="pxbtn shots__nav shots__next" type="button" aria-label="{{home.real.button-aria-label2}}">{{home.real.button2}}</button>
+        </div>
+      </div>
+
+      <ul class="build-notes">
+        <li><b>{{home.real.li1}}</b><span>{{home.real.li2}}</span></li>
+        <li><b>{{home.real.li3}}</b><span>{{home.real.li4}}</span></li>
+        <li><b>{{home.real.li5}}</b><span>{{home.real.li6}}</span></li>
+        <li><b>{{home.real.li7}}</b><span>{{home.real.li8}}</span></li>
+        <li><b>{{home.real.li9}}</b><span>{{home.real.li10}}</span></li>
+        <li><b>{{home.real.li11}}</b><span>{{home.real.li12}}</span></li>
+        <li><b>{{home.real.li13}}</b><span>{{home.real.li14}}</span></li>
+        <li><b>{{home.real.li15}}</b><span>{{home.real.li16}}</span></li>
+      </ul>
+    </div>
+
+    <!-- One studio photo per colourway (tools/photos.sh crops them from ../ref/OpenWalkieTalkie) -->
+    <div class="colourways reveal" id="colourways">
+      <p class="section-kicker">{{home.colourways.p1}}</p>
+      <div class="colourways__grid">
+        <figure class="colourway">
+          <img class="colourway__img" src="/assets/photos/black-green.webp" alt="{{home.colourways.img-alt1}}" width="1536" height="1024" loading="lazy" />
+          <figcaption class="colourway__cap"><span class="shot__cap-title">{{home.colourways.figcaption1}}</span><span class="shot__cap-body">{{home.colourways.figcaption2}}</span></figcaption>
+        </figure>
+        <figure class="colourway">
+          <img class="colourway__img" src="/assets/photos/white-orange.webp" alt="{{home.colourways.img-alt2}}" width="1536" height="1024" loading="lazy" />
+          <figcaption class="colourway__cap"><span class="shot__cap-title">{{home.real.figcaption5}}</span><span class="shot__cap-body">{{home.colourways.figcaption3}}</span></figcaption>
+        </figure>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ HARDWARE WAITLIST ============ -->
+<section class="section waitlist" id="waitlist" aria-labelledby="waitlist-title">
+  <div class="wrap">
+    <div class="waitlist__panel">
+      <div class="waitlist__intro">
+        <p class="section-kicker">{{home.waitlist.p1}}</p>
+        <h2 class="section-title" id="waitlist-title">{{home.waitlist-title.h21}}</h2>
+        <p>{{home.waitlist.p2}}</p>
+        <p class="waitlist__note">{{home.waitlist.p3}}</p>
+        <a class="waitlist__source" href="https://github.com/conol-ai/openwalkietalkie">{{home.waitlist.div1}}</a>
+      </div>
+      <form class="waitlist__form" id="waitlist-form" action="/api/waitlist" method="post">{{=waitlistLang}}
+        <label for="waitlist-email">{{home.waitlist-form.label1}}</label>
+        <input id="waitlist-email" name="email" type="email" autocomplete="email" inputmode="email" placeholder="{{home.waitlist-email.input-placeholder1}}" maxlength="254" required aria-describedby="waitlist-note" />
+        <div class="waitlist__trap" aria-hidden="true">
+          <label for="waitlist-company">{{home.waitlist-form.label2}}</label>
+          <input id="waitlist-company" name="company" type="text" tabindex="-1" autocomplete="off" />
+        </div>
+        <label class="waitlist__consent" for="waitlist-consent">
+          <input id="waitlist-consent" name="consent" type="checkbox" value="yes" required />
+          <span>{{home.waitlist-form.label3}}</span>
+        </label>
+        <button class="btn btn--primary btn--big" type="submit">{{common.join-the-waitlist}}</button>
+        <p class="waitlist__note" id="waitlist-note">{{home.waitlist-note.p1}}</p>
+        <p class="waitlist__status" id="waitlist-status" role="status" aria-live="polite" aria-atomic="true"></p>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DOWNLOAD ============ -->
+<section class="section" id="download">
+  <div class="wrap">
+    <header class="section-head reveal">
+      <p class="section-kicker">{{home.download.p1}}</p>
+      <h2 class="section-title">{{home.download.h21}}</h2>
+      <p class="section-lede">{{home.download.p2}}</p>
+    </header>
+    <div class="inv reveal">
+      <div class="inv__foot">
+        <div class="inv__ctas">
+          <a class="btn btn--primary btn--big" href="https://github.com/conol-ai/openwalkietalkie/releases/download/v0.16.0/OpenWalkieTalkie-0.16.0-macos-aarch64.dmg">{{home.download.div1}}</a>
+          <a class="btn btn--ghost btn--big" href="https://github.com/conol-ai/openwalkietalkie/releases/download/v0.16.0/OpenWalkieTalkie-0.16.0-macos-x86_64.dmg">{{home.download.div2}}</a>
+            <a class="btn btn--ghost btn--big" href="https://github.com/conol-ai/openwalkietalkie/releases/download/v0.16.0/OpenWalkieTalkie-0.16.0-windows-x86_64.zip">{{home.download.div3}}</a>
+          <a class="btn btn--ghost btn--big" href="/docs/omarchy/">{{home.download.div4}}</a>
+        </div>
+        <p>{{home.download.p3}}</p>
+          <p>{{home.download.p4}}</p>
+        <p>{{home.download.p5}}</p>
+        <p class="inv__note">{{home.download.p6}}</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ============ 10. FOOTER ============ -->
+<footer class="footer" id="footer">
+  <div class="footer__banner" aria-hidden="true">
+    <img class="swap-img swap-img--day" src="/assets/landscape_day.webp" alt="" width="1536" height="1024" loading="lazy" />
+    <img class="swap-img swap-img--night" src="/assets/landscape_night.webp" alt="" width="1536" height="1024" loading="lazy" />
+    <span class="footer__banner-fade"></span>
+  </div>
+
+  <div class="footer__inner">
+    <div class="footer__panel">
+      <p class="footer__slogan">{{home.hero.p3}}</p>
+      <div class="footer__cta">
+        <a class="btn btn--primary" href="#waitlist">{{common.join-the-waitlist}}</a>
+        <a class="btn btn--ghost" href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">{{home.hero.div2}}</a>
+        <a class="btn btn--ghost" href="#demo">{{common.try-it}}</a>
+        <a class="btn btn--ghost" href="#top">{{home.footer.div1}}</a>
+      </div>
+      <nav class="footer__links" aria-label="{{common.footer}}">
+      <a href="/manual/">{{home.footer.nav1}}</a>
+        <a href="/privacy/">{{common.privacy-policy}}</a>
+        <a href="/cookies/">{{common.cookie-information}}</a>
+        <a href="/cookies/" data-privacy-open>{{common.privacy-notice}}</a>
+        <a href="https://github.com/conol-ai/openwalkietalkie/tree/main/hardware" target="_blank" rel="noopener">{{home.footer.nav2}}</a>
+        <a href="https://github.com/conol-ai/openwalkietalkie/tree/main/src" target="_blank" rel="noopener">{{home.blueprint.li7}}</a>
+        <a href="https://github.com/conol-ai/openwalkietalkie/tree/main/host" target="_blank" rel="noopener">{{home.blueprint.li11}}</a>
+        <a href="https://github.com/conol-ai/openwalkietalkie#readme" target="_blank" rel="noopener">{{home.footer.nav3}}</a>
+        <a href="https://openmicrokbd.org/" target="_blank" rel="noopener">{{home.footer.nav4}}</a>
+        <a href="https://cohdl.org/" target="_blank" rel="noopener">{{common.cohdl}}</a>
+        <a href="https://discord.gg/x7DXPvK66" target="_blank" rel="noopener" aria-label="{{common.join-the-cohdl-and-openwalkietalkie-comm}}">{{common.discord}}</a>
+        <a href="/blog/">{{home.footer.nav5}}</a>
+      </nav>
+      <p class="footer__fine">{{home.footer.p1}}</p>
+      <p class="footer__heart"><a class="project-credit" href="https://cohdl.org/">{{home.footer.p2}}</a></p>
+    </div>
+  </div>
+</footer>
+
+<script src="/js/arcade.js"></script>
+<script src="/js/main.js"></script>
+<script src="/js/waitlist.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>
