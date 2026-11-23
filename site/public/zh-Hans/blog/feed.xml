@@ -5,8 +5,16 @@
   <id>https://openwalkietalkie.org/zh-Hans/blog/</id>
   <link href="https://openwalkietalkie.org/zh-Hans/blog/" />
   <link rel="self" type="application/atom+xml" href="https://openwalkietalkie.org/zh-Hans/blog/feed.xml" />
-  <updated>2026-11-22T09:04:46Z</updated>
+  <updated>2026-11-23T07:33:33Z</updated>
   <author><name>Tony Huang</name></author>
+  <entry>
+    <title>OpenWalkieTalkie v0.17.0：Windows 上的口述，约一秒出字</title>
+    <id>https://openwalkietalkie.org/zh-Hans/blog/windows-dictation-in-a-second/</id>
+    <link href="https://openwalkietalkie.org/zh-Hans/blog/windows-dictation-in-a-second/" />
+    <published>2026-11-23T07:33:33Z</published>
+    <updated>2026-11-23T07:33:33Z</updated>
+    <summary>在 Windows 预览版上，按下 PTT 说话得不到任何文字。原因是 whisper.cpp 编译时没有开优化，而 Windows 用的是 Mac 的解码设置。两者都已修复：在测试电脑上，从松开到出字 1.1 秒。</summary>
+  </entry>
   <entry>
     <title>OpenWalkieTalkie v0.16.0：懂得窗口的口述</title>
     <id>https://openwalkietalkie.org/zh-Hans/blog/dictation-that-knows-the-window/</id>

@@ -5,8 +5,16 @@
   <id>https://openwalkietalkie.org/ja/blog/</id>
   <link href="https://openwalkietalkie.org/ja/blog/" />
   <link rel="self" type="application/atom+xml" href="https://openwalkietalkie.org/ja/blog/feed.xml" />
-  <updated>2026-11-22T09:04:46Z</updated>
+  <updated>2026-11-23T07:33:33Z</updated>
   <author><name>Tony Huang</name></author>
+  <entry>
+    <title>OpenWalkieTalkie v0.17.0：Windows の口述が約 1 秒に</title>
+    <id>https://openwalkietalkie.org/ja/blog/windows-dictation-in-a-second/</id>
+    <link href="https://openwalkietalkie.org/ja/blog/windows-dictation-in-a-second/" />
+    <published>2026-11-23T07:33:33Z</published>
+    <updated>2026-11-23T07:33:33Z</updated>
+    <summary>Windows プレビュー版では、PTT を押して話しても文字が出ませんでした。whisper.cpp が最適化なしでコンパイルされ、Windows が Mac 向けのデコード設定を使っていたためです。両方を直し、テスト用 PC では離してから文字が出るまで 1.1 秒になりました。</summary>
+  </entry>
   <entry>
     <title>OpenWalkieTalkie v0.16.0：ウィンドウがわかる口述</title>
     <id>https://openwalkietalkie.org/ja/blog/dictation-that-knows-the-window/</id>

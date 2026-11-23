@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie v0.17.0：Windows の口述が約 1 秒に · OpenWalkieTalkie</title>
+<meta name="description" content="Windows プレビュー版では、PTT を押して話しても文字が出ませんでした。whisper.cpp が最適化なしでコンパイルされ、Windows が Mac 向けのデコード設定を使っていたためです。両方を直し、テスト用 PC では離してから文字が出るまで 1.1 秒になりました。" />
+<link rel="canonical" href="https://openwalkietalkie.org/ja/blog/windows-dictation-in-a-second/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/windows-dictation-in-a-second/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/windows-dictation-in-a-second/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/windows-dictation-in-a-second/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/windows-dictation-in-a-second/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/windows-dictation-in-a-second/" />
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.17.0：Windows の口述が約 1 秒に · OpenWalkieTalkie" />
+<meta property="og:description" content="Windows プレビュー版では、PTT を押して話しても文字が出ませんでした。whisper.cpp が最適化なしでコンパイルされ、Windows が Mac 向けのデコード設定を使っていたためです。両方を直し、テスト用 PC では離してから文字が出るまで 1.1 秒になりました。" />
+<meta property="og:url" content="https://openwalkietalkie.org/ja/blog/windows-dictation-in-a-second/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie ブログ" href="/ja/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/i18n/ja.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">本文へスキップ</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/ja/" aria-label="OpenWalkieTalkie — ホーム">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="セクション">
+      <a href="/ja/#pile">The Pile</a>
+      <a href="/ja/#features">機能</a>
+      <a href="/ja/#demo">試す</a>
+      <a href="/ja/#faces">ページ</a>
+      <a href="/ja/#blueprint">設計図</a>
+      <a href="/ja/docs/">ドキュメント</a>
+      <a href="/ja/blog/" aria-current="true">ブログ</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="言語: 日本語">日本語</summary>
+        <ul>
+          <li><a href="/blog/windows-dictation-in-a-second/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/windows-dictation-in-a-second/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/windows-dictation-in-a-second/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/blog/windows-dictation-in-a-second/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="昼と夜のテーマを切り替える" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">昼</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="メニューを開く" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">ブログ · リリースノート</p>
+  <h1>OpenWalkieTalkie v0.17.0：Windows の口述が約 1 秒に</h1>
+  <p class="post-meta"><span>2026年11月23日</span><span>Windows の口述の修正</span></p>
+</header>
+<article class="post-body">
+  <p>0.17.0 で直したのは 1 つだけ、Windows での口述です。Windows プレビュー版では、PTT を押して話しても文字が出ませんでした。音声認識が終わる前に時間切れになっていたためです。今は約 1 秒で終わります。デバイスのファームウェアは 0.14.0 のまま変わらず、macOS と Omarchy にも変更はありません。</p>
+  <h2>2 つの原因</h2>
+  <p>Windows では Whisper は CPU で動きます。リリースビルドは whisper.cpp をまったく最適化せずにコンパイルしていました。Visual Studio ジェネレーターでは、<code>cmake</code> クレートがリリース用のコンパイラフラグを <code>/O2</code> を含まないものに上書きするためです。さらに Windows は、Metal 向けの Mac のデコード設定を使っていました。2 秒の押下でもエンコーダーは 30 秒のウィンドウ全体を処理し、失敗したパスはより高い温度でもう一度デコードされていました。この 2 つが重なり、短い押下でも口述に与えられる 30 秒を超えることがありました。</p>
+  <h2>変更点</h2>
+  <p>Windows のリリースビルドは <code>CMAKE_C_FLAGS_RELEASE</code> と <code>CMAKE_CXX_FLAGS_RELEASE</code> を設定するようになり、whisper.cpp は最適化してコンパイルされます。Windows でも Linux と同じく、Whisper のデコードは 1 回だけで、押下に必要な分だけのウィンドウをエンコードします。モデルを読み込むと、whisper.cpp がどの CPU 機能でコンパイルされたかをサービスのログに記録します。</p>
+  <h2>測定結果</h2>
+  <p>Intel Core i5-13420H のテスト用 PC で、<code>ggml-small.bin</code> モデルを使い、同じ中国語（普通話）の文「收到，已经下发了。」で 3 つのビルドを試しました。リリースされた 0.16.0 では文字がまったく出ませんでした。<code>small</code> と <code>large-v3-turbo-q5_0</code> で 1 回ずつ押し、どちらも 30,000 ms で時間切れになりました。デコード設定だけを直し、whisper.cpp が最適化なしのままだと、文字が出るまで 17,242 ms でした。両方を直すと 1,124 ms で、同じ CPU で動かした参照実装の <code>whisper-cli</code> より速くなりました。認識結果は <code>收到已经下发了</code> で、7 文字すべてが正しく、順番どおりでした。読点と句点は出ませんでした。</p>
+  <h2>自分でビルドする場合</h2>
+  <p>ローカルの Windows ビルドでも同じ 2 つの変数を設定する必要があります。PowerShell では <code>/O2 /Ob2 /DNDEBUG</code>、Git Bash では <code>-O2 -Ob2 -DNDEBUG</code> です。設定しないと whisper.cpp はまた最適化なしでコンパイルされます。コマンドはリリースノートにあります。</p>
+  <h2>アップデート</h2>
+  <p>Windows では、<a href="/ja/docs/windows/">Windows のガイド</a>のとおりにリリースから ZIP をダウンロードします。Mac では<strong>アップデートを確認…</strong>を選ぶか、署名・公証済みの <strong>0.17.0</strong> のアプリ（Apple シリコン用または Intel 用、macOS 13 以降）をインストールします。Omarchy では、<a href="/ja/docs/omarchy/">Omarchy のガイド</a>のとおりに、最新のコードを取得してサービスとアプリをビルドし、両方で <code>install.sh</code> を実行します。このリリースではデバイスのファームウェアの更新は不要です。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.17.0" rel="noopener">GitHub で OpenWalkieTalkie v0.17.0 とチェックサムを入手 →</a></p>
+  <p class="post-back"><a href="/ja/blog/">← ブログに戻る</a></p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL のプロジェクト · ソフトウェアは MIT · ハードウェアは CERN-OHL-P</span>
+    <nav aria-label="フッター">
+      <a href="/ja/#waitlist">ウェイトリストに登録</a>
+      <a href="/ja/privacy/">プライバシーポリシー</a>
+      <a href="/ja/cookies/">Cookie について</a>
+      <a href="/ja/cookies/" data-privacy-open>プライバシーに関するお知らせ</a>
+      <a href="/ja/">ホーム</a>
+      <a href="/ja/#demo">試す</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Discord で CoHDL と OpenWalkieTalkie のコミュニティに参加">Discord</a>
+      <a href="/ja/blog/feed.xml">フィード</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

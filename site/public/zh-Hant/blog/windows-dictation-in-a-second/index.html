@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie v0.17.0：Windows 上的口述，約一秒出字 · OpenWalkieTalkie</title>
+<meta name="description" content="在 Windows 預覽版上，按下 PTT 說話得不到任何文字。原因是 whisper.cpp 編譯時沒有開啟最佳化，而 Windows 用的是 Mac 的解碼設定。兩者都已修正：在測試電腦上，從放開到出字 1.1 秒。" />
+<link rel="canonical" href="https://openwalkietalkie.org/zh-Hant/blog/windows-dictation-in-a-second/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/windows-dictation-in-a-second/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/windows-dictation-in-a-second/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/windows-dictation-in-a-second/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/windows-dictation-in-a-second/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/windows-dictation-in-a-second/" />
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.17.0：Windows 上的口述，約一秒出字 · OpenWalkieTalkie" />
+<meta property="og:description" content="在 Windows 預覽版上，按下 PTT 說話得不到任何文字。原因是 whisper.cpp 編譯時沒有開啟最佳化，而 Windows 用的是 Mac 的解碼設定。兩者都已修正：在測試電腦上，從放開到出字 1.1 秒。" />
+<meta property="og:url" content="https://openwalkietalkie.org/zh-Hant/blog/windows-dictation-in-a-second/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie 部落格" href="/zh-Hant/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/i18n/zh-Hant.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">跳至主要內容</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/zh-Hant/" aria-label="OpenWalkieTalkie — 首頁">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="網站區塊">
+      <a href="/zh-Hant/#pile">The Pile</a>
+      <a href="/zh-Hant/#features">功能</a>
+      <a href="/zh-Hant/#demo">試用</a>
+      <a href="/zh-Hant/#faces">頁面</a>
+      <a href="/zh-Hant/#blueprint">設計藍圖</a>
+      <a href="/zh-Hant/docs/">說明文件</a>
+      <a href="/zh-Hant/blog/" aria-current="true">部落格</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="語言: 繁體中文">繁體中文</summary>
+        <ul>
+          <li><a href="/blog/windows-dictation-in-a-second/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/windows-dictation-in-a-second/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/windows-dictation-in-a-second/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
+          <li><a href="/ja/blog/windows-dictation-in-a-second/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切換日間與夜間主題" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">日間</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="開啟選單" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">部落格 · 版本資訊</p>
+  <h1>OpenWalkieTalkie v0.17.0：Windows 上的口述，約一秒出字</h1>
+  <p class="post-meta"><span>2026年11月23日</span><span>Windows 口述修正</span></p>
+</header>
+<article class="post-body">
+  <p>0.17.0 版只修正了一件事：Windows 上的口述。在 Windows 預覽版上，按下 PTT 說話得不到任何文字，因為語音辨識還沒完成就逾時了。現在大約一秒就能完成。裝置韌體不變，仍是 0.14.0，macOS 與 Omarchy 上沒有變化。</p>
+  <h2>兩個原因</h2>
+  <p>在 Windows 上，Whisper 在 CPU 上執行。發行組建編譯 whisper.cpp 時完全沒有開啟最佳化：使用 Visual Studio 產生器時，<code>cmake</code> crate 會用不含 <code>/O2</code> 的參數覆寫發行版的編譯參數。而且 Windows 用的是適合 Metal 的 Mac 解碼設定：按 2 秒，編碼器也要跑完整個 30 秒視窗，失敗的一遍還會用更高的溫度重新解碼。兩者疊加，一次很短的按鍵也可能超過一次口述的 30 秒時限。</p>
+  <h2>改了什麼</h2>
+  <p>Windows 的發行組建現在會設定 <code>CMAKE_C_FLAGS_RELEASE</code> 與 <code>CMAKE_CXX_FLAGS_RELEASE</code>，whisper.cpp 會以最佳化方式編譯。在 Windows 上，和 Linux 一樣，Whisper 只解碼一遍，只編碼這次按鍵需要的那部分視窗。模型載入時，服務的記錄會寫下 whisper.cpp 編譯時啟用的 CPU 功能。</p>
+  <h2>實測</h2>
+  <p>在一台 Intel Core i5-13420H 的測試電腦上，使用 <code>ggml-small.bin</code> 模型，說同一句普通話「收到，已经下发了。」，試了三個組建。發行的 0.16.0 沒有任何文字：兩次按鍵，分別用 <code>small</code> 與 <code>large-v3-turbo-q5_0</code>，都在 30,000 毫秒後逾時。只修正解碼設定、whisper.cpp 仍未最佳化時，17,242 毫秒後出字。兩項都修正後，1,124 毫秒出字，比同一顆 CPU 上的參考實作 <code>whisper-cli</code> 還快。辨識結果是 <code>收到已经下发了</code>（簡體字）：七個字全部正確，順序也對，只是少了逗號與句號。</p>
+  <h2>自己組建</h2>
+  <p>本機的 Windows 組建也必須設定這兩個變數，在 PowerShell 中設為 <code>/O2 /Ob2 /DNDEBUG</code>，在 Git Bash 中設為 <code>-O2 -Ob2 -DNDEBUG</code>，否則 whisper.cpp 又會在沒有最佳化的情況下編譯。實際指令見版本說明。</p>
+  <h2>更新</h2>
+  <p>在 Windows 上，依照 <a href="/zh-Hant/docs/windows/">Windows 指南</a>從版本頁面下載 ZIP。在 Mac 上，選擇<strong>檢查更新…</strong>，或安裝已簽署並經過公證的 <strong>0.17.0</strong> 應用程式（Apple Silicon 或 Intel，macOS 13 或更新版本）。在 Omarchy 上，拉取程式碼，建置服務與應用程式，再用這兩者執行 <code>install.sh</code>，詳見 <a href="/zh-Hant/docs/omarchy/">Omarchy 指南</a>。這個版本不需要更新裝置韌體。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.17.0" rel="noopener">在 GitHub 取得 OpenWalkieTalkie v0.17.0 與總和檢查碼 →</a></p>
+  <p class="post-back"><a href="/zh-Hant/blog/">← 返回部落格</a></p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL 專案 · MIT 授權軟體 · CERN-OHL-P 授權硬體</span>
+    <nav aria-label="頁尾">
+      <a href="/zh-Hant/#waitlist">加入候補名單</a>
+      <a href="/zh-Hant/privacy/">隱私權政策</a>
+      <a href="/zh-Hant/cookies/">Cookie 說明</a>
+      <a href="/zh-Hant/cookies/" data-privacy-open>隱私權聲明</a>
+      <a href="/zh-Hant/">首頁</a>
+      <a href="/zh-Hant/#demo">試用</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="在 Discord 加入 CoHDL 與 OpenWalkieTalkie 社群">Discord</a>
+      <a href="/zh-Hant/blog/feed.xml">訂閱來源</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>
