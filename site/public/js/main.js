@@ -10,6 +10,9 @@
   var $  = function (s, r) { return (r || document).querySelector(s); };
   var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
   var clamp = function (v, a, b) { return v < a ? a : v > b ? b : v; };
+  // Copy in other languages comes from js/i18n/<lang>.js, built from i18n/strings/.
+  var STRINGS = window.OWT_STRINGS || {};
+  var t = function (s) { var out = Object.prototype.hasOwnProperty.call(STRINGS, s) ? STRINGS[s] : s; for (var i = 1; i < arguments.length; i++) out = out.split('{' + (i - 1) + '}').join(arguments[i]); return out; };
 
   /* ------------------------------------------------------------
      1. THEME (day / night) — persisted, crossfaded via CSS
@@ -25,7 +28,7 @@
 
     function apply(mode, silent) {
       root.setAttribute('data-theme', mode);
-      if (label) label.textContent = mode === 'night' ? 'NIGHT' : 'DAY';
+      if (label) label.textContent = mode === 'night' ? t('NIGHT') : t('DAY');
       if (btn) btn.setAttribute('aria-pressed', mode === 'night' ? 'true' : 'false');
       $$('meta[name="theme-color"]').forEach(function (m) {
         m.setAttribute('content', mode === 'night' ? '#131a3a' : '#f2e2bd');
@@ -220,7 +223,7 @@
       btn.addEventListener('click', function () {
         on = !on;
         btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-        if (label) label.textContent = 'SOUND: ' + (on ? 'ON' : 'OFF');
+        if (label) label.textContent = (on ? t('SOUND: ON') : t('SOUND: OFF'));
         if (on) blip(760, 0.06);
       });
     }
@@ -276,7 +279,7 @@
       btn.classList.add('is-held');
       if (out) out.classList.add('is-live');
       if (overlay) overlay.classList.add('is-on');
-      if (readout) readout.textContent = 'Listening. The deck streams 16 kHz audio to the Mac while you hold the key.';
+      if (readout) readout.textContent = t('Listening. The deck streams 16 kHz audio to the Mac while you hold the key.');
       if (text) typing = typer(text, LINE);
       audio.blip(520, 0.05);
     }
@@ -287,7 +290,7 @@
       if (typing) typing.stop();
       if (text) text.textContent = LINE;
       var secs = ((Date.now() - t0) / 1000).toFixed(1);
-      if (readout) readout.textContent = 'Released after ' + secs + ' s. The transcript goes to the active agent as its next prompt.';
+      if (readout) readout.textContent = t('Released after {0} s. The transcript goes to the active agent as its next prompt.', secs);
       audio.blip(760, 0.06);
       closeTimer = setTimeout(function () {
         if (overlay) overlay.classList.remove('is-on');
@@ -332,7 +335,7 @@
       { kind: 'Codex', name: 'firmware', state: 'w', sub: 'Compiling openmicro · 2m' },
       { kind: 'Script', name: 'nightly', state: 'i', sub: 'Idle · via the open API' }
     ];
-    var STATE_NAME = { q: 'Question', r: 'Ready', w: 'Working', e: 'Error', i: 'Idle' };
+    var STATE_NAME = { q: t('Question'), r: t('Ready'), w: t('Working'), e: t('Error'), i: t('Idle') };
 
     var face = 0;
     var view = 'roster';          // roster | channel | card
@@ -393,9 +396,9 @@
             chanPending.appendChild(d);
           });
         } else if (a.q) {
-          var d1 = document.createElement('div'); d1.className = 'choice'; d1.textContent = 'Answer · ' + a.q.choices.length + ' choices'; chanPending.appendChild(d1);
+          var d1 = document.createElement('div'); d1.className = 'choice'; d1.textContent = t('Answer · {0} choices', a.q.choices.length); chanPending.appendChild(d1);
         } else if (a.ready) {
-          var d2 = document.createElement('div'); d2.className = 'choice'; d2.textContent = 'Ready summary'; chanPending.appendChild(d2);
+          var d2 = document.createElement('div'); d2.className = 'choice'; d2.textContent = t('Ready summary'); chanPending.appendChild(d2);
         }
       }
     }
@@ -433,7 +436,7 @@
         var d = document.createElement('button'); d.type = 'button';
         d.className = 'mkey' + (!m ? ' mkey--empty' : '');
         var small = document.createElement('small'); small.textContent = m ? m[1] : '';
-        var label = document.createElement('span'); label.textContent = m ? m[0] : '+ assign';
+        var label = document.createElement('span'); label.textContent = m ? m[0] : t('+ assign');
         d.append(small, label);
         d.addEventListener('click', function () { if (!m || editingMacros || shiftHeld) openEditor(i); else pressMacro(i, 'touch'); });
         mgrid.appendChild(d); mkeys.push(d);
@@ -441,7 +444,7 @@
     }
     function openEditor(i) {
       editingSlot = i;
-      $('#macroEditorTitle').textContent = 'EDIT KEY ' + (i + 1);
+      $('#macroEditorTitle').textContent = t('EDIT KEY {0}', i + 1);
       $('#macroLabel').value = MACROS[i] ? MACROS[i][0] : '';
       $('#macroShortcut').value = MACROS[i] ? MACROS[i][1] : '';
       editor.hidden = false; $('#macroLabel').focus();
@@ -457,7 +460,7 @@
     $('#macroRemove').addEventListener('click', function () { MACROS[editingSlot] = null; log('out', 'Key ' + (editingSlot + 1) + ' cleared'); closeEditor(); });
     $('#macroCancel').addEventListener('click', closeEditor);
     editor.addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.stopPropagation(); closeEditor(); } });
-    $('#macroEditToggle').addEventListener('click', function () { editingMacros = !editingMacros; this.setAttribute('aria-pressed', String(editingMacros)); this.textContent = editingMacros ? 'PICK A KEY TO EDIT · DONE' : 'EDIT KEYS'; });
+    $('#macroEditToggle').addEventListener('click', function () { editingMacros = !editingMacros; this.setAttribute('aria-pressed', String(editingMacros)); this.textContent = editingMacros ? t('PICK A KEY TO EDIT · DONE') : t('EDIT KEYS'); });
     function pressMacro(i, how) {
       var m = MACROS[i], el = mkeys[i];
       if (!el) return;
@@ -473,7 +476,7 @@
     }
 
     /* ---- usage ---- */
-    var USAGE = [['Claude Pro · session', 62, 'resets in 4 h'], ['Claude Pro · week', 38, 'resets in 4 days'], ['Codex · OpenAI', 81, 'resets tomorrow']];
+    var USAGE = [[t('Claude Pro · session'), 62, t('resets in 4 h')], [t('Claude Pro · week'), 38, t('resets in 4 days')], ['Codex · OpenAI', 81, t('resets tomorrow')]];
     var usageEl = $('#usage');
     function renderUsage(animate) {
       if (!usageEl) return;
@@ -506,16 +509,16 @@
       WINDOWS[wsHl].forEach(function (name) {
         var li = document.createElement('li'), button = document.createElement('button');
         button.type = 'button'; button.className = 'window-button'; button.textContent = name;
-        button.addEventListener('click', function () { $$('.window-button', rows).forEach(function (b) { b.classList.remove('is-focused'); }); button.classList.add('is-focused'); $('#wsStatus').textContent = 'Focused · ' + name; log('out', 'Window focus · ' + name); });
+        button.addEventListener('click', function () { $$('.window-button', rows).forEach(function (b) { b.classList.remove('is-focused'); }); button.classList.add('is-focused'); $('#wsStatus').textContent = t('Focused · {0}', name); log('out', 'Window focus · ' + name); });
         li.appendChild(button); rows.appendChild(li);
       });
-      $('#wsStatus').textContent = 'Workspace ' + WS[wsHl] + ' · ' + WINDOWS[wsHl].length + ' windows';
+      $('#wsStatus').textContent = t('Workspace {0} · {1} windows', WS[wsHl], WINDOWS[wsHl].length);
     }
 
     /* System metrics are clearly labelled samples, never browser telemetry. */
     var systemRefresh = 0;
     function renderSystem() {
-      var rows = [['CPU', 24 + systemRefresh % 12, 'Total processor load'], ['Memory', 58, '18.6 / 32 GiB used'], ['GPU', 12 + systemRefresh % 8, 'Graphics processor load'], ['Storage', 68, '348 / 512 GiB free']];
+      var rows = [['CPU', 24 + systemRefresh % 12, t('Total processor load')], [t('Memory'), 58, t('18.6 / 32 GiB used')], ['GPU', 12 + systemRefresh % 8, t('Graphics processor load')], [t('Storage'), 68, t('348 / 512 GiB free')]];
       $('#systemMeters').innerHTML = rows.map(function (m) { return '<div class="system-meter"><span>' + m[0] + '</span><b>' + m[1] + '%</b><progress max="100" value="' + m[1] + '"></progress><small>' + m[2] + '</small></div>'; }).join('');
     }
     $('#refreshSystem').addEventListener('click', function () { systemRefresh += 3; renderSystem(); log('in', 'Sample metrics refreshed · CPU, memory, GPU and free storage'); });
@@ -525,24 +528,24 @@
 
     /* ---- the screen chrome ---- */
     var HINTS = {
-      roster:  '<kbd>‹ ›</kbd> switch <kbd>SCROLL</kbd> select <kbd>ENTER</kbd> open <kbd>PTT</kbd> talk',
-      channel: '<kbd>‹ ›</kbd> agents <kbd>ENTER</kbd> card <kbd>CANCEL</kbd> roster',
-      card:    '<kbd>SCROLL</kbd> choose <kbd>ENTER</kbd> confirm <kbd>PTT</kbd> reply <kbd>CANCEL</kbd> snooze',
-      OMARCHY: '<kbd>‹ ›</kbd> workspace <kbd>ENTER</kbd> go <kbd>CANCEL</kbd> home',
-      MACROPAD: 'tap or press · <kbd>SHIFT</kbd>+<kbd>CANCEL</kbd> edits the keys',
-      USAGE:   '<kbd>SCROLL</kbd> providers <kbd>ENTER</kbd> refresh',
-      SYSTEM: '<kbd>ENTER</kbd> refresh sample metrics',
-      ARCADE: '<kbd>‹ ›</kbd> move <kbd>PTT</kbd> play <kbd>ESC</kbd> back',
+      roster:  t('<kbd>‹ ›</kbd> switch <kbd>SCROLL</kbd> select <kbd>ENTER</kbd> open <kbd>PTT</kbd> talk'),
+      channel: t('<kbd>‹ ›</kbd> agents <kbd>ENTER</kbd> card <kbd>CANCEL</kbd> roster'),
+      card:    t('<kbd>SCROLL</kbd> choose <kbd>ENTER</kbd> confirm <kbd>PTT</kbd> reply <kbd>CANCEL</kbd> snooze'),
+      OMARCHY: t('<kbd>‹ ›</kbd> workspace <kbd>ENTER</kbd> go <kbd>CANCEL</kbd> home'),
+      MACROPAD: t('tap or press · <kbd>SHIFT</kbd>+<kbd>CANCEL</kbd> edits the keys'),
+      USAGE:   t('<kbd>SCROLL</kbd> providers <kbd>ENTER</kbd> refresh'),
+      SYSTEM: t('<kbd>ENTER</kbd> refresh sample metrics'),
+      ARCADE: t('<kbd>‹ ›</kbd> move <kbd>PTT</kbd> play <kbd>ESC</kbd> back'),
     };
     var TAGS = { AGENTS: '19:42', OMARCHY: 'remote', MACROPAD: 'deck.toml', USAGE: 'sample', SYSTEM: 'sample', ARCADE: 'local' };
 
     var GUIDES = [
-      ['A direct line to your agents.', 'Open a session, answer a question, or hold PTT to send a sample prompt.', 'Try: ENTER twice to open the first question.'],
-      ['Your desktop, within reach.', 'Switch workspaces and tap a window to focus your Omarchy desktop.', 'Try: workspace 3, then select KiCad.'],
-      ['Make every key yours.', 'Label nine touch keys and assign shortcuts for your everyday actions.', 'Try: EDIT KEYS, choose a key, then save.'],
-      ['Know how much is left.', 'See Claude and Codex usage windows, with a countdown to each reset.', 'Try: scroll providers; ENTER refreshes.'],
-      ['Your computer, at a glance.', 'Check sample CPU, memory, GPU and free storage readings in one place.', 'Try: ENTER to refresh the sample metrics.'],
-      ['A break between builds.', 'Play Flappy Bird, Snake or Raiden, adapted from the deck’s local games.', 'Try: pick a game; PTT plays, ESC goes back.']
+      [t('A direct line to your agents.'), t('Open a session, answer a question, or hold PTT to send a sample prompt.'), t('Try: ENTER twice to open the first question.')],
+      [t('Your desktop, within reach.'), t('Switch workspaces and tap a window to focus your Omarchy desktop.'), t('Try: workspace 3, then select KiCad.')],
+      [t('Make every key yours.'), t('Label nine touch keys and assign shortcuts for your everyday actions.'), t('Try: EDIT KEYS, choose a key, then save.')],
+      [t('Know how much is left.'), t('See Claude and Codex usage windows, with a countdown to each reset.'), t('Try: scroll providers; ENTER refreshes.')],
+      [t('Your computer, at a glance.'), t('Check sample CPU, memory, GPU and free storage readings in one place.'), t('Try: ENTER to refresh the sample metrics.')],
+      [t('A break between builds.'), t('Play Flappy Bird, Snake or Raiden, adapted from the deck’s local games.'), t('Try: pick a game; PTT plays, ESC goes back.')]
     ];
     $$('[data-demo-face]').forEach(function (button) { button.addEventListener('click', function () { setFace(Number(button.dataset.demoFace)); }); });
 
@@ -550,9 +553,9 @@
       faceEls.forEach(function (f, i) { f.classList.toggle('is-active', i === face); });
       var name = FACES[face];
       $$('[data-demo-face]').forEach(function (b, i) { b.setAttribute('aria-pressed', String(i === face)); });
-      $('#demoEyebrow').textContent = '0' + (face + 1) + ' / ' + name;
+      $('#demoEyebrow').textContent = '0' + (face + 1) + ' / ' + t(name);
       $('#demoTitle').textContent = GUIDES[face][0]; $('#demoDescription').textContent = GUIDES[face][1]; $('#demoTip').textContent = GUIDES[face][2];
-      if (title) title.textContent = name === 'AGENTS' && view !== 'roster' ? (agents[chan].kind + ' · ' + agents[chan].name).toUpperCase() : name;
+      if (title) title.textContent = name === 'AGENTS' && view !== 'roster' ? (agents[chan].kind + ' · ' + agents[chan].name).toUpperCase() : t(name);
       if (tag) { tag.textContent = TAGS[name]; tag.classList.toggle('is-demo', name === 'SYSTEM' || name === 'USAGE'); }
       if (hint) hint.innerHTML = name === 'AGENTS' ? HINTS[view] : HINTS[name];
       $$('[data-view]', deckEl).forEach(function (v) { v.hidden = v.getAttribute('data-view') !== view; });

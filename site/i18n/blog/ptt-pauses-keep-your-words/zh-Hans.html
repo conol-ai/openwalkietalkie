@@ -1,0 +1,24 @@
+---
+title: OpenWalkieTalkie v0.11.1：停顿时保留你说过的话 · OpenWalkieTalkie
+description: 按住 PTT 时可以停顿后继续说。使用 Apple 本地运行的语音识别时，之前说的句子现在会保留在预览和最终转写中。
+heading: OpenWalkieTalkie v0.11.1：停顿时保留你说过的话
+kind: Mac 应用和服务补丁
+date: 2026-10-28
+published: 2026-10-28T06:26:49Z
+updated: 2026-10-28T06:26:49Z
+summary: 按住 PTT 时可以停顿后继续说。使用 Apple 本地运行的语音识别时，之前说的句子现在会保留在预览和最终转写中。
+excerpt: 按住 PTT 时可以停顿后继续说。使用 Apple 本地运行的语音识别时，之前说的句子现在会保留在预览和最终转写中。
+lastmod: 2026-10-28
+navDocs: yes
+---
+  <p>你应该可以在句子之间想一想，而不丢掉已经说过的话。0.11.1 版修复了一个听写问题：按住 PTT 时停顿一下，消息里可能只剩下最后一句。</p>
+  <h2>按住一次，句句都在</h2>
+  <p>使用 Apple 本地运行的语音识别时，停顿可能让一句话结束，而录音仍在继续。下一个识别结果可能只包含新的这一句。服务以前把这个结果当成了整段转写的替换。</p>
+  <p>现在，在按住 PTT 的整个过程中，服务会保留已经完成的句子。实时预览包含之前的句子，松开按键时发送完整的转写。修正仍会替换正在识别的词，有意重复的句子也会保留。</p>
+  <h2>用真实的停顿测试</h2>
+  <p>我们用三句合成的英语、每句之间停顿三秒，重现了丢字问题。修复后，用 Apple 本地运行的识别器跑同样的场景，预览和最终结果都保留了全部三句。回归测试还覆盖了修正的词、重复的句子、累积的结果和空的最终结果。</p>
+  <h2>更新 Mac 应用</h2>
+  <p>选择<strong>检查更新</strong>，或安装已签名并经过公证的 0.11.1 版 Mac 应用（Apple Silicon 或 Intel）。如果服务仍显示旧版本，请选择<strong>服务 → 重新启动</strong>。需要 macOS 13 或更高版本。</p>
+  <p>这个修复在 Mac 上的服务中。固件仍为 <strong>0.11.0</strong>；这个补丁不需要更新固件或引导程序。你的设置和蓝牙配对都会保留。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.11.1" rel="noopener">在 GitHub 上获取 OpenWalkieTalkie v0.11.1 及校验和 →</a></p>
+  <p class="post-back"><a href="/blog/">← 返回博客</a></p>

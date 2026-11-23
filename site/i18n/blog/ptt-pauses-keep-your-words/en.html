@@ -1,0 +1,24 @@
+---
+title: OpenWalkieTalkie v0.11.1: Keep your words across pauses · OpenWalkieTalkie
+description: Pause while holding PTT and keep speaking. Earlier phrases now stay in the preview and final transcript with Apple on-device recognition.
+heading: OpenWalkieTalkie v0.11.1: Keep your words across pauses
+kind: Mac app and service patch
+date: 2026-10-28
+published: 2026-10-28T06:26:49Z
+updated: 2026-10-28T06:26:49Z
+summary: Pause while holding PTT and keep speaking. Earlier phrases now stay in the preview and final transcript with Apple on-device recognition.
+excerpt: Pause while holding PTT and keep speaking. Earlier phrases now stay in the preview and final transcript with Apple on-device recognition.
+lastmod: 2026-10-28
+navDocs: yes
+---
+  <p>You should be able to think between sentences without losing what you already said. Version 0.11.1 fixes a dictation bug where pausing while holding PTT could leave only the last phrase in your message.</p>
+  <h2>One button hold, every phrase</h2>
+  <p>With Apple on-device recognition, a pause can complete a phrase while the recording continues. The next recognition result may contain only the new phrase. The service previously treated that result as a replacement for the whole transcript.</p>
+  <p>The service now keeps completed phrases throughout the PTT hold. The live preview includes earlier sentences, and releasing the button sends the complete transcript. Corrections still replace the words being recognized, and intentionally repeated phrases are kept.</p>
+  <h2>Tested with real pauses</h2>
+  <p>We reproduced the loss with three synthesized English sentences separated by three-second pauses. Running the same scenario through Apple's on-device recognizer with the fix preserved all three sentences in both the preview and the final result. Regression tests also cover corrected words, repeated phrases, cumulative results and empty final results.</p>
+  <h2>Update the Mac app</h2>
+  <p>Choose <strong>Check for Updates</strong>, or install the signed, notarized 0.11.1 Mac app for Apple Silicon or Intel. If the service still reports an older version, choose <strong>Service → Restart</strong>. macOS 13 or later is required.</p>
+  <p>This fix is in the Mac service. Firmware remains at <strong>0.11.0</strong>; no firmware or bootloader update is needed for this patch. Your settings and Bluetooth pairing are preserved.</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.11.1" rel="noopener">Get OpenWalkieTalkie v0.11.1 and checksums on GitHub →</a></p>
+  <p class="post-back"><a href="/blog/">← Back to the blog</a></p>

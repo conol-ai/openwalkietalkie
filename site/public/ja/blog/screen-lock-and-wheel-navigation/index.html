@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie v0.8.0：画面ロックとそろったホイール操作 · OpenWalkieTalkie</title>
+<meta name="description" content="自動の画面ロックがバッグの中の PTT を守ります。反時計回りに4クリックで解除でき、ページと項目の選択は同じ方向で動きます。" />
+<link rel="canonical" href="https://openwalkietalkie.org/ja/blog/screen-lock-and-wheel-navigation/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/screen-lock-and-wheel-navigation/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/screen-lock-and-wheel-navigation/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/screen-lock-and-wheel-navigation/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/screen-lock-and-wheel-navigation/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/screen-lock-and-wheel-navigation/" />
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.8.0：画面ロックとそろったホイール操作 · OpenWalkieTalkie" />
+<meta property="og:description" content="自動の画面ロックがバッグの中の PTT を守ります。反時計回りに4クリックで解除でき、ページと項目の選択は同じ方向で動きます。" />
+<meta property="og:url" content="https://openwalkietalkie.org/ja/blog/screen-lock-and-wheel-navigation/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie ブログ" href="/ja/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/i18n/ja.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">本文へスキップ</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/ja/" aria-label="OpenWalkieTalkie — ホーム">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="セクション">
+      <a href="/ja/#pile">The Pile</a>
+      <a href="/ja/#features">機能</a>
+      <a href="/ja/#demo">試す</a>
+      <a href="/ja/#faces">ページ</a>
+      <a href="/ja/#blueprint">設計図</a>
+      <a href="/ja/blog/" aria-current="true">ブログ</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="言語: 日本語">日本語</summary>
+        <ul>
+          <li><a href="/blog/screen-lock-and-wheel-navigation/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/screen-lock-and-wheel-navigation/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/screen-lock-and-wheel-navigation/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/blog/screen-lock-and-wheel-navigation/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="昼と夜のテーマを切り替える" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">昼</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="メニューを開く" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">ブログ · リリースノート</p>
+  <h1>OpenWalkieTalkie v0.8.0：画面ロックとそろったホイール操作</h1>
+  <p class="post-meta"><span>2026年10月21日</span><span>アプリとファームウェアの更新</span></p>
+</header>
+<article class="post-body">
+  <p>手に取ったらすぐ使えて、しかもバッグの中から誤って音声メッセージを送らない。携帯機器にはそれが必要です。バージョン 0.8.0 では自動の画面ロックを追加し、ページの切り替えやリストの移動でホイールの向きがそろうようにしました。</p>
+  <h2>2分でロック、4クリックで解除</h2>
+  <p>本体での操作が2分間ないと、画面がスリープし、押して話す機能を含むすべての本体操作がロックされます。キーを押す、画面に触れる、ホイールを回すと、ロック画面が点灯しますが、その下にある操作は実行されません。</p>
+  <p>解除するには、ホイールを<strong>反時計回りに4クリック続けて</strong>回します。最初の1クリックで画面が点灯した場合、それも4クリックに数えます。時計回りに回すか、画面がもう一度スリープすると、カウントはやり直しになります。</p>
+  <p>最後の1クリックはロックを解除するだけで、選択は動きません。ロック中に押していたキーは、一度離してから押し直すまで動作しません。そのため、押されたままの PTT がロック解除と同時に送信を始めることはありません。通知で画面が点灯することはありますが、ロックは解除されません。また、キーを押し続けてもロック中の画面がずっと点灯したままになることはありません。</p>
+  <h2>ページもリストも同じ方向</h2>
+  <p>エンコーダーの物理的な向きを修正しました。<strong>反時計回りで次または下、時計回りで前または上を選択します。</strong>これは SHIFT ＋ホイールでのページ選択にも、メニュー項目、エージェントとセッションのリスト、カードの選択肢、リストのスクロールにも当てはまります。使い方のページの向きも同じです。</p>
+  <p>音量などの数値設定は、これまでどおり時計回りで増えます。マクロパッドのキーに割り当てた操作と、ゲーム内の旋回は、物理的な向きのままです。</p>
+  <h2>音声の改善はそのまま</h2>
+  <p>このリリースでは、<a href="/ja/blog/speaker-eq-and-less-hiss/">0.7.0 で導入したスピーカー EQ と Rev A の RAM 実行</a>を引き続き使います。Rev B はこれまでどおり NOR フラッシュから実行します。フラッシュのパーティションとリカバリープロトコルは変わりません。</p>
+  <h2>アプリとデバイスを更新する</h2>
+  <p>署名・公証済みの Mac アプリ（Apple Silicon または Intel）をインストールするか、アプリで<strong>アップデートを確認</strong>を選びます。macOS 13 以降が必要です。デバイスを USB-C で接続し、<strong>サービス → 更新 → ファームウェア更新を確認</strong>を使います。アプリ、サービス、ファームウェアがすべて 0.8.0 と表示されるはずです。</p>
+  <p>すでにリカバリープロトコル 2 を使っているデバイスには通常のアプリケーション更新が届き、設定と Bluetooth のペアリングは保持されます。それより古いリカバリーのバージョンでは、アプリの既存のガイド付き移行を使います。お使いのデバイスにはアプリのアップデーターを使ってください。Rev A 用と Rev B 用に分かれた出荷時 ZIP にはチップ全体のイメージが入っており、設定とペアリングを上書きします。</p>
+  <h2>確認したこと</h2>
+  <p>開発版ファームウェアを USB で Rev A のデバイスに書き込んで検証し、操作担当者がホイールの物理的な向きの修正を確認しました。自動チェックでは、ロックのタイミング、押したままの入力とキューに入った入力、PTT の抑止、ホイールの選択と端の扱い、描画、基板ごとの実行レイアウトを確認しています。このセッションでは Rev B のハードウェアを実機で試していません。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.8.0" rel="noopener">OpenWalkieTalkie v0.8.0、ファームウェア、出荷時ファームウェア、チェックサムを GitHub で入手 →</a></p>
+  <p class="post-back"><a href="/ja/blog/">← ブログに戻る</a></p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL のプロジェクト · ソフトウェアは MIT · ハードウェアは CERN-OHL-P</span>
+    <nav aria-label="フッター">
+      <a href="/ja/#waitlist">ウェイトリストに登録</a>
+      <a href="/ja/privacy/">プライバシーポリシー</a>
+      <a href="/ja/cookies/">Cookie について</a>
+      <a href="/ja/cookies/" data-privacy-open>プライバシーに関するお知らせ</a>
+      <a href="/ja/">ホーム</a>
+      <a href="/ja/#demo">試す</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Discord で CoHDL と OpenWalkieTalkie のコミュニティに参加">Discord</a>
+      <a href="/ja/blog/feed.xml">フィード</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "blog-index.head.title1": "ブログ · OpenWalkieTalkie",
+  "blog-index.head.meta-content1": "OpenWalkieTalkie の開発ログと解説。AI エージェントのためのオープンソースのハンディ無線機です。",
+  "blog-index.content.p1": "開発ログ",
+  "blog-index.content.h11": "ブログ",
+  "blog-index.content.p2": "開発ログと解説。どの記事も基板と同じくらいオープンです。",
+  "blog-index.content.p40": "今後のリリースや開発ログは <a href=\"/blog/feed.xml\">Atom フィード</a>で購読できます。",
+  "blog-index.card.read": "リリースを読む →",
+  "blog-index.feed.subtitle": "AI エージェントのためのオープンソースのハンディ無線機、その開発ログと解説。"
+}

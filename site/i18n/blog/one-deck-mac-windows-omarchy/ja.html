@@ -1,0 +1,37 @@
+---
+title: OpenWalkieTalkie v0.14.0：Mac、Windows、Omarchy で使える 1 台のデバイス · OpenWalkieTalkie
+description: Mac アプリがデバイスの管理アプリになり、サービスは Windows と Omarchy でも動くようになりました。Grok Bot が Claude Code と Codex に加わり、ファームウェアのインストールはデバイス自身が確認します。
+heading: OpenWalkieTalkie v0.14.0：Mac、Windows、Omarchy で使える 1 台のデバイス
+kind: Mac と Windows のアプリ、Omarchy、サービスとファームウェア
+date: 2026-11-16
+published: 2026-11-16T05:04:33Z
+updated: 2026-11-16T05:04:33Z
+summary: Mac アプリがデバイスの管理アプリになり、サービスは Windows と Omarchy でも動くようになりました。Grok Bot が Claude Code と Codex に加わり、ファームウェアのインストールはデバイス自身が確認します。
+excerpt: Mac アプリがデバイスの管理アプリになり、サービスは Windows と Omarchy でも動くようになりました。Grok Bot が Claude Code と Codex に加わり、ファームウェアのインストールはデバイス自身が確認します。
+lastmod: 2026-11-16
+navDocs: yes
+---
+  <p>バージョン 0.14.0 は、これまでで最大のリリースです。Mac アプリがデバイスの管理アプリになり、サービスは Windows と Omarchy でも動くようになりました。Grok Bot が Claude Code と Codex に加わり、ファームウェアのインストールはデバイス自身が確認します。</p>
+  <h2>デバイスの管理アプリ</h2>
+  <p>セッションはデバイスで読んで答えます。セッションの内容がアプリのウィンドウに届くことはありません。ウィンドウはデバイスとその周りのサービスを管理するもので、5 つのページがあります：<strong>デバイス</strong>、<strong>ページとキー</strong>、<strong>連携</strong>、<strong>音声</strong>、<strong>サービス</strong>。「連携」には各接続元からデータが届いているかが表示され、接続元ごとに<strong>テスト質問を送信</strong>と、<strong>設定する</strong>または<strong>修復</strong>があります。「サービス」には<strong>セットアップを確認</strong>、<strong>サポートファイルを書き出す</strong>、更新、インストールされたものすべてと<strong>アンインストール</strong>があります。初回起動では、<strong>これらを追加</strong>を選ぶまで何もインストールされません。</p>
+  <p>エージェント一覧、カードでの回答、指示の入力欄、「使用量」ページはウィンドウからなくなりました。デバイスにあるからです。セッションのカードで ENTER を押すと、そのセッションのアプリが前面に出ます。オートメーションの権限は要りません。設定はデバイスごとに保存され、サービスは自分で更新を確認し、デバイスの接続が切れてから 10 分後に収集を止めます。</p>
+  <h2>Grok Bot が Claude Code と Codex に加わる</h2>
+  <p>xAI のチームメイトアプリ Grok Bot が、最新の連携です。ボットはそれぞれ、デバイスの<strong>Grok Bot</strong>ページに 1 行ずつ、Grok のマーク付きで並びます。ボットを押すと、そのボットのルーティンの Webhook に届きます。ボットはパソコン上で <code>deckd grokbot say</code> を実行して答えます。答えの短い版がデバイスに表示されて読み上げられ、答えの全文はボットのチャットに残ります。ボットからデバイスで質問し、選んだ答えを受け取ることもできます。</p>
+  <p>Mac でボットを追加するには、<strong>連携 → Grok Bot → ボット…</strong>を開き、名前を入力して<strong>プロンプトをコピー</strong>を選びます。そのプロンプトを Grok Bot のチャットでボットに送ると、ボットが自分でルーティンを作ります。ルーティンの<strong>POST先</strong> URL と<strong>キー</strong>をダイアログにコピーし、Grok Bot の<strong>設定 → コンピューター</strong>で、ボットがコマンドを実行できるようにします。ボットが実行したコマンドはデバイスに報告できますが、ほかのセッションのカードに答えたり、設定を変えたりはできません。</p>
+  <h2>Windows（プレビュー版）</h2>
+  <p>サービスとアプリが Windows 10 と 11（x64）で動くようになりました。対応するのは「システム」ページ、Claude Code、Claude Channels、Codex、マクロパッド、音声、Grok Bot、タスクトレイのアイコン、サインイン時の起動、アプリ内アップデートです。各リリースには、署名なしの Windows 用 ZIP が含まれるようになりました。署名がないため、SmartScreen では<strong>詳細情報 → 実行</strong>を選ぶ必要があり、スマート アプリ コントロールではブロックされます。手順は<a href="/docs/windows/">Windows インストールガイド</a>で説明しています。</p>
+  <h2>Omarchy</h2>
+  <p>Omarchy（Hyprland）のマシンでは、Linux のサービスと Omarchy ブリッジが、そのマシンの Claude Code、Codex、Kimi Code のセッションをデバイスに表示します。Omarchy のページではウィンドウとワークスペースを切り替えられ、音声での指示はそのセッションのターミナルに入力されます。Superwhisper がインストールされていれば、押している間の音声は Superwhisper が認識します。マクロパッドは uinput で入力するので、Omarchy の Super ショートカットも使えます。ビルドとインストールは<a href="/docs/omarchy/">Omarchy ガイド</a>で説明しています。</p>
+  <h2>更新はデバイスが確認する</h2>
+  <p>ファームウェア 0.14.0 以降、ファームウェアの更新はデバイスで ENTER を押したときにだけ始まります。CANCEL、タイムアウト、音声、API では何もインストールされません。0.13 から 0.14 への更新は引き続きアプリで確認します。リカバリーモードのデバイスはすぐにインストールします。</p>
+  <p>質問の通知が次の ENTER を受け取るようになりました。次に押すと質問が開き、その次に押すと答えます。新しい質問に移っても、動いているタイマー、鳴っているアラーム、ゲームはそのままです。</p>
+  <h2>知っておきたい変更</h2>
+  <ul>
+    <li>親プロセスの制限が、ネイティブインストールした Claude Code も捉えるようになりました。Claude Code や Codex の中で実行した管理用の <code>deckd</code> コマンドは拒否されます。自分で開いたターミナルから実行してください。</li>
+    <li>ローカルの TCP の窓口は既定でオフになり、次のリリースで削除されます。</li>
+    <li>デバイスの「使用量」ページでの Claude の使用量は、オンにした場合だけ表示されます。また、デバイスのマイクが使えないときに、サービスが Mac のマイクで録音することはなくなりました。</li>
+  </ul>
+  <h2>アップデート</h2>
+  <p>Mac では<strong>アップデートを確認…</strong>を選ぶか、Apple Silicon または Intel（macOS 13 以降）用の、署名・公証済みの <strong>0.14.0</strong> アプリをインストールします。次に、デバイスを USB で接続したまま<strong>サービス → 更新</strong>を開き、デバイスの横の<strong>確認</strong>を選んでから、<strong>内容を確認…</strong>と<strong>インストール</strong>を選びます。通常の更新では、設定と Bluetooth のペアリングは保持されます。Windows では、リリースから ZIP をダウンロードし、Windows ガイドに従ってください。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.14.0" rel="noopener">GitHub で OpenWalkieTalkie v0.14.0 とチェックサムを入手 →</a></p>
+  <p class="post-back"><a href="/blog/">← ブログに戻る</a></p>

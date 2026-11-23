@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="{{=lang}}" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>{{=title}}</title>
+<meta name="description" content="{{=description}}" />
+<link rel="canonical" href="{{=canonical}}" />{{=alternates}}
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="{{=ogTitle}}" />
+<meta property="og:description" content="{{=ogDescription}}" />
+<meta property="og:url" content="{{=canonical}}" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="{{common.openwalkietalkie-blog}}" href="/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+{{=i18nScript}}<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">{{common.skip-to-content}}</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/" aria-label="{{common.openwalkietalkie-home}}">
+      {{common.open-walkie-talkie}}
+    </a>
+
+    <nav class="nav__links" aria-label="{{common.sections}}">
+      <a href="/#pile">{{common.the-pile}}</a>
+      <a href="/#features">{{common.features}}</a>
+      <a href="/#demo">{{common.try-it}}</a>
+      <a href="/#faces">{{common.faces}}</a>
+      <a href="/#blueprint">{{common.blueprint}}</a>
+{{#navDocs}}      <a href="/docs/">{{common.docs}}</a>
+{{/navDocs}}      <a href="/blog/" aria-current="true">{{common.blog}}</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">{{common.github}}</a>
+{{=switcher}}    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="{{common.toggle-day-and-night-theme}}" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">{{common.day}}</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="{{common.open-menu}}" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">{{common.the-blog-release-notes}}</p>
+  <h1>{{=heading}}</h1>
+  <p class="post-meta"><span>{{=date}}</span><span>{{=kind}}</span></p>
+</header>
+<article class="post-body">
+{{=body}}</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>{{common.openwalkietalkie-a-cohdl-project-mit-sof}}</span>
+    <nav aria-label="{{common.footer}}">
+      <a href="/#waitlist">{{common.join-the-waitlist}}</a>
+      <a href="/privacy/">{{common.privacy-policy}}</a>
+      <a href="/cookies/">{{common.cookie-information}}</a>
+      <a href="/cookies/" data-privacy-open>{{common.privacy-notice}}</a>
+      <a href="/">{{common.home}}</a>
+      <a href="/#demo">{{common.try-it}}</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">{{common.github}}</a>
+      <a href="https://cohdl.org/" rel="noopener">{{common.cohdl}}</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="{{common.join-the-cohdl-and-openwalkietalkie-comm}}">{{common.discord}}</a>
+      <a href="/blog/feed.xml">{{common.feed}}</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

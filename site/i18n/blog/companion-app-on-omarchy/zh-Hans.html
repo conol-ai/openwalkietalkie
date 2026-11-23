@@ -1,0 +1,27 @@
+---
+title: OpenWalkieTalkie v0.15.0：配套应用来到 Omarchy · OpenWalkieTalkie
+description: 配套应用可在 Omarchy 上运行，在 Omarchy 页面上按住 PTT 可在光标处听写，滚轮按窗口行的顺序移动，Linux 服务把所有内容放在一个文件夹中。
+heading: OpenWalkieTalkie v0.15.0：配套应用来到 Omarchy
+kind: Omarchy 应用、听写和服务
+date: 2026-11-17
+published: 2026-11-17T12:58:57Z
+updated: 2026-11-17T12:58:57Z
+summary: 配套应用可在 Omarchy 上运行，在 Omarchy 页面上按住 PTT 可在光标处听写，滚轮按窗口行的顺序移动，Linux 服务把所有内容放在一个文件夹中。
+excerpt: 配套应用可在 Omarchy 上运行，在 Omarchy 页面上按住 PTT 可在光标处听写，滚轮按窗口行的顺序移动，Linux 服务把所有内容放在一个文件夹中。
+lastmod: 2026-11-17
+navDocs: yes
+---
+  <p>0.15.0 版把配套应用带到了 Omarchy，并让设备在那里成为听写用的麦克风。设备固件保持 0.14.0 不变。</p>
+  <h2>Omarchy 上的配套应用</h2>
+  <p>Mac 和 Windows 上的应用现在也能在 Omarchy（Hyprland）上运行，在应用启动器中名为 <strong>OpenWalkieTalkie</strong>，同样有五个页面：<strong>设备</strong>、<strong>页面与按键</strong>、<strong>集成</strong>、<strong>语音</strong>和<strong>服务</strong>。它会自己找到服务。<strong>服务</strong>通过服务的 systemd 用户单元启动和停止服务，<strong>登录时打开</strong>是一个 XDG 自动启动项。没有托盘图标，那是桌面状态栏的事；也没有应用内更新，因为应用是从源代码构建的。</p>
+  <p><strong>页面与按键</strong>也能适应比应用设计宽度更窄的平铺窗口：页面列表会换到第二行，按键编辑区会移到按键网格下方。<a href="/docs/omarchy/">Omarchy 指南</a>介绍了如何构建和安装它。</p>
+  <h2>在 Omarchy 页面上听写</h2>
+  <p>在 Omarchy 页面上，PTT 的用法和 Superwhisper 自己的按住说话一样。按住说话，松开，你的话就会输入到当前拥有键盘焦点的窗口的光标处，不会按 Enter。按住时按 CANCEL 会丢弃这段录音。装有 Superwhisper 时由它识别，使用它自己的模式、语言和词汇表；否则由本地 Whisper 模型识别。为此，桥接程序会在列表中添加一个 <strong>Dictate</strong> 条目，在“助手”页面上选中它，也能以同样的方式听写。</p>
+  <h2>滚轮跟着行走</h2>
+  <p>在 Omarchy 页面上，滚轮现在按页面列出的顺序在窗口行之间移动，和它在设备其他列表中的移动方式一样，并在第一行和最后一行停住。以前它按 Hyprland 自己的窗口顺序移动，所以转一下可能会跳过下面那一行。</p>
+  <h2>Linux 上只用一个文件夹</h2>
+  <p>Linux 服务现在把所有内容放在一个文件夹 <code>~/.local/share/openwalkietalkie</code> 中，就像在 Mac 上用一个文件夹存放一样。Omarchy 安装本来就在那里运行，<code>deckd</code> 命令也不再需要 <code>DECKD_DATA_DIR=…</code> 前缀。如果你曾在 Linux 上按旧布局手动运行 <code>deckd</code>，请把它的文件移到该文件夹，或设置 <code>DECKD_DATA_DIR</code>。</p>
+  <h2>更新</h2>
+  <p>在 Mac 上，选择<strong>检查更新…</strong>，或安装已签名并经过公证的 <strong>0.15.0</strong> 应用，支持 Apple Silicon 和 Intel（macOS 13 或更高版本）。在 Windows 上，从发布页面下载 ZIP 包。在 Omarchy 上，拉取代码，构建服务和应用，再用这两者运行 <code>install.sh</code>，具体见 <a href="/docs/omarchy/">Omarchy 指南</a>。本次发布不需要更新设备固件。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.15.0" rel="noopener">在 GitHub 上获取 OpenWalkieTalkie v0.15.0 及校验和 →</a></p>
+  <p class="post-back"><a href="/blog/">← 返回博客</a></p>

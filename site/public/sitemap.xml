@@ -1,46 +1,991 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
     <loc>https://openwalkietalkie.org/</loc>
     <lastmod>2026-11-16</lastmod>
     <changefreq>monthly</changefreq>
     <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/</loc>
+    <lastmod>2026-11-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/</loc>
+    <lastmod>2026-11-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/</loc>
+    <lastmod>2026-11-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/" />
   </url>
   <url>
     <loc>https://openwalkietalkie.org/blog/</loc>
     <lastmod>2026-11-16</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/" />
   </url>
   <url>
-    <loc>https://openwalkietalkie.org/blog/introducing-openwalkietalkie/</loc>
-    <lastmod>2026-10-13</lastmod>
+    <loc>https://openwalkietalkie.org/zh-Hans/blog/</loc>
+    <lastmod>2026-11-16</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/blog/</loc>
+    <lastmod>2026-11-16</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/blog/</loc>
+    <lastmod>2026-11-16</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/manual/</loc>
+    <lastmod>2026-11-19</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/manual/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/manual/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/manual/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/manual/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/manual/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/manual/</loc>
+    <lastmod>2026-11-19</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/manual/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/manual/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/manual/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/manual/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/manual/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/manual/</loc>
+    <lastmod>2026-11-19</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/manual/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/manual/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/manual/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/manual/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/manual/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/manual/</loc>
+    <lastmod>2026-11-19</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/manual/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/manual/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/manual/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/manual/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/manual/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/docs/</loc>
+    <lastmod>2026-10-28</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/docs/</loc>
+    <lastmod>2026-10-28</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/docs/</loc>
+    <lastmod>2026-10-28</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/docs/</loc>
+    <lastmod>2026-10-28</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/docs/native-companions/</loc>
+    <lastmod>2026-10-28</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/native-companions/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/native-companions/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/native-companions/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/native-companions/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/native-companions/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/docs/native-companions/</loc>
+    <lastmod>2026-10-28</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/native-companions/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/native-companions/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/native-companions/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/native-companions/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/native-companions/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/docs/native-companions/</loc>
+    <lastmod>2026-10-28</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/native-companions/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/native-companions/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/native-companions/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/native-companions/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/native-companions/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/docs/native-companions/</loc>
+    <lastmod>2026-10-28</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/native-companions/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/native-companions/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/native-companions/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/native-companions/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/native-companions/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/docs/windows/</loc>
+    <lastmod>2026-11-14</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/windows/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/windows/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/windows/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/windows/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/windows/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/docs/windows/</loc>
+    <lastmod>2026-11-14</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/windows/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/windows/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/windows/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/windows/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/windows/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/docs/windows/</loc>
+    <lastmod>2026-11-14</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/windows/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/windows/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/windows/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/windows/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/windows/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/docs/windows/</loc>
+    <lastmod>2026-11-14</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/windows/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/windows/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/windows/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/windows/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/windows/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/docs/omarchy/</loc>
+    <lastmod>2026-11-15</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/omarchy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/omarchy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/omarchy/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/omarchy/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/omarchy/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/docs/omarchy/</loc>
+    <lastmod>2026-11-15</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/omarchy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/omarchy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/omarchy/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/omarchy/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/omarchy/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/docs/omarchy/</loc>
+    <lastmod>2026-11-15</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/omarchy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/omarchy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/omarchy/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/omarchy/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/omarchy/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/docs/omarchy/</loc>
+    <lastmod>2026-11-15</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/omarchy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/omarchy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/omarchy/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/omarchy/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/omarchy/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/privacy/</loc>
+    <lastmod>2026-10-16</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/privacy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/privacy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/privacy/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/privacy/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/privacy/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/privacy/</loc>
+    <lastmod>2026-10-16</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/privacy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/privacy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/privacy/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/privacy/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/privacy/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/privacy/</loc>
+    <lastmod>2026-10-16</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/privacy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/privacy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/privacy/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/privacy/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/privacy/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/privacy/</loc>
+    <lastmod>2026-10-16</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/privacy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/privacy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/privacy/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/privacy/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/privacy/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/cookies/</loc>
+    <lastmod>2026-10-16</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/cookies/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/cookies/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/cookies/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/cookies/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/cookies/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/cookies/</loc>
+    <lastmod>2026-10-16</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/cookies/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/cookies/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/cookies/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/cookies/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/cookies/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/cookies/</loc>
+    <lastmod>2026-10-16</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/cookies/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/cookies/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/cookies/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/cookies/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/cookies/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/cookies/</loc>
+    <lastmod>2026-10-16</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/cookies/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/cookies/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/cookies/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/cookies/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/cookies/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/blog/dictation-that-knows-the-window/</loc>
+    <lastmod>2026-11-22</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/dictation-that-knows-the-window/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/dictation-that-knows-the-window/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/dictation-that-knows-the-window/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/dictation-that-knows-the-window/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/dictation-that-knows-the-window/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/blog/dictation-that-knows-the-window/</loc>
+    <lastmod>2026-11-22</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/dictation-that-knows-the-window/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/dictation-that-knows-the-window/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/dictation-that-knows-the-window/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/dictation-that-knows-the-window/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/dictation-that-knows-the-window/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/blog/dictation-that-knows-the-window/</loc>
+    <lastmod>2026-11-22</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/dictation-that-knows-the-window/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/dictation-that-knows-the-window/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/dictation-that-knows-the-window/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/dictation-that-knows-the-window/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/dictation-that-knows-the-window/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/blog/dictation-that-knows-the-window/</loc>
+    <lastmod>2026-11-22</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/dictation-that-knows-the-window/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/dictation-that-knows-the-window/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/dictation-that-knows-the-window/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/dictation-that-knows-the-window/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/dictation-that-knows-the-window/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/blog/companion-app-on-omarchy/</loc>
+    <lastmod>2026-11-17</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/companion-app-on-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/companion-app-on-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/companion-app-on-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/companion-app-on-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/companion-app-on-omarchy/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/blog/companion-app-on-omarchy/</loc>
+    <lastmod>2026-11-17</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/companion-app-on-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/companion-app-on-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/companion-app-on-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/companion-app-on-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/companion-app-on-omarchy/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/blog/companion-app-on-omarchy/</loc>
+    <lastmod>2026-11-17</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/companion-app-on-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/companion-app-on-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/companion-app-on-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/companion-app-on-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/companion-app-on-omarchy/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/blog/companion-app-on-omarchy/</loc>
+    <lastmod>2026-11-17</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/companion-app-on-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/companion-app-on-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/companion-app-on-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/companion-app-on-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/companion-app-on-omarchy/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/blog/one-deck-mac-windows-omarchy/</loc>
+    <lastmod>2026-11-16</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/one-deck-mac-windows-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/one-deck-mac-windows-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/one-deck-mac-windows-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/one-deck-mac-windows-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/one-deck-mac-windows-omarchy/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/blog/one-deck-mac-windows-omarchy/</loc>
+    <lastmod>2026-11-16</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/one-deck-mac-windows-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/one-deck-mac-windows-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/one-deck-mac-windows-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/one-deck-mac-windows-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/one-deck-mac-windows-omarchy/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/blog/one-deck-mac-windows-omarchy/</loc>
+    <lastmod>2026-11-16</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/one-deck-mac-windows-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/one-deck-mac-windows-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/one-deck-mac-windows-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/one-deck-mac-windows-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/one-deck-mac-windows-omarchy/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/blog/one-deck-mac-windows-omarchy/</loc>
+    <lastmod>2026-11-16</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/one-deck-mac-windows-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/one-deck-mac-windows-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/one-deck-mac-windows-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/one-deck-mac-windows-omarchy/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/one-deck-mac-windows-omarchy/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/blog/four-languages-one-setting/</loc>
+    <lastmod>2026-11-08</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/four-languages-one-setting/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/four-languages-one-setting/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/four-languages-one-setting/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/four-languages-one-setting/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/four-languages-one-setting/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/blog/four-languages-one-setting/</loc>
+    <lastmod>2026-11-08</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/four-languages-one-setting/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/four-languages-one-setting/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/four-languages-one-setting/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/four-languages-one-setting/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/four-languages-one-setting/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/blog/four-languages-one-setting/</loc>
+    <lastmod>2026-11-08</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/four-languages-one-setting/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/four-languages-one-setting/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/four-languages-one-setting/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/four-languages-one-setting/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/four-languages-one-setting/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/blog/four-languages-one-setting/</loc>
+    <lastmod>2026-11-08</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/four-languages-one-setting/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/four-languages-one-setting/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/four-languages-one-setting/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/four-languages-one-setting/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/four-languages-one-setting/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/blog/conol-speech-and-pomodoro/</loc>
+    <lastmod>2026-11-05</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/conol-speech-and-pomodoro/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/conol-speech-and-pomodoro/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/conol-speech-and-pomodoro/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/conol-speech-and-pomodoro/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/conol-speech-and-pomodoro/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/blog/conol-speech-and-pomodoro/</loc>
+    <lastmod>2026-11-05</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/conol-speech-and-pomodoro/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/conol-speech-and-pomodoro/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/conol-speech-and-pomodoro/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/conol-speech-and-pomodoro/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/conol-speech-and-pomodoro/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/blog/conol-speech-and-pomodoro/</loc>
+    <lastmod>2026-11-05</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/conol-speech-and-pomodoro/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/conol-speech-and-pomodoro/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/conol-speech-and-pomodoro/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/conol-speech-and-pomodoro/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/conol-speech-and-pomodoro/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/blog/conol-speech-and-pomodoro/</loc>
+    <lastmod>2026-11-05</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/conol-speech-and-pomodoro/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/conol-speech-and-pomodoro/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/conol-speech-and-pomodoro/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/conol-speech-and-pomodoro/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/conol-speech-and-pomodoro/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/blog/ptt-pauses-keep-your-words/</loc>
+    <lastmod>2026-10-28</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/ptt-pauses-keep-your-words/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/ptt-pauses-keep-your-words/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/ptt-pauses-keep-your-words/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/ptt-pauses-keep-your-words/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/ptt-pauses-keep-your-words/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/blog/ptt-pauses-keep-your-words/</loc>
+    <lastmod>2026-10-28</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/ptt-pauses-keep-your-words/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/ptt-pauses-keep-your-words/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/ptt-pauses-keep-your-words/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/ptt-pauses-keep-your-words/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/ptt-pauses-keep-your-words/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/blog/ptt-pauses-keep-your-words/</loc>
+    <lastmod>2026-10-28</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/ptt-pauses-keep-your-words/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/ptt-pauses-keep-your-words/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/ptt-pauses-keep-your-words/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/ptt-pauses-keep-your-words/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/ptt-pauses-keep-your-words/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/blog/ptt-pauses-keep-your-words/</loc>
+    <lastmod>2026-10-28</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/ptt-pauses-keep-your-words/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/ptt-pauses-keep-your-words/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/ptt-pauses-keep-your-words/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/ptt-pauses-keep-your-words/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/ptt-pauses-keep-your-words/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/blog/conol-and-native-companions/</loc>
+    <lastmod>2026-10-28</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/conol-and-native-companions/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/conol-and-native-companions/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/conol-and-native-companions/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/conol-and-native-companions/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/conol-and-native-companions/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/blog/conol-and-native-companions/</loc>
+    <lastmod>2026-10-28</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/conol-and-native-companions/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/conol-and-native-companions/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/conol-and-native-companions/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/conol-and-native-companions/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/conol-and-native-companions/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/blog/conol-and-native-companions/</loc>
+    <lastmod>2026-10-28</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/conol-and-native-companions/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/conol-and-native-companions/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/conol-and-native-companions/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/conol-and-native-companions/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/conol-and-native-companions/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/blog/conol-and-native-companions/</loc>
+    <lastmod>2026-10-28</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/conol-and-native-companions/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/conol-and-native-companions/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/conol-and-native-companions/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/conol-and-native-companions/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/conol-and-native-companions/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/blog/computer-resources-on-the-deck/</loc>
+    <lastmod>2026-10-26</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/computer-resources-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/computer-resources-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/computer-resources-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/computer-resources-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/computer-resources-on-the-deck/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/blog/computer-resources-on-the-deck/</loc>
+    <lastmod>2026-10-26</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/computer-resources-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/computer-resources-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/computer-resources-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/computer-resources-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/computer-resources-on-the-deck/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/blog/computer-resources-on-the-deck/</loc>
+    <lastmod>2026-10-26</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/computer-resources-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/computer-resources-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/computer-resources-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/computer-resources-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/computer-resources-on-the-deck/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/blog/computer-resources-on-the-deck/</loc>
+    <lastmod>2026-10-26</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/computer-resources-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/computer-resources-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/computer-resources-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/computer-resources-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/computer-resources-on-the-deck/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/blog/usb-audio-and-reset-reminders/</loc>
+    <lastmod>2026-10-22</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/usb-audio-and-reset-reminders/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/usb-audio-and-reset-reminders/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/usb-audio-and-reset-reminders/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/usb-audio-and-reset-reminders/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/usb-audio-and-reset-reminders/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/blog/usb-audio-and-reset-reminders/</loc>
+    <lastmod>2026-10-22</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/usb-audio-and-reset-reminders/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/usb-audio-and-reset-reminders/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/usb-audio-and-reset-reminders/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/usb-audio-and-reset-reminders/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/usb-audio-and-reset-reminders/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/blog/usb-audio-and-reset-reminders/</loc>
+    <lastmod>2026-10-22</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/usb-audio-and-reset-reminders/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/usb-audio-and-reset-reminders/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/usb-audio-and-reset-reminders/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/usb-audio-and-reset-reminders/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/usb-audio-and-reset-reminders/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/blog/usb-audio-and-reset-reminders/</loc>
+    <lastmod>2026-10-22</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/usb-audio-and-reset-reminders/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/usb-audio-and-reset-reminders/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/usb-audio-and-reset-reminders/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/usb-audio-and-reset-reminders/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/usb-audio-and-reset-reminders/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/blog/screen-lock-and-wheel-navigation/</loc>
+    <lastmod>2026-10-21</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/screen-lock-and-wheel-navigation/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/screen-lock-and-wheel-navigation/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/screen-lock-and-wheel-navigation/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/screen-lock-and-wheel-navigation/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/screen-lock-and-wheel-navigation/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/blog/screen-lock-and-wheel-navigation/</loc>
+    <lastmod>2026-10-21</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/screen-lock-and-wheel-navigation/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/screen-lock-and-wheel-navigation/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/screen-lock-and-wheel-navigation/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/screen-lock-and-wheel-navigation/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/screen-lock-and-wheel-navigation/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/blog/screen-lock-and-wheel-navigation/</loc>
+    <lastmod>2026-10-21</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/screen-lock-and-wheel-navigation/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/screen-lock-and-wheel-navigation/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/screen-lock-and-wheel-navigation/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/screen-lock-and-wheel-navigation/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/screen-lock-and-wheel-navigation/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/blog/screen-lock-and-wheel-navigation/</loc>
+    <lastmod>2026-10-21</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/screen-lock-and-wheel-navigation/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/screen-lock-and-wheel-navigation/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/screen-lock-and-wheel-navigation/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/screen-lock-and-wheel-navigation/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/screen-lock-and-wheel-navigation/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/blog/speaker-eq-and-less-hiss/</loc>
+    <lastmod>2026-10-20</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/speaker-eq-and-less-hiss/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/speaker-eq-and-less-hiss/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/speaker-eq-and-less-hiss/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/speaker-eq-and-less-hiss/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/speaker-eq-and-less-hiss/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/blog/speaker-eq-and-less-hiss/</loc>
+    <lastmod>2026-10-20</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/speaker-eq-and-less-hiss/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/speaker-eq-and-less-hiss/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/speaker-eq-and-less-hiss/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/speaker-eq-and-less-hiss/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/speaker-eq-and-less-hiss/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/blog/speaker-eq-and-less-hiss/</loc>
+    <lastmod>2026-10-20</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/speaker-eq-and-less-hiss/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/speaker-eq-and-less-hiss/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/speaker-eq-and-less-hiss/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/speaker-eq-and-less-hiss/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/speaker-eq-and-less-hiss/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/blog/speaker-eq-and-less-hiss/</loc>
+    <lastmod>2026-10-20</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/speaker-eq-and-less-hiss/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/speaker-eq-and-less-hiss/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/speaker-eq-and-less-hiss/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/speaker-eq-and-less-hiss/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/speaker-eq-and-less-hiss/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/blog/arcade-on-the-deck/</loc>
+    <lastmod>2026-10-19</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/arcade-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/arcade-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/arcade-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/arcade-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/arcade-on-the-deck/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/blog/arcade-on-the-deck/</loc>
+    <lastmod>2026-10-19</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/arcade-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/arcade-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/arcade-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/arcade-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/arcade-on-the-deck/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/blog/arcade-on-the-deck/</loc>
+    <lastmod>2026-10-19</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/arcade-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/arcade-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/arcade-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/arcade-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/arcade-on-the-deck/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/blog/arcade-on-the-deck/</loc>
+    <lastmod>2026-10-19</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/arcade-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/arcade-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/arcade-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/arcade-on-the-deck/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/arcade-on-the-deck/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/blog/desktop-connection-and-factory-images/</loc>
+    <lastmod>2026-10-19</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/desktop-connection-and-factory-images/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/desktop-connection-and-factory-images/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/desktop-connection-and-factory-images/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/desktop-connection-and-factory-images/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/desktop-connection-and-factory-images/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/blog/desktop-connection-and-factory-images/</loc>
+    <lastmod>2026-10-19</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/desktop-connection-and-factory-images/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/desktop-connection-and-factory-images/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/desktop-connection-and-factory-images/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/desktop-connection-and-factory-images/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/desktop-connection-and-factory-images/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/blog/desktop-connection-and-factory-images/</loc>
+    <lastmod>2026-10-19</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/desktop-connection-and-factory-images/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/desktop-connection-and-factory-images/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/desktop-connection-and-factory-images/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/desktop-connection-and-factory-images/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/desktop-connection-and-factory-images/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/blog/desktop-connection-and-factory-images/</loc>
+    <lastmod>2026-10-19</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/desktop-connection-and-factory-images/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/desktop-connection-and-factory-images/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/desktop-connection-and-factory-images/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/desktop-connection-and-factory-images/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/desktop-connection-and-factory-images/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/blog/recovery-and-more-room/</loc>
+    <lastmod>2026-10-18</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/recovery-and-more-room/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/recovery-and-more-room/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/recovery-and-more-room/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/recovery-and-more-room/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/recovery-and-more-room/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/blog/recovery-and-more-room/</loc>
+    <lastmod>2026-10-18</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/recovery-and-more-room/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/recovery-and-more-room/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/recovery-and-more-room/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/recovery-and-more-room/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/recovery-and-more-room/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/blog/recovery-and-more-room/</loc>
+    <lastmod>2026-10-18</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/recovery-and-more-room/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/recovery-and-more-room/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/recovery-and-more-room/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/recovery-and-more-room/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/recovery-and-more-room/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/blog/recovery-and-more-room/</loc>
+    <lastmod>2026-10-18</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/recovery-and-more-room/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/recovery-and-more-room/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/recovery-and-more-room/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/recovery-and-more-room/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/recovery-and-more-room/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/blog/images-and-questions/</loc>
+    <lastmod>2026-10-15</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/images-and-questions/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/images-and-questions/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/images-and-questions/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/images-and-questions/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/images-and-questions/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/blog/images-and-questions/</loc>
+    <lastmod>2026-10-15</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/images-and-questions/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/images-and-questions/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/images-and-questions/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/images-and-questions/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/images-and-questions/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/blog/images-and-questions/</loc>
+    <lastmod>2026-10-15</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/images-and-questions/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/images-and-questions/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/images-and-questions/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/images-and-questions/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/images-and-questions/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/blog/images-and-questions/</loc>
+    <lastmod>2026-10-15</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/images-and-questions/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/images-and-questions/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/images-and-questions/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/images-and-questions/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/images-and-questions/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/blog/radio-branding/</loc>
+    <lastmod>2026-10-15</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/radio-branding/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/radio-branding/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/radio-branding/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/radio-branding/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/radio-branding/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/blog/radio-branding/</loc>
+    <lastmod>2026-10-15</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/radio-branding/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/radio-branding/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/radio-branding/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/radio-branding/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/radio-branding/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/blog/radio-branding/</loc>
+    <lastmod>2026-10-15</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/radio-branding/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/radio-branding/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/radio-branding/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/radio-branding/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/radio-branding/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/blog/radio-branding/</loc>
+    <lastmod>2026-10-15</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/radio-branding/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/radio-branding/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/radio-branding/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/radio-branding/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/radio-branding/" />
   </url>
   <url>
     <loc>https://openwalkietalkie.org/blog/workflows-and-usage/</loc>
     <lastmod>2026-10-13</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/workflows-and-usage/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/workflows-and-usage/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/workflows-and-usage/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/workflows-and-usage/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/workflows-and-usage/" />
   </url>
-  <url><loc>https://openwalkietalkie.org/blog/dictation-that-knows-the-window/</loc><lastmod>2026-11-22</lastmod></url>
-  <url><loc>https://openwalkietalkie.org/blog/companion-app-on-omarchy/</loc><lastmod>2026-11-17</lastmod></url>
-  <url><loc>https://openwalkietalkie.org/blog/one-deck-mac-windows-omarchy/</loc><lastmod>2026-11-16</lastmod></url>
-  <url><loc>https://openwalkietalkie.org/blog/radio-branding/</loc><lastmod>2026-10-15</lastmod></url>
-  <url><loc>https://openwalkietalkie.org/blog/images-and-questions/</loc><lastmod>2026-10-15</lastmod></url>
-  <url><loc>https://openwalkietalkie.org/privacy/</loc><lastmod>2026-10-16</lastmod></url>
-  <url><loc>https://openwalkietalkie.org/cookies/</loc><lastmod>2026-10-16</lastmod></url>
-  <url><loc>https://openwalkietalkie.org/blog/recovery-and-more-room/</loc><lastmod>2026-10-18</lastmod></url>
-  <url><loc>https://openwalkietalkie.org/blog/desktop-connection-and-factory-images/</loc><lastmod>2026-10-19</lastmod></url>
-  <url><loc>https://openwalkietalkie.org/blog/arcade-on-the-deck/</loc><lastmod>2026-10-19</lastmod></url>
-  <url><loc>https://openwalkietalkie.org/blog/screen-lock-and-wheel-navigation/</loc><lastmod>2026-10-21</lastmod></url>
-  <url><loc>https://openwalkietalkie.org/blog/speaker-eq-and-less-hiss/</loc><lastmod>2026-10-20</lastmod></url>
-  <url><loc>https://openwalkietalkie.org/blog/usb-audio-and-reset-reminders/</loc><lastmod>2026-10-22</lastmod></url>
-  <url><loc>https://openwalkietalkie.org/blog/computer-resources-on-the-deck/</loc><lastmod>2026-10-26</lastmod></url>
-  <url><loc>https://openwalkietalkie.org/docs/</loc><lastmod>2026-10-28</lastmod></url>
-  <url><loc>https://openwalkietalkie.org/docs/native-companions/</loc><lastmod>2026-10-28</lastmod></url>
-  <url><loc>https://openwalkietalkie.org/docs/windows/</loc><lastmod>2026-11-14</lastmod></url>
-  <url><loc>https://openwalkietalkie.org/docs/omarchy/</loc><lastmod>2026-11-15</lastmod></url>
-  <url><loc>https://openwalkietalkie.org/manual/</loc><lastmod>2026-11-19</lastmod></url>
-  <url><loc>https://openwalkietalkie.org/blog/conol-and-native-companions/</loc><lastmod>2026-10-28</lastmod></url>
-  <url><loc>https://openwalkietalkie.org/blog/ptt-pauses-keep-your-words/</loc><lastmod>2026-10-28</lastmod></url>
-  <url><loc>https://openwalkietalkie.org/blog/conol-speech-and-pomodoro/</loc><lastmod>2026-11-05</lastmod></url>
-  <url><loc>https://openwalkietalkie.org/blog/four-languages-one-setting/</loc><lastmod>2026-11-08</lastmod></url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/blog/workflows-and-usage/</loc>
+    <lastmod>2026-10-13</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/workflows-and-usage/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/workflows-and-usage/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/workflows-and-usage/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/workflows-and-usage/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/workflows-and-usage/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/blog/workflows-and-usage/</loc>
+    <lastmod>2026-10-13</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/workflows-and-usage/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/workflows-and-usage/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/workflows-and-usage/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/workflows-and-usage/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/workflows-and-usage/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/blog/workflows-and-usage/</loc>
+    <lastmod>2026-10-13</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/workflows-and-usage/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/workflows-and-usage/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/workflows-and-usage/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/workflows-and-usage/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/workflows-and-usage/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/blog/introducing-openwalkietalkie/</loc>
+    <lastmod>2026-10-13</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/introducing-openwalkietalkie/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/introducing-openwalkietalkie/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/introducing-openwalkietalkie/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/introducing-openwalkietalkie/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/introducing-openwalkietalkie/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hans/blog/introducing-openwalkietalkie/</loc>
+    <lastmod>2026-10-13</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/introducing-openwalkietalkie/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/introducing-openwalkietalkie/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/introducing-openwalkietalkie/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/introducing-openwalkietalkie/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/introducing-openwalkietalkie/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/zh-Hant/blog/introducing-openwalkietalkie/</loc>
+    <lastmod>2026-10-13</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/introducing-openwalkietalkie/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/introducing-openwalkietalkie/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/introducing-openwalkietalkie/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/introducing-openwalkietalkie/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/introducing-openwalkietalkie/" />
+  </url>
+  <url>
+    <loc>https://openwalkietalkie.org/ja/blog/introducing-openwalkietalkie/</loc>
+    <lastmod>2026-10-13</lastmod>
+    <xhtml:link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/introducing-openwalkietalkie/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/introducing-openwalkietalkie/" />
+    <xhtml:link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/introducing-openwalkietalkie/" />
+    <xhtml:link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/introducing-openwalkietalkie/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/introducing-openwalkietalkie/" />
+  </url>
 </urlset>

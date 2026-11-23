@@ -1,0 +1,33 @@
+---
+title: OpenWalkieTalkie v0.5.0: Desktop connected, factory ready · OpenWalkieTalkie
+description: Codex Desktop connection fixes, reliable short replies, alternate flash support, and factory programming images.
+heading: OpenWalkieTalkie v0.5.0: Desktop connected, factory ready
+kind: App and firmware update
+date: 2026-10-19
+published: 2026-10-19T05:00:00Z
+updated: 2026-10-19T05:00:00Z
+summary: Codex Desktop connection fixes, reliable short replies, alternate flash support, and factory programming images.
+excerpt: Codex Desktop connection fixes, reliable short replies, alternate flash support, and factory programming images.
+lastmod: 2026-10-19
+navDocs: no
+---
+  <p>OpenWalkieTalkie 0.5.0 fixes the connection between Codex Desktop and your deck. It also adds firmware support for two alternative flash chips and packages full-chip images for factory programming.</p>
+  <h2>Desktop tasks reach the shared service</h2>
+  <p>The previous launcher could open Desktop successfully while leaving its conversations invisible to OpenWalkieTalkie. Desktop’s default plugin settings caused its implicit shared-service mode to fall back to a private server. The updated launcher selects the shared local connection explicitly.</p>
+  <p>Compatible installations named either ChatGPT.app or Codex.app are detected. The launcher reuses the existing Codex service and leaves running Desktop tasks alone. A separate fix restores replies from short tasks that finish before OpenWalkieTalkie subscribes to their conversation.</p>
+  <h2>Repair the integration after updating</h2>
+  <p>Install the 0.5.0 app and check that its service also reports 0.5.0. Open <strong>Integrations → Codex Desktop</strong> and install or repair the integration. When your Desktop tasks are idle, quit Codex Desktop / ChatGPT and open <code>~/Applications/Codex with OpenWalkieTalkie.app</code>.</p>
+  <p>This is a small launcher for your installed Desktop app. Use it for future launches too: opening the original app directly does not enable the shared connection. Unsupported Desktop builds produce an error instead of silently opening a disconnected session.</p>
+  <h2>More flash options and factory images</h2>
+  <p>The firmware now accepts Puya PY25Q128HA-SUH-IR (C5354566) and GigaDevice GD25Q128ESIGR (C2928891), alongside the existing Winbond W25Q128JVSIQ (C97521). Its settings, pairing, and bootloader writers verify a stable supported chip ID before enabling writes. Boards populated with the alternative parts still need physical qualification.</p>
+  <p>The release includes a factory ZIP with separate 16 MiB images for Rev A and Rev B. Each combines the exact released application and recovery binaries with a fresh flash table and empty unit storage. Chinese instructions, component hashes, and a standalone verifier are included.</p>
+  <p><strong>Factory images overwrite all flash contents, including settings and pairing data.</strong> They are for blank-board provisioning. Existing devices should use the app’s normal USB updater.</p>
+  <h2>Updating an existing deck</h2>
+  <p>Connect one deck over USB-C and open <strong>Service → Updates → Check firmware</strong>. The partition layout and recovery protocol are unchanged from 0.4.0, so devices already on recovery protocol 2 receive a normal application update.</p>
+  <p><strong>Devices still on the old bootloader need the guided migration. Keep power connected and the Mac awake: losing power during bootloader replacement can prevent startup and USB recovery and require hardware repair.</strong> The app displays this warning before migration. Do not manually install bootstrap or recovery files as application firmware.</p>
+  <h2>What we verified</h2>
+  <p>The launcher and transport regression tests pass. In a live test on the development Mac, Desktop connected to the shared service and its <code>DESKTOP-LINK-OK</code> reply appeared in the OpenWalkieTalkie GUI. USB delivery to the connected Rev A was healthy; the final physical screen check was not recorded.</p>
+  <p>Both board variants pass software checks. The preceding 0.4.1 development firmware with the same flash support completed an old-bootloader migration on the existing Rev A. The CI-built 0.5.0 files were not flashed in that test. A shipped Rev B, boards with the alternate chips, and blank-board factory programming still need hardware validation. No device audio test was performed.</p>
+  <h2>Get v0.5.0</h2>
+  <p>Use <strong>Check for Updates</strong> or <a href="/#download">download the signed and notarized Mac app</a> for Apple Silicon or Intel. macOS 13 or later is required.</p>
+  <p>The <a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.5.0">GitHub release</a> includes firmware, factory images, checksums, build attestations, and a Chinese upgrade guide. The guide is also included in each DMG.</p>

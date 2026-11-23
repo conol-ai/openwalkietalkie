@@ -1,0 +1,18 @@
+{
+  "success": "You're on the list. We'll email you when OpenWalkieTalkie is available to buy.",
+  "method_not_allowed": "Use the waitlist form to join.",
+  "cross_origin": "Please submit the form from the OpenWalkieTalkie website.",
+  "content_type": "Use the waitlist form to join.",
+  "too_large": "That submission is too large. Please use the email form.",
+  "invalid_body": "We couldn't read that submission. Please try again.",
+  "invalid_email": "Please enter a valid email address.",
+  "consent_required": "Please confirm that you'd like device availability emails.",
+  "rate_limited": "Too many attempts from this connection. Please try again in a minute.",
+  "unavailable": "We couldn't save your email just now. Please try again shortly.",
+  "not_found": "That endpoint doesn't exist.",
+  "page_title": "Waitlist signup · OpenWalkieTalkie",
+  "page_heading": "We couldn't add you yet",
+  "page_return": "Return to the waitlist form",
+  "privacy_policy": "Privacy Policy",
+  "cookie_information": "Cookie information"
+}

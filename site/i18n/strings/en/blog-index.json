@@ -1,0 +1,10 @@
+{
+  "blog-index.head.title1": "Blog · OpenWalkieTalkie",
+  "blog-index.head.meta-content1": "Build logs and write-ups from OpenWalkieTalkie — the open-source handheld radio for your AI agents.",
+  "blog-index.content.p1": "DEV LOG",
+  "blog-index.content.h11": "THE BLOG",
+  "blog-index.content.p2": "Build logs and write-ups. Every entry as open as the board.",
+  "blog-index.content.p40": "Subscribe with the <a href=\"/blog/feed.xml\">Atom feed</a> for future releases and build logs.",
+  "blog-index.card.read": "READ THE RELEASE →",
+  "blog-index.feed.subtitle": "Build logs and write-ups from the open-source handheld radio for your AI agents."
+}

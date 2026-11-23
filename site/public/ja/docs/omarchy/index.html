@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Omarchy で使う OpenWalkieTalkie · OpenWalkieTalkie</title>
+<meta name="description" content="Omarchy（Hyprland）のノートパソコンに OpenWalkieTalkie のサービスと Omarchy ブリッジをインストールします。デバイスがデスクトップのリモコンになり、Claude Code、Codex、Kimi Code のセッションを表示し、音声で指示を出せます。" />
+<link rel="canonical" href="https://openwalkietalkie.org/ja/docs/omarchy/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/omarchy/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/omarchy/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/omarchy/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/omarchy/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/omarchy/" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="Omarchy で使う OpenWalkieTalkie · OpenWalkieTalkie" />
+<meta property="og:description" content="Omarchy のノートパソコンに OpenWalkieTalkie のサービスと Omarchy ブリッジをインストールします。" />
+<meta property="og:url" content="https://openwalkietalkie.org/ja/docs/omarchy/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie ブログ" href="/ja/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<link rel="stylesheet" href="/css/docs.css" />
+<script src="/js/i18n/ja.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">本文へスキップ</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/ja/" aria-label="OpenWalkieTalkie — ホーム">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="セクション">
+      <a href="/ja/#pile">The Pile</a>
+      <a href="/ja/#features">機能</a>
+      <a href="/ja/#demo">試す</a>
+      <a href="/ja/#faces">ページ</a>
+      <a href="/ja/#blueprint">設計図</a>
+      <a href="/ja/docs/" aria-current="true">ドキュメント</a>
+      <a href="/ja/blog/">ブログ</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="言語: 日本語">日本語</summary>
+        <ul>
+          <li><a href="/docs/omarchy/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/docs/omarchy/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/docs/omarchy/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/docs/omarchy/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="昼と夜のテーマを切り替える" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">昼</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="メニューを開く" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main docs-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">LINUX · OMARCHY · ソースからビルド · 0.13.0+</p>
+  <h1>Omarchy で使う OpenWalkieTalkie</h1>
+  <p class="post-meta">デバイスを Omarchy（Hyprland）ノートパソコンのリモコンに</p>
+</header>
+<article class="post-body">
+
+<p><a href="https://omarchy.org/">Omarchy</a> では、Mac なしでデバイスがデスクトップとコーディングエージェントを操作します。ノートパソコンでは小さなサービスが 2 つ動きます。Mac アプリが動かすのと同じサービスを Linux 向けにビルドした <code>deckd</code> と、それを Hyprland および Claude Code、Codex、Kimi Code のセッションにつなぐ <strong>Omarchy ブリッジ</strong>です。</p>
+<ul>
+  <li><strong>Omarchy のページ：</strong>ワークスペースとウィンドウ。ホイールでウィンドウを、LEFT / RIGHT でワークスペースを切り替え、ENTER で全画面、SHIFT+CANCEL で scratchpad を切り替えます。</li>
+  <li><strong>一覧に並ぶセッション</strong>は、実行中、完了、質問中のいずれかで表示されます。選ぶと、そのターミナルが前面に出ます。</li>
+  <li><strong>音声の指示：</strong>セッションで PTT を押しながら話します。話した言葉がそのターミナルに入力され、ターンが終わると返信が表示され、読み上げられます。</li>
+  <li><strong>マクロパッド、システム、使用量のページ</strong>には、このノートパソコンの情報が表示されます。</li>
+  <li><strong>コンパニオンアプリ</strong>は Mac と同じウィンドウで、Omarchy のアプリランチャーにあります。</li>
+</ul>
+<p>Linux 版のダウンロードはまだありません。<code>deckd</code> とアプリはソースからビルドします。初回は 10 分ほどかかります。以下のコマンドはすべて Omarchy ノートパソコンのターミナルで実行します。</p>
+
+<h2>1. ツールをインストールする</h2>
+<pre><code>sudo pacman -S --needed base-devel git rustup cmake clang espeak-ng wtype
+rustup default stable</code></pre>
+<p><code>cmake</code> と <code>clang</code> はローカルの音声認識エンジンのビルドに、<code>espeak-ng</code> はデバイスでの返信の読み上げに、<code>wtype</code> はターミナルへの指示の入力に使います。ビルドに必要なその他のライブラリ（udev、ALSA、D-Bus）は Omarchy に入っています。</p>
+
+<h2>2. ビルドしてインストールする</h2>
+<pre><code>git clone https://github.com/conol-ai/openwalkietalkie.git
+cd openwalkietalkie/host
+cargo build --release --target x86_64-unknown-linux-gnu -p deckd -p openwalkietalkie-app
+sh omarchy/install.sh target/x86_64-unknown-linux-gnu/release/deckd target/x86_64-unknown-linux-gnu/release/openwalkietalkie-app</code></pre>
+<p><code>install.sh</code> は <code>deckd</code> とアプリを <code>~/.local/bin</code> に置き、アプリを <strong>OpenWalkieTalkie</strong> として Omarchy のランチャーに追加し、ブリッジを <code>~/.local/share/openwalkietalkie/omarchy</code> にコピーして、両方を systemd のユーザーサービス <code>deckd</code> と <code>omarchy-deck</code> として起動します。ログインのたびに再び起動します。最後に root 権限が必要な手順を表示します。それが次のセクションです。</p>
+
+<h2>3. サービスがデバイスを開けるようにする</h2>
+<p>デバイスの HID デバイスは、udev ルールがあなたに渡すまで root のものです。<code>install.sh</code> が表示した 2 つのコマンドを実行します。</p>
+<pre><code>sudo install -m 644 omarchy/70-openwalkietalkie.rules /etc/udev/rules.d/
+sudo udevadm control --reload &amp;&amp; sudo udevadm trigger --subsystem-match=hidraw</code></pre>
+<p>このルールは、USB-C でも Bluetooth でも同じようにデバイスに一致します。</p>
+
+<h2>4. デバイスを接続する</h2>
+<ul>
+  <li><strong>USB-C：</strong>差し込むだけです。ほかに必要なことはありません。</li>
+  <li><strong>Bluetooth：</strong>Omarchy の Bluetooth メニュー（または <code>bluetoothctl</code>）で <strong>OpenWalkieTalkie</strong> をペアリングします。デバイスが保持するペアリングは一度に 1 つです。Mac とペアリングしていた場合は、先に Mac 側で削除してください。</li>
+</ul>
+<p>サービスは数秒以内に自動で接続します。確認するには：</p>
+<pre><code>deckd status</code></pre>
+<p><code>link:</code> の行が <code>Connected, session Live</code> になっていれば接続済みです。</p>
+
+<h2>5. セッションをデバイスに表示する</h2>
+<p>使っているエージェントのフックをインストールします。インストールのたびにエージェントの設定ファイルを先にバックアップし、置き換えずに追記します。</p>
+<pre><code>python3 omarchy/omarchy_hook.py install claude
+python3 omarchy/omarchy_hook.py install codex
+python3 omarchy/omarchy_hook.py install kimi</code></pre>
+<p>すでに開いているセッションは新しいフックを読み込みません。起動し直すと、エージェントのページに表示されます。</p>
+
+<h2>6. 音声</h2>
+<p>選んだセッションで PTT を押しながら話し、離します。テキストがそのセッションのターミナルに入力され、続けて Enter が押されます。</p>
+<ul>
+  <li><strong>Superwhisper を使う場合</strong>（Omarchy の口述入力を使っているなら）、設定は不要です。押すたびに Superwhisper のモード、言語、語彙で認識し、Cloud モードなら 1 秒かかりません。準備ができているかは <code>superwhisper status</code> で確認します。</li>
+  <li><strong>使わない場合</strong>は、ローカルの Whisper モデル（約 465 MB）を一度ダウンロードします。
+<pre><code>printf '[voice.stt]\nengine = "whisper"\nmodel = "small"\nlanguage = "auto"\n' &gt;&gt; ~/.local/share/openwalkietalkie/config.toml
+deckd stt install --model small</code></pre>
+  Whisper はノートパソコンの CPU で動くため、プロセッサーによっては 1 回の押下に数秒以上かかります。</li>
+</ul>
+<p>音声が届くのは、ターミナルのウィンドウで動いているセッションだけです。別のアプリの中で動くセッションには入力先のターミナルがないため、デバイスには指示が届かなかったと表示されます。</p>
+
+<h2>7. 任意：マクロパッドのショートカット</h2>
+<p>キー操作を設定したマクロパッドのキーは、ノートパソコンでそれを入力します。フォーカス中のアプリのショートカットに加えて Omarchy 自体のショートカット（Super+…）もキーで動かすには、ブリッジがキーボードとして振る舞う必要があり、それには <code>/dev/uinput</code> が必要です。</p>
+<pre><code>sudo install -m 644 omarchy/71-openwalkietalkie-uinput.rules /etc/udev/rules.d/
+echo uinput | sudo tee /etc/modules-load.d/openwalkietalkie-uinput.conf
+sudo udevadm control --reload &amp;&amp; sudo modprobe uinput
+systemctl --user restart omarchy-deck</code></pre>
+<p>これ以降、実行するどのプログラムも ydotool と同じように入力デバイスを作れるようになります。この手順を飛ばしても、マクロパッドのキーはフォーカス中のアプリには届きますが、Omarchy のショートカットは動きません。</p>
+
+<h2>8. 任意：Claude の使用量バー</h2>
+<p>使用量のページに Claude のレート制限の枠を表示できます。Claude Code のログインを使って 5 分ごとに読み取ります。</p>
+<pre><code>deckd config set 'usage.providers=["codex","claude"]'</code></pre>
+
+<h2>セットアップを確認する</h2>
+<pre><code>deckd care checks
+python3 omarchy/omarchy_hook.py status
+journalctl --user -u deckd -u omarchy-deck -f</code></pre>
+<p>または、アプリランチャーから <strong>OpenWalkieTalkie</strong> を開きます。「デバイス」ページに接続状態が表示され、「サービス」ページでサービス（<code>deckd</code> の systemd ユニット）の開始と停止、ログイン時にアプリを開く設定ができます。サービスのファイルはすべて <code>~/.local/share/openwalkietalkie</code> にあります。</p>
+
+<h2>更新</h2>
+<pre><code>cd openwalkietalkie/host
+git pull
+cargo build --release --target x86_64-unknown-linux-gnu -p deckd -p openwalkietalkie-app
+sh omarchy/install.sh target/x86_64-unknown-linux-gnu/release/deckd target/x86_64-unknown-linux-gnu/release/openwalkietalkie-app</code></pre>
+<p><code>install.sh</code> をもう一度実行すると、新しいコードで両方のサービスが再起動します。アプリは終了して開き直すと新しいバージョンになります。デバイスのファームウェアを更新するには、USB-C で接続して <code>deckd firmware check</code>、続けて <code>deckd firmware install</code> を実行するか、アプリの「サービス」ページを使います。デバイスはインストール前に ENTER を押すよう求めます。Mac と同じ USB の経路ですが、Omarchy ではまだ試していません。</p>
+
+<h2>Omarchy にまだないもの</h2>
+<ul>
+  <li>デバイスでの権限の確認への応答。確認はターミナルに残ります。</li>
+  <li>Codex の使用量バーと、Omarchy のセッションのリーダーでの履歴とツールの行。</li>
+  <li>トレイアイコンとアプリの自動更新。アプリはソースからビルドするので、上の方法で更新してください。</li>
+</ul>
+
+<h2>アンインストール</h2>
+<pre><code>python3 omarchy/omarchy_hook.py uninstall all
+systemctl --user disable --now deckd omarchy-deck
+rm -f ~/.config/systemd/user/deckd.service ~/.config/systemd/user/omarchy-deck.service ~/.local/bin/deckd ~/.local/bin/openwalkietalkie-app
+rm -f ~/.local/share/applications/openwalkietalkie.desktop ~/.local/share/icons/hicolor/512x512/apps/openwalkietalkie.png ~/.config/autostart/openwalkietalkie.desktop
+rm -rf ~/.local/share/openwalkietalkie
+sudo rm -f /etc/udev/rules.d/70-openwalkietalkie.rules /etc/udev/rules.d/71-openwalkietalkie-uinput.rules /etc/modules-load.d/openwalkietalkie-uinput.conf</code></pre>
+<p>フックのアンインストールは、各エージェントの設定に自分が追加したものだけを削除します。</p>
+
+<p>うまく動かない場合は、<code>deckd care checks</code> の出力と <code>journalctl --user -u deckd -u omarchy-deck</code> の最後の数行を添えて <a href="https://github.com/conol-ai/openwalkietalkie/issues">Issue を作成</a>してください。詳しいリファレンスは <a href="https://github.com/conol-ai/openwalkietalkie/blob/main/host/omarchy/README.md">Omarchy ブリッジの README</a> です。</p>
+
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL のプロジェクト · ソフトウェアは MIT · ハードウェアは CERN-OHL-P</span>
+    <nav aria-label="フッター">
+      <a href="/ja/#waitlist">ウェイトリストに登録</a>
+      <a href="/ja/privacy/">プライバシーポリシー</a>
+      <a href="/ja/cookies/">Cookie について</a>
+      <a href="/ja/cookies/" data-privacy-open>プライバシーに関するお知らせ</a>
+      <a href="/ja/">ホーム</a>
+      <a href="/ja/#demo">試す</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Discord で CoHDL と OpenWalkieTalkie のコミュニティに参加">Discord</a>
+      <a href="/ja/blog/feed.xml">フィード</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

@@ -292,6 +292,23 @@ html[data-theme="night"] .btn--primary { --btn-ink: #1a1030; --btn-edge: #05070f
 }
 .nav__links a:hover { color: var(--ink); background: var(--panel-2); transform: translateY(-1px); }
 
+/* Language switcher: the last of the header links, a menu of the four languages */
+.lang-switch { position: relative; }
+.lang-switch summary {
+  list-style: none; cursor: pointer; font-size: 19px; padding: 6px 10px; color: var(--ink-soft); white-space: nowrap;
+  transition: color 160ms var(--ease), background-color 160ms var(--ease);
+}
+.lang-switch summary::-webkit-details-marker { display: none; }
+.lang-switch summary::after { content: " \25BE"; }
+.lang-switch summary:hover, .lang-switch[open] summary { color: var(--ink); background: var(--panel-2); }
+.lang-switch ul {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 1; min-width: 100%;
+  margin: 0; padding: 6px; list-style: none; background: var(--panel);
+  box-shadow: 0 0 0 var(--px) var(--panel-edge-2), 0 var(--px) 0 rgba(0,0,0,.2);
+}
+.lang-switch li a { display: block; }
+.nav__links .lang-switch a[aria-current] { color: var(--ink); background: var(--panel-2); }
+
 /* Day/Night toggle */
 .theme-toggle {
   display: flex; align-items: center; gap: 8px;
@@ -1429,6 +1446,8 @@ html[data-theme="night"] .footer__banner-fade::after  { opacity: 1; }
   .nav__inner { position: relative; }
   .nav__links.is-open { display: flex; }
   .nav__links a { font-size: 22px; padding: 10px; }
+  .lang-switch summary { font-size: 22px; padding: 10px; }
+  .lang-switch ul { position: static; box-shadow: none; padding: 0 0 0 18px; }
   .nav__burger { display: block; order: 5; }
   .theme-toggle { margin-left: auto; }
   .theme-toggle__label { display: none; }

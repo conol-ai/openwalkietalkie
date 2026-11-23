@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="{{=lang}}" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>{{native-companions.head.title1}}</title>
+<meta name="description" content="{{native-companions.head.meta-content1}}" />
+<link rel="canonical" href="https://openwalkietalkie.org/docs/native-companions/" />{{=alternates}}
+
+<meta property="og:type" content="website" />
+<meta name="owt-api-version" content="0.11.0" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="{{native-companions.head.title1}}" />
+<meta property="og:description" content="{{native-companions.head.meta-content1}}" />
+<meta property="og:url" content="https://openwalkietalkie.org/docs/native-companions/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="{{common.openwalkietalkie-blog}}" href="/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<link rel="stylesheet" href="/css/docs.css" />
+{{=i18nScript}}<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">{{common.skip-to-content}}</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/" aria-label="{{common.openwalkietalkie-home}}">
+      {{common.open-walkie-talkie}}
+    </a>
+
+    <nav class="nav__links" aria-label="{{common.sections}}">
+      <a href="/#pile">{{common.the-pile}}</a>
+      <a href="/#features">{{common.features}}</a>
+      <a href="/#demo">{{common.try-it}}</a>
+      <a href="/#faces">{{common.faces}}</a>
+      <a href="/#blueprint">{{common.blueprint}}</a>
+      <a href="/docs/" aria-current="true">{{common.docs}}</a>
+      <a href="/blog/">{{common.blog}}</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">{{common.github}}</a>
+{{=switcher}}    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="{{common.toggle-day-and-night-theme}}" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">{{common.day}}</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="{{common.open-menu}}" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main docs-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">{{common.developer-documentation-0-11-0}}</p>
+  <h1>{{common.native-companion-api}}</h1>
+  <p class="post-meta">{{common.native-integrations-for-any-agent}}</p>
+</header>
+<article class="post-body">
+<p>{{native-companions.content.p1}}</p>
+<p>{{native-companions.content.p2}}</p>
+<p>{{native-companions.content.p3}}</p>
+<nav class="toc" aria-label="{{native-companions.content.nav-aria-label1}}"><p class="toc-title">{{native-companions.content.p4}}</p><ul><li><a href="#try-the-example">{{native-companions.content.li1}}</a></li><li><a href="#connect-and-discover">{{native-companions.content.li2}}</a></li><li><a href="#register-sessions-and-group-them">{{native-companions.content.li3}}</a></li><li><a href="#start-and-activate-a-new-chat">{{native-companions.content.li4}}</a></li><li><a href="#keep-both-transcripts-current">{{native-companions.content.li5}}</a></li><li><a href="#transcribe-with-your-own-speech-model">{{native-companions.content.li6}}</a></li><li><a href="#handle-complex-questions-on-the-deck">{{native-companions.content.li7}}</a></li><li><a href="#display-and-change-model-thinking-effort">{{native-companions.content.li8}}</a></li><li><a href="#feed-the-omarchy-face">{{native-companions.content.li9}}</a></li><li><a href="#integration-checklist">{{native-companions.content.li10}}</a></li></ul></nav>
+<h2 id="try-the-example">{{native-companions.content.li1}}</h2>
+<p>{{native-companions.content.p5}}</p>
+<pre><code class="language-sh">python3 native_companion.py
+</code></pre>
+<p>{{native-companions.content.p6}}</p>
+<p>{{native-companions.content.p7}}</p>
+<h2 id="connect-and-discover">{{native-companions.content.li2}}</h2>
+<p>{{native-companions.content.p8}}</p>
+<ul>
+<li>{{native-companions.content.li11}}</li>
+<li>{{native-companions.content.li12}}</li>
+<li>{{native-companions.content.li13}}</li>
+</ul>
+<p>{{native-companions.content.p9}}</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;session.hello&quot;,&quot;params&quot;:{
+  &quot;client&quot;:{&quot;name&quot;:&quot;Example companion&quot;,&quot;version&quot;:&quot;1&quot;},
+  &quot;scopes&quot;:[&quot;agent&quot;,&quot;observe&quot;],
+  &quot;subscribe&quot;:[&quot;agent.order&quot;,&quot;agent.answer&quot;,&quot;focus.changed&quot;,&quot;session.settings_requested&quot;],
+  &quot;snapshot&quot;:false
+}}
+</code></pre>
+<p>{{native-companions.content.p10}}</p>
+<p>{{native-companions.content.p11}}</p>
+<p>{{native-companions.content.p12}}</p>
+<h2 id="register-sessions-and-group-them">{{native-companions.content.li3}}</h2>
+<p>{{native-companions.content.p13}}</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:2,&quot;method&quot;:&quot;agent.register&quot;,&quot;params&quot;:{
+  &quot;kind&quot;:&quot;other&quot;,&quot;name&quot;:&quot;Plan the release&quot;,&quot;key&quot;:&quot;example:personal:chat-42&quot;,
+  &quot;caps&quot;:{&quot;answer&quot;:&quot;push&quot;,&quot;order&quot;:&quot;push&quot;,&quot;focus&quot;:true},&quot;lease_ttl_s&quot;:30
+}}
+</code></pre>
+<p>{{native-companions.content.p14}}</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:3,&quot;method&quot;:&quot;agent.companion.set&quot;,&quot;params&quot;:{
+  &quot;agent&quot;:&quot;ag_example&quot;,&quot;profile&quot;:{
+    &quot;app_id&quot;:&quot;org.example.companion&quot;,&quot;group_id&quot;:&quot;personal&quot;,
+    &quot;group_label&quot;:&quot;Example&quot;,&quot;role&quot;:&quot;session&quot;
+  }
+}}
+</code></pre>
+<p><code>app_id</code> {{native-companions.content.p15}}</p>
+<p><code>role</code> {{native-companions.content.p16}}</p>
+<p>{{native-companions.content.p17}}</p>
+<p>{{native-companions.content.p18}}</p>
+<h2 id="start-and-activate-a-new-chat">{{native-companions.content.li4}}</h2>
+<p>{{native-companions.content.p19}}</p>
+<p>{{native-companions.content.p20}}</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{
+  &quot;type&quot;:&quot;agent.order&quot;,&quot;rev&quot;:123,
+  &quot;data&quot;:{&quot;agent&quot;:&quot;ag_launcher&quot;,&quot;text&quot;:&quot;Help me plan the release&quot;,&quot;order&quot;:&quot;or_12&quot;}
+}}
+</code></pre>
+<ol>
+<li>{{native-companions.content.li14}}</li>
+<li>{{native-companions.content.li15}}</li>
+<li>{{native-companions.content.li16}}</li>
+<li>{{native-companions.content.li17}}</li>
+</ol>
+<p>{{native-companions.content.p21}}</p>
+<p>{{native-companions.content.p22}}</p>
+<h2 id="keep-both-transcripts-current">{{native-companions.content.li5}}</h2>
+<p>{{native-companions.content.p23}}</p>
+<p>{{native-companions.content.p24}}</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:5,&quot;method&quot;:&quot;agent.order.result&quot;,&quot;params&quot;:{
+  &quot;agent&quot;:&quot;ag_example&quot;,&quot;order&quot;:&quot;or_12&quot;,&quot;ok&quot;:false,&quot;reason&quot;:&quot;backend_refused&quot;
+}}
+</code></pre>
+<p><code>reason</code> {{native-companions.content.p25}}</p>
+<p>{{native-companions.content.p26}}</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:4,&quot;method&quot;:&quot;agent.reply&quot;,&quot;params&quot;:{
+  &quot;agent&quot;:&quot;ag_example&quot;,&quot;text&quot;:&quot;I can help with the release.&quot;,&quot;speak&quot;:false,
+  &quot;message&quot;:{&quot;id&quot;:&quot;message-42&quot;,&quot;role&quot;:&quot;assistant&quot;,&quot;streaming&quot;:true}
+}}
+</code></pre>
+<p>{{native-companions.content.p27}}</p>
+<p>{{native-companions.content.p28}}</p>
+<p>{{native-companions.content.p29}}</p>
+<h2 id="transcribe-with-your-own-speech-model">{{native-companions.content.li6}}</h2>
+<p>{{native-companions.content.p30}}</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{
+  &quot;type&quot;:&quot;agent.transcribe&quot;,&quot;rev&quot;:124,
+  &quot;data&quot;:{&quot;agent&quot;:&quot;ag_example&quot;,&quot;transcription&quot;:&quot;tr_7&quot;,&quot;mime&quot;:&quot;audio/wav&quot;,
+    &quot;rate&quot;:16000,&quot;ms&quot;:4200,&quot;bytes&quot;:134444,&quot;page&quot;:98304,&quot;locale&quot;:&quot;en-US&quot;}
+}}
+</code></pre>
+<p>{{native-companions.content.p31}}</p>
+<h2 id="handle-complex-questions-on-the-deck">{{native-companions.content.li7}}</h2>
+<p>{{native-companions.content.p32}}</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:5,&quot;method&quot;:&quot;agent.card.set&quot;,&quot;params&quot;:{
+  &quot;agent&quot;:&quot;ag_example&quot;,&quot;type&quot;:&quot;q&quot;,&quot;text&quot;:&quot;1/3 Choose a language&quot;,
+  &quot;choices&quot;:[{&quot;label&quot;:&quot;Python&quot;},{&quot;label&quot;:&quot;Rust&quot;},{&quot;label&quot;:&quot;More&quot;},{&quot;label&quot;:&quot;Cancel&quot;}],
+  &quot;free_text&quot;:false,&quot;deliver&quot;:&quot;push&quot;,&quot;origin&quot;:{&quot;kind&quot;:&quot;custom&quot;}
+}}
+</code></pre>
+<p>{{native-companions.content.p33}}</p>
+<ul>
+<li>{{native-companions.content.li18}}</li>
+<li>{{native-companions.content.li19}}</li>
+<li>{{native-companions.content.li20}}</li>
+<li>{{native-companions.content.li21}}</li>
+<li>{{native-companions.content.li22}}</li>
+<li>{{native-companions.content.li23}}</li>
+</ul>
+<p>{{native-companions.content.p34}}</p>
+<h2 id="display-and-change-model-thinking-effort">{{native-companions.content.li8}}</h2>
+<p>{{native-companions.content.p35}}</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:6,&quot;method&quot;:&quot;agent.session.set&quot;,&quot;params&quot;:{
+  &quot;agent&quot;:&quot;ag_example&quot;,&quot;controls&quot;:{
+    &quot;model&quot;:&quot;My model&quot;,&quot;effort&quot;:&quot;High&quot;,&quot;editable&quot;:false,
+    &quot;note&quot;:&quot;Change these settings in Example.&quot;
+  }
+}}
+</code></pre>
+<p>{{native-companions.content.p36}}</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:7,&quot;method&quot;:&quot;agent.session.set&quot;,&quot;params&quot;:{
+  &quot;agent&quot;:&quot;ag_example&quot;,&quot;controls&quot;:{
+    &quot;model&quot;:&quot;fast&quot;,&quot;effort&quot;:&quot;low&quot;,&quot;editable&quot;:true,&quot;note&quot;:&quot;&quot;,
+    &quot;models&quot;:[
+      {&quot;id&quot;:&quot;fast&quot;,&quot;label&quot;:&quot;Fast model&quot;,&quot;efforts&quot;:[&quot;low&quot;,&quot;high&quot;],&quot;default_effort&quot;:&quot;low&quot;},
+      {&quot;id&quot;:&quot;simple&quot;,&quot;label&quot;:&quot;Simple model&quot;,&quot;efforts&quot;:[],&quot;default_effort&quot;:&quot;&quot;}
+    ]
+  }
+}}
+</code></pre>
+<p><code>model</code> {{native-companions.content.p37}}</p>
+<p>{{native-companions.content.p38}}</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{
+  &quot;type&quot;:&quot;session.settings_requested&quot;,&quot;rev&quot;:124,
+  &quot;data&quot;:{&quot;agent&quot;:&quot;ag_example&quot;,&quot;model&quot;:&quot;fast&quot;,&quot;effort&quot;:&quot;high&quot;,&quot;request_rev&quot;:19}
+}}
+</code></pre>
+<p>{{native-companions.content.p39}}</p>
+<p>{{native-companions.content.p40}}</p>
+<h2 id="feed-the-omarchy-face">{{native-companions.content.li9}}</h2>
+<p>{{native-companions.content.p41}}</p>
+<p>{{native-companions.content.p42}}</p>
+<p>{{native-companions.content.p43}}</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;session.hello&quot;,&quot;params&quot;:{
+  &quot;client&quot;:{&quot;name&quot;:&quot;Example window switcher&quot;,&quot;version&quot;:&quot;1&quot;},
+  &quot;scopes&quot;:[&quot;device&quot;,&quot;observe&quot;],
+  &quot;subscribe&quot;:[&quot;device.ws&quot;,&quot;device.key&quot;,&quot;device.link&quot;],
+  &quot;snapshot&quot;:false
+}}
+</code></pre>
+<p>{{native-companions.content.p44}}</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:2,&quot;method&quot;:&quot;device.ws.set&quot;,&quot;params&quot;:{
+  &quot;active&quot;:2,&quot;count&quot;:4,&quot;sel&quot;:0,
+  &quot;windows&quot;:[
+    {&quot;tone&quot;:&quot;blue&quot;,&quot;title&quot;:&quot;kitty — claude · header refactor&quot;},
+    {&quot;title&quot;:&quot;firefox — github · pulls&quot;}
+  ]
+}}
+</code></pre>
+<ul>
+<li><code>count</code>{{native-companions.content.li24}}</li>
+<li><code>active</code>{{native-companions.content.li25}}</li>
+<li><code>windows</code>{{native-companions.content.li26}}</li>
+<li><code>sel</code>{{native-companions.content.li27}}</li>
+</ul>
+<p>{{native-companions.content.p45}}</p>
+<p>{{native-companions.content.p46}}</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{
+  &quot;type&quot;:&quot;device.ws&quot;,&quot;rev&quot;:130,&quot;data&quot;:{&quot;win&quot;:1}
+}}
+</code></pre>
+<p>{{native-companions.content.p47}}</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{
+  &quot;type&quot;:&quot;device.key&quot;,&quot;rev&quot;:131,&quot;data&quot;:{&quot;k&quot;:&quot;cw&quot;,&quot;act&quot;:2,&quot;shift&quot;:false,&quot;f&quot;:2}
+}}
+</code></pre>
+<ul>
+<li><code>k</code>{{native-companions.content.li28}}</li>
+<li><code>act</code>{{native-companions.content.li29}}</li>
+<li><code>shift</code>{{native-companions.content.li30}}</li>
+<li><code>f</code>{{native-companions.content.li31}}</li>
+</ul>
+<p>{{native-companions.content.p48}}</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{
+  &quot;type&quot;:&quot;device.link&quot;,&quot;rev&quot;:132,
+  &quot;data&quot;:{&quot;link&quot;:&quot;connected&quot;,&quot;session&quot;:&quot;live&quot;,&quot;host_online&quot;:true,
+    &quot;sid&quot;:314159,&quot;fw&quot;:&quot;0.13.1&quot;,&quot;boot&quot;:false}
+}}
+</code></pre>
+<p><code>link</code> {{native-companions.content.p49}}</p>
+<p>{{native-companions.content.p50}}</p>
+<pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{
+  &quot;type&quot;:&quot;service.dormancy&quot;,&quot;rev&quot;:140,
+  &quot;data&quot;:{&quot;window_s&quot;:600,&quot;collecting&quot;:false,&quot;dormant_since&quot;:&quot;2026-11-11T01:51:00.000Z&quot;}
+}}
+</code></pre>
+<p><code>dormant_since</code> {{native-companions.content.p51}}</p>
+<h2 id="integration-checklist">{{native-companions.content.li10}}</h2>
+<p>{{native-companions.content.p52}}</p>
+<p>{{native-companions.content.p53}}</p>
+
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>{{common.openwalkietalkie-a-cohdl-project-mit-sof}}</span>
+    <nav aria-label="{{common.footer}}">
+      <a href="/#waitlist">{{common.join-the-waitlist}}</a>
+      <a href="/privacy/">{{common.privacy-policy}}</a>
+      <a href="/cookies/">{{common.cookie-information}}</a>
+      <a href="/cookies/" data-privacy-open>{{common.privacy-notice}}</a>
+      <a href="/">{{common.home}}</a>
+      <a href="/#demo">{{common.try-it}}</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">{{common.github}}</a>
+      <a href="https://cohdl.org/" rel="noopener">{{common.cohdl}}</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="{{common.join-the-cohdl-and-openwalkietalkie-comm}}">{{common.discord}}</a>
+      <a href="/blog/feed.xml">{{common.feed}}</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

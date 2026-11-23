@@ -1,0 +1,33 @@
+---
+title: OpenWalkieTalkie v0.4.0: recovery on screen, room to grow · OpenWalkieTalkie
+description: A guided bootloader upgrade, recovery progress on the deck, faster USB transfers, and Chinese text.
+heading: OpenWalkieTalkie v0.4.0: recovery on screen, room to grow
+kind: App and firmware update
+date: 2026-10-18
+published: 2026-10-18T05:00:00Z
+updated: 2026-10-18T05:00:00Z
+summary: A guided bootloader upgrade, recovery progress on the deck, faster USB transfers, and Chinese text.
+excerpt: A guided bootloader upgrade, recovery progress on the deck, faster USB transfers, and Chinese text.
+lastmod: 2026-10-18
+navDocs: no
+---
+  <p>OpenWalkieTalkie 0.4.0 gives the deck more space for features and makes firmware recovery visible on the device itself. It also adds Chinese text support and clearer Codex questions and answers.</p>
+  <h2>More of the flash is available to the application</h2>
+  <p>The 16 MiB NOR flash now provides 15.75 MiB for application code and assets. The flash table, bootloader, and both Bluetooth storage regions keep their reserved space. Chinese fonts live in the upper application bank, leaving more room for code in the lower bank.</p>
+  <p>With the clock configuration corrected, the firmware executes directly from NOR flash again. It no longer copies the whole application into PSRAM at startup.</p>
+  <h2>A recovery screen and faster USB updates</h2>
+  <p>The new bootloader shows recovery instructions, transfer progress, completion, and errors on the deck’s display. Updated devices can use sparse transfers and pipelined USB bulk, avoiding writes to padding and preserving the Bluetooth storage regions.</p>
+  <p>The first upgrade from an old bootloader still begins with a HID transfer of a temporary updater. That stage takes several minutes. Later stages can use the new transport, but flash erase and write time still contribute to the total.</p>
+  <h2>Upgrading from 0.3.0</h2>
+  <p>Install the 0.4.0 Mac app, connect one deck with a USB-C data cable, and open <strong>Service → Updates → Check firmware</strong>. Check the board revision and serial number before continuing.</p>
+  <p><strong>This upgrade can replace the bootloader. Keep USB-C power connected and the Mac awake until the app reports success. Losing power during bootloader replacement can prevent both startup and USB recovery and require hardware repair.</strong> The app displays this warning and requires explicit confirmation before migration.</p>
+  <p>The app installs a temporary updater, backs up and replaces the bootloader, reads it back to verify the write, then installs the final firmware. Use this guided flow rather than manually flashing the bootstrap or recovery files. The updater does not rewrite the flash table and skips the Bluetooth storage regions.</p>
+  <p>After completion, the device About page should show <strong>0.4.0 · Rev A</strong> or <strong>0.4.0 · Rev B</strong>. The version label now follows the firmware build automatically. Both board variants and their verified manifest are bundled with the app, so firmware updates can also work offline.</p>
+  <h2>Chinese text and clearer agent conversations</h2>
+  <p>A bundled Noto Sans CJK font adds simplified and traditional Chinese coverage. Codex clarification questions and answers appear as readable headings, question context, and answer text, instead of showing their transport envelope. This release also includes the Codex Desktop integration and Bluetooth signal-strength indicator added since 0.3.0.</p>
+  <h2>What has been tested</h2>
+  <p>Both board variants build and pass software checks. An earlier 0.3.1 candidate completed the full original-0.3.0-to-new-bootloader GUI migration on Rev A in about five and a half minutes. It used the same recovery source. The CI release rebuild produces different bootloader bytes and has not been flashed in that test.</p>
+  <p>The final 0.4.0 GUI rerun was blocked by local desktop automation before flashing. A shipped Rev B was unavailable, so its complete migration, display behavior, and pairing/settings preservation remain to be checked on hardware. These are pending checks, not completed validation. No device audio test was performed in this session.</p>
+  <h2>Get v0.4.0</h2>
+  <p>Use <strong>Check for Updates</strong> or <a href="/#download">download the signed and notarized Mac app</a> for Apple Silicon or Intel. macOS 13 or later is required.</p>
+  <p>The <a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.4.0">GitHub release</a> includes firmware, checksums, and a Chinese upgrade guide. The same guide is included inside the DMG.</p>

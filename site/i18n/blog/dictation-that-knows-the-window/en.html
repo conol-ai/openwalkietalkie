@@ -1,0 +1,29 @@
+---
+title: OpenWalkieTalkie v0.16.0: Dictation that knows the window · OpenWalkieTalkie
+description: Experimental and off by default: dictation at the cursor can be rewritten for the focused window, from its app name and title as plain text, through models you choose on a new Model access page.
+heading: OpenWalkieTalkie v0.16.0: Dictation that knows the window
+kind: Experimental dictation and model access
+date: 2026-11-22
+published: 2026-11-22T09:04:46Z
+updated: 2026-11-22T09:04:46Z
+summary: Experimental and off by default: dictation at the cursor can be rewritten for the focused window, from its app name and title as plain text, through models you choose on a new Model access page.
+excerpt: Experimental and off by default: dictation at the cursor can be rewritten for the focused window, from its app name and title as plain text, through models you choose on a new Model access page.
+lastmod: 2026-11-22
+navDocs: yes
+---
+  <p>Version 0.16.0 adds one feature, and it is <strong>experimental</strong>: dictation at the cursor can be rewritten for the window it goes into. It is off until you turn it on. The deck's firmware is unchanged at 0.14.0.</p>
+  <h2>The problem</h2>
+  <p>Spoken text comes out as prose. Hold PTT over a terminal and say "system CTL status", and the words "System CTL status" are typed, not <code>systemctl status</code>. What you meant depends on where the words are going, and the dictation did not know.</p>
+  <h2>What it does</h2>
+  <p>With the feature on, a dictation at the cursor (the <strong>Dictate</strong> entry on Omarchy) is rewritten before it is typed. A <strong>window recognition model</strong> reads the focused window's app name and title, as plain text and nothing else: never a screenshot, never the window's contents. It names what kind of place that is: a shell, an agent, an editor, a chat or prose. A <strong>rewriting model</strong> then rewrites your words for it. Without a window recognition model, built-in rules decide from the app's name.</p>
+  <p>Your dictated words go to the rewriting model's provider, and the app name and title to the window recognition model's provider. The service's log records each dictation's outcome, lengths and timings, never the words. You turn it on and choose both models in the companion app, under <strong>Voice › Context aware transcription</strong>.</p>
+  <h2>Three seconds, then your words as heard</h2>
+  <p>A dictation using cloud models has 3 seconds for both calls together. If a model is slower than that, fails, or answers with something that does not look like a rewrite, your words are typed exactly as heard. A model on this computer or your own network is given longer, 15 seconds by default and never more than 60, and the pickers mark it <strong>Local · slower</strong>. A local model known not to be running is not waited for.</p>
+  <h2>Model access</h2>
+  <p>The models come from a new page under <strong>Voice</strong>, <strong>Model access</strong>: one list of providers, each with one key, kept in the operating system's key store and never in <code>config.toml</code>. The page shows a key only by its last four characters. Providers speak one of two protocols: OpenAI-compatible chat completions (OpenAI, OpenRouter, Ollama, or any compatible server at an address you give) or Anthropic's Messages API. ElevenLabs is listed for the cloud voice only. On Omarchy, its own local models are found by themselves.</p>
+  <h2>Why it is experimental</h2>
+  <p>Three things have not been shown yet. Until this release, the macOS and Windows parts had never been built; CI built and tested them on both systems for 0.16.0, but only the Hyprland window reader has read a real window. No model running on your own computer has been used yet, only stand-ins for one. And Anthropic's API has only been tried against a stand-in, never the real service. No real dictation on the deck has yet been shown to be rewritten correctly end to end with this code, and macOS and Windows have no <strong>Dictate</strong> entry yet, so there the feature has nothing to rewrite.</p>
+  <h2>Update</h2>
+  <p>On a Mac, choose <strong>Check for Updates…</strong>, or install the signed, notarized <strong>0.16.0</strong> app for Apple Silicon or Intel (macOS 13 or later). On Windows, download the ZIP from the release. On Omarchy, pull, build the service and the app, and run <code>install.sh</code> with both, as the <a href="/docs/omarchy/">Omarchy guide</a> shows. The deck needs no firmware update for this release.</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.16.0" rel="noopener">Get OpenWalkieTalkie v0.16.0 and checksums on GitHub →</a></p>
+  <p class="post-back"><a href="/blog/">← Back to the blog</a></p>

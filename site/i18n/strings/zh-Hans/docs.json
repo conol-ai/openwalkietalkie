@@ -1,0 +1,19 @@
+{
+  "docs.head.title1": "为 OpenWalkieTalkie 开发 · OpenWalkieTalkie",
+  "docs.head.meta-content1": "为 OpenWalkieTalkie 开发原生助手集成的开发者指南和 API 参考。",
+  "docs.content.h11": "为 OpenWalkieTalkie 开发",
+  "docs.content.p1": "把你的助手的对话放到设备上。你的应用负责管理会话和模型连接；OpenWalkieTalkie 负责实体按键、语音输入和小巧的屏幕。",
+  "docs.content.p2": "应用 + 服务 + 固件 0.11.0+",
+  "docs.content.p3": "分组会话、新聊天启动器、实时消息、多步提问、模型/思考强度设置，以及 Omarchy 页面的数据推送。Conol 和 Omarchy 桥接所用的同一套接口，任何助手都可以使用。",
+  "docs.content.a1": "阅读指南 →",
+  "docs.content.p4": "预览版 · 0.14.0+",
+  "docs.content.p5": "安装未签名的 Windows 预览版应用和服务，绕过 SmartScreen 的拦截，再通过 USB-C 更新设备固件。",
+  "docs.content.p6": "LINUX · OMARCHY · 0.13.0+",
+  "docs.content.p7": "编译并安装服务和 Omarchy 桥接：设备成为 Hyprland 的遥控器，你的 Claude Code、Codex 和 Kimi Code 会话出现在列表中，语音指令直接送进它们的终端。",
+  "docs.content.h21": "正在使用设备？",
+  "docs.content.p8": "<a href=\"/manual/\">阅读图文使用手册</a>，了解设置、操作和故障排除，也可以打印一份放在桌边。",
+  "docs.content.h22": "从一个可运行的示例开始",
+  "docs.content.p9": "<a href=\"/examples/native_companion.py\" download>下载 Python 配套程序示例</a>。在 OpenWalkieTalkie 打开时，用 Python 3.10+ 运行它。它使用预设回复，不需要任何软件包、模型 API 密钥或 Conol 账户。",
+  "docs.content.h23": "查阅接口约定",
+  "docs.content.p10": "<a href=\"/docs/deckd-api.md\">完整的 JSON-RPC API 参考（Markdown）</a>，根据守护进程的请求 schema 和方法权限生成。<a href=\"https://github.com/conol-ai/openwalkietalkie\">源代码仓库</a>包含该示例和集成测试。"
+}

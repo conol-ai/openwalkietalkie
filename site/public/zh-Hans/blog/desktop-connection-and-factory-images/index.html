@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie v0.5.0：Desktop 已连接，出厂准备就绪 · OpenWalkieTalkie</title>
+<meta name="description" content="Codex Desktop 连接修复、可靠的简短回复、替代闪存芯片支持，以及用于工厂烧录的出厂固件。" />
+<link rel="canonical" href="https://openwalkietalkie.org/zh-Hans/blog/desktop-connection-and-factory-images/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/desktop-connection-and-factory-images/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/desktop-connection-and-factory-images/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/desktop-connection-and-factory-images/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/desktop-connection-and-factory-images/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/desktop-connection-and-factory-images/" />
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.5.0：Desktop 已连接，出厂准备就绪 · OpenWalkieTalkie" />
+<meta property="og:description" content="Codex Desktop 连接修复、可靠的简短回复、替代闪存芯片支持，以及用于工厂烧录的出厂固件。" />
+<meta property="og:url" content="https://openwalkietalkie.org/zh-Hans/blog/desktop-connection-and-factory-images/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie 博客" href="/zh-Hans/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/i18n/zh-Hans.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">跳至正文</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/zh-Hans/" aria-label="OpenWalkieTalkie — 首页">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="栏目">
+      <a href="/zh-Hans/#pile">The Pile</a>
+      <a href="/zh-Hans/#features">功能</a>
+      <a href="/zh-Hans/#demo">试用</a>
+      <a href="/zh-Hans/#faces">页面</a>
+      <a href="/zh-Hans/#blueprint">设计图纸</a>
+      <a href="/zh-Hans/blog/" aria-current="true">博客</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="语言: 简体中文">简体中文</summary>
+        <ul>
+          <li><a href="/blog/desktop-connection-and-factory-images/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/desktop-connection-and-factory-images/" hreflang="zh-Hans" lang="zh-Hans" aria-current="true">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/desktop-connection-and-factory-images/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/blog/desktop-connection-and-factory-images/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换日间和夜间主题" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">日间</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="打开菜单" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">博客 · 更新说明</p>
+  <h1>OpenWalkieTalkie v0.5.0：Desktop 已连接，出厂准备就绪</h1>
+  <p class="post-meta"><span>2026年10月19日</span><span>应用和固件更新</span></p>
+</header>
+<article class="post-body">
+  <p>OpenWalkieTalkie 0.5.0 修复了 Codex Desktop 与设备之间的连接。它还在固件中加入了对两款替代闪存芯片的支持，并打包了用于工厂烧录的整片出厂固件。</p>
+  <h2>Desktop 的任务能到达共享服务了</h2>
+  <p>之前的启动器能成功打开 Desktop，但它的对话对 OpenWalkieTalkie 不可见。Desktop 的默认插件设置让它隐式的共享服务模式退回到私有服务器。更新后的启动器会明确选择共享的本地连接。</p>
+  <p>名为 ChatGPT.app 或 Codex.app 的兼容安装都能被识别。启动器会复用现有的 Codex 服务，不会干扰正在运行的 Desktop 任务。另一项修复让那些在 OpenWalkieTalkie 订阅其对话之前就已完成的简短任务，也能正常送回回复。</p>
+  <h2>更新后修复集成</h2>
+  <p>安装 0.5.0 版应用，并确认它的服务也显示 0.5.0。打开 <strong>集成 → Codex Desktop</strong>，安装或修复这项集成。等 Desktop 的任务空闲时，退出 Codex Desktop / ChatGPT，然后打开 <code>~/Applications/Codex with OpenWalkieTalkie.app</code>。</p>
+  <p>这是一个用来启动你已安装的 Desktop 应用的小启动器。以后也请用它来启动：直接打开原来的应用不会启用共享连接。不受支持的 Desktop 版本会报错，而不是悄悄打开一个未连接的会话。</p>
+  <h2>更多闪存选择和出厂固件</h2>
+  <p>除了原有的 Winbond W25Q128JVSIQ（C97521），固件现在也接受 Puya PY25Q128HA-SUH-IR（C5354566）和 GigaDevice GD25Q128ESIGR（C2928891）。设置、配对和引导程序的写入程序在允许写入之前，会先确认读到的是稳定且受支持的芯片 ID。贴装了替代芯片的主板仍需实机验证。</p>
+  <p>这个版本附带一个出厂 ZIP，其中 Rev A 和 Rev B 各有一个独立的 16 MiB 镜像。每个镜像都由与发布版本完全相同的应用程序和恢复二进制文件、一份全新的分区表以及空的设备存储区组成。随附中文说明、各组件的哈希值和一个独立的校验工具。</p>
+  <p><strong>出厂固件会覆盖闪存中的全部内容，包括设置和配对数据。</strong>它用于空白主板的初次烧录。已在使用的设备应使用应用中常规的 USB 更新程序。</p>
+  <h2>更新已有的设备</h2>
+  <p>通过 USB-C 连接一台设备，然后打开 <strong>服务 → 更新 → 检查固件更新</strong>。分区布局和恢复协议与 0.4.0 相同，因此已使用恢复协议 2 的设备会收到普通的应用程序更新。</p>
+  <p><strong>仍在使用旧引导程序的设备需要进行引导式迁移。请保持供电，并让 Mac 保持唤醒：替换引导程序时断电，可能导致设备无法启动、无法通过 USB 恢复，只能进行硬件维修。</strong>应用会在迁移前显示这条警告。不要把 bootstrap 或 recovery 文件当作应用程序固件手动安装。</p>
+  <h2>我们验证了什么</h2>
+  <p>启动器和传输的回归测试均已通过。在开发用 Mac 上的实际测试中，Desktop 连接到了共享服务，它的 <code>DESKTOP-LINK-OK</code> 回复出现在 OpenWalkieTalkie 的图形界面中。通过 USB 向已连接的 Rev A 发送正常；最后在实机屏幕上的检查没有记录下来。</p>
+  <p>两种主板版本都通过了软件检查。之前带有相同闪存支持的 0.4.1 开发版固件，在现有的 Rev A 上完成了从旧引导程序的迁移。该测试中没有刷写 CI 构建的 0.5.0 文件。已出货的 Rev B、使用替代芯片的主板以及空白主板的工厂烧录，仍需硬件验证。没有进行设备音频测试。</p>
+  <h2>获取 v0.5.0</h2>
+  <p>使用 <strong>检查更新</strong>，或<a href="/zh-Hans/#download">下载已签名并经过公证的 Mac 应用</a>，支持 Apple Silicon 和 Intel。需要 macOS 13 或更高版本。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.5.0">GitHub 发布版本</a>包含固件、出厂固件、校验和、构建证明以及中文升级指南。每个 DMG 中也附有这份指南。</p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL 项目 · MIT 许可的软件 · CERN-OHL-P 许可的硬件</span>
+    <nav aria-label="页脚">
+      <a href="/zh-Hans/#waitlist">加入候补名单</a>
+      <a href="/zh-Hans/privacy/">隐私政策</a>
+      <a href="/zh-Hans/cookies/">Cookie 说明</a>
+      <a href="/zh-Hans/cookies/" data-privacy-open>隐私声明</a>
+      <a href="/zh-Hans/">首页</a>
+      <a href="/zh-Hans/#demo">试用</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="在 Discord 上加入 CoHDL 和 OpenWalkieTalkie 社区">Discord</a>
+      <a href="/zh-Hans/blog/feed.xml">订阅源</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

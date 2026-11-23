@@ -1,0 +1,19 @@
+{
+  "docs.head.title1": "Build for OpenWalkieTalkie · OpenWalkieTalkie",
+  "docs.head.meta-content1": "Developer guides and API reference for native agent integrations with OpenWalkieTalkie.",
+  "docs.content.h11": "Build for OpenWalkieTalkie",
+  "docs.content.p1": "Put your agent’s conversations on the deck. Your app manages sessions and model connections; OpenWalkieTalkie handles the physical controls, voice input and compact display.",
+  "docs.content.p2": "APP + SERVICE + FIRMWARE 0.11.0+",
+  "docs.content.p3": "Grouped sessions, a new-chat launcher, live messages, multi-step questions, model / thinking effort settings, and the Omarchy face feed. The same interface used by Conol and the Omarchy bridge is available to any agent.",
+  "docs.content.a1": "READ THE GUIDE →",
+  "docs.content.p4": "PREVIEW · 0.14.0+",
+  "docs.content.p5": "Install the unsigned Windows preview of the app and service, get past SmartScreen, and update your deck’s firmware over USB-C.",
+  "docs.content.p6": "LINUX · OMARCHY · 0.13.0+",
+  "docs.content.p7": "Build and install the service and the Omarchy bridge: the deck as a remote for Hyprland, your Claude Code, Codex and Kimi Code sessions on the roster, and voice orders into their terminals.",
+  "docs.content.h21": "Using the deck?",
+  "docs.content.p8": "<a href=\"/manual/\">Read the illustrated User Manual</a> for setup, controls and troubleshooting, or print a copy to keep beside your desk.",
+  "docs.content.h22": "Start with a working example",
+  "docs.content.p9": "<a href=\"/examples/native_companion.py\" download>Download the Python companion example</a>. Run it with Python 3.10+ while OpenWalkieTalkie is open. It uses scripted replies and needs no packages, model API keys or Conol account.",
+  "docs.content.h23": "Look up the contract",
+  "docs.content.p10": "<a href=\"/docs/deckd-api.md\">Complete JSON-RPC API reference (Markdown)</a>, generated from the daemon’s request schemas and method permissions. The <a href=\"https://github.com/conol-ai/openwalkietalkie\">source repository</a> includes the example and integration tests."
+}

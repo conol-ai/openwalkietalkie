@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie v0.9.0：更清楚的 USB 語音與重設提醒 · OpenWalkieTalkie</title>
+<meta name="description" content="透過 USB 以 48 kHz 在揚聲器播放，16 kHz 音訊也有改進；未使用的手動用量重設快要到期前，Mac 和裝置上都會提醒。" />
+<link rel="canonical" href="https://openwalkietalkie.org/zh-Hant/blog/usb-audio-and-reset-reminders/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/usb-audio-and-reset-reminders/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/usb-audio-and-reset-reminders/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/usb-audio-and-reset-reminders/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/usb-audio-and-reset-reminders/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/usb-audio-and-reset-reminders/" />
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.9.0：更清楚的 USB 語音與重設提醒 · OpenWalkieTalkie" />
+<meta property="og:description" content="透過 USB 以 48 kHz 在揚聲器播放，16 kHz 音訊也有改進；未使用的手動用量重設快要到期前，Mac 和裝置上都會提醒。" />
+<meta property="og:url" content="https://openwalkietalkie.org/zh-Hant/blog/usb-audio-and-reset-reminders/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie 部落格" href="/zh-Hant/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/i18n/zh-Hant.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">跳至主要內容</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/zh-Hant/" aria-label="OpenWalkieTalkie — 首頁">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="網站區塊">
+      <a href="/zh-Hant/#pile">The Pile</a>
+      <a href="/zh-Hant/#features">功能</a>
+      <a href="/zh-Hant/#demo">試用</a>
+      <a href="/zh-Hant/#faces">頁面</a>
+      <a href="/zh-Hant/#blueprint">設計藍圖</a>
+      <a href="/zh-Hant/blog/" aria-current="true">部落格</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="語言: 繁體中文">繁體中文</summary>
+        <ul>
+          <li><a href="/blog/usb-audio-and-reset-reminders/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/usb-audio-and-reset-reminders/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/usb-audio-and-reset-reminders/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
+          <li><a href="/ja/blog/usb-audio-and-reset-reminders/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切換日間與夜間主題" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">日間</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="開啟選單" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">部落格 · 版本資訊</p>
+  <h1>OpenWalkieTalkie v0.9.0：更清楚的 USB 語音與重設提醒</h1>
+  <p class="post-meta"><span>2026年10月22日</span><span>應用程式與韌體更新</span></p>
+</header>
+<article class="post-body">
+  <p>0.9.0 版讓 USB 語音更清楚，並為一件容易忽略的事加上提醒：快要到期、尚未使用的手動用量重設。更新 Mac 應用程式和裝置韌體，就能同時獲得這兩項改進。</p>
+  <h2>聽清楚每個字</h2>
+  <p>我們先用音樂比較 16 kHz 和 48 kHz。聽者沒有聽出明顯差異。英語語音的結果就不一樣了：開啟揚聲器 EQ 並把音量對齊後，48 kHz 的那段聽起來更清楚，16 kHz 版本中聽得到的雜音也不見了。</p>
+  <p>只要連線的韌體支援，裝置現在就會<strong>透過 USB 以 48 kHz 在揚聲器播放</strong>。服務會自動檢查這項能力，保持 EQ 開啟，遇到較舊的韌體則退回 16 kHz。切換連線時以及放開按住說話後，播放都會依照協商好的取樣率。</p>
+  <p>這改善的是播放路徑，不會憑空產生原始語音中沒有的細節。我們測試用的 Kokoro 語音輸出的是 24 kHz 音訊。讓它走 48 kHz 路徑，可以避開之前降到 16 kHz 的步驟，壓縮與重建的路徑也隨之改變。</p>
+  <h2>16 kHz 路徑也更好了</h2>
+  <p>主機現在會嘗試其他 ADPCM 編碼路徑來減少量化誤差，只要原本的結果比較好，就保留原本的結果。韌體在把 16 kHz 音訊送到 48 kHz DAC 之前，改用帶限濾波器取代線性內插。</p>
+  <p>在同一段英語語音上，修改後的編碼器把編碼誤差的平方降低了約 30%。這是數位量測結果，並不保證聽感上的底噪會完全消失：修改後的 16 kHz 路徑仍需要實際試聽確認。</p>
+  <p><strong>BLE 播放和麥克風收音仍維持 16 kHz。</strong>USB 比較測試在兩種取樣率下都沒有出現斷音、欠載、佇列丟棄或序號錯誤。透過 BLE 長時間以 48 kHz 播放尚未經過驗證，所以此版本只在 USB 上使用較高的取樣率。</p>
+  <h2>在到期前用掉重設</h2>
+  <p>當未使用的手動重設額度將在 <strong>72 小時</strong>內到期時，Mac 上的「用量」頁和裝置上的「用量」頁面會在每週用量條下方顯示一則琥珀色的小提示。例如：<strong>「2 次重設將在 1 天 6 小時後到期。」</strong></p>
+  <figure class="post-figure" style="max-width:480px;margin-left:auto;margin-right:auto"><img src="/assets/screens/usage-reset-expiring-090.png" alt="裝置的「用量」畫面，Claude 每週用量條下方顯示琥珀色提醒：2 次重設將在 1 天 6 小時後到期" width="480" height="480" loading="lazy" /><figcaption>實際裝置介面上的重設到期提醒，以示意用的展示資料算繪。</figcaption></figure>
+  <p>這和每週額度更新前的一般倒數是兩回事。提示會採用最近的額度到期時間，只計算在這個期限到期的額度。額度用掉或到期後提示就會消失；切換帳號時會清除前一個帳號的額度；中斷連線時提示會隱藏。如果服務商沒有提供這項資料，就不會出現提醒。裝置不會替你兌換重設。</p>
+  <h2>兩邊都要更新</h2>
+  <p>安裝已簽署並經過公證的 Mac 應用程式（Apple Silicon 或 Intel），或選擇<strong>檢查更新</strong>。需要 macOS 13 或更新版本。接著透過 USB-C 連接裝置，使用<strong>服務 → 更新 → 檢查韌體更新</strong>。應用程式、服務和韌體都應顯示 0.9.0。</p>
+  <p>在使用復原協定 2 的裝置上，一般更新會保留設定和藍牙配對。較舊的復原版本使用現有的引導式移轉。各主機板的原廠 ZIP 仍會提供，用於生產；其中整顆晶片的映像檔會覆寫設定和配對，所以現有裝置請使用應用程式的更新功能。</p>
+  <h2>部落格是版本發行的一部分</h2>
+  <p>發行驗證程式現在要求先備妥一篇部落格文章、它的訂閱來源項目、部落格索引連結、網站地圖項目，以及最新的 Mac 下載檔，才能發行版本。先前缺少的 <a href="/zh-Hant/blog/speaker-eq-and-less-hiss/">0.7.0</a> 和 <a href="/zh-Hant/blog/screen-lock-and-wheel-navigation/">0.8.0</a> 文章現在也已補上。</p>
+  <p>開發版韌體和語音比較都在 Rev A 上透過 USB 檢查過；重新啟動更新後的服務後，也確認了常駐程式的一般播放為 48 kHz。自動檢查涵蓋取樣率協商、連線切換、音訊編碼與濾波、重設到期與帳號切換，以及算繪。這次沒有在 Rev B 上實機測試音訊。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.9.0" rel="noopener">在 GitHub 上取得 OpenWalkieTalkie v0.9.0、韌體、原廠韌體與檢查碼 →</a></p>
+  <p class="post-back"><a href="/zh-Hant/blog/">← 返回部落格</a></p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL 專案 · MIT 授權軟體 · CERN-OHL-P 授權硬體</span>
+    <nav aria-label="頁尾">
+      <a href="/zh-Hant/#waitlist">加入候補名單</a>
+      <a href="/zh-Hant/privacy/">隱私權政策</a>
+      <a href="/zh-Hant/cookies/">Cookie 說明</a>
+      <a href="/zh-Hant/cookies/" data-privacy-open>隱私權聲明</a>
+      <a href="/zh-Hant/">首頁</a>
+      <a href="/zh-Hant/#demo">試用</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="在 Discord 加入 CoHDL 與 OpenWalkieTalkie 社群">Discord</a>
+      <a href="/zh-Hant/blog/feed.xml">訂閱來源</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

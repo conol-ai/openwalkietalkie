@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="zh-Hans">
+  <title>OpenWalkieTalkie 博客</title>
+  <subtitle>为你的 AI 助手打造的开源手持对讲机：开发日志和文章。</subtitle>
+  <id>https://openwalkietalkie.org/zh-Hans/blog/</id>
+  <link href="https://openwalkietalkie.org/zh-Hans/blog/" />
+  <link rel="self" type="application/atom+xml" href="https://openwalkietalkie.org/zh-Hans/blog/feed.xml" />
+  <updated>2026-11-22T09:04:46Z</updated>
+  <author><name>Tony Huang</name></author>
+  <entry>
+    <title>OpenWalkieTalkie v0.16.0：懂得窗口的口述</title>
+    <id>https://openwalkietalkie.org/zh-Hans/blog/dictation-that-knows-the-window/</id>
+    <link href="https://openwalkietalkie.org/zh-Hans/blog/dictation-that-knows-the-window/" />
+    <published>2026-11-22T09:04:46Z</published>
+    <updated>2026-11-22T09:04:46Z</updated>
+    <summary>实验性功能，默认关闭：在光标处口述的内容，可以根据聚焦的窗口进行改写。只依据窗口的应用名称和标题（纯文本），并通过你在新的“模型接入”页面中选择的模型完成。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.15.0：配套应用来到 Omarchy</title>
+    <id>https://openwalkietalkie.org/zh-Hans/blog/companion-app-on-omarchy/</id>
+    <link href="https://openwalkietalkie.org/zh-Hans/blog/companion-app-on-omarchy/" />
+    <published>2026-11-17T12:58:57Z</published>
+    <updated>2026-11-17T12:58:57Z</updated>
+    <summary>配套应用可在 Omarchy 上运行，在 Omarchy 页面上按住 PTT 可在光标处听写，滚轮按窗口行的顺序移动，Linux 服务把所有内容放在一个文件夹中。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.14.0：一台设备，支持 Mac、Windows 和 Omarchy</title>
+    <id>https://openwalkietalkie.org/zh-Hans/blog/one-deck-mac-windows-omarchy/</id>
+    <link href="https://openwalkietalkie.org/zh-Hans/blog/one-deck-mac-windows-omarchy/" />
+    <published>2026-11-16T05:04:33Z</published>
+    <updated>2026-11-16T05:04:33Z</updated>
+    <summary>Mac 应用成为设备的配套应用，服务也能在 Windows 和 Omarchy 上运行，Grok Bot 与 Claude Code、Codex 一起出现在设备上，固件安装由设备自己确认。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.13.0：四种语言，一个设置</title>
+    <id>https://openwalkietalkie.org/zh-Hans/blog/four-languages-one-setting/</id>
+    <link href="https://openwalkietalkie.org/zh-Hans/blog/four-languages-one-setting/" />
+    <published>2026-11-08T02:41:16Z</published>
+    <updated>2026-11-08T02:41:16Z</updated>
+    <summary>Mac 应用和设备支持 English、简体中文、繁體中文和日本語，保存的语言选择双向同步。另有百分之一秒显示和有声的计时结束提醒。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.12.0：Conol 听得懂你，还有番茄钟</title>
+    <id>https://openwalkietalkie.org/zh-Hans/blog/conol-speech-and-pomodoro/</id>
+    <link href="https://openwalkietalkie.org/zh-Hans/blog/conol-speech-and-pomodoro/" />
+    <published>2026-11-05T03:40:00Z</published>
+    <updated>2026-11-05T03:40:00Z</updated>
+    <summary>Conol 用自己的语音模型转写你对它的聊天说的话，设备显示实时的录音时间线，新的“计时器”页面提供秒表、倒计时和番茄钟。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.11.1：停顿时保留你说过的话</title>
+    <id>https://openwalkietalkie.org/zh-Hans/blog/ptt-pauses-keep-your-words/</id>
+    <link href="https://openwalkietalkie.org/zh-Hans/blog/ptt-pauses-keep-your-words/" />
+    <published>2026-10-28T06:26:49Z</published>
+    <updated>2026-10-28T06:26:49Z</updated>
+    <summary>按住 PTT 时可以停顿后继续说。使用 Apple 本地运行的语音识别时，之前说的句子现在会保留在预览和最终转写中。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.11.0：Conol 与原生配套程序</title>
+    <id>https://openwalkietalkie.org/zh-Hans/blog/conol-and-native-companions/</id>
+    <link href="https://openwalkietalkie.org/zh-Hans/blog/conol-and-native-companions/" />
+    <published>2026-10-28T03:07:14Z</published>
+    <updated>2026-10-28T03:07:14Z</updated>
+    <summary>在设备上查看 Conol 对话、口述新建聊天、回答多步提问，并为其他应用提供开放的配套程序 API。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.10.0：在设备上查看电脑资源</title>
+    <id>https://openwalkietalkie.org/zh-Hans/blog/computer-resources-on-the-deck/</id>
+    <link href="https://openwalkietalkie.org/zh-Hans/blog/computer-resources-on-the-deck/" />
+    <published>2026-10-26T06:52:06Z</published>
+    <updated>2026-10-26T06:52:06Z</updated>
+    <summary>一个实时显示 Mac 的 CPU、内存、GPU 和存储空间的页面，更高效的像素小鸟渲染，以及更长的原创游戏音乐。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.9.0：更清晰的 USB 语音和重置提醒</title>
+    <id>https://openwalkietalkie.org/zh-Hans/blog/usb-audio-and-reset-reminders/</id>
+    <link href="https://openwalkietalkie.org/zh-Hans/blog/usb-audio-and-reset-reminders/" />
+    <published>2026-10-22T08:23:08Z</published>
+    <updated>2026-10-22T08:23:08Z</updated>
+    <summary>通过 USB 以 48 kHz 在扬声器播放，16 kHz 音频也有改进；未使用的手动用量重置即将过期前，Mac 和设备上都会提醒。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.8.0：锁屏与一致的滚轮导航</title>
+    <id>https://openwalkietalkie.org/zh-Hans/blog/screen-lock-and-wheel-navigation/</id>
+    <link href="https://openwalkietalkie.org/zh-Hans/blog/screen-lock-and-wheel-navigation/" />
+    <published>2026-10-21T09:02:39Z</published>
+    <updated>2026-10-21T09:02:39Z</updated>
+    <summary>自动锁屏防止 PTT 在包里被误按，逆时针转四格即可解锁；切换页面和选择项目使用同一个方向。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.7.0：语音更清楚，底噪更少</title>
+    <id>https://openwalkietalkie.org/zh-Hans/blog/speaker-eq-and-less-hiss/</id>
+    <link href="https://openwalkietalkie.org/zh-Hans/blog/speaker-eq-and-less-hiss/" />
+    <published>2026-10-20T15:08:13Z</published>
+    <updated>2026-10-20T15:08:13Z</updated>
+    <summary>为语音和提示音加入扬声器均衡，并让 Rev A 从 RAM 运行，以减少与闪存相关的底噪，同时保留设置和蓝牙配对。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.6.0：设备上的小游戏</title>
+    <id>https://openwalkietalkie.org/zh-Hans/blog/arcade-on-the-deck/</id>
+    <link href="https://openwalkietalkie.org/zh-Hans/blog/arcade-on-the-deck/" />
+    <published>2026-10-19T08:27:59Z</published>
+    <updated>2026-10-19T08:27:59Z</updated>
+    <summary>三款全屏游戏、实体按键操作，以及原创 8-bit 音乐和音效，并且可以关闭。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.5.0：Desktop 已连接，出厂准备就绪</title>
+    <id>https://openwalkietalkie.org/zh-Hans/blog/desktop-connection-and-factory-images/</id>
+    <link href="https://openwalkietalkie.org/zh-Hans/blog/desktop-connection-and-factory-images/" />
+    <published>2026-10-19T05:00:00Z</published>
+    <updated>2026-10-19T05:00:00Z</updated>
+    <summary>Codex Desktop 连接修复、可靠的简短回复、替代闪存芯片支持，以及用于工厂烧录的出厂固件。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.4.0：恢复过程显示在屏幕上，留出成长空间</title>
+    <id>https://openwalkietalkie.org/zh-Hans/blog/recovery-and-more-room/</id>
+    <link href="https://openwalkietalkie.org/zh-Hans/blog/recovery-and-more-room/" />
+    <published>2026-10-18T05:00:00Z</published>
+    <updated>2026-10-18T05:00:00Z</updated>
+    <summary>引导式引导程序升级、设备上的恢复进度、更快的 USB 传输，以及中文文字支持。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.3.0：图片和待回答的提问</title>
+    <id>https://openwalkietalkie.org/zh-Hans/blog/images-and-questions/</id>
+    <link href="https://openwalkietalkie.org/zh-Hans/blog/images-and-questions/" />
+    <published>2026-10-15T14:20:00Z</published>
+    <updated>2026-10-15T14:20:00Z</updated>
+    <summary>在 Mac 和设备上查看聊天图片，图片预览更稳定，还能在手持设备上回答 Codex 的提问。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.2.1：我们的对讲机，无处不在</title>
+    <id>https://openwalkietalkie.org/zh-Hans/blog/radio-branding/</id>
+    <link href="https://openwalkietalkie.org/zh-Hans/blog/radio-branding/" />
+    <published>2026-10-15T09:00:00Z</published>
+    <updated>2026-10-15T09:00:00Z</updated>
+    <summary>网站上的对讲机来到了应用图标、菜单栏、设备启动画面和“关于”页面。一个 COHDL 项目。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.2.0：工作流一目了然</title>
+    <id>https://openwalkietalkie.org/zh-Hans/blog/workflows-and-usage/</id>
+    <link href="https://openwalkietalkie.org/zh-Hans/blog/workflows-and-usage/" />
+    <published>2026-10-13T14:00:00Z</published>
+    <updated>2026-10-13T14:00:00Z</updated>
+    <summary>在 Mac 和手持设备上实时查看工作流进度，查看 Claude Fable 用量限额，并修复了工作流页面闪烁的问题。</summary>
+  </entry>
+  <entry>
+    <title>OpenWalkieTalkie v0.1.0：给你的助手一台手持设备</title>
+    <id>https://openwalkietalkie.org/zh-Hans/blog/introducing-openwalkietalkie/</id>
+    <link href="https://openwalkietalkie.org/zh-Hans/blog/introducing-openwalkietalkie/" />
+    <published>2026-10-13T00:00:00Z</published>
+    <updated>2026-10-13T00:00:00Z</updated>
+    <summary>首个正式的 Mac 应用和固件版本：按住说话、在设备上查看对话，以及应用和设备更新。</summary>
+  </entry>
+</feed>

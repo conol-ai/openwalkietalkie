@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie v0.2.0 · OpenWalkieTalkie</title>
+<meta name="description" content="在 Mac 與手持裝置上即時查看工作流程進度、Claude Fable 用量上限，裝置更新也更順暢。" />
+<link rel="canonical" href="https://openwalkietalkie.org/zh-Hant/blog/workflows-and-usage/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/workflows-and-usage/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/workflows-and-usage/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/workflows-and-usage/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/workflows-and-usage/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/workflows-and-usage/" />
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.2.0 · OpenWalkieTalkie" />
+<meta property="og:description" content="在 Mac 與手持裝置上即時查看工作流程進度、Claude Fable 用量上限，裝置更新也更順暢。" />
+<meta property="og:url" content="https://openwalkietalkie.org/zh-Hant/blog/workflows-and-usage/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie 部落格" href="/zh-Hant/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/i18n/zh-Hant.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">跳至主要內容</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/zh-Hant/" aria-label="OpenWalkieTalkie — 首頁">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="網站區塊">
+      <a href="/zh-Hant/#pile">The Pile</a>
+      <a href="/zh-Hant/#features">功能</a>
+      <a href="/zh-Hant/#demo">試用</a>
+      <a href="/zh-Hant/#faces">頁面</a>
+      <a href="/zh-Hant/#blueprint">設計藍圖</a>
+      <a href="/zh-Hant/blog/" aria-current="true">部落格</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="語言: 繁體中文">繁體中文</summary>
+        <ul>
+          <li><a href="/blog/workflows-and-usage/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/workflows-and-usage/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/workflows-and-usage/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
+          <li><a href="/ja/blog/workflows-and-usage/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切換日間與夜間主題" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">日間</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="開啟選單" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">部落格 · 版本資訊</p>
+  <h1>OpenWalkieTalkie v0.2.0：工作流程一目瞭然</h1>
+  <p class="post-meta"><span>2026年10月13日</span><span>應用程式與韌體更新</span></p>
+</header>
+<article class="post-body">
+  <p>OpenWalkieTalkie v0.2.0 讓你更容易掌握在背景持續執行的工作。Mac 應用程式與手持裝置現在會在助理對話旁顯示即時的工作流程進度。</p>
+  <h2>掌握工作進度</h2>
+  <p>開啟一個工作階段並切換到「工作流程」，就能看到它的計畫和精簡的工具活動。Claude Dynamic Workflows 還會顯示每次執行的名稱、進度列、已完成與已啟動的 worker 數、經過時間和 token 數。即使主對話沒有動靜，背景執行仍會持續更新。</p>
+  <p>裝置會持續顯示目前的工作流程頁面，直到新內容送達為止，修正了定期重新整理時的閃爍。捲動位置會維持不變，工具詳細資料也仍可展開。</p>
+  <h2>顯示你正在使用的帳號的用量</h2>
+  <p>Mac 應用程式有專屬的「用量」頁面；當帳號提供 Claude Fable 的每週用量上限時，應用程式與裝置都會顯示。每個量表都會顯示使用中的帳號、用量百分比和重設時間。Claude 與 Codex 的上限會同時顯示。</p>
+  <h2>取得 v0.2.0</h2>
+  <p>在 Mac 應用程式中使用<strong>檢查更新</strong>，或<a href="/zh-Hant/#download">下載經過簽署與公證的安裝套件</a>，支援 Apple Silicon 或 Intel。需要 macOS 13 或以上版本。</p>
+  <p>裝置方面，請透過 USB 連接，然後在應用程式中開啟<strong>服務 → 更新</strong>。檢查韌體、確認所選的主機板，然後安裝 v0.2.0。內含 Rev A 與 Rev B 映像檔；第一次燒錄仍需要相容的開機載入程式。</p>
+  <p>請參閱<a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.2.0">版本資訊、韌體下載與總和檢查碼</a>。</p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL 專案 · MIT 授權軟體 · CERN-OHL-P 授權硬體</span>
+    <nav aria-label="頁尾">
+      <a href="/zh-Hant/#waitlist">加入候補名單</a>
+      <a href="/zh-Hant/privacy/">隱私權政策</a>
+      <a href="/zh-Hant/cookies/">Cookie 說明</a>
+      <a href="/zh-Hant/cookies/" data-privacy-open>隱私權聲明</a>
+      <a href="/zh-Hant/">首頁</a>
+      <a href="/zh-Hant/#demo">試用</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="在 Discord 加入 CoHDL 與 OpenWalkieTalkie 社群">Discord</a>
+      <a href="/zh-Hant/blog/feed.xml">訂閱來源</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

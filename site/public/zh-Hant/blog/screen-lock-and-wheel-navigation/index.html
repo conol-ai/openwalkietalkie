@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie v0.8.0：螢幕鎖定與一致的滾輪操作 · OpenWalkieTalkie</title>
+<meta name="description" content="自動螢幕鎖定避免 PTT 在包包裡被誤按，逆時針轉四格即可解鎖；切換頁面與選擇項目都用同一個方向。" />
+<link rel="canonical" href="https://openwalkietalkie.org/zh-Hant/blog/screen-lock-and-wheel-navigation/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/screen-lock-and-wheel-navigation/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/screen-lock-and-wheel-navigation/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/screen-lock-and-wheel-navigation/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/screen-lock-and-wheel-navigation/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/screen-lock-and-wheel-navigation/" />
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.8.0：螢幕鎖定與一致的滾輪操作 · OpenWalkieTalkie" />
+<meta property="og:description" content="自動螢幕鎖定避免 PTT 在包包裡被誤按，逆時針轉四格即可解鎖；切換頁面與選擇項目都用同一個方向。" />
+<meta property="og:url" content="https://openwalkietalkie.org/zh-Hant/blog/screen-lock-and-wheel-navigation/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie 部落格" href="/zh-Hant/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/i18n/zh-Hant.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">跳至主要內容</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/zh-Hant/" aria-label="OpenWalkieTalkie — 首頁">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="網站區塊">
+      <a href="/zh-Hant/#pile">The Pile</a>
+      <a href="/zh-Hant/#features">功能</a>
+      <a href="/zh-Hant/#demo">試用</a>
+      <a href="/zh-Hant/#faces">頁面</a>
+      <a href="/zh-Hant/#blueprint">設計藍圖</a>
+      <a href="/zh-Hant/blog/" aria-current="true">部落格</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="語言: 繁體中文">繁體中文</summary>
+        <ul>
+          <li><a href="/blog/screen-lock-and-wheel-navigation/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/screen-lock-and-wheel-navigation/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/screen-lock-and-wheel-navigation/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
+          <li><a href="/ja/blog/screen-lock-and-wheel-navigation/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切換日間與夜間主題" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">日間</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="開啟選單" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">部落格 · 版本資訊</p>
+  <h1>OpenWalkieTalkie v0.8.0：螢幕鎖定與一致的滾輪操作</h1>
+  <p class="post-meta"><span>2026年10月21日</span><span>應用程式與韌體更新</span></p>
+</header>
+<article class="post-body">
+  <p>手持裝置應該拿起來就能用，但不該在包包裡誤傳一則語音訊息。0.8.0 版新增自動螢幕鎖定，並讓滾輪在切換頁面和瀏覽清單時的方向保持一致。</p>
+  <h2>兩分鐘鎖定，四格解鎖</h2>
+  <p>兩分鐘內沒有本機輸入，螢幕就會休眠，所有本機控制項都會鎖定，包括按住說話。按下按鍵、觸控螢幕或轉動滾輪會點亮鎖定畫面，但不會觸發底下的控制項。</p>
+  <p>解鎖時，<strong>逆時針連續轉動滾輪四格</strong>。如果第一格喚醒了螢幕，這一格也算在四格之內。順時針轉動或讓螢幕再次休眠，進度都會歸零。</p>
+  <p>最後一格只負責解鎖裝置，不會同時移動選取。鎖定期間一直按住的按鍵必須放開再按一次才會作用，所以裝置解鎖時，卡住的 PTT 不會開始傳送。通知可以點亮螢幕，但無法解鎖；按住按鍵也不能讓鎖定的螢幕一直亮著。</p>
+  <h2>頁面與清單同一個方向</h2>
+  <p>編碼器的實體方向已經修正。<strong>逆時針選擇下一個或往下；順時針選擇上一個或往上。</strong>這適用於 SHIFT + 滾輪切換頁面，也適用於選單項目、助理與工作階段清單、卡片選項以及清單捲動。使用教學中的頁面方向也相同。</p>
+  <p>數值設定（包括音量）仍然是順時針增加。「快捷鍵」頁面已指定的按鍵綁定和遊戲中的轉向維持原本的實體方向。</p>
+  <h2>保留音訊改進</h2>
+  <p>此版本保留 <a href="/zh-Hant/blog/speaker-eq-and-less-hiss/">0.7.0 推出的揚聲器 EQ 與 Rev A 的 RAM 執行</a>。Rev B 仍從 NOR 快閃記憶體執行。快閃記憶體分割區和復原協定都沒有變更。</p>
+  <h2>更新應用程式與裝置</h2>
+  <p>安裝已簽署並經過公證的 Mac 應用程式（Apple Silicon 或 Intel），或在應用程式中選擇<strong>檢查更新</strong>。需要 macOS 13 或更新版本。透過 USB-C 連接裝置，然後使用<strong>服務 → 更新 → 檢查韌體更新</strong>。應用程式、服務和韌體都應顯示 0.8.0。</p>
+  <p>已使用復原協定 2 的裝置會收到一般的應用程式更新，設定和藍牙配對都會保留。較舊的復原版本使用應用程式現有的引導式移轉。現有裝置請使用應用程式的更新功能：Rev A 與 Rev B 各自的原廠 ZIP 含有整顆晶片的映像檔，會覆寫設定和配對。</p>
+  <h2>我們檢查了什麼</h2>
+  <p>開發版韌體已透過 USB 燒錄到一台 Rev A 裝置並完成驗證，操作人員也確認了滾輪實體方向的修正。自動檢查涵蓋鎖定計時、按住與排隊中的輸入、PTT 抑制、滾輪選擇與邊界、算繪，以及各主機板的執行配置。這次沒有在 Rev B 硬體上實機測試。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.8.0" rel="noopener">在 GitHub 上取得 OpenWalkieTalkie v0.8.0、韌體、原廠韌體與檢查碼 →</a></p>
+  <p class="post-back"><a href="/zh-Hant/blog/">← 返回部落格</a></p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL 專案 · MIT 授權軟體 · CERN-OHL-P 授權硬體</span>
+    <nav aria-label="頁尾">
+      <a href="/zh-Hant/#waitlist">加入候補名單</a>
+      <a href="/zh-Hant/privacy/">隱私權政策</a>
+      <a href="/zh-Hant/cookies/">Cookie 說明</a>
+      <a href="/zh-Hant/cookies/" data-privacy-open>隱私權聲明</a>
+      <a href="/zh-Hant/">首頁</a>
+      <a href="/zh-Hant/#demo">試用</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="在 Discord 加入 CoHDL 與 OpenWalkieTalkie 社群">Discord</a>
+      <a href="/zh-Hant/blog/feed.xml">訂閱來源</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

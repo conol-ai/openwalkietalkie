@@ -1,0 +1,18 @@
+{
+  "success": "你已加入候补名单。OpenWalkieTalkie 开售时，我们会发邮件通知你。",
+  "method_not_allowed": "请通过候补名单表单加入。",
+  "cross_origin": "请在 OpenWalkieTalkie 网站上提交表单。",
+  "content_type": "请通过候补名单表单加入。",
+  "too_large": "提交的内容过大。请使用邮箱表单。",
+  "invalid_body": "无法读取提交的内容。请重试。",
+  "invalid_email": "请输入有效的电子邮件地址。",
+  "consent_required": "请确认你愿意接收设备开售通知邮件。",
+  "rate_limited": "此连接的尝试次数过多。请一分钟后重试。",
+  "unavailable": "暂时无法保存你的邮箱。请稍后重试。",
+  "not_found": "该端点不存在。",
+  "page_title": "加入候补名单 · OpenWalkieTalkie",
+  "page_heading": "暂时无法将你加入",
+  "page_return": "返回候补名单表单",
+  "privacy_policy": "隐私政策",
+  "cookie_information": "Cookie 说明"
+}

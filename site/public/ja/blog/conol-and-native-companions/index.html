@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie v0.11.0：Conol とネイティブコンパニオン · OpenWalkieTalkie</title>
+<meta name="description" content="デバイスで Conol の会話、口述での新しいチャット、複数ステップの質問。ほかのアプリにも開かれたコンパニオン API。" />
+<link rel="canonical" href="https://openwalkietalkie.org/ja/blog/conol-and-native-companions/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/conol-and-native-companions/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/conol-and-native-companions/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/conol-and-native-companions/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/conol-and-native-companions/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/conol-and-native-companions/" />
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.11.0：Conol とネイティブコンパニオン · OpenWalkieTalkie" />
+<meta property="og:description" content="デバイスで Conol の会話、口述での新しいチャット、複数ステップの質問。ほかのアプリにも開かれたコンパニオン API。" />
+<meta property="og:url" content="https://openwalkietalkie.org/ja/blog/conol-and-native-companions/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie ブログ" href="/ja/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/i18n/ja.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">本文へスキップ</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/ja/" aria-label="OpenWalkieTalkie — ホーム">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="セクション">
+      <a href="/ja/#pile">The Pile</a>
+      <a href="/ja/#features">機能</a>
+      <a href="/ja/#demo">試す</a>
+      <a href="/ja/#faces">ページ</a>
+      <a href="/ja/#blueprint">設計図</a>
+      <a href="/ja/docs/">ドキュメント</a>
+      <a href="/ja/blog/" aria-current="true">ブログ</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="言語: 日本語">日本語</summary>
+        <ul>
+          <li><a href="/blog/conol-and-native-companions/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/conol-and-native-companions/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/conol-and-native-companions/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/blog/conol-and-native-companions/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="昼と夜のテーマを切り替える" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">昼</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="メニューを開く" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">ブログ · リリースノート</p>
+  <h1>OpenWalkieTalkie v0.11.0：Conol とネイティブコンパニオン</h1>
+  <p class="post-meta"><span>2026年10月28日</span><span>アプリとファームウェアの更新</span></p>
+</header>
+<article class="post-body">
+  <p>0.11.0 では、デバイスが Conol のデスクトップアプリの会話につながります。ハンディデバイスからチャットを開き、最近のメッセージを読み、続きを口述し、質問に答えられます。同じローカルのコンパニオンのインターフェースは、ほかのアプリでも使えます。</p>
+  <h2>Conol の会話をひとまとめに</h2>
+  <p>対応する Conol のデスクトップアプリが動いていてサインイン済みなら、チャットは <strong>Conol</strong> の下に、ロボットのモザイクの絵柄と <strong>+ New chat</strong> のランチャーとともに表示されます。会話を選ぶと、最近の公開のユーザーとアシスタントのメッセージが見られます。PTT を押して続きを口述するか、ランチャーに向かって口述すると新しいチャットを作れます。</p>
+  <p>作ったチャットはデバイスで開き、次のメッセージを待ちます。Conol はローカルの OpenWalkieTalkie のサービスを自動的に見つけるので、ターミナルのフックや別のモデルの API キーを設定する必要はありません。この接続には、OpenWalkieTalkie ブリッジを備えた Conol のデスクトップアプリが必要です。ブラウザー版はローカルのサービスに接続しません。</p>
+  <h2>フォーム全体にハンディデバイスで答える</h2>
+  <p>Conol は AskUser のフォームやワークフローの承認を、1 問ずつ表示できます。単一選択をページ送りし、複数選択を切り替え、自由入力を口述し、確認と修正をしてから、フォーム全体を明示的に送信します。下書きの回答は、コンパニオンのソケットが接続し直しても残ります。この操作に収まらないフォームは Conol で開きます。</p>
+  <p>セッションのパネルには、会話で実際に使われているモデルと思考の深さが表示されます。Conol では今のところ読み取り専用なので、変更は Conol で行ってください。会話の履歴には公開のユーザーとアシスタントのテキストが反映されます。画像、ツールの出力、非公開の推論は所有するアプリに残ります。</p>
+  <h2>ほかのアプリにも開かれている</h2>
+  <p>この連携は公開の JSON-RPC のインターフェースを使います。アプリは <code>agent.companion.set</code> で独自のグループ分けと新しいチャットのランチャーを提供し、メッセージや質問を公開し、<code>agent.session.set</code> で実際のモデルと思考の深さを報告できます。変更可能な設定に対応するアプリは、要求された変更をそれぞれ正確なリビジョンに対して確定します。</p>
+  <p>新しい<a href="/ja/docs/native-companions/">ネイティブコンパニオンのガイド</a>では、検出、登録、会話の履歴、フォーム、設定、再接続を説明しています。<a href="/examples/native_companion.py">単体で動く Python のサンプル</a>も試してください。用意された返信を使うので、モデルの API キーは不要で、Conol をインストールしていなくても動きます。<a href="/docs/deckd-api.md">自動生成した API リファレンス</a>には、リクエストのスキーマと権限が載っています。</p>
+  <h2>新しいチャットにフォーカスを保つ</h2>
+  <p>サービスは、入れ替えたスロットの新しい持ち主を、フォーカスする前に知らせるようになりました。デバイスは PTT を離した直後にコンパニオンの明示的な選択に従い、入力が押されている間は待ち、あなたがほかへ移動したら譲ります。終わっていない質問は開いたままです。</p>
+  <p>共有の 8 スロットの上限は変わりません。あふれたコンパニオンのチャットを開くと、同じ接続・同じアプリ・同じアカウントの、固定されていない同列のチャットと入れ替わることがあります。ランチャーと、ほかのアカウントの作業中のチャットは残ります。</p>
+  <h2>0.11.0 に更新する</h2>
+  <p>Apple シリコン用または Intel 用の、署名・公証済みの Mac アプリをインストールするか、<strong>アップデートを確認</strong>を選んでください。macOS 13 以降が必要です。デバイスを USB-C で接続し、<strong>サービス → 更新 → ファームウェア更新を確認</strong>を選びます。ネイティブコンパニオンに対応するには、Mac のサービスとファームウェアの両方が 0.11.0 である必要があります。古いサービスがまだ動いている場合は、<strong>サービス → 再起動</strong>を選びます。Conol も、OpenWalkieTalkie ブリッジを備えたビルドに更新してください。</p>
+  <p>通常の更新では、設定と Bluetooth のペアリングは保たれます。リカバリープロトコル 2 とフラッシュの配置は変わりません。別の工場用 ZIP は製造用で、設定とペアリングを上書きします。</p>
+  <p>自動テストは、所有権、グループ分け、スロットの繰り上げ、設定の確定、フォーカスの順番、押されている入力、プロトコルの解析、描画、サンプルのフォームと再接続を確認しています。このリリースでは、実際の Conol の会話と基板でのテストは繰り返していません。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.11.0" rel="noopener">GitHub で OpenWalkieTalkie v0.11.0、ファームウェア、出荷時イメージ、チェックサムを入手 →</a></p>
+  <p class="post-back"><a href="/ja/blog/">← ブログに戻る</a></p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL のプロジェクト · ソフトウェアは MIT · ハードウェアは CERN-OHL-P</span>
+    <nav aria-label="フッター">
+      <a href="/ja/#waitlist">ウェイトリストに登録</a>
+      <a href="/ja/privacy/">プライバシーポリシー</a>
+      <a href="/ja/cookies/">Cookie について</a>
+      <a href="/ja/cookies/" data-privacy-open>プライバシーに関するお知らせ</a>
+      <a href="/ja/">ホーム</a>
+      <a href="/ja/#demo">試す</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Discord で CoHDL と OpenWalkieTalkie のコミュニティに参加">Discord</a>
+      <a href="/ja/blog/feed.xml">フィード</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

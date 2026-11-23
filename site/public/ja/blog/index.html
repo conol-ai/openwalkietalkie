@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ブログ · OpenWalkieTalkie</title>
+<meta name="description" content="OpenWalkieTalkie の開発ログと解説。AI エージェントのためのオープンソースのハンディ無線機です。" />
+<link rel="canonical" href="https://openwalkietalkie.org/ja/blog/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="ブログ · OpenWalkieTalkie" />
+<meta property="og:description" content="OpenWalkieTalkie の開発ログと解説。AI エージェントのためのオープンソースのハンディ無線機です。" />
+<meta property="og:url" content="https://openwalkietalkie.org/ja/blog/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie ブログ" href="/ja/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/i18n/ja.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">本文へスキップ</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/ja/" aria-label="OpenWalkieTalkie — ホーム">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="セクション">
+      <a href="/ja/#pile">The Pile</a>
+      <a href="/ja/#features">機能</a>
+      <a href="/ja/#demo">試す</a>
+      <a href="/ja/#faces">ページ</a>
+      <a href="/ja/#blueprint">設計図</a>
+      <a href="/ja/docs/">ドキュメント</a>
+      <a href="/ja/blog/" aria-current="true">ブログ</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="言語: 日本語">日本語</summary>
+        <ul>
+          <li><a href="/blog/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/blog/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="昼と夜のテーマを切り替える" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">昼</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="メニューを開く" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+
+<header class="blog-head">
+  <p class="section-kicker">開発ログ</p>
+  <h1 class="section-title">ブログ</h1>
+  <p class="section-lede">開発ログと解説。どの記事も基板と同じくらいオープンです。</p>
+</header>
+
+<a class="post-card" href="/ja/blog/dictation-that-knows-the-window/">
+  <p class="post-card__date">2026 · 11 · 22</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.16.0：ウィンドウがわかる口述</p>
+  <p class="post-card__excerpt">試験的な機能で、既定ではオフ：カーソル位置への口述を、フォーカス中のウィンドウに合わせて書き直せます。使うのはアプリ名とタイトルのテキストだけで、新しい「モデルへの接続」ページで選んだモデルを通します。</p>
+  <p class="post-card__read">リリースを読む →</p>
+</a>
+
+<a class="post-card" href="/ja/blog/companion-app-on-omarchy/">
+  <p class="post-card__date">2026 · 11 · 17</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.15.0：Omarchy で使えるアプリ</p>
+  <p class="post-card__excerpt">アプリが Omarchy で動くようになりました。Omarchy のページで PTT を押すとカーソル位置に口述入力でき、ホイールはウィンドウの行に沿って動き、Linux のサービスは 1 つのフォルダにまとまります。</p>
+  <p class="post-card__read">リリースを読む →</p>
+</a>
+
+<a class="post-card" href="/ja/blog/one-deck-mac-windows-omarchy/">
+  <p class="post-card__date">2026 · 11 · 16</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.14.0：Mac、Windows、Omarchy で使える 1 台のデバイス</p>
+  <p class="post-card__excerpt">Mac アプリがデバイスの管理アプリになり、サービスは Windows と Omarchy でも動くようになりました。Grok Bot が Claude Code と Codex に加わり、ファームウェアのインストールはデバイス自身が確認します。</p>
+  <p class="post-card__read">リリースを読む →</p>
+</a>
+
+<a class="post-card" href="/ja/blog/four-languages-one-setting/">
+  <p class="post-card__date">2026 · 11 · 08</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.13.0：4 つの言語、1 つの設定</p>
+  <p class="post-card__excerpt">Macアプリとデバイスが English、简体中文、繁體中文、日本語に対応し、保存した言語の選択は双方向に同期されます。ほかに 100 分の 1 秒表示と、音で知らせるタイマー終了も。</p>
+  <p class="post-card__read">リリースを読む →</p>
+</a>
+
+<a class="post-card" href="/ja/blog/conol-speech-and-pomodoro/">
+  <p class="post-card__date">2026 · 11 · 05</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.12.0：Conol があなたの声を聞き取り、ポモドーロも</p>
+  <p class="post-card__excerpt">Conol のチャットに話した内容を Conol 自身の音声モデルが文字起こしし、デバイスには録音中のタイムラインが表示されます。新しい「タイマー」ページでは、ストップウォッチ、カウントダウン、ポモドーロが使えます。</p>
+  <p class="post-card__read">リリースを読む →</p>
+</a>
+
+<a class="post-card" href="/ja/blog/ptt-pauses-keep-your-words/">
+  <p class="post-card__date">2026 · 10 · 28</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.11.1：間を置いても言葉が消えません</p>
+  <p class="post-card__excerpt">PTT を押したまま間を置いて、話し続けられます。Apple のオンデバイス音声認識で、前に話した文がプレビューと最終的な文字起こしに残るようになりました。</p>
+  <p class="post-card__read">リリースを読む →</p>
+</a>
+
+<a class="post-card" href="/ja/blog/conol-and-native-companions/">
+  <p class="post-card__date">2026 · 10 · 28</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.11.0：Conol とネイティブコンパニオン</p>
+  <p class="post-card__excerpt">デバイスで Conol の会話、口述での新しいチャット、複数ステップの質問。ほかのアプリにも開かれたコンパニオン API。</p>
+  <p class="post-card__read">リリースを読む →</p>
+</a>
+
+<a class="post-card" href="/ja/blog/computer-resources-on-the-deck/">
+  <p class="post-card__date">2026 · 10 · 26</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.10.0：パソコンのリソースをデバイスに</p>
+  <p class="post-card__excerpt">Mac の CPU、メモリー、GPU、ストレージをリアルタイムで表示するページ、より効率的なフラッピーバードの描画、より長いオリジナルのゲーム音楽。</p>
+  <p class="post-card__read">リリースを読む →</p>
+</a>
+
+<a class="post-card" href="/ja/blog/usb-audio-and-reset-reminders/">
+  <p class="post-card__date">2026 · 10 · 22</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.9.0：聞き取りやすい USB 音声とリセットのリマインダー</p>
+  <p class="post-card__excerpt">USB 経由で 48 kHz のスピーカー再生、16 kHz の音質改善、そして未使用の手動リセットが期限切れになる前に Mac とデバイスでお知らせします。</p>
+  <p class="post-card__read">リリースを読む →</p>
+</a>
+
+<a class="post-card" href="/ja/blog/screen-lock-and-wheel-navigation/">
+  <p class="post-card__date">2026 · 10 · 21</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.8.0：画面ロックとそろったホイール操作</p>
+  <p class="post-card__excerpt">自動の画面ロックがバッグの中の PTT を守ります。反時計回りに4クリックで解除でき、ページと項目の選択は同じ方向で動きます。</p>
+  <p class="post-card__read">リリースを読む →</p>
+</a>
+
+<a class="post-card" href="/ja/blog/speaker-eq-and-less-hiss/">
+  <p class="post-card__date">2026 · 10 · 20</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.7.0：声はより明瞭に、ノイズはより少なく</p>
+  <p class="post-card__excerpt">音声と通知音向けのスピーカー EQ を追加し、Rev A を RAM から実行してフラッシュに起因するノイズを減らしました。設定と Bluetooth のペアリングはそのままです。</p>
+  <p class="post-card__read">リリースを読む →</p>
+</a>
+
+<a class="post-card" href="/ja/blog/arcade-on-the-deck/">
+  <p class="post-card__date">2026 · 10 · 19</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.6.0：デバイスでゲーム</p>
+  <p class="post-card__excerpt">全画面のゲーム 3 本、本体のキーによる操作、オリジナルの 8-bit 音楽と効果音（オフにできます）。</p>
+  <p class="post-card__read">リリースを読む →</p>
+</a>
+
+<a class="post-card" href="/ja/blog/desktop-connection-and-factory-images/">
+  <p class="post-card__date">2026 · 10 · 19</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.5.0：Desktop がつながり、工場での書き込みにも対応</p>
+  <p class="post-card__excerpt">Codex Desktop の接続の修正、短い返信の確実な配信、代替のフラッシュチップへの対応、工場での書き込み用のイメージ。</p>
+  <p class="post-card__read">リリースを読む →</p>
+</a>
+
+<a class="post-card" href="/ja/blog/recovery-and-more-room/">
+  <p class="post-card__date">2026 · 10 · 18</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.4.0：画面でわかるリカバリーと、広がった容量</p>
+  <p class="post-card__excerpt">ガイド付きのブートローダー更新、デバイス上でのリカバリー進捗表示、より速い USB 転送、そして中国語テキストに対応しました。</p>
+  <p class="post-card__read">リリースを読む →</p>
+</a>
+
+<a class="post-card" href="/ja/blog/images-and-questions/">
+  <p class="post-card__date">2026 · 10 · 15</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.3.0：画像と回答待ちの質問</p>
+  <p class="post-card__excerpt">Mac とデバイスでのチャット画像、安定した画像プレビュー、ハンディデバイスから答えられる Codex の質問。</p>
+  <p class="post-card__read">リリースを読む →</p>
+</a>
+
+<a class="post-card" href="/ja/blog/radio-branding/">
+  <p class="post-card__date">2026 · 10 · 15</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.2.1：どこにでも、あの無線機</p>
+  <p class="post-card__excerpt">ウェブサイトの無線機が、アプリアイコン、メニューバー、デバイスの起動画面、「情報」画面にやってきました。COHDL のプロジェクトです。</p>
+  <p class="post-card__read">リリースを読む →</p>
+</a>
+
+<a class="post-card" href="/ja/blog/workflows-and-usage/">
+  <p class="post-card__date">2026 · 10 · 13</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.2.0：ワークフローがひと目でわかる</p>
+  <p class="post-card__excerpt">Mac とハンディデバイスでのワークフローのリアルタイム進捗、Claude Fable の使用量上限、ワークフローページのちらつきの修正。</p>
+  <p class="post-card__read">リリースを読む →</p>
+</a>
+
+<a class="post-card" href="/ja/blog/introducing-openwalkietalkie/">
+  <p class="post-card__date">2026 · 10 · 13</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.1.0：エージェントのためのハンディデバイス</p>
+  <p class="post-card__excerpt">Mac アプリとファームウェアの最初の正式リリースです。押して話す機能、デバイス上での会話、アプリとデバイスの更新に対応しました。</p>
+  <p class="post-card__read">リリースを読む →</p>
+</a>
+
+<p class="blog-feedline">今後のリリースや開発ログは <a href="/ja/blog/feed.xml">Atom フィード</a>で購読できます。</p>
+
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL のプロジェクト · ソフトウェアは MIT · ハードウェアは CERN-OHL-P</span>
+    <nav aria-label="フッター">
+      <a href="/ja/#waitlist">ウェイトリストに登録</a>
+      <a href="/ja/privacy/">プライバシーポリシー</a>
+      <a href="/ja/cookies/">Cookie について</a>
+      <a href="/ja/cookies/" data-privacy-open>プライバシーに関するお知らせ</a>
+      <a href="/ja/">ホーム</a>
+      <a href="/ja/#demo">試す</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Discord で CoHDL と OpenWalkieTalkie のコミュニティに参加">Discord</a>
+      <a href="/ja/blog/feed.xml">フィード</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "blog-index.head.title1": "部落格 · OpenWalkieTalkie",
+  "blog-index.head.meta-content1": "OpenWalkieTalkie 的開發日誌與文章 — 為你的 AI 助理打造的開源手持對講機。",
+  "blog-index.content.p1": "開發日誌",
+  "blog-index.content.h11": "部落格",
+  "blog-index.content.p2": "開發日誌與文章。每一篇都和電路板一樣公開。",
+  "blog-index.content.p40": "訂閱 <a href=\"/blog/feed.xml\">Atom 訂閱來源</a>，取得之後的版本發布與開發日誌。",
+  "blog-index.card.read": "閱讀版本資訊 →",
+  "blog-index.feed.subtitle": "為你的 AI 助理打造的開源手持對講機：開發日誌與文章。"
+}
