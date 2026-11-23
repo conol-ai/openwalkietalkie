@@ -36,6 +36,16 @@ voice over USB).
 output / input report:  [6, 5, len, payload[0..len], zero padding]   len <= 61
 ```
 
+**BLE hosts using ordinary GATT APIs.** Discover the Deck Control service
+(`f65fc100-b23e-4c52-94f2-bc437242d398`) after connecting. On each connection,
+subscribe to TX (`f65fc102-b23e-4c52-94f2-bc437242d398`), then send the normal
+`hello` line to RX (`f65fc101-b23e-4c52-94f2-bc437242d398`) using writes with
+response. Both the TX subscription and RX writes require an encrypted connection.
+Each value carries up to `min(61, ATT_MTU - 3)` raw bytes of the UTF-8 stream,
+including its LF delimiters. A character or line can span multiple values.
+While TX is subscribed, channel 5 on that BLE connection uses RX/TX exclusively.
+Other HID channels and the microphone service keep their existing transports.
+
 A message is one line: a compact JSON object in raw UTF-8 terminated by a raw
 LF (`0x0A`). `\uXXXX` escapes (including surrogate pairs) are accepted but not
 needed; raw UTF-8 is shorter. A line is at most **1024 bytes including the

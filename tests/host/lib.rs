@@ -21,6 +21,8 @@ mod ui;
 mod audio;
 #[path = "../../src/link/bond_record.rs"]
 mod bond_record;
+#[path = "../../src/link/deck_gatt.rs"]
+mod deck_gatt;
 #[path = "../../src/battery/charger.rs"]
 mod charger;
 #[path = "../../src/link/wire.rs"]
@@ -38,6 +40,8 @@ mod power;
 #[path = "../../src/input/touch_state.rs"]
 mod touch_state;
 
+#[cfg(test)]
+mod deck_gatt_tests;
 #[cfg(test)]
 mod deck_protocol;
 #[cfg(test)]

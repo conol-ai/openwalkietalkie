@@ -23,6 +23,7 @@
 
 mod bond_flash;
 mod bond_record;
+mod deck_gatt;
 mod nor_flash;
 pub use bond_record::Prefs;
 #[cfg(feature = "hw-a")]
@@ -291,6 +292,16 @@ struct Server {
     battery: BatteryService,
     hid: HidService,
     audio: AudioService,
+    deck_control: DeckControlService,
+}
+
+/// Channel 5 as a byte stream for hosts using public GATT APIs.
+#[gatt_service(uuid = "f65fc100-b23e-4c52-94f2-bc437242d398")]
+struct DeckControlService {
+    #[characteristic(uuid = "f65fc101-b23e-4c52-94f2-bc437242d398", write, value = heapless::Vec::new(), permissions(write = encrypted))]
+    rx: heapless::Vec<u8, 61>,
+    #[characteristic(uuid = "f65fc102-b23e-4c52-94f2-bc437242d398", notify, value = heapless::Vec::new(), permissions(cccd = encrypted))]
+    tx: heapless::Vec<u8, 61>,
 }
 
 #[gatt_service(uuid = "180a")]
@@ -497,6 +508,7 @@ pub async fn task(p: RadioPeripherals, address: [u8; 6]) {
                                 u16::from(record.hid_notify).into(),
                             ),
                             (server.audio.mic.cccd_handle.unwrap(), 0u16.into()),
+                            (server.deck_control.tx.cccd_handle.unwrap(), 0u16.into()),
                         ]),
                     );
                 }
@@ -545,6 +557,8 @@ async fn gatt_task(
     saved: &mut Option<bond_record::Record>,
 ) {
     let mut inbound = Inbound::new();
+    let control_cccd = server.deck_control.tx.cccd_handle;
+    let mut control_on = subscribed(server, conn, control_cccd);
     let mut speaker_drops = 0u32;
     let mut burst = Burst::new();
     loop {
@@ -599,16 +613,23 @@ async fn gatt_task(
                 let mut len = 0;
                 let mut cccd_written = false;
                 let mut mic_cccd = false;
+                let mut control_cccd_written = false;
                 if let GattEvent::Write(e) = &event {
                     cccd_written = Some(e.handle()) == server.hid.input.cccd_handle
                         || Some(e.handle()) == server.battery.level.cccd_handle;
                     mic_cccd = Some(e.handle()) == server.audio.mic.cccd_handle;
-                    if e.handle() == server.hid.output.handle && e.data().len() <= frame.len() {
+                    control_cccd_written = Some(e.handle()) == control_cccd;
+                    if e.handle() == server.deck_control.rx.handle && control_on {
+                        len = deck_gatt::report_body(e.data(), &mut frame);
+                    } else if e.handle() == server.hid.output.handle
+                        && e.data().len() <= frame.len()
+                        && !(control_on && is_deck(e.data()))
+                    {
                         len = e.data().len();
                         frame[..len].copy_from_slice(e.data());
-                        if burst.report(Instant::now()) {
-                            crate::audio::voice::ACTIVITY.signal(());
-                        }
+                    }
+                    if len != 0 && burst.report(Instant::now()) {
+                        crate::audio::voice::ACTIVITY.signal(());
                     }
                     // Speaker frames are queued before the reply goes out:
                     // the write is decided whatever the reply's fate.
@@ -630,6 +651,14 @@ async fn gatt_task(
                     Err(e) => {
                         logln!("link: GATT error: {:?}", e);
                         continue;
+                    }
+                }
+                if control_cccd_written {
+                    let on = subscribed(server, conn, control_cccd);
+                    if on != control_on {
+                        // A fragment from the previous carrier must not prefix the new host's hello.
+                        inbound.deck_rx.clear();
+                        control_on = on;
                     }
                 }
                 if mic_cccd {
@@ -1194,18 +1223,12 @@ struct BleSink<'a, 'b, 'c> {
     conn: &'a GattConnection<'b, 'c, DefaultPacketPool>,
 }
 
-impl ReportSink for BleSink<'_, '_, '_> {
-    /// The BLE report characteristic carries the 63-byte body; the report id
-    /// lives in its Report Reference descriptor.
-    async fn send(&mut self, report: &[u8; wire::REPORT_LEN]) -> Result<(), LinkError> {
-        let mut body = [0; 63];
-        body.copy_from_slice(&report[1..]);
-        match with_timeout(
-            Duration::from_millis(500),
-            self.server.hid.input.notify(self.conn, &body),
-        )
-        .await
-        {
+impl BleSink<'_, '_, '_> {
+    async fn notify(
+        &self,
+        notification: impl core::future::Future<Output = Result<(), trouble_host::Error>>,
+    ) -> Result<(), LinkError> {
+        match with_timeout(Duration::from_millis(500), notification).await {
             Ok(result) => result.map_err(LinkError::Ble)?,
             Err(_) => {
                 self.conn.raw().disconnect();
@@ -1214,6 +1237,25 @@ impl ReportSink for BleSink<'_, '_, '_> {
         }
         Timer::after_millis(4).await;
         Ok(())
+    }
+}
+
+impl ReportSink for BleSink<'_, '_, '_> {
+    async fn send(&mut self, report: &[u8; wire::REPORT_LEN]) -> Result<(), LinkError> {
+        let tx = &self.server.deck_control.tx;
+        if report[1] == proto::CHANNEL && subscribed(self.server, self.conn, tx.cccd_handle) {
+            for chunk in deck_gatt::notifications(report, self.conn.raw().att_mtu()) {
+                // A notification is at most one channel-5 payload (61 bytes).
+                let value = heapless::Vec::from_slice(chunk).unwrap();
+                self.notify(tx.notify(self.conn, &value)).await?;
+            }
+            return Ok(());
+        }
+        // HID carries the fixed-length body; the report ID is in its descriptor.
+        let mut body = [0; 63];
+        body.copy_from_slice(&report[1..]);
+        self.notify(self.server.hid.input.notify(self.conn, &body))
+            .await
     }
 
     async fn idle(&mut self, battery_percent: u8) -> Result<(), LinkError> {
