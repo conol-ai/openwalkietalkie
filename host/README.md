@@ -30,6 +30,25 @@ Releases from 0.14.0 include an unsigned preview zip; the website's
 [install guide](https://openwalkietalkie.org/docs/windows/) covers it, and
 [RELEASING.md](../RELEASING.md#the-windows-preview) how it is built.
 
+A local release build must set `CMAKE_C_FLAGS_RELEASE` and
+`CMAKE_CXX_FLAGS_RELEASE` (to `/O2 /Ob2 /DNDEBUG` in PowerShell, or
+`-O2 -Ob2 -DNDEBUG` in Git Bash, which rewrites a leading slash as a path).
+Under the Visual Studio generator the `cmake` crate otherwise overwrites them
+with flags that carry no `/O2`, whisper.cpp is compiled with
+`<Optimization></Optimization>`, and a short dictation can outlast its
+30-second limit. The release workflow sets both in its build step's `env`.
+`[target.'cfg(windows)'.env]` in a cargo config does not work (cargo ignores
+it), and `_CL_` breaks CMake's compiler detection. In PowerShell:
+
+```powershell
+$env:CMAKE_C_FLAGS_RELEASE = "/O2 /Ob2 /DNDEBUG"
+$env:CMAKE_CXX_FLAGS_RELEASE = "/O2 /Ob2 /DNDEBUG"
+cargo build --manifest-path host/Cargo.toml -p deckd -p openwalkietalkie-app --release --locked --target x86_64-pc-windows-msvc
+```
+
+The model-load log line `whisper stt: system info` shows the CPU features the
+build was compiled with.
+
 - **The local door is a named pipe**, `\\.\pipe\openwalkietalkie-deckd-<hash>`,
   the hash being the data directory's (`deck_client::windows::pipe_name_for`),
   so `DECKD_DATA_DIR` and `--data-dir` move it as they move the socket. Every

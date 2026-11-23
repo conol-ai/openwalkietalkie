@@ -273,7 +273,7 @@
   "home.waitlist-note.p1": "只发送设备上市的通知。随时发邮件到 <a href=\"mailto:privacy@cohdl.ai\">privacy@cohdl.ai</a> 即可退出名单。",
   "home.download.p1": "准备好说话了",
   "home.download.h21": "获取应用",
-  "home.download.p2": "v0.16.0，适用于 macOS 13 及更高版本，已签名并经过公证：你的设备的配套应用，支持 Mac、Windows 和 Omarchy。Windows 10 和 11 为未签名的预览版。",
+  "home.download.p2": "v0.17.0，适用于 macOS 13 及更高版本，已签名并经过公证：你的设备的配套应用，支持 Mac、Windows 和 Omarchy。Windows 10 和 11 为未签名的预览版。",
   "home.download.div1": "↓ Mac · Apple 芯片",
   "home.download.div2": "↓ Mac · Intel",
   "home.download.div3": "↓ Windows · x64 预览版",

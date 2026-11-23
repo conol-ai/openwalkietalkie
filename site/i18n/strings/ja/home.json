@@ -273,7 +273,7 @@
   "home.waitlist-note.p1": "送るのはデバイスの販売開始のお知らせだけです。<a href=\"mailto:privacy@cohdl.ai\">privacy@cohdl.ai</a> にメールすれば、いつでもリストから外れられます。",
   "home.download.p1": "話す準備はできた",
   "home.download.h21": "アプリを入手",
-  "home.download.p2": "v0.16.0。macOS 13 以降、署名・公証済み。Mac、Windows、Omarchy で使える、デバイスのコンパニオンアプリです。Windows 10 と 11 は署名なしのプレビュー版です。",
+  "home.download.p2": "v0.17.0。macOS 13 以降、署名・公証済み。Mac、Windows、Omarchy で使える、デバイスのコンパニオンアプリです。Windows 10 と 11 は署名なしのプレビュー版です。",
   "home.download.div1": "↓ Mac · Apple シリコン",
   "home.download.div2": "↓ Mac · Intel",
   "home.download.div3": "↓ Windows · x64 プレビュー版",
