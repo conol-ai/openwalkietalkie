@@ -56,7 +56,7 @@ const FINISH_MAX: Duration = Duration::from_secs(90);
 
 /// The encoder positions covering `samples` of 16 kHz audio, with room to
 /// spare, between a floor Whisper still decodes well from and the full window.
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+#[cfg_attr(not(any(target_os = "linux", windows)), allow(dead_code))]
 fn audio_ctx(samples: usize) -> i32 {
     let positions = samples / 320 + 128;
     i32::try_from(positions.next_multiple_of(64).clamp(512, 1500)).unwrap_or(1500)
@@ -212,6 +212,12 @@ impl WhisperStt {
                             model = %path.display(),
                             load_ms = started.elapsed().as_millis() as u64,
                             "whisper stt: model loaded"
+                        );
+                        // Temporary (win-stt-tuning): which CPU features this
+                        // build of whisper.cpp was compiled with.
+                        tracing::info!(
+                            system_info = whisper_rs::print_system_info(),
+                            "whisper stt: system info"
                         );
                         *me.loaded.lock().unwrap() = Some(Loaded {
                             path,
@@ -625,17 +631,35 @@ fn decode_once(
     } else {
         audio
     };
-    // Linux only, where Whisper runs on the CPU and a press must finish within
-    // its budget (the Mac has Metal and keeps whisper.cpp's defaults).
+    // Linux and Windows, where Whisper runs on the CPU and a press must finish
+    // within its budget (the Mac has Metal and keeps whisper.cpp's defaults;
+    // the Windows build has no GPU backend, so it is CPU-only as Linux is).
     // One pass: the default retries at higher temperatures re-decode the whole
     // window several times. And the encoder costs the same for 2 s as for 30 s
     // unless it is told how much of its 30 s window is audio.
-    #[cfg(target_os = "linux")]
-    {
+    #[cfg(any(target_os = "linux", windows))]
+    let window = {
         params.set_temperature_inc(0.0);
-        params.set_audio_ctx(audio_ctx(audio.len()));
-    }
-    state.full(params, audio).map_err(|e| e.to_string())?;
+        let window = audio_ctx(audio.len());
+        params.set_audio_ctx(window);
+        window
+    };
+    // 0 is whisper.cpp's "the whole 30 s window".
+    #[cfg(not(any(target_os = "linux", windows)))]
+    let window = 0;
+    // Temporary (win-stt-tuning): each decode's own time, never its words.
+    // whisper-rs 0.16 does not expose how many temperature passes ran.
+    let started = Instant::now();
+    let outcome = state.full(params, audio);
+    tracing::info!(
+        decode_ms = started.elapsed().as_millis() as u64,
+        audio_ms = (audio.len() as u64 * 1000) / u64::from(RATE),
+        audio_ctx = window,
+        threads = decode.threads,
+        ok = outcome.is_ok(),
+        "whisper stt: decode"
+    );
+    outcome.map_err(|e| e.to_string())?;
     let mut text = String::new();
     for segment in state.as_iter() {
         let piece = segment.to_str_lossy().map_err(|e| e.to_string())?;
