@@ -1,0 +1,43 @@
+name: Build Windows preview (branch test)
+# Branch-only scaffolding for win-stt-tuning: builds the Windows host the way
+# release.yml does and uploads deckd.exe, so a patched service can be tried on
+# a PC that cannot build (Smart App Control blocks cargo's build scripts).
+# `workflow_dispatch` can only be started for a workflow that is also on the
+# default branch, which this one is not, so a push to the branch starts it too.
+on:
+  workflow_dispatch:
+  push:
+    branches: [win-stt-tuning]
+permissions:
+  contents: read
+concurrency:
+  group: build-windows-preview-${{ github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
+env:
+  CARGO_TERM_COLOR: always
+jobs:
+  windows:
+    name: Windows host (release)
+    runs-on: windows-2025
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: 1.98.1
+      - name: Build the Windows host and app
+        run: |
+          cargo build --manifest-path host/Cargo.toml -p deckd -p openwalkietalkie-app --release --locked --target x86_64-pc-windows-msvc --target-dir target/host
+      - name: Checksum
+        run: |
+          sha256sum target/host/x86_64-pc-windows-msvc/release/deckd.exe
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: deckd-windows-x86_64
+          path: target/host/x86_64-pc-windows-msvc/release/deckd.exe
+          if-no-files-found: error
