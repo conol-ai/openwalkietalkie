@@ -213,8 +213,10 @@ impl WhisperStt {
                             load_ms = started.elapsed().as_millis() as u64,
                             "whisper stt: model loaded"
                         );
-                        // Temporary (win-stt-tuning): which CPU features this
-                        // build of whisper.cpp was compiled with.
+                        // Once per load: the CPU features this build of
+                        // whisper.cpp was compiled with (AVX, AVX2, FMA...).
+                        // A CPU build without them decodes many times slower,
+                        // and this line is the only place that shows up.
                         tracing::info!(
                             system_info = whisper_rs::print_system_info(),
                             "whisper stt: system info"
@@ -647,11 +649,13 @@ fn decode_once(
     // 0 is whisper.cpp's "the whole 30 s window".
     #[cfg(not(any(target_os = "linux", windows)))]
     let window = 0;
-    // Temporary (win-stt-tuning): each decode's own time, never its words.
+    // Each decode's own time against its audio's length, encoder window and
+    // threads (never its words): the numbers to compare when a CPU decode is
+    // slow. Debug level, as it is one line per press.
     // whisper-rs 0.16 does not expose how many temperature passes ran.
     let started = Instant::now();
     let outcome = state.full(params, audio);
-    tracing::info!(
+    tracing::debug!(
         decode_ms = started.elapsed().as_millis() as u64,
         audio_ms = (audio.len() as u64 * 1000) / u64::from(RATE),
         audio_ctx = window,
