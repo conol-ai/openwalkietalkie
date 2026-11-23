@@ -274,7 +274,14 @@ async fn logical_session_keeps_ownership_and_refuses_push() {
         )
         .await;
     assert!(updated["error"].is_null(), "{updated}");
-    assert_eq!(updated["result"]["rev"], daemon.api.bus.rev());
+    // The reply's rev includes its own write. The core publishes the reply's
+    // events just after it answers, so wait for the bus to reach that rev
+    // before comparing (as src/api/conn.rs does).
+    let rev = updated["result"]["rev"].as_u64().expect("the reply's rev");
+    daemon
+        .until("the update to reach the bus", |snap| snap.rev >= rev)
+        .await;
+    assert_eq!(daemon.api.bus.rev(), rev);
     let card = daemon
         .rpc(
             &auth,
