@@ -5,8 +5,16 @@
   <id>https://openwalkietalkie.org/blog/</id>
   <link href="https://openwalkietalkie.org/blog/" />
   <link rel="self" type="application/atom+xml" href="https://openwalkietalkie.org/blog/feed.xml" />
-  <updated>2026-11-22T09:04:46Z</updated>
+  <updated>2026-11-23T07:33:33Z</updated>
   <author><name>Tony Huang</name></author>
+  <entry>
+    <title>OpenWalkieTalkie v0.17.0: Windows dictation in about a second</title>
+    <id>https://openwalkietalkie.org/blog/windows-dictation-in-a-second/</id>
+    <link href="https://openwalkietalkie.org/blog/windows-dictation-in-a-second/" />
+    <published>2026-11-23T07:33:33Z</published>
+    <updated>2026-11-23T07:33:33Z</updated>
+    <summary>On the Windows preview, a press of PTT produced no text. whisper.cpp was compiled unoptimised and Windows used the Mac's decode settings. Both are fixed: 1.1 seconds from release to text on a test PC.</summary>
+  </entry>
   <entry>
     <title>OpenWalkieTalkie v0.16.0: Dictation that knows the window</title>
     <id>https://openwalkietalkie.org/blog/dictation-that-knows-the-window/</id>

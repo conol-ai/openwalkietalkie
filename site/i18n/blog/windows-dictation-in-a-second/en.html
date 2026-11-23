@@ -1,0 +1,26 @@
+---
+title: OpenWalkieTalkie v0.17.0: Windows dictation in about a second · OpenWalkieTalkie
+description: On the Windows preview, a press of PTT produced no text. whisper.cpp was compiled unoptimised and Windows used the Mac's decode settings. Both are fixed: 1.1 seconds from release to text on a test PC.
+heading: OpenWalkieTalkie v0.17.0: Windows dictation in about a second
+kind: Windows dictation fix
+date: 2026-11-23
+published: 2026-11-23T07:33:33Z
+updated: 2026-11-23T07:33:33Z
+summary: On the Windows preview, a press of PTT produced no text. whisper.cpp was compiled unoptimised and Windows used the Mac's decode settings. Both are fixed: 1.1 seconds from release to text on a test PC.
+excerpt: On the Windows preview, a press of PTT produced no text. whisper.cpp was compiled unoptimised and Windows used the Mac's decode settings. Both are fixed: 1.1 seconds from release to text on a test PC.
+lastmod: 2026-11-23
+navDocs: yes
+---
+  <p>Version 0.17.0 fixes one thing: dictation on Windows. On the Windows preview, a press of PTT produced no text, because the speech recogniser ran out of time before it finished. It now finishes in about a second. The deck's firmware is unchanged at 0.14.0, and nothing changes on macOS or Omarchy.</p>
+  <h2>Two causes</h2>
+  <p>On Windows, Whisper runs on the CPU. The release build compiled whisper.cpp with no optimisation at all: under the Visual Studio generator, the <code>cmake</code> crate overwrites the release compiler flags with ones that carry no <code>/O2</code>. And Windows used the Mac's decode settings, which suit Metal: the encoder ran its full 30-second window for a 2-second press, and a failed pass was decoded again at a higher temperature. Together, a short press could take longer than the 30 seconds a dictation is given.</p>
+  <h2>What changed</h2>
+  <p>The Windows release build now sets <code>CMAKE_C_FLAGS_RELEASE</code> and <code>CMAKE_CXX_FLAGS_RELEASE</code>, so whisper.cpp is compiled optimised. On Windows, as on Linux, Whisper makes one pass and encodes only as much of its window as the press needs. When the model loads, the service's log records which CPU features whisper.cpp was compiled with.</p>
+  <h2>Measured</h2>
+  <p>On a test PC with an Intel Core i5-13420H, the <code>ggml-small.bin</code> model and the Mandarin sentence 「收到，已经下发了。」, three builds were tried. 0.16.0 as shipped produced nothing: two presses, with <code>small</code> and with <code>large-v3-turbo-q5_0</code>, both timed out after 30,000 ms. With the decode settings fixed but whisper.cpp still unoptimised, the text came out after 17,242 ms. With both fixes, it came out after 1,124 ms, faster than the reference <code>whisper-cli</code> on the same CPU. The transcript was <code>收到已经下发了</code>: all seven characters correct and in order, without the comma and the full stop.</p>
+  <h2>Building it yourself</h2>
+  <p>A local Windows build must set the same two variables, <code>/O2 /Ob2 /DNDEBUG</code> in PowerShell or <code>-O2 -Ob2 -DNDEBUG</code> in Git Bash, or whisper.cpp is compiled unoptimised again. The release notes show the commands.</p>
+  <h2>Update</h2>
+  <p>On Windows, download the ZIP from the release, as the <a href="/docs/windows/">Windows guide</a> shows. On a Mac, choose <strong>Check for Updates…</strong>, or install the signed, notarized <strong>0.17.0</strong> app for Apple Silicon or Intel (macOS 13 or later). On Omarchy, pull, build the service and the app, and run <code>install.sh</code> with both, as the <a href="/docs/omarchy/">Omarchy guide</a> shows. The deck needs no firmware update for this release.</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.17.0" rel="noopener">Get OpenWalkieTalkie v0.17.0 and checksums on GitHub →</a></p>
+  <p class="post-back"><a href="/blog/">← Back to the blog</a></p>

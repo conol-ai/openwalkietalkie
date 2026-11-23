@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="day">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OpenWalkieTalkie v0.17.0: Windows dictation in about a second · OpenWalkieTalkie</title>
+<meta name="description" content="On the Windows preview, a press of PTT produced no text. whisper.cpp was compiled unoptimised and Windows used the Mac's decode settings. Both are fixed: 1.1 seconds from release to text on a test PC." />
+<link rel="canonical" href="https://openwalkietalkie.org/blog/windows-dictation-in-a-second/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/windows-dictation-in-a-second/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/windows-dictation-in-a-second/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/blog/windows-dictation-in-a-second/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/blog/windows-dictation-in-a-second/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/blog/windows-dictation-in-a-second/" />
+
+<meta property="og:type" content="article" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.17.0: Windows dictation in about a second · OpenWalkieTalkie" />
+<meta property="og:description" content="On the Windows preview, a press of PTT produced no text. whisper.cpp was compiled unoptimised and Windows used the Mac's decode settings. Both are fixed: 1.1 seconds from release to text on a test PC." />
+<meta property="og:url" content="https://openwalkietalkie.org/blog/windows-dictation-in-a-second/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie Blog" href="/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">Skip to content</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/" aria-label="OpenWalkieTalkie — home">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="Sections">
+      <a href="/#pile">The Pile</a>
+      <a href="/#features">Features</a>
+      <a href="/#demo">Try It</a>
+      <a href="/#faces">Faces</a>
+      <a href="/#blueprint">Blueprint</a>
+      <a href="/docs/">Docs</a>
+      <a href="/blog/" aria-current="true">Blog</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="Language: English">English</summary>
+        <ul>
+          <li><a href="/blog/windows-dictation-in-a-second/" hreflang="en" lang="en" aria-current="true">English</a></li>
+          <li><a href="/zh-Hans/blog/windows-dictation-in-a-second/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/windows-dictation-in-a-second/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/blog/windows-dictation-in-a-second/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle day and night theme" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">DAY</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="Open menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">THE BLOG · RELEASE NOTES</p>
+  <h1>OpenWalkieTalkie v0.17.0: Windows dictation in about a second</h1>
+  <p class="post-meta"><span>November 23, 2026</span><span>Windows dictation fix</span></p>
+</header>
+<article class="post-body">
+  <p>Version 0.17.0 fixes one thing: dictation on Windows. On the Windows preview, a press of PTT produced no text, because the speech recogniser ran out of time before it finished. It now finishes in about a second. The deck's firmware is unchanged at 0.14.0, and nothing changes on macOS or Omarchy.</p>
+  <h2>Two causes</h2>
+  <p>On Windows, Whisper runs on the CPU. The release build compiled whisper.cpp with no optimisation at all: under the Visual Studio generator, the <code>cmake</code> crate overwrites the release compiler flags with ones that carry no <code>/O2</code>. And Windows used the Mac's decode settings, which suit Metal: the encoder ran its full 30-second window for a 2-second press, and a failed pass was decoded again at a higher temperature. Together, a short press could take longer than the 30 seconds a dictation is given.</p>
+  <h2>What changed</h2>
+  <p>The Windows release build now sets <code>CMAKE_C_FLAGS_RELEASE</code> and <code>CMAKE_CXX_FLAGS_RELEASE</code>, so whisper.cpp is compiled optimised. On Windows, as on Linux, Whisper makes one pass and encodes only as much of its window as the press needs. When the model loads, the service's log records which CPU features whisper.cpp was compiled with.</p>
+  <h2>Measured</h2>
+  <p>On a test PC with an Intel Core i5-13420H, the <code>ggml-small.bin</code> model and the Mandarin sentence 「收到，已经下发了。」, three builds were tried. 0.16.0 as shipped produced nothing: two presses, with <code>small</code> and with <code>large-v3-turbo-q5_0</code>, both timed out after 30,000 ms. With the decode settings fixed but whisper.cpp still unoptimised, the text came out after 17,242 ms. With both fixes, it came out after 1,124 ms, faster than the reference <code>whisper-cli</code> on the same CPU. The transcript was <code>收到已经下发了</code>: all seven characters correct and in order, without the comma and the full stop.</p>
+  <h2>Building it yourself</h2>
+  <p>A local Windows build must set the same two variables, <code>/O2 /Ob2 /DNDEBUG</code> in PowerShell or <code>-O2 -Ob2 -DNDEBUG</code> in Git Bash, or whisper.cpp is compiled unoptimised again. The release notes show the commands.</p>
+  <h2>Update</h2>
+  <p>On Windows, download the ZIP from the release, as the <a href="/docs/windows/">Windows guide</a> shows. On a Mac, choose <strong>Check for Updates…</strong>, or install the signed, notarized <strong>0.17.0</strong> app for Apple Silicon or Intel (macOS 13 or later). On Omarchy, pull, build the service and the app, and run <code>install.sh</code> with both, as the <a href="/docs/omarchy/">Omarchy guide</a> shows. The deck needs no firmware update for this release.</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.17.0" rel="noopener">Get OpenWalkieTalkie v0.17.0 and checksums on GitHub →</a></p>
+  <p class="post-back"><a href="/blog/">← Back to the blog</a></p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · A COHDL project · MIT software · CERN-OHL-P hardware</span>
+    <nav aria-label="Footer">
+      <a href="/#waitlist">Join the waitlist</a>
+      <a href="/privacy/">Privacy Policy</a>
+      <a href="/cookies/">Cookie information</a>
+      <a href="/cookies/" data-privacy-open>Privacy notice</a>
+      <a href="/">Home</a>
+      <a href="/#demo">Try It</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Join the CoHDL and OpenWalkieTalkie community on Discord">Discord</a>
+      <a href="/blog/feed.xml">Feed</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/privacy.js"></script>
+</body>
+</html>

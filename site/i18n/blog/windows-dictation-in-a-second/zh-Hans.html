@@ -1,0 +1,26 @@
+---
+title: OpenWalkieTalkie v0.17.0：Windows 上的口述，约一秒出字 · OpenWalkieTalkie
+description: 在 Windows 预览版上，按下 PTT 说话得不到任何文字。原因是 whisper.cpp 编译时没有开优化，而 Windows 用的是 Mac 的解码设置。两者都已修复：在测试电脑上，从松开到出字 1.1 秒。
+heading: OpenWalkieTalkie v0.17.0：Windows 上的口述，约一秒出字
+kind: Windows 口述修复
+date: 2026-11-23
+published: 2026-11-23T07:33:33Z
+updated: 2026-11-23T07:33:33Z
+summary: 在 Windows 预览版上，按下 PTT 说话得不到任何文字。原因是 whisper.cpp 编译时没有开优化，而 Windows 用的是 Mac 的解码设置。两者都已修复：在测试电脑上，从松开到出字 1.1 秒。
+excerpt: 在 Windows 预览版上，按下 PTT 说话得不到任何文字。原因是 whisper.cpp 编译时没有开优化，而 Windows 用的是 Mac 的解码设置。两者都已修复：在测试电脑上，从松开到出字 1.1 秒。
+lastmod: 2026-11-23
+navDocs: yes
+---
+  <p>0.17.0 版只修了一件事：Windows 上的口述。在 Windows 预览版上，按下 PTT 说话得不到任何文字，因为语音识别还没完成就超时了。现在大约一秒就能完成。设备固件不变，仍是 0.14.0，macOS 和 Omarchy 上没有变化。</p>
+  <h2>两个原因</h2>
+  <p>在 Windows 上，Whisper 在 CPU 上运行。发布构建编译 whisper.cpp 时完全没有开优化：使用 Visual Studio 生成器时，<code>cmake</code> crate 会用不带 <code>/O2</code> 的参数覆盖发布版的编译参数。而且 Windows 用的是适合 Metal 的 Mac 解码设置：按 2 秒，编码器也要跑完整个 30 秒窗口，失败的一遍还会用更高的温度重新解码。两者叠加，一次很短的按键也可能超过一次口述的 30 秒时限。</p>
+  <h2>改了什么</h2>
+  <p>Windows 的发布构建现在会设置 <code>CMAKE_C_FLAGS_RELEASE</code> 和 <code>CMAKE_CXX_FLAGS_RELEASE</code>，whisper.cpp 会以优化方式编译。在 Windows 上，和 Linux 一样，Whisper 只解码一遍，只编码这次按键需要的那部分窗口。模型加载时，服务日志会记录 whisper.cpp 编译时启用的 CPU 特性。</p>
+  <h2>实测</h2>
+  <p>在一台 Intel Core i5-13420H 的测试电脑上，使用 <code>ggml-small.bin</code> 模型，说同一句普通话「收到，已经下发了。」，试了三个构建。发布的 0.16.0 没有任何文字：两次按键，分别用 <code>small</code> 和 <code>large-v3-turbo-q5_0</code>，都在 30,000 毫秒后超时。只修好解码设置、whisper.cpp 仍未优化时，17,242 毫秒后出字。两项都修好后，1,124 毫秒出字，比同一颗 CPU 上的参考实现 <code>whisper-cli</code> 还快。识别结果是 <code>收到已经下发了</code>：七个字全部正确，顺序也对，只是少了逗号和句号。</p>
+  <h2>自己构建</h2>
+  <p>本地的 Windows 构建也必须设置这两个变量，在 PowerShell 中设为 <code>/O2 /Ob2 /DNDEBUG</code>，在 Git Bash 中设为 <code>-O2 -Ob2 -DNDEBUG</code>，否则 whisper.cpp 又会在没有优化的情况下编译。具体命令见发布说明。</p>
+  <h2>更新</h2>
+  <p>在 Windows 上，按 <a href="/docs/windows/">Windows 指南</a>从发布页面下载 ZIP。在 Mac 上，选择<strong>检查更新…</strong>，或安装已签名并经过公证的 <strong>0.17.0</strong> 应用（Apple Silicon 或 Intel，macOS 13 或更高版本）。在 Omarchy 上，拉取代码，构建服务和应用，再用这两者运行 <code>install.sh</code>，具体见 <a href="/docs/omarchy/">Omarchy 指南</a>。这个版本不需要更新设备固件。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.17.0" rel="noopener">在 GitHub 获取 OpenWalkieTalkie v0.17.0 和校验和 →</a></p>
+  <p class="post-back"><a href="/blog/">← 返回博客</a></p>

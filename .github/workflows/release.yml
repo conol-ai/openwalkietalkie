@@ -101,6 +101,16 @@ jobs:
       - name: Build and package the Windows preview
         env:
           TAG: ${{ needs.validate.outputs.tag }}
+          # whisper.cpp must be compiled optimised. With the Visual Studio
+          # generator the `cmake` crate overwrites these two variables with
+          # flags that carry no /O2, and whisper.cpp then decodes about ten
+          # times slower on Windows; whisper-rs-sys hands CMAKE_* variables
+          # to CMake, and a variable that is set is left alone. Spelled with
+          # dashes because this step runs in Git Bash, which rewrites a value
+          # that starts with a slash as a path (/O2 becomes C:/Program
+          # Files/Git/O2); cl.exe reads -O2 as /O2.
+          CMAKE_C_FLAGS_RELEASE: -O2 -Ob2 -DNDEBUG
+          CMAKE_CXX_FLAGS_RELEASE: -O2 -Ob2 -DNDEBUG
         run: |
           cargo build --manifest-path host/Cargo.toml -p deckd -p openwalkietalkie-app --release --locked --target x86_64-pc-windows-msvc --target-dir target/host
           built=target/host/x86_64-pc-windows-msvc/release
