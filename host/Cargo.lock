@@ -1862,7 +1862,7 @@ dependencies = [
 
 [[package]]
 name = "deck-client"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "deck-model",
  "futures-util",
@@ -1876,7 +1876,7 @@ dependencies = [
 
 [[package]]
 name = "deck-gui-core"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "async-channel 2.5.0",
  "deck-client",
@@ -1887,7 +1887,7 @@ dependencies = [
 
 [[package]]
 name = "deck-model"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "deck-proto",
  "deck-wrap",
@@ -1900,7 +1900,7 @@ dependencies = [
 
 [[package]]
 name = "deck-proto"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "proptest",
  "schemars",
@@ -1911,7 +1911,7 @@ dependencies = [
 
 [[package]]
 name = "deck-wrap"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "deck-proto",
  "embedded-graphics",
@@ -1920,7 +1920,7 @@ dependencies = [
 
 [[package]]
 name = "deckd"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "arc-swap",
  "axum",
@@ -5472,7 +5472,7 @@ checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
 
 [[package]]
 name = "openwalkietalkie-app"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "async-channel 2.5.0",
  "base64",
