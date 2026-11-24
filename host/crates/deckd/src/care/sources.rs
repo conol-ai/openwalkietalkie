@@ -39,7 +39,7 @@
 use crate::config::{self, Config};
 use crate::core::handle::SessionKind;
 use crate::core::sessions::{SessionEntry, Sessions};
-use deck_model::{AdapterKind, Agent, Principal, Request, Scope, SessionId, Snapshot, Ts};
+use deck_model::{AdapterKind, Agent, Kind, Principal, Request, Scope, SessionId, Snapshot, Ts};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -291,18 +291,19 @@ impl Ledger {
         self.refresh(sessions, snapshot);
         let mut tally: BTreeMap<Source, Tally> = BTreeMap::new();
         let mut other = 0;
-        let mut channels_on_deck = 0;
+        let ready_sessions = around.channels.ready_session_ids();
+        let channels_on_deck = snapshot
+            .agents
+            .values()
+            .filter_map(slotted_claude_session_id)
+            .filter(|id| ready_sessions.contains(*id))
+            .collect::<BTreeSet<_>>()
+            .len();
         for agent in snapshot.agents.values() {
             match self.origin(sessions, agent.owner.session) {
                 Origin::Daemon => {}
                 Origin::Unknown | Origin::Source(Source::Other) => other += 1,
                 Origin::Source(source) => {
-                    if source == Source::Claude
-                        && agent.slot.is_some()
-                        && around.channels.ready(agent)
-                    {
-                        channels_on_deck += 1;
-                    }
                     tally.entry(source).or_default().add(agent);
                 }
             }
@@ -467,6 +468,16 @@ impl Ledger {
             })
             .collect()
     }
+}
+
+/// Native and Omarchy entries use different key prefixes for the same Claude
+/// session. Compare the final segment for display counts without granting a route.
+fn slotted_claude_session_id(agent: &Agent) -> Option<&str> {
+    if agent.kind != Kind::Claude || agent.slot.is_none() {
+        return None;
+    }
+    let (_, session_id) = agent.session.key.as_deref()?.rsplit_once(':')?;
+    (!session_id.is_empty()).then_some(session_id)
 }
 
 fn channels_row(around: &Around<'_>, on_deck: usize) -> Row {
@@ -1302,6 +1313,57 @@ mod tests {
         assert_eq!(channels(&mut c), on);
         assert!(slot(&c, &api).is_some());
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn channels_count_ready_slotted_sessions_once_across_sources() {
+        let cases: &[(&str, &[&str], usize)] = &[
+            ("bridge-only", &["omarchy:host:claude:one"], 1),
+            ("native-only", &["claude:one"], 1),
+            ("both", &["claude:one", "omarchy:host:claude:one"], 1),
+            ("unslotted", &["claude:one"], 0),
+            ("two-sessions", &["claude:one", "omarchy:host:claude:two"], 2),
+            ("partial-suffix", &["omarchy:host:claude:someone"], 0),
+        ];
+        for &(name, keys, expected) in cases {
+            let (mut c, _ops, _lines, _debug, dir) = detached_core(name);
+            let now = Instant::now();
+            reconfigure(&mut c, now, |config| {
+                config.sources.claude = !matches!(name, "bridge-only" | "unslotted");
+                config.sources.claude_channels = Some(true);
+            });
+            let native = adapter(&mut c, AdapterKind::Claude, now);
+            let bridge = app(&mut c, "Omarchy remote", &[Scope::Agent], now);
+            let _one = c.adapters().claude_channels.test_channel(101, "one");
+            let _two = c.adapters().claude_channels.test_channel(102, "two");
+            for &key in keys {
+                let owner = if key.starts_with("claude:") {
+                    native
+                } else {
+                    bridge
+                };
+                let principal = c.sessions.get(owner).unwrap().principal.clone();
+                let mut registration = testkit::register(name, Some(key));
+                registration.kind = Kind::Claude;
+                let result = c
+                    .api_call(
+                        principal,
+                        owner,
+                        false,
+                        Request::AgentRegister(registration),
+                        now,
+                    )
+                    .unwrap();
+                let id = serde_json::from_value(result["agent"].clone()).unwrap();
+                assert_eq!(slot(&c, &id).is_some(), name != "unslotted", "{name}");
+            }
+            assert_eq!(
+                row(&list(&mut c, now), "claude_channels")["on_deck"],
+                expected,
+                "{name}"
+            );
+            std::fs::remove_dir_all(dir).unwrap();
+        }
     }
 
     /// The shape of a column, for comparing the reply with the fixture the

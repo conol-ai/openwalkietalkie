@@ -194,6 +194,17 @@ impl Hub {
         entries.values().filter(|e| e.ready && !e.sender.is_closed()).count()
     }
 
+    /// A display-only snapshot of ready session IDs, with no delivery authority.
+    pub(crate) fn ready_session_ids(&self) -> std::collections::BTreeSet<String> {
+        self.entries
+            .lock()
+            .expect("channel hub")
+            .iter()
+            .filter(|(_, entry)| entry.ready && !entry.sender.is_closed())
+            .map(|(id, _)| id.session.clone())
+            .collect()
+    }
+
     pub fn status(&self) -> Value {
         let entries = self.entries.lock().expect("channel hub");
         json!(entries
