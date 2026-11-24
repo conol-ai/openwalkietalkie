@@ -350,12 +350,12 @@ pub fn exe_path(pid: u32) -> Option<PathBuf> {
 
 #[cfg(target_os = "linux")]
 pub fn exe_path(pid: u32) -> Option<PathBuf> {
-    std::fs::read_link(
-        std::path::Path::new("/proc")
-            .join(pid.to_string())
-            .join("exe"),
-    )
-    .ok()
+    linux_exe_path(&Path::new("/proc").join(pid.to_string()))
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn linux_exe_path(directory: &Path) -> Option<PathBuf> {
+    std::fs::read_link(directory.join("exe")).ok()
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]

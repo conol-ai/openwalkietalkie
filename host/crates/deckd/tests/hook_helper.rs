@@ -82,7 +82,7 @@ fn hook(data_dir: &Path, args: &[&str], stdin: &[u8]) -> Run {
 /// a symlink back to its target, and not `/bin/sh` because macOS launch
 /// constraints SIGKILL a system binary run from anywhere but its own path
 /// (measured: a copy of `/bin/sh` dies with signal 9).
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn fake_cli(dir: &Path, name: &str) -> PathBuf {
     use std::os::unix::fs::PermissionsExt;
     let path = dir.join(name);
@@ -93,8 +93,8 @@ fn fake_cli(dir: &Path, name: &str) -> PathBuf {
 }
 
 /// Read a pid a spawned shell wrote, or fail after five seconds. Only the
-/// macOS parent-walk row reads one.
-#[cfg(target_os = "macos")]
+/// real parent-walk test reads one.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn pid_in(file: &Path) -> u32 {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     loop {
@@ -112,7 +112,7 @@ fn pid_in(file: &Path) -> u32 {
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn kill(pid: u32) {
     let _ = Command::new("/bin/kill")
         .args(["-9", &pid.to_string()])
@@ -128,9 +128,9 @@ fn kill(pid: u32) {
 /// `kill(ppid, 0)` liveness poll on it would flap the roster within 2 s.
 ///
 /// Both shapes are real processes under a real process called `codex`, so
-/// this exercises `proc_pidinfo`/`proc_pidpath` and not a table.
+/// this exercises the platform process lookup directly.
 #[test]
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn the_parent_walk_finds_the_cli_through_both_spawn_forms() {
     let temp = Temp::new("spawn");
     let exec_file = temp.path().join("exec.pid");

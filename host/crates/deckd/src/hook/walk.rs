@@ -190,30 +190,7 @@ impl Procs for MacProcs {
 
     #[cfg(target_os = "linux")]
     fn get(&self, pid: u32) -> Option<Proc> {
-        let directory = std::path::Path::new("/proc").join(pid.to_string());
-        let (ppid, started) = linux_stat(&directory)?;
-        let comm = std::fs::read(directory.join("comm")).ok()?;
-        let exe = crate::trust::exe_path(pid)?;
-        // A reused parent PID cannot belong to a process younger than this one.
-        if ppid != 0 {
-            let parent = std::path::Path::new("/proc").join(ppid.to_string());
-            if linux_stat(&parent)?.1 > started {
-                return None;
-            }
-        }
-        // The PID or parent could have changed while reading the files.
-        if linux_stat(&directory)? != (ppid, started) {
-            return None;
-        }
-        let mut names = vec![
-            String::from_utf8_lossy(&comm)
-                .trim_end_matches('\n')
-                .to_owned(),
-            exe.to_string_lossy().into_owned(),
-        ];
-        names.retain(|name| !name.is_empty());
-        names.dedup();
-        Some(Proc { pid, ppid, names })
+        linux_process(std::path::Path::new("/proc"), pid)
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
@@ -262,6 +239,34 @@ impl Procs for MacProcs {
             names,
         })
     }
+}
+
+#[cfg(target_os = "linux")]
+fn linux_process(root: &std::path::Path, pid: u32) -> Option<Proc> {
+    let directory = root.join(pid.to_string());
+    let (ppid, started) = linux_stat(&directory)?;
+    let comm = std::fs::read(directory.join("comm")).ok()?;
+    let exe = crate::trust::linux_exe_path(&directory)?;
+    // A reused parent PID cannot belong to a process younger than this one.
+    if ppid != 0 {
+        let parent = root.join(ppid.to_string());
+        if linux_stat(&parent)?.1 > started {
+            return None;
+        }
+    }
+    // The PID or parent could have changed while reading the files.
+    if linux_stat(&directory)? != (ppid, started) {
+        return None;
+    }
+    let mut names = vec![
+        String::from_utf8_lossy(&comm)
+            .trim_end_matches('\n')
+            .to_owned(),
+        exe.to_string_lossy().into_owned(),
+    ];
+    names.retain(|name| !name.is_empty());
+    names.dedup();
+    Some(Proc { pid, ppid, names })
 }
 
 /// Parent PID and process start time (Linux stat fields 4 and 22).
@@ -439,6 +444,39 @@ mod tests {
             launchd.names.iter().any(|n| n.ends_with("/launchd")),
             "{launchd:?}"
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_stat_accepts_complex_comm_and_rejects_truncated_or_reused_parent() {
+        let root = std::env::temp_dir().join(format!("deckd-linux-stat-{}", std::process::id()));
+        let child = root.join("10");
+        let parent = root.join("9");
+        std::fs::create_dir_all(&child).unwrap();
+        std::fs::create_dir_all(&parent).unwrap();
+        let stat = |pid, ppid, start| {
+            format!("{pid} (comm with ) spaces) S {ppid} {} {start} 0\n", ["0"; 17].join(" "))
+        };
+        std::fs::write(child.join("stat"), stat(10, 9, 100)).unwrap();
+        std::fs::write(parent.join("stat"), stat(9, 0, 99)).unwrap();
+        std::fs::write(child.join("comm"), "comm with ) spaces\n").unwrap();
+        std::os::unix::fs::symlink("/bin/sh", child.join("exe")).unwrap();
+        assert_eq!(linux_stat(&child), Some((9, 100)));
+        assert_eq!(linux_process(&root, 10).unwrap().ppid, 9);
+
+        struct Fixture(std::path::PathBuf);
+        impl Procs for Fixture {
+            fn get(&self, pid: u32) -> Option<Proc> {
+                linux_process(&self.0, pid)
+            }
+        }
+        std::fs::write(parent.join("stat"), stat(9, 0, 101)).unwrap();
+        let walk = resolve(10, &Fixture(root.clone()), MAX_HOPS);
+        assert_eq!(walk.pid_kind, PidKind::Unknown);
+        assert!(walk.cli_pid.is_none() && walk.chain.is_empty());
+        std::fs::write(child.join("stat"), "10 (comm with ) spaces) S 9").unwrap();
+        assert_eq!(linux_stat(&child), None);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[cfg(target_os = "linux")]
