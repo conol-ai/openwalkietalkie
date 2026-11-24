@@ -1,0 +1,10 @@
+{
+  "autodeskProduct": "Fusion360",
+  "type": "script",
+  "author": "OpenWalkieTalkie",
+  "description": {
+    "": "Build HW17-R0 native motor wheel"
+  },
+  "version": "1.0.0",
+  "supportedOS": "mac|windows"
+}

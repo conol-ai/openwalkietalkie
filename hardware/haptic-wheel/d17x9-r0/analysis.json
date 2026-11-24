@@ -1,0 +1,134 @@
+{
+  "method": "Analytical sinusoidal PM flux linkage sensitivity, NOT FEA or measured performance",
+  "convention": "Iq is peak phase current; Rphase is one star phase at 20 C; copper loss=1.5*Rphase*Iq^2; Kt=1.5*p*lambda_phase_peak",
+  "winding_phasors": {
+    "A": {
+      "distribution_factor": 0.9659258262890684,
+      "electrical_axis_deg": 14.999999999999961
+    },
+    "B": {
+      "distribution_factor": 0.9659258262890681,
+      "electrical_axis_deg": -105.00000000000004
+    },
+    "C": {
+      "distribution_factor": 0.9659258262890683,
+      "electrical_axis_deg": 134.99999999999997
+    }
+  },
+  "coil_pitch_factor": 0.9659258262890683,
+  "winding_factor": 0.9330127018922195,
+  "phase_series_turns": 128,
+  "wire_length_per_phase_m": 1.6528,
+  "phase_resistance_20C_ohm": 2.1467475685704076,
+  "line_line_resistance_20C_ohm": 4.293495137140815,
+  "phase_resistance_80C_ohm": 2.6529506452393097,
+  "coil_copper_fill_in_allocated_side": 0.5056468175777857,
+  "finished_wire_area_fill_in_allocated_side": 0.6290665289688133,
+  "scenarios": [
+    {
+      "assumed_fundamental_airgap_B_T": 0.3,
+      "Kt_mNm_per_A_peak": 2.848301176336567,
+      "flux_per_pole_uWb": 2.271428571428571,
+      "points": [
+        {
+          "torque_mNm": 0.5,
+          "rim_force_N": 0.058823529411764705,
+          "Iq_peak_A": 0.1755432340350647,
+          "phase_RMS_A": 0.12412781117761139,
+          "copper_loss_20C_W": 0.09922941452994138,
+          "copper_loss_80C_W": 0.12262771047610158,
+          "ideal_zero_speed_bus_min_20C_V": 0.6527181694618539
+        },
+        {
+          "torque_mNm": 1.6,
+          "rim_force_N": 0.18823529411764706,
+          "Iq_peak_A": 0.561738348912207,
+          "phase_RMS_A": 0.3972089957683564,
+          "copper_loss_20C_W": 1.0161092047865996,
+          "copper_loss_80C_W": 1.25570775527528,
+          "ideal_zero_speed_bus_min_20C_V": 2.0886981422779325
+        },
+        {
+          "torque_mNm": 3.0,
+          "rim_force_N": 0.35294117647058826,
+          "Iq_peak_A": 1.053259404210388,
+          "phase_RMS_A": 0.7447668670656682,
+          "copper_loss_20C_W": 3.5722589230778885,
+          "copper_loss_80C_W": 4.414597577139655,
+          "ideal_zero_speed_bus_min_20C_V": 3.9163090167711228
+        }
+      ],
+      "torque_at_unverified_0p5W_copper_budget_mNm": 1.1223667493436638
+    },
+    {
+      "assumed_fundamental_airgap_B_T": 0.45,
+      "Kt_mNm_per_A_peak": 4.272451764504852,
+      "flux_per_pole_uWb": 3.407142857142857,
+      "points": [
+        {
+          "torque_mNm": 0.5,
+          "rim_force_N": 0.058823529411764705,
+          "Iq_peak_A": 0.11702882269004308,
+          "phase_RMS_A": 0.08275187411840755,
+          "copper_loss_20C_W": 0.044101962013307246,
+          "copper_loss_80C_W": 0.0545012046560451,
+          "ideal_zero_speed_bus_min_20C_V": 0.4351454463079025
+        },
+        {
+          "torque_mNm": 1.6,
+          "rim_force_N": 0.18823529411764706,
+          "Iq_peak_A": 0.3744922326081379,
+          "phase_RMS_A": 0.26480599717890424,
+          "copper_loss_20C_W": 0.45160409101626636,
+          "copper_loss_80C_W": 0.558092335677902,
+          "ideal_zero_speed_bus_min_20C_V": 1.392465428185288
+        },
+        {
+          "torque_mNm": 3.0,
+          "rim_force_N": 0.35294117647058826,
+          "Iq_peak_A": 0.7021729361402586,
+          "phase_RMS_A": 0.4965112447104454,
+          "copper_loss_20C_W": 1.587670632479061,
+          "copper_loss_80C_W": 1.9620433676176239,
+          "ideal_zero_speed_bus_min_20C_V": 2.6108726778474147
+        }
+      ],
+      "torque_at_unverified_0p5W_copper_budget_mNm": 1.6835501240154962
+    },
+    {
+      "assumed_fundamental_airgap_B_T": 0.6,
+      "Kt_mNm_per_A_peak": 5.696602352673134,
+      "flux_per_pole_uWb": 4.542857142857142,
+      "points": [
+        {
+          "torque_mNm": 0.5,
+          "rim_force_N": 0.058823529411764705,
+          "Iq_peak_A": 0.08777161701753235,
+          "phase_RMS_A": 0.062063905588805694,
+          "copper_loss_20C_W": 0.024807353632485346,
+          "copper_loss_80C_W": 0.030656927619025394,
+          "ideal_zero_speed_bus_min_20C_V": 0.32635908473092695
+        },
+        {
+          "torque_mNm": 1.6,
+          "rim_force_N": 0.18823529411764706,
+          "Iq_peak_A": 0.2808691744561035,
+          "phase_RMS_A": 0.1986044978841782,
+          "copper_loss_20C_W": 0.2540273011966499,
+          "copper_loss_80C_W": 0.31392693881882,
+          "ideal_zero_speed_bus_min_20C_V": 1.0443490711389662
+        },
+        {
+          "torque_mNm": 3.0,
+          "rim_force_N": 0.35294117647058826,
+          "Iq_peak_A": 0.526629702105194,
+          "phase_RMS_A": 0.3723834335328341,
+          "copper_loss_20C_W": 0.8930647307694721,
+          "copper_loss_80C_W": 1.1036493942849137,
+          "ideal_zero_speed_bus_min_20C_V": 1.9581545083855614
+        }
+      ],
+      "torque_at_unverified_0p5W_copper_budget_mNm": 2.2447334986873275
+    }
+  ]
+}

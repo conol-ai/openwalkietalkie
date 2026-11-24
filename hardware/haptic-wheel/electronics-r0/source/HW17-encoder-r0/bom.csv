@@ -1,0 +1,3 @@
+Reference,Value,Footprint,MPN,LCSC,Quantity,Notes
+U1,MT6701QT-STD,HW17:MT6701QT_QFN16_3x3_P0p5,MT6701QT-STD,C2913974,1,MODE and CSN tied VDD for I2C. EP soldered to isolated island; confirm EP policy with manufacturer.
+C1,100nF 10V,Capacitor_SMD:C_0201_0603Metric,,,1,

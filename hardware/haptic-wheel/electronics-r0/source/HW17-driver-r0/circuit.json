@@ -1,0 +1,927 @@
+{
+  "name": "HW17-driver-r0",
+  "title": "HW17 / Rev A-B FPC motor driver - BENCH PROTOTYPE",
+  "parts": [
+    {
+      "ref": "J1",
+      "value": "DECK DISPLAY FPC 31P",
+      "footprint": "HW17:FPC31_DIANWEI_8_03A5_031250",
+      "nets": {
+        "1": "GND",
+        "2": null,
+        "3": null,
+        "4": "SDA",
+        "5": "SCL",
+        "6": null,
+        "7": "GND",
+        "8": "HOST_3V3",
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": "GND",
+        "13": null,
+        "14": "HOST_EN",
+        "15": null,
+        "16": "HOST_PWM_U",
+        "17": "HOST_PWM_V",
+        "18": null,
+        "19": null,
+        "20": "HOST_PWM_W",
+        "21": "nFAULT",
+        "22": "GND",
+        "23": null,
+        "24": null,
+        "25": "GND",
+        "26": null,
+        "27": null,
+        "28": "GND",
+        "29": null,
+        "30": null,
+        "31": "GND",
+        "MP": "GND"
+      },
+      "xy": [
+        6,
+        19
+      ],
+      "rot": 270,
+      "names": {},
+      "types": {},
+      "mpn": "8.03A5.031250",
+      "lcsc": "C55247264",
+      "notes": "31P 0.3mm; 0.2mm FPC; match host pin 1 to adapter pin 1. OLED disconnected.",
+      "sch": [
+        55,
+        72
+      ],
+      "uuid": "d32ddda0-c63a-40cc-ba50-cddb92ea6288"
+    },
+    {
+      "ref": "U1",
+      "value": "DRV8311HRRWR",
+      "footprint": "HW17:DRV8311_RRW0024A",
+      "nets": {
+        "1": "nFAULT",
+        "2": "CSAREF",
+        "3": "IS_C",
+        "4": "IS_B",
+        "5": "IS_A",
+        "6": "CP",
+        "7": "VM",
+        "8": "VM",
+        "9": "GND",
+        "10": "PH_U",
+        "11": "PH_V",
+        "12": "PH_W",
+        "13": "PWM_W",
+        "14": "PWM_V",
+        "15": "PWM_U",
+        "16": "GND",
+        "17": "AVDD",
+        "18": "AVDD",
+        "19": "AVDD",
+        "20": "AVDD",
+        "21": "AVDD",
+        "22": "GND",
+        "23": "AVDD",
+        "24": "DRV_EN",
+        "25": "GND"
+      },
+      "xy": [
+        29,
+        22
+      ],
+      "rot": 0,
+      "names": {
+        "1": "nFAULT",
+        "2": "CSAREF",
+        "3": "SOC",
+        "4": "SOB",
+        "5": "SOA",
+        "6": "CP",
+        "7": "VIN_AVDD",
+        "8": "VM",
+        "9": "PGND",
+        "10": "OUTA",
+        "11": "OUTB",
+        "12": "OUTC",
+        "13": "INHC",
+        "14": "INHB",
+        "15": "INHA",
+        "16": "AGND",
+        "17": "AVDD",
+        "18": "INLA",
+        "19": "INLB",
+        "20": "INLC",
+        "21": "GAIN",
+        "22": "SLEW",
+        "23": "MODE",
+        "24": "nSLEEP",
+        "25": "EP"
+      },
+      "types": {
+        "1": "open_collector",
+        "2": "power_in",
+        "3": "output",
+        "4": "output",
+        "5": "output",
+        "6": "output",
+        "7": "power_in",
+        "8": "power_in",
+        "9": "power_in",
+        "10": "output",
+        "11": "output",
+        "12": "output",
+        "13": "input",
+        "14": "input",
+        "15": "input",
+        "16": "power_in",
+        "17": "power_out",
+        "18": "input",
+        "19": "input",
+        "20": "input",
+        "21": "input",
+        "22": "input",
+        "23": "input",
+        "24": "input",
+        "25": "power_in"
+      },
+      "mpn": "DRV8311HRRWR",
+      "lcsc": "C5218862",
+      "notes": "3PWM; GAIN=2V/A; SLEW=35V/us; OCP=5A (not motor-safe current regulation).",
+      "sch": [
+        165,
+        72
+      ],
+      "uuid": "581964f9-deed-4283-83f2-988c423550ee"
+    },
+    {
+      "ref": "J2",
+      "value": "5V INPUT",
+      "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+      "nets": {
+        "1": "VIN_5V",
+        "2": "GND"
+      },
+      "xy": [
+        44,
+        7.3
+      ],
+      "rot": 0,
+      "names": {
+        "1": "+5V",
+        "2": "GND"
+      },
+      "types": {},
+      "mpn": "",
+      "lcsc": "",
+      "notes": "External current-limited bench supply only; no connection to host power rails.",
+      "sch": [
+        263,
+        34
+      ],
+      "uuid": "a14eb1e7-c647-41d6-8944-63a0c8c07876"
+    },
+    {
+      "ref": "J3",
+      "value": "ENCODER",
+      "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical",
+      "nets": {
+        "1": "GND",
+        "2": "HOST_3V3",
+        "3": "SDA",
+        "4": "SCL"
+      },
+      "xy": [
+        9,
+        7
+      ],
+      "rot": 90,
+      "names": {},
+      "types": {},
+      "mpn": "",
+      "lcsc": "",
+      "notes": "",
+      "sch": [
+        263,
+        78
+      ],
+      "uuid": "ac4f708a-a762-4b77-8d47-5f9150b7e7f4"
+    },
+    {
+      "ref": "J4",
+      "value": "MOTOR U V W",
+      "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical",
+      "nets": {
+        "1": "PH_U",
+        "2": "PH_V",
+        "3": "PH_W"
+      },
+      "xy": [
+        44,
+        26
+      ],
+      "rot": 0,
+      "names": {},
+      "types": {},
+      "mpn": "",
+      "lcsc": "",
+      "notes": "",
+      "sch": [
+        354,
+        34
+      ],
+      "uuid": "5aee216e-6ca0-48ea-865e-26dae00728d9"
+    },
+    {
+      "ref": "J5",
+      "value": "ARM - SHUNT REMOVED",
+      "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+      "nets": {
+        "1": "ARM_IN",
+        "2": "DRV_EN"
+      },
+      "xy": [
+        15,
+        32
+      ],
+      "rot": 90,
+      "names": {},
+      "types": {},
+      "mpn": "",
+      "lcsc": "",
+      "notes": "Fit removable shunt only after bench firmware initializes. No shunt in shipped assembly.",
+      "sch": [
+        354,
+        65
+      ],
+      "uuid": "e5e214dd-c7c8-4795-ac25-29e9f4323cbf"
+    },
+    {
+      "ref": "J6",
+      "value": "CURRENT MONITOR",
+      "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x05_P2.54mm_Vertical",
+      "nets": {
+        "1": "IS_A_MON",
+        "2": "IS_B_MON",
+        "3": "IS_C_MON",
+        "4": "CSAREF",
+        "5": "GND"
+      },
+      "xy": [
+        21,
+        4.5
+      ],
+      "rot": 90,
+      "names": {},
+      "types": {},
+      "mpn": "",
+      "lcsc": "",
+      "notes": "For oscilloscope/external ADC; NOT connected to SF32 ADC.",
+      "sch": [
+        354,
+        95
+      ],
+      "uuid": "07b100bc-642d-4f27-af0d-486cf3991e54"
+    },
+    {
+      "ref": "D1",
+      "value": "SS14",
+      "footprint": "Diode_SMD:D_SMA",
+      "nets": {
+        "1": "VM",
+        "2": "VIN_5V"
+      },
+      "xy": [
+        37,
+        8
+      ],
+      "rot": 180,
+      "names": {
+        "1": "K",
+        "2": "A"
+      },
+      "types": {},
+      "mpn": "SS14",
+      "lcsc": "C2480",
+      "notes": "",
+      "sch": null,
+      "uuid": "3ea07eec-32fe-4a79-aded-3058058d3f5e"
+    },
+    {
+      "ref": "D2",
+      "value": "SMAJ5.0A",
+      "footprint": "Diode_SMD:D_SMA",
+      "nets": {
+        "1": "VM",
+        "2": "GND"
+      },
+      "xy": [
+        45,
+        17
+      ],
+      "rot": 90,
+      "names": {
+        "1": "K",
+        "2": "A"
+      },
+      "types": {},
+      "mpn": "SMAJ5.0A",
+      "lcsc": "",
+      "notes": "Unidirectional 5V-standoff TVS; limits bus transients, not a sustained braking load.",
+      "sch": null,
+      "uuid": "d2e72114-1a27-447f-9e95-bf812c323d87"
+    },
+    {
+      "ref": "R1",
+      "value": "1k",
+      "footprint": "Resistor_SMD:R_0603_1608Metric",
+      "nets": {
+        "1": "HOST_EN",
+        "2": "ARM_IN"
+      },
+      "xy": [
+        11,
+        27
+      ],
+      "rot": 90,
+      "names": {},
+      "types": {},
+      "mpn": "RC0603FR-071KL",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "36ab2b25-313b-46b4-811a-3d2d27a206e7"
+    },
+    {
+      "ref": "R2",
+      "value": "47k",
+      "footprint": "Resistor_SMD:R_0603_1608Metric",
+      "nets": {
+        "1": "DRV_EN",
+        "2": "GND"
+      },
+      "xy": [
+        23,
+        30
+      ],
+      "rot": 90,
+      "names": {},
+      "types": {},
+      "mpn": "RC0603FR-0747KL",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "63a8cf29-fca2-40b8-9384-26b2a8ece345"
+    },
+    {
+      "ref": "R3",
+      "value": "100R",
+      "footprint": "Resistor_SMD:R_0603_1608Metric",
+      "nets": {
+        "1": "HOST_PWM_U",
+        "2": "PWM_U"
+      },
+      "xy": [
+        37,
+        19
+      ],
+      "rot": 0,
+      "names": {},
+      "types": {},
+      "mpn": "RC0603FR-07100RL",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "902841c5-045e-4379-bab9-2e73a921a2ca"
+    },
+    {
+      "ref": "R6",
+      "value": "100k",
+      "footprint": "Resistor_SMD:R_0603_1608Metric",
+      "nets": {
+        "1": "PWM_U",
+        "2": "GND"
+      },
+      "xy": [
+        33.5,
+        19
+      ],
+      "rot": 90,
+      "names": {},
+      "types": {},
+      "mpn": "RC0603FR-07100KL",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "3fd5a596-5bb8-46de-a8ab-500b907a9bf1"
+    },
+    {
+      "ref": "R4",
+      "value": "100R",
+      "footprint": "Resistor_SMD:R_0603_1608Metric",
+      "nets": {
+        "1": "HOST_PWM_V",
+        "2": "PWM_V"
+      },
+      "xy": [
+        37,
+        22
+      ],
+      "rot": 0,
+      "names": {},
+      "types": {},
+      "mpn": "RC0603FR-07100RL",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "3fea5d60-186c-45f2-81fa-0f4637538b1c"
+    },
+    {
+      "ref": "R7",
+      "value": "100k",
+      "footprint": "Resistor_SMD:R_0603_1608Metric",
+      "nets": {
+        "1": "PWM_V",
+        "2": "GND"
+      },
+      "xy": [
+        33.5,
+        22
+      ],
+      "rot": 90,
+      "names": {},
+      "types": {},
+      "mpn": "RC0603FR-07100KL",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "b3cf500c-fdb3-435b-a951-8b0fe03acf1d"
+    },
+    {
+      "ref": "R5",
+      "value": "100R",
+      "footprint": "Resistor_SMD:R_0603_1608Metric",
+      "nets": {
+        "1": "HOST_PWM_W",
+        "2": "PWM_W"
+      },
+      "xy": [
+        37,
+        25
+      ],
+      "rot": 0,
+      "names": {},
+      "types": {},
+      "mpn": "RC0603FR-07100RL",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "e9027837-7ff1-4fbb-ba57-b42ed6ff1655"
+    },
+    {
+      "ref": "R8",
+      "value": "100k",
+      "footprint": "Resistor_SMD:R_0603_1608Metric",
+      "nets": {
+        "1": "PWM_W",
+        "2": "GND"
+      },
+      "xy": [
+        33.5,
+        25
+      ],
+      "rot": 90,
+      "names": {},
+      "types": {},
+      "mpn": "RC0603FR-07100KL",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "59f6b300-e946-454f-a8a6-53ae895381b9"
+    },
+    {
+      "ref": "R9",
+      "value": "10k",
+      "footprint": "Resistor_SMD:R_0603_1608Metric",
+      "nets": {
+        "1": "HOST_3V3",
+        "2": "nFAULT"
+      },
+      "xy": [
+        17.5,
+        16
+      ],
+      "rot": 90,
+      "names": {},
+      "types": {},
+      "mpn": "RC0603FR-0710KL",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "320aca88-efac-4c72-8193-a0eb7b8f314c"
+    },
+    {
+      "ref": "R10",
+      "value": "4.7k",
+      "footprint": "Resistor_SMD:R_0603_1608Metric",
+      "nets": {
+        "1": "HOST_3V3",
+        "2": "SDA"
+      },
+      "xy": [
+        13,
+        12
+      ],
+      "rot": 90,
+      "names": {},
+      "types": {},
+      "mpn": "RC0603FR-074K7L",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "3ad5741e-2df5-4f84-aced-db2d4e9dfd65"
+    },
+    {
+      "ref": "R11",
+      "value": "4.7k",
+      "footprint": "Resistor_SMD:R_0603_1608Metric",
+      "nets": {
+        "1": "HOST_3V3",
+        "2": "SCL"
+      },
+      "xy": [
+        16,
+        12
+      ],
+      "rot": 90,
+      "names": {},
+      "types": {},
+      "mpn": "RC0603FR-074K7L",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "16dfde9b-72e9-42c2-ab0a-40b1a52e9013"
+    },
+    {
+      "ref": "R12",
+      "value": "0R",
+      "footprint": "Resistor_SMD:R_0603_1608Metric",
+      "nets": {
+        "1": "AVDD",
+        "2": "CSAREF"
+      },
+      "xy": [
+        25,
+        16
+      ],
+      "rot": 0,
+      "names": {},
+      "types": {},
+      "mpn": "",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "10618239-9400-481b-8196-148ad5949a86"
+    },
+    {
+      "ref": "R13",
+      "value": "330R",
+      "footprint": "Resistor_SMD:R_0603_1608Metric",
+      "nets": {
+        "1": "IS_A",
+        "2": "IS_A_MON"
+      },
+      "xy": [
+        21,
+        11
+      ],
+      "rot": 90,
+      "names": {},
+      "types": {},
+      "mpn": "RC0603FR-07330RL",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "e1280923-913f-4237-9bc9-8c8a8c5bb372"
+    },
+    {
+      "ref": "R14",
+      "value": "330R",
+      "footprint": "Resistor_SMD:R_0603_1608Metric",
+      "nets": {
+        "1": "IS_B",
+        "2": "IS_B_MON"
+      },
+      "xy": [
+        24,
+        11
+      ],
+      "rot": 90,
+      "names": {},
+      "types": {},
+      "mpn": "RC0603FR-07330RL",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "86c40339-bac7-4c5b-8470-dd59b1e88f41"
+    },
+    {
+      "ref": "R15",
+      "value": "330R",
+      "footprint": "Resistor_SMD:R_0603_1608Metric",
+      "nets": {
+        "1": "IS_C",
+        "2": "IS_C_MON"
+      },
+      "xy": [
+        27,
+        11
+      ],
+      "rot": 90,
+      "names": {},
+      "types": {},
+      "mpn": "RC0603FR-07330RL",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "f7115b90-c055-43e0-aaab-b104c81a06f5"
+    },
+    {
+      "ref": "C1",
+      "value": "100nF 16V",
+      "footprint": "Capacitor_SMD:C_0603_1608Metric",
+      "nets": {
+        "1": "VIN_5V",
+        "2": "GND"
+      },
+      "xy": [
+        47.5,
+        10
+      ],
+      "rot": 90,
+      "names": {},
+      "types": {},
+      "mpn": "",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "f6c81079-531a-4ab6-833b-466872c3b441"
+    },
+    {
+      "ref": "C2",
+      "value": "100uF 16V",
+      "footprint": "Capacitor_THT:CP_Radial_D6.3mm_P2.50mm",
+      "nets": {
+        "1": "VM",
+        "2": "GND"
+      },
+      "xy": [
+        36,
+        13.5
+      ],
+      "rot": 0,
+      "names": {},
+      "types": {},
+      "mpn": "",
+      "lcsc": "",
+      "notes": "C2 pin 1 positive.",
+      "sch": null,
+      "uuid": "065be292-76ab-48cf-a16e-ef5382af2baf"
+    },
+    {
+      "ref": "C3",
+      "value": "22uF 16V",
+      "footprint": "Capacitor_SMD:C_1206_3216Metric",
+      "nets": {
+        "1": "VM",
+        "2": "GND"
+      },
+      "xy": [
+        21,
+        27
+      ],
+      "rot": 180,
+      "names": {},
+      "types": {},
+      "mpn": "",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "3b4d6618-25c1-48cc-b5b3-caf60075d65e"
+    },
+    {
+      "ref": "C4",
+      "value": "22uF 16V",
+      "footprint": "Capacitor_SMD:C_1206_3216Metric",
+      "nets": {
+        "1": "VM",
+        "2": "GND"
+      },
+      "xy": [
+        30,
+        30
+      ],
+      "rot": 0,
+      "names": {},
+      "types": {},
+      "mpn": "",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "f0319780-18b0-4482-a957-594a833f8e5e"
+    },
+    {
+      "ref": "C5",
+      "value": "100nF 16V",
+      "footprint": "Capacitor_SMD:C_0603_1608Metric",
+      "nets": {
+        "1": "VM",
+        "2": "GND"
+      },
+      "xy": [
+        28.2,
+        26
+      ],
+      "rot": 270,
+      "names": {},
+      "types": {},
+      "mpn": "",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "08add5d1-e02a-44f4-a95b-887b6bf017aa"
+    },
+    {
+      "ref": "C6",
+      "value": "100nF 16V",
+      "footprint": "Capacitor_SMD:C_0603_1608Metric",
+      "nets": {
+        "1": "VM",
+        "2": "GND"
+      },
+      "xy": [
+        25,
+        24.3
+      ],
+      "rot": 0,
+      "names": {},
+      "types": {},
+      "mpn": "",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "39c7a6a8-cd96-49f5-a1a2-f0510c3571b3"
+    },
+    {
+      "ref": "C7",
+      "value": "100nF 16V",
+      "footprint": "Capacitor_SMD:C_0603_1608Metric",
+      "nets": {
+        "1": "CP",
+        "2": "VM"
+      },
+      "xy": [
+        25,
+        22
+      ],
+      "rot": 180,
+      "names": {},
+      "types": {},
+      "mpn": "",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "ed37437e-7a97-44f7-8257-f8f3f5137aa4"
+    },
+    {
+      "ref": "C8",
+      "value": "2.2uF 10V",
+      "footprint": "Capacitor_SMD:C_0603_1608Metric",
+      "nets": {
+        "1": "AVDD",
+        "2": "GND"
+      },
+      "xy": [
+        31.2,
+        18
+      ],
+      "rot": 0,
+      "names": {},
+      "types": {},
+      "mpn": "",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "3b5c926b-4afc-488f-bedd-70d048ae8e2e"
+    },
+    {
+      "ref": "C9",
+      "value": "100nF 10V",
+      "footprint": "Capacitor_SMD:C_0603_1608Metric",
+      "nets": {
+        "1": "CSAREF",
+        "2": "GND"
+      },
+      "xy": [
+        25,
+        18.5
+      ],
+      "rot": 0,
+      "names": {},
+      "types": {},
+      "mpn": "",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "6fdd763e-a027-4aa7-a0ac-3133473ce8fa"
+    },
+    {
+      "ref": "C10",
+      "value": "1uF 10V",
+      "footprint": "Capacitor_SMD:C_0603_1608Metric",
+      "nets": {
+        "1": "HOST_3V3",
+        "2": "GND"
+      },
+      "xy": [
+        10,
+        12
+      ],
+      "rot": 90,
+      "names": {},
+      "types": {},
+      "mpn": "",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "5af51c35-daad-40cb-a0c8-c41757596aee"
+    },
+    {
+      "ref": "C11",
+      "value": "22pF C0G",
+      "footprint": "Capacitor_SMD:C_0603_1608Metric",
+      "nets": {
+        "1": "IS_A_MON",
+        "2": "GND"
+      },
+      "xy": [
+        21,
+        14
+      ],
+      "rot": 0,
+      "names": {},
+      "types": {},
+      "mpn": "",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "b9cba338-196e-4b0a-961a-f5201ec4846a"
+    },
+    {
+      "ref": "C12",
+      "value": "22pF C0G",
+      "footprint": "Capacitor_SMD:C_0603_1608Metric",
+      "nets": {
+        "1": "IS_B_MON",
+        "2": "GND"
+      },
+      "xy": [
+        24,
+        14
+      ],
+      "rot": 0,
+      "names": {},
+      "types": {},
+      "mpn": "",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "300b79a5-f467-44d6-afaf-c57433279525"
+    },
+    {
+      "ref": "C13",
+      "value": "22pF C0G",
+      "footprint": "Capacitor_SMD:C_0603_1608Metric",
+      "nets": {
+        "1": "IS_C_MON",
+        "2": "GND"
+      },
+      "xy": [
+        27,
+        14
+      ],
+      "rot": 0,
+      "names": {},
+      "types": {},
+      "mpn": "",
+      "lcsc": "",
+      "notes": "",
+      "sch": null,
+      "uuid": "f355db3d-cb93-49ea-8630-06a141370a77"
+    }
+  ],
+  "thickness": 1.0,
+  "kind": "driver",
+  "root_uuid": "a672f045-96b1-46fd-93cd-a392bba456cf"
+}

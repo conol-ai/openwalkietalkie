@@ -1,0 +1,38 @@
+Reference,Value,Footprint,MPN,LCSC,Quantity,Notes
+J1,DECK DISPLAY FPC 31P,HW17:FPC31_DIANWEI_8_03A5_031250,8.03A5.031250,C55247264,1,31P 0.3mm; 0.2mm FPC; match host pin 1 to adapter pin 1. OLED disconnected.
+U1,DRV8311HRRWR,HW17:DRV8311_RRW0024A,DRV8311HRRWR,C5218862,1,3PWM; GAIN=2V/A; SLEW=35V/us; OCP=5A (not motor-safe current regulation).
+J2,5V INPUT,Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical,,,1,External current-limited bench supply only; no connection to host power rails.
+J3,ENCODER,Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical,,,1,
+J4,MOTOR U V W,Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical,,,1,
+J5,ARM - SHUNT REMOVED,Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical,,,1,Fit removable shunt only after bench firmware initializes. No shunt in shipped assembly.
+J6,CURRENT MONITOR,Connector_PinHeader_2.54mm:PinHeader_1x05_P2.54mm_Vertical,,,1,For oscilloscope/external ADC; NOT connected to SF32 ADC.
+D1,SS14,Diode_SMD:D_SMA,SS14,C2480,1,
+D2,SMAJ5.0A,Diode_SMD:D_SMA,SMAJ5.0A,,1,"Unidirectional 5V-standoff TVS; limits bus transients, not a sustained braking load."
+R1,1k,Resistor_SMD:R_0603_1608Metric,RC0603FR-071KL,,1,
+R2,47k,Resistor_SMD:R_0603_1608Metric,RC0603FR-0747KL,,1,
+R3,100R,Resistor_SMD:R_0603_1608Metric,RC0603FR-07100RL,,1,
+R6,100k,Resistor_SMD:R_0603_1608Metric,RC0603FR-07100KL,,1,
+R4,100R,Resistor_SMD:R_0603_1608Metric,RC0603FR-07100RL,,1,
+R7,100k,Resistor_SMD:R_0603_1608Metric,RC0603FR-07100KL,,1,
+R5,100R,Resistor_SMD:R_0603_1608Metric,RC0603FR-07100RL,,1,
+R8,100k,Resistor_SMD:R_0603_1608Metric,RC0603FR-07100KL,,1,
+R9,10k,Resistor_SMD:R_0603_1608Metric,RC0603FR-0710KL,,1,
+R10,4.7k,Resistor_SMD:R_0603_1608Metric,RC0603FR-074K7L,,1,
+R11,4.7k,Resistor_SMD:R_0603_1608Metric,RC0603FR-074K7L,,1,
+R12,0R,Resistor_SMD:R_0603_1608Metric,,,1,
+R13,330R,Resistor_SMD:R_0603_1608Metric,RC0603FR-07330RL,,1,
+R14,330R,Resistor_SMD:R_0603_1608Metric,RC0603FR-07330RL,,1,
+R15,330R,Resistor_SMD:R_0603_1608Metric,RC0603FR-07330RL,,1,
+C1,100nF 16V,Capacitor_SMD:C_0603_1608Metric,,,1,
+C2,100uF 16V,Capacitor_THT:CP_Radial_D6.3mm_P2.50mm,,,1,C2 pin 1 positive.
+C3,22uF 16V,Capacitor_SMD:C_1206_3216Metric,,,1,
+C4,22uF 16V,Capacitor_SMD:C_1206_3216Metric,,,1,
+C5,100nF 16V,Capacitor_SMD:C_0603_1608Metric,,,1,
+C6,100nF 16V,Capacitor_SMD:C_0603_1608Metric,,,1,
+C7,100nF 16V,Capacitor_SMD:C_0603_1608Metric,,,1,
+C8,2.2uF 10V,Capacitor_SMD:C_0603_1608Metric,,,1,
+C9,100nF 10V,Capacitor_SMD:C_0603_1608Metric,,,1,
+C10,1uF 10V,Capacitor_SMD:C_0603_1608Metric,,,1,
+C11,22pF C0G,Capacitor_SMD:C_0603_1608Metric,,,1,
+C12,22pF C0G,Capacitor_SMD:C_0603_1608Metric,,,1,
+C13,22pF C0G,Capacitor_SMD:C_0603_1608Metric,,,1,

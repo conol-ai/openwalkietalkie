@@ -1,0 +1,218 @@
+{
+  "native_reopened": true,
+  "part_count": 41,
+  "timeline_count": 235,
+  "parametric": true,
+  "as_built_joints": 1,
+  "section_analyses": 2,
+  "named_views": 2,
+  "warnings": [],
+  "parts": [
+    {
+      "name": "06_stator_carrier",
+      "is_solid": true,
+      "volume_mm3": 146.07184663635374
+    },
+    {
+      "name": "07_stator_stack",
+      "is_solid": true,
+      "volume_mm3": 211.3369810660099
+    },
+    {
+      "name": "08_coil_01_Ap",
+      "is_solid": true,
+      "volume_mm3": 10.348799999999999
+    },
+    {
+      "name": "08_coil_02_An",
+      "is_solid": true,
+      "volume_mm3": 10.348800000000006
+    },
+    {
+      "name": "08_coil_03_Bn",
+      "is_solid": true,
+      "volume_mm3": 10.34880000000001
+    },
+    {
+      "name": "08_coil_04_Bp",
+      "is_solid": true,
+      "volume_mm3": 10.3488
+    },
+    {
+      "name": "08_coil_05_Cp",
+      "is_solid": true,
+      "volume_mm3": 10.348800000000002
+    },
+    {
+      "name": "08_coil_06_Cn",
+      "is_solid": true,
+      "volume_mm3": 10.348800000000015
+    },
+    {
+      "name": "08_coil_07_An",
+      "is_solid": true,
+      "volume_mm3": 10.3488
+    },
+    {
+      "name": "08_coil_08_Ap",
+      "is_solid": true,
+      "volume_mm3": 10.348800000000006
+    },
+    {
+      "name": "08_coil_09_Bp",
+      "is_solid": true,
+      "volume_mm3": 10.348800000000004
+    },
+    {
+      "name": "08_coil_10_Bn",
+      "is_solid": true,
+      "volume_mm3": 10.3488
+    },
+    {
+      "name": "08_coil_11_Cn",
+      "is_solid": true,
+      "volume_mm3": 10.348800000000006
+    },
+    {
+      "name": "08_coil_12_Cp",
+      "is_solid": true,
+      "volume_mm3": 10.348799999999999
+    },
+    {
+      "name": "09_bearing_1",
+      "is_solid": true,
+      "volume_mm3": 41.23340357836781
+    },
+    {
+      "name": "09_bearing_2",
+      "is_solid": true,
+      "volume_mm3": 41.23340357836781
+    },
+    {
+      "name": "11_lower_outer_retainer",
+      "is_solid": true,
+      "volume_mm3": 0.746128255227609
+    },
+    {
+      "name": "12_upper_outer_retainer",
+      "is_solid": true,
+      "volume_mm3": 0.746128255227609
+    },
+    {
+      "name": "14_sensor_flex",
+      "is_solid": true,
+      "volume_mm3": 10.484748765736104
+    },
+    {
+      "name": "15_MT6701_max_envelope",
+      "is_solid": true,
+      "volume_mm3": 7.688000000000002
+    },
+    {
+      "name": "16_sensor_decoupling",
+      "is_solid": true,
+      "volume_mm3": 0.054000000000000034
+    },
+    {
+      "name": "01_grip_ring",
+      "is_solid": true,
+      "volume_mm3": 111.86403105819923
+    },
+    {
+      "name": "02_rotor_back_iron",
+      "is_solid": true,
+      "volume_mm3": 169.83449885307112
+    },
+    {
+      "name": "03_rotor_cap",
+      "is_solid": true,
+      "volume_mm3": 183.12795967117813
+    },
+    {
+      "name": "04_rotor_shaft",
+      "is_solid": true,
+      "volume_mm3": 20.28526376422843
+    },
+    {
+      "name": "05_magnet_01_N",
+      "is_solid": true,
+      "volume_mm3": 12.781614591025122
+    },
+    {
+      "name": "05_magnet_02_S",
+      "is_solid": true,
+      "volume_mm3": 12.781614591025125
+    },
+    {
+      "name": "05_magnet_03_N",
+      "is_solid": true,
+      "volume_mm3": 12.781614591025162
+    },
+    {
+      "name": "05_magnet_04_S",
+      "is_solid": true,
+      "volume_mm3": 12.781614591025132
+    },
+    {
+      "name": "05_magnet_05_N",
+      "is_solid": true,
+      "volume_mm3": 12.7816145910251
+    },
+    {
+      "name": "05_magnet_06_S",
+      "is_solid": true,
+      "volume_mm3": 12.781614591025104
+    },
+    {
+      "name": "05_magnet_07_N",
+      "is_solid": true,
+      "volume_mm3": 12.78161459102511
+    },
+    {
+      "name": "05_magnet_08_S",
+      "is_solid": true,
+      "volume_mm3": 12.78161459102512
+    },
+    {
+      "name": "05_magnet_09_N",
+      "is_solid": true,
+      "volume_mm3": 12.781614591025129
+    },
+    {
+      "name": "05_magnet_10_S",
+      "is_solid": true,
+      "volume_mm3": 12.781614591025132
+    },
+    {
+      "name": "05_magnet_11_N",
+      "is_solid": true,
+      "volume_mm3": 12.781614591025175
+    },
+    {
+      "name": "05_magnet_12_S",
+      "is_solid": true,
+      "volume_mm3": 12.781614591025138
+    },
+    {
+      "name": "05_magnet_13_N",
+      "is_solid": true,
+      "volume_mm3": 12.781614591025152
+    },
+    {
+      "name": "05_magnet_14_S",
+      "is_solid": true,
+      "volume_mm3": 12.78161459102517
+    },
+    {
+      "name": "10_inner_spacer",
+      "is_solid": true,
+      "volume_mm3": 0.2167698930977051
+    },
+    {
+      "name": "13_sensor_magnet",
+      "is_solid": true,
+      "volume_mm3": 6.2831853071798545
+    }
+  ],
+  "interferences": []
+}

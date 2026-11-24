@@ -1,0 +1,165 @@
+{
+  "pages": 22,
+  "part_pages": {
+    "P01": [
+      2
+    ],
+    "P02": [
+      3
+    ],
+    "P03": [
+      4
+    ],
+    "P04": [
+      5
+    ],
+    "P05": [
+      6,
+      7
+    ],
+    "P06": [
+      8
+    ],
+    "P07": [
+      9
+    ],
+    "P08": [
+      10
+    ],
+    "P09": [
+      11
+    ],
+    "A02": [
+      12,
+      13
+    ],
+    "C01": [
+      14
+    ],
+    "C03": [
+      15
+    ],
+    "J01": [
+      16
+    ],
+    "J02": [
+      17
+    ]
+  },
+  "page_index": [
+    {
+      "page": 1,
+      "drawing": "HW18-B1-A01 / 1",
+      "title": "N52 方块磁铁电机 · 总装与询价范围"
+    },
+    {
+      "page": 2,
+      "drawing": "HW18-B1-A01 / 2",
+      "title": "电机总装 · 径向与轴向剖面"
+    },
+    {
+      "page": 3,
+      "drawing": "HW18-B1-P01",
+      "title": "POM 触摸外圈 · 零件图"
+    },
+    {
+      "page": 4,
+      "drawing": "HW18-B1-P02",
+      "title": "十四平面转子钢轭 · 零件图"
+    },
+    {
+      "page": 5,
+      "drawing": "HW18-B1-P03",
+      "title": "转子端盖 · 零件图"
+    },
+    {
+      "page": 6,
+      "drawing": "HW18-B1-P04",
+      "title": "带肩转轴 · 零件图"
+    },
+    {
+      "page": 7,
+      "drawing": "HW18-B1-P05",
+      "title": "定子及轴承固定座 · 零件图"
+    },
+    {
+      "page": 8,
+      "drawing": "HW18-B1-P05 / 2",
+      "title": "定子及轴承固定座 · 孔位与通道"
+    },
+    {
+      "page": 9,
+      "drawing": "HW18-B1-P06",
+      "title": "定子冲片 / 切割片 · 零件图"
+    },
+    {
+      "page": 10,
+      "drawing": "HW18-B1-P07",
+      "title": "内圈选配隔垫 · 零件图"
+    },
+    {
+      "page": 11,
+      "drawing": "HW18-B1-P08",
+      "title": "外圈隔垫 · 零件图"
+    },
+    {
+      "page": 12,
+      "drawing": "HW18-B1-P09",
+      "title": "上轴承外圈挡环 · 零件图"
+    },
+    {
+      "page": 13,
+      "drawing": "HW18-B1-A02",
+      "title": "绕线定子组件 · 零件图"
+    },
+    {
+      "page": 14,
+      "drawing": "HW18-B1-A02 / 2",
+      "title": "绕线定子组件 · 绕向与接线"
+    },
+    {
+      "page": 15,
+      "drawing": "HW18-B1-C01",
+      "title": "用户自备 N52 电机磁铁 · 零件图"
+    },
+    {
+      "page": 16,
+      "drawing": "HW18-B1-C03",
+      "title": "两极测角磁铁 · 零件图"
+    },
+    {
+      "page": 17,
+      "drawing": "HW18-B1-J01",
+      "title": "磁铁粘接定位工装 · 零件图"
+    },
+    {
+      "page": 18,
+      "drawing": "HW18-B1-J02",
+      "title": "台架固定底板 · 零件图"
+    },
+    {
+      "page": 19,
+      "drawing": "HW18-B1-REQ / 1",
+      "title": "加工与检验要求 · 通用条款"
+    },
+    {
+      "page": 20,
+      "drawing": "HW18-B1-REQ / 2",
+      "title": "公差链与装配验收"
+    },
+    {
+      "page": 21,
+      "drawing": "HW18-B1-REQ / 3",
+      "title": "装配顺序与试验记录"
+    },
+    {
+      "page": 22,
+      "drawing": "HW18-B1-REQ / 4",
+      "title": "依据、文件目录与版本说明"
+    }
+  ],
+  "text_count": 930,
+  "out_of_border_text": [],
+  "all_pages_have_text": true,
+  "notes": "Visual rendering review is required in addition to this text bounds check."
+}

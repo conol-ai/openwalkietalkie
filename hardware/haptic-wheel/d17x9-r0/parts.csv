@@ -1,0 +1,42 @@
+part,group,material,note
+01_grip_ring,rotor,POM,"36 shallow axial flutes, max OD17; black matte finish"
+02_rotor_back_iron,rotor,low-carbon magnetic steel; supplier B-H curve required,OD16.4 ID15.4; 0.50 radial wall
+03_rotor_cap,rotor,6061-T6 aluminium,Spigot adhesive joint; shaft hub controls inner-ring spacing. Final fits by bearing supplier.
+04_rotor_shaft,rotor,Nonmagnetic austenitic stainless steel,"D2 precision ground seats; integral lower D2.6 thrust collar, magnet bond face"
+05_magnet_01_N,magnet,"N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring
+05_magnet_02_S,magnet,"N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring
+05_magnet_03_N,magnet,"N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring
+05_magnet_04_S,magnet,"N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring
+05_magnet_05_N,magnet,"N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring
+05_magnet_06_S,magnet,"N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring
+05_magnet_07_N,magnet,"N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring
+05_magnet_08_S,magnet,"N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring
+05_magnet_09_N,magnet,"N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring
+05_magnet_10_S,magnet,"N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring
+05_magnet_11_N,magnet,"N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring
+05_magnet_12_S,magnet,"N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring
+05_magnet_13_N,magnet,"N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring
+05_magnet_14_S,magnet,"N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring
+06_stator_carrier,fixed,6061-T6 aluminium,"Three M1.4 blind pilot holes, bearing fits and adhesive retention require tolerance review"
+07_stator_stack,fixed,"0.20 mm insulated non-oriented electrical steel, supplier to provide B-H and loss curves",20 nominal 0.20 mm insulated laminations; final assembled stack 4.00 mm incl. coating
+08_coil_01_Ap,coil,Enamelled copper winding envelope,"A+, 32 turns D0.13 Cu, finished OD <=0.145, 11/11/10 layers. Envelope is not solid copper."
+08_coil_02_An,coil,Enamelled copper winding envelope,"A-, 32 turns D0.13 Cu, finished OD <=0.145, 11/11/10 layers. Envelope is not solid copper."
+08_coil_03_Bn,coil,Enamelled copper winding envelope,"B-, 32 turns D0.13 Cu, finished OD <=0.145, 11/11/10 layers. Envelope is not solid copper."
+08_coil_04_Bp,coil,Enamelled copper winding envelope,"B+, 32 turns D0.13 Cu, finished OD <=0.145, 11/11/10 layers. Envelope is not solid copper."
+08_coil_05_Cp,coil,Enamelled copper winding envelope,"C+, 32 turns D0.13 Cu, finished OD <=0.145, 11/11/10 layers. Envelope is not solid copper."
+08_coil_06_Cn,coil,Enamelled copper winding envelope,"C-, 32 turns D0.13 Cu, finished OD <=0.145, 11/11/10 layers. Envelope is not solid copper."
+08_coil_07_An,coil,Enamelled copper winding envelope,"A-, 32 turns D0.13 Cu, finished OD <=0.145, 11/11/10 layers. Envelope is not solid copper."
+08_coil_08_Ap,coil,Enamelled copper winding envelope,"A+, 32 turns D0.13 Cu, finished OD <=0.145, 11/11/10 layers. Envelope is not solid copper."
+08_coil_09_Bp,coil,Enamelled copper winding envelope,"B+, 32 turns D0.13 Cu, finished OD <=0.145, 11/11/10 layers. Envelope is not solid copper."
+08_coil_10_Bn,coil,Enamelled copper winding envelope,"B-, 32 turns D0.13 Cu, finished OD <=0.145, 11/11/10 layers. Envelope is not solid copper."
+08_coil_11_Cn,coil,Enamelled copper winding envelope,"C-, 32 turns D0.13 Cu, finished OD <=0.145, 11/11/10 layers. Envelope is not solid copper."
+08_coil_12_Cp,coil,Enamelled copper winding envelope,"C+, 32 turns D0.13 Cu, finished OD <=0.145, 11/11/10 layers. Envelope is not solid copper."
+09_bearing_1,bearing,EZO MR52ZZ 2 x 5 x 2.5,"Envelope only, rolling elements not modelled; zero interference fit in nominal geometry"
+09_bearing_2,bearing,EZO MR52ZZ 2 x 5 x 2.5,"Envelope only, rolling elements not modelled; zero interference fit in nominal geometry"
+10_inner_spacer,rotor,Ground nonmagnetic stainless shim,Match inner/outer spacing to avoid unintended preload; select shim after measurement
+11_lower_outer_retainer,fixed,Nonmagnetic stainless steel,Bonded outer-race retainer; no contact with inner ring or shields outside outer-ring land
+12_upper_outer_retainer,fixed,Nonmagnetic stainless steel,Bonded outer-race retainer; no contact with inner ring or shields outside outer-ring land
+13_sensor_magnet,rotor,"NdFeB, diametrically magnetized",Single pole pair; D4 x 0.5; 0.02 adhesive to shaft collar. Non-reference magnet requires field validation.
+14_sensor_flex,sensor,"Rigid-flex envelope, 0.4 mm central stiffened island",D5.5 sensor island and 1.6 mm tail to module edge; actual PCB layout not included
+15_MT6701_max_envelope,sensor,MT6701QT-STD QFN16,Maximum 3.1 x 3.1 x 0.8 body plus 0.05 solder allowance
+16_sensor_decoupling,sensor,0201 capacitor envelope,100 nF adjacent VDD/GND; land pattern and routing to be designed

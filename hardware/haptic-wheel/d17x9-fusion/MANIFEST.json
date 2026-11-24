@@ -1,0 +1,25 @@
+{
+  "design": "HW17-R0 Fusion native reconstruction",
+  "date": "2026-10-29",
+  "file_hashes": {
+    "HW17-R0-Fusion.step": "464551066367840e95fce4957e45b9a7ccad0b6cba97b32a35c9c47d91265c53",
+    "使用说明.txt": "eb78604c016646364307fa28ecae4bd5ce672db57e097345d36ff36406ba209f",
+    "archive-roundtrip.json": "fb23181d8c529b1f90672d32905b378eff1b5b370de819d9d13ca614533457ea",
+    "joint-verification.json": "e8a54c2f04790724bc11ab34684e406244d3f7c87797bf0a4e07ed7b61ad0ab7",
+    "internal.png": "01758d1357f3030b00a12c009cb7979ddffa9ca79caf8888fcd6ae940f262a30",
+    "HW17-R0-Fusion.f3d": "b919c9149f6c7be78eacd97145c7189b016f1c330f5e25febb630083fb239288",
+    "section-radial.png": "5023a2810d5b080cd4c413770165f1bfdf3c38463c8bab2df5fc12cb2b07fde0",
+    "assembled.png": "0800c4c3e6a0c464c31de8f1d00d5c27e9129c734fa0bcb30509e5398b05ae73",
+    "step-check.json": "c2f7cec2be78458d562023b1e1d39357be5a683360e295ae97cbdd0a27a7d8ac",
+    "verification.json": "8848d848d64b426c5af1a18783174b485ade9f8a22b95742891b58c79b155f7e",
+    "section-axial.png": "7f91525c3fd9e7d1d4d3d964528b4ef963524cb59272842e94321267c873feeb",
+    "build.log": "1e36fd890e6c390166064e196b4fe02f1af2329d07a8b8e396f8c8b30a8ef973",
+    "source/DESIGN-NOTES.txt": "ffeef8e7d9d1043863050bb596d5655187675a881878dc38d621450eea78718f",
+    "source/verification.json": "9d2c178580958866e7d862c1d696aaceda0645320c0e4e3d3d834f0931199a8c",
+    "source/design.json": "59c0701c8132e1ffbb3ef4d0674e7f061bbd0b7468c31b241f119ad21b67f50d",
+    "FusionBuild/finish_views.py": "9eecc63edbd1e823199cf025bfa7d40418bb062ab2c989e6dbee5cf28536b980",
+    "FusionBuild/verify_archive.py": "491d0b3d64f4d3b5e9d4aa6d8d106467cf78cbbc2522e46f6a259c0d095fbd1e",
+    "FusionBuild/FusionBuild.py": "f445a4a76b9b8d435255b81836995975a91361e38b74e3a496f8d677b78f1463",
+    "FusionBuild/FusionBuild.manifest": "93e038fbda3ac01dd4c708fb0f88f403b1ed26a6ac10300883e603c7aebcdcfc"
+  }
+}

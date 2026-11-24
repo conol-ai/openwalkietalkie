@@ -1,0 +1,811 @@
+{
+  "revision": "HW17-R0",
+  "parts": [
+    {
+      "name": "01_grip_ring",
+      "group": "rotor",
+      "color": "#313c48",
+      "material": "POM",
+      "note": "36 shallow axial flutes, max OD17; black matte finish",
+      "bbox_mm": [
+        -8.5,
+        -8.5,
+        1.2,
+        8.5,
+        8.5,
+        8.8
+      ],
+      "volume_mm3": 111.86403105821705,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "02_rotor_back_iron",
+      "group": "rotor",
+      "color": "#697984",
+      "material": "low-carbon magnetic steel; supplier B-H curve required",
+      "note": "OD16.4 ID15.4; 0.50 radial wall",
+      "bbox_mm": [
+        -8.2,
+        -8.2,
+        1.2,
+        8.2,
+        8.2,
+        8.0
+      ],
+      "volume_mm3": 169.83449885306334,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "03_rotor_cap",
+      "group": "rotor",
+      "color": "#9aabb7",
+      "material": "6061-T6 aluminium",
+      "note": "Spigot adhesive joint; shaft hub controls inner-ring spacing. Final fits by bearing supplier.",
+      "bbox_mm": [
+        -8.2,
+        -8.2,
+        7.4,
+        8.2,
+        8.2,
+        8.8
+      ],
+      "volume_mm3": 183.1279596711703,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "04_rotor_shaft",
+      "group": "rotor",
+      "color": "#c1cad0",
+      "material": "Nonmagnetic austenitic stainless steel",
+      "note": "D2 precision ground seats; integral lower D2.6 thrust collar, magnet bond face",
+      "bbox_mm": [
+        -1.3,
+        -1.3,
+        2.4000000000000004,
+        1.3,
+        1.3,
+        8.65
+      ],
+      "volume_mm3": 20.285263764229295,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "05_magnet_01_N",
+      "group": "magnet",
+      "color": "#d96159",
+      "material": "N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",
+      "note": "Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring",
+      "bbox_mm": [
+        6.588537702793801,
+        -1.6632109525210814,
+        2.05,
+        7.65,
+        1.663210952521077,
+        6.55
+      ],
+      "volume_mm3": 12.781614591025132,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "05_magnet_02_S",
+      "group": "magnet",
+      "color": "#4c8bbd",
+      "material": "N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",
+      "note": "Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring",
+      "bbox_mm": [
+        5.299326013729311,
+        1.5364523541206352,
+        2.05,
+        7.449183189602128,
+        4.738315245955025,
+        6.550000000000001
+      ],
+      "volume_mm3": 12.781614591025132,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "05_magnet_03_N",
+      "group": "magnet",
+      "color": "#d96159",
+      "material": "N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",
+      "note": "Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring",
+      "bbox_mm": [
+        2.960517815677274,
+        4.236130551910042,
+        2.05,
+        5.9559548937674816,
+        6.874938093304666,
+        6.550000000000001
+      ],
+      "volume_mm3": 12.781614591025136,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "05_magnet_04_S",
+      "group": "magnet",
+      "color": "#4c8bbd",
+      "material": "N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",
+      "note": "Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring",
+      "bbox_mm": [
+        0.03534275586208337,
+        6.096791141161846,
+        2.05,
+        3.283076686228991,
+        7.649895135692816,
+        6.550000000000001
+      ],
+      "volume_mm3": 12.781614591025127,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "05_magnet_05_N",
+      "group": "magnet",
+      "color": "#d96159",
+      "material": "N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",
+      "note": "Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring",
+      "bbox_mm": [
+        -3.283076686228991,
+        6.096791141161845,
+        2.05,
+        -0.035342755862084047,
+        7.649895135692816,
+        6.550000000000001
+      ],
+      "volume_mm3": 12.781614591025118,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "05_magnet_06_S",
+      "group": "magnet",
+      "color": "#4c8bbd",
+      "material": "N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",
+      "note": "Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring",
+      "bbox_mm": [
+        -5.9559548937674816,
+        4.236130551910041,
+        2.05,
+        -2.960517815677278,
+        6.8749380933046655,
+        6.550000000000001
+      ],
+      "volume_mm3": 12.781614591025127,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "05_magnet_07_N",
+      "group": "magnet",
+      "color": "#d96159",
+      "material": "N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",
+      "note": "Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring",
+      "bbox_mm": [
+        -7.449183189602127,
+        1.5364523541206363,
+        2.05,
+        -5.299326013729313,
+        4.738315245955024,
+        6.55
+      ],
+      "volume_mm3": 12.781614591025118,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "05_magnet_08_S",
+      "group": "magnet",
+      "color": "#4c8bbd",
+      "material": "N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",
+      "note": "Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring",
+      "bbox_mm": [
+        -7.65,
+        -1.6632109525210756,
+        2.05,
+        -6.5885377027938,
+        1.6632109525210772,
+        6.550000000000001
+      ],
+      "volume_mm3": 12.781614591025125,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "05_magnet_09_N",
+      "group": "magnet",
+      "color": "#d96159",
+      "material": "N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",
+      "note": "Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring",
+      "bbox_mm": [
+        -7.449183189602127,
+        -4.7383152459550235,
+        2.05,
+        -5.299326013729313,
+        -1.5364523541206374,
+        6.55
+      ],
+      "volume_mm3": 12.781614591025113,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "05_magnet_10_S",
+      "group": "magnet",
+      "color": "#4c8bbd",
+      "material": "N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",
+      "note": "Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring",
+      "bbox_mm": [
+        -5.955954893767479,
+        -6.874938093304666,
+        2.05,
+        -2.9605178156772736,
+        -4.236130551910044,
+        6.550000000000001
+      ],
+      "volume_mm3": 12.781614591025136,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "05_magnet_11_N",
+      "group": "magnet",
+      "color": "#d96159",
+      "material": "N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",
+      "note": "Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring",
+      "bbox_mm": [
+        -3.2830766862289953,
+        -7.649895135692816,
+        2.05,
+        -0.03534275586207521,
+        -6.0967911411618445,
+        6.550000000000001
+      ],
+      "volume_mm3": 12.781614591025154,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "05_magnet_12_S",
+      "group": "magnet",
+      "color": "#4c8bbd",
+      "material": "N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",
+      "note": "Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring",
+      "bbox_mm": [
+        0.03534275586208472,
+        -7.649895135692816,
+        2.05,
+        3.2830766862289997,
+        -6.096791141161843,
+        6.550000000000001
+      ],
+      "volume_mm3": 12.78161459102516,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "05_magnet_13_N",
+      "group": "magnet",
+      "color": "#d96159",
+      "material": "N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",
+      "note": "Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring",
+      "bbox_mm": [
+        2.960517815677272,
+        -6.874938093304666,
+        2.05,
+        5.9559548937674816,
+        -4.236130551910042,
+        6.55
+      ],
+      "volume_mm3": 12.78161459102514,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "05_magnet_14_S",
+      "group": "magnet",
+      "color": "#4c8bbd",
+      "material": "N35SH sintered NdFeB, 14 custom radially magnetized arc segments; alternate inward N/S; epoxy protective coating",
+      "note": "Pole label is the inward-facing surface; 0.6 degree adhesive joint; independent arcs form a 14-pole ring",
+      "bbox_mm": [
+        5.29932601372931,
+        -4.738315245955028,
+        2.05,
+        7.449183189602128,
+        -1.536452354120634,
+        6.550000000000001
+      ],
+      "volume_mm3": 12.781614591025146,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "06_stator_carrier",
+      "group": "fixed",
+      "color": "#aebdc5",
+      "material": "6061-T6 aluminium",
+      "note": "Three M1.4 blind pilot holes, bearing fits and adhesive retention require tolerance review",
+      "bbox_mm": [
+        -7.0,
+        -7.0,
+        0.0,
+        7.0,
+        7.0,
+        7.8
+      ],
+      "volume_mm3": 146.07184663634675,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "07_stator_stack",
+      "group": "fixed",
+      "color": "#717f88",
+      "material": "0.20 mm insulated non-oriented electrical steel, supplier to provide B-H and loss curves",
+      "note": "20 nominal 0.20 mm insulated laminations; final assembled stack 4.00 mm incl. coating",
+      "bbox_mm": [
+        -6.5,
+        -6.5,
+        2.3,
+        6.5,
+        6.5,
+        6.3
+      ],
+      "volume_mm3": 211.33698106602054,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "08_coil_01_Ap",
+      "group": "coil",
+      "color": "#c9823d",
+      "material": "Enamelled copper winding envelope",
+      "note": "A+, 32 turns D0.13 Cu, finished OD <=0.145, 11/11/10 layers. Envelope is not solid copper.",
+      "bbox_mm": [
+        4.2,
+        -0.98,
+        1.72,
+        5.95,
+        0.98,
+        6.88
+      ],
+      "volume_mm3": 10.3488,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "08_coil_02_An",
+      "group": "coil",
+      "color": "#c9823d",
+      "material": "Enamelled copper winding envelope",
+      "note": "A-, 32 turns D0.13 Cu, finished OD <=0.145, 11/11/10 layers. Envelope is not solid copper.",
+      "bbox_mm": [
+        3.1473066958946423,
+        1.25129510429125,
+        1.72,
+        5.6428511525174105,
+        3.8237048957087496,
+        6.88
+      ],
+      "volume_mm3": 10.348800000000004,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "08_coil_03_Bn",
+      "group": "coil",
+      "color": "#d0a548",
+      "material": "Enamelled copper winding envelope",
+      "note": "B-, 32 turns D0.13 Cu, finished OD <=0.145, 11/11/10 layers. Envelope is not solid copper.",
+      "bbox_mm": [
+        1.2512951042912508,
+        3.1473066958946423,
+        1.72,
+        3.8237048957087505,
+        5.6428511525174105,
+        6.88
+      ],
+      "volume_mm3": 10.3488,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "08_coil_04_Bp",
+      "group": "coil",
+      "color": "#d0a548",
+      "material": "Enamelled copper winding envelope",
+      "note": "B+, 32 turns D0.13 Cu, finished OD <=0.145, 11/11/10 layers. Envelope is not solid copper.",
+      "bbox_mm": [
+        -0.9799999999999995,
+        4.2,
+        1.72,
+        0.9800000000000006,
+        5.95,
+        6.88
+      ],
+      "volume_mm3": 10.3488,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "08_coil_05_Cp",
+      "group": "coil",
+      "color": "#a96541",
+      "material": "Enamelled copper winding envelope",
+      "note": "C+, 32 turns D0.13 Cu, finished OD <=0.145, 11/11/10 layers. Envelope is not solid copper.",
+      "bbox_mm": [
+        -3.8237048957087487,
+        3.1473066958946427,
+        1.72,
+        -1.2512951042912492,
+        5.6428511525174105,
+        6.88
+      ],
+      "volume_mm3": 10.348800000000002,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "08_coil_06_Cn",
+      "group": "coil",
+      "color": "#a96541",
+      "material": "Enamelled copper winding envelope",
+      "note": "C-, 32 turns D0.13 Cu, finished OD <=0.145, 11/11/10 layers. Envelope is not solid copper.",
+      "bbox_mm": [
+        -5.642851152517411,
+        1.2512951042912497,
+        1.72,
+        -3.147306695894643,
+        3.82370489570875,
+        6.88
+      ],
+      "volume_mm3": 10.348800000000004,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "08_coil_07_An",
+      "group": "coil",
+      "color": "#c9823d",
+      "material": "Enamelled copper winding envelope",
+      "note": "A-, 32 turns D0.13 Cu, finished OD <=0.145, 11/11/10 layers. Envelope is not solid copper.",
+      "bbox_mm": [
+        -5.95,
+        -0.9799999999999994,
+        1.72,
+        -4.2,
+        0.9800000000000008,
+        6.88
+      ],
+      "volume_mm3": 10.3488,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "08_coil_08_Ap",
+      "group": "coil",
+      "color": "#c9823d",
+      "material": "Enamelled copper winding envelope",
+      "note": "A+, 32 turns D0.13 Cu, finished OD <=0.145, 11/11/10 layers. Envelope is not solid copper.",
+      "bbox_mm": [
+        -5.64285115251741,
+        -3.8237048957087505,
+        1.72,
+        -3.1473066958946423,
+        -1.2512951042912508,
+        6.88
+      ],
+      "volume_mm3": 10.348799999999999,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "08_coil_09_Bp",
+      "group": "coil",
+      "color": "#d0a548",
+      "material": "Enamelled copper winding envelope",
+      "note": "B+, 32 turns D0.13 Cu, finished OD <=0.145, 11/11/10 layers. Envelope is not solid copper.",
+      "bbox_mm": [
+        -3.8237048957087523,
+        -5.642851152517409,
+        1.72,
+        -1.2512951042912521,
+        -3.147306695894641,
+        6.88
+      ],
+      "volume_mm3": 10.3488,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "08_coil_10_Bn",
+      "group": "coil",
+      "color": "#d0a548",
+      "material": "Enamelled copper winding envelope",
+      "note": "B-, 32 turns D0.13 Cu, finished OD <=0.145, 11/11/10 layers. Envelope is not solid copper.",
+      "bbox_mm": [
+        -0.9800000000000013,
+        -5.95,
+        1.72,
+        0.9799999999999991,
+        -4.2,
+        6.88
+      ],
+      "volume_mm3": 10.3488,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "08_coil_11_Cn",
+      "group": "coil",
+      "color": "#a96541",
+      "material": "Enamelled copper winding envelope",
+      "note": "C-, 32 turns D0.13 Cu, finished OD <=0.145, 11/11/10 layers. Envelope is not solid copper.",
+      "bbox_mm": [
+        1.2512951042912508,
+        -5.64285115251741,
+        1.72,
+        3.8237048957087505,
+        -3.1473066958946423,
+        6.88
+      ],
+      "volume_mm3": 10.348799999999999,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "08_coil_12_Cp",
+      "group": "coil",
+      "color": "#a96541",
+      "material": "Enamelled copper winding envelope",
+      "note": "C+, 32 turns D0.13 Cu, finished OD <=0.145, 11/11/10 layers. Envelope is not solid copper.",
+      "bbox_mm": [
+        3.147306695894641,
+        -3.8237048957087523,
+        1.72,
+        5.642851152517409,
+        -1.2512951042912521,
+        6.88
+      ],
+      "volume_mm3": 10.3488,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "09_bearing_1",
+      "group": "bearing",
+      "color": "#c4ced5",
+      "material": "EZO MR52ZZ 2 x 5 x 2.5",
+      "note": "Envelope only, rolling elements not modelled; zero interference fit in nominal geometry",
+      "bbox_mm": [
+        -2.5,
+        -2.5,
+        2.7,
+        2.5,
+        2.5,
+        5.2
+      ],
+      "volume_mm3": 41.23340357836603,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "09_bearing_2",
+      "group": "bearing",
+      "color": "#c4ced5",
+      "material": "EZO MR52ZZ 2 x 5 x 2.5",
+      "note": "Envelope only, rolling elements not modelled; zero interference fit in nominal geometry",
+      "bbox_mm": [
+        -2.5,
+        -2.5,
+        5.3,
+        2.5,
+        2.5,
+        7.8
+      ],
+      "volume_mm3": 41.23340357836603,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "10_inner_spacer",
+      "group": "rotor",
+      "color": "#c4ced5",
+      "material": "Ground nonmagnetic stainless shim",
+      "note": "Match inner/outer spacing to avoid unintended preload; select shim after measurement",
+      "bbox_mm": [
+        -1.3,
+        -1.3,
+        5.2,
+        1.3,
+        1.3,
+        5.3
+      ],
+      "volume_mm3": 0.2167698930976949,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "11_lower_outer_retainer",
+      "group": "fixed",
+      "color": "#9eacb7",
+      "material": "Nonmagnetic stainless steel",
+      "note": "Bonded outer-race retainer; no contact with inner ring or shields outside outer-ring land",
+      "bbox_mm": [
+        -2.5,
+        -2.5,
+        2.5,
+        2.5,
+        2.5,
+        2.7
+      ],
+      "volume_mm3": 0.7461282552275743,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "12_upper_outer_retainer",
+      "group": "fixed",
+      "color": "#9eacb7",
+      "material": "Nonmagnetic stainless steel",
+      "note": "Bonded outer-race retainer; no contact with inner ring or shields outside outer-ring land",
+      "bbox_mm": [
+        -2.5,
+        -2.5,
+        7.8,
+        2.5,
+        2.5,
+        8.0
+      ],
+      "volume_mm3": 0.7461282552275739,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "13_sensor_magnet",
+      "group": "rotor",
+      "color": "#b088b6",
+      "material": "NdFeB, diametrically magnetized",
+      "note": "Single pole pair; D4 x 0.5; 0.02 adhesive to shaft collar. Non-reference magnet requires field validation.",
+      "bbox_mm": [
+        -2.0,
+        -2.0,
+        1.88,
+        2.0,
+        2.0,
+        2.38
+      ],
+      "volume_mm3": 6.283185307179585,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "14_sensor_flex",
+      "group": "sensor",
+      "color": "#3b977d",
+      "material": "Rigid-flex envelope, 0.4 mm central stiffened island",
+      "note": "D5.5 sensor island and 1.6 mm tail to module edge; actual PCB layout not included",
+      "bbox_mm": [
+        -5.374011537017761,
+        -2.75,
+        0.0,
+        2.75,
+        5.374011537017761,
+        0.4
+      ],
+      "volume_mm3": 10.484748765735691,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "15_MT6701_max_envelope",
+      "group": "sensor",
+      "color": "#34434d",
+      "material": "MT6701QT-STD QFN16",
+      "note": "Maximum 3.1 x 3.1 x 0.8 body plus 0.05 solder allowance",
+      "bbox_mm": [
+        -1.55,
+        -1.55,
+        0.45,
+        1.55,
+        1.55,
+        1.25
+      ],
+      "volume_mm3": 7.688000000000001,
+      "valid": true,
+      "solid_count": 1
+    },
+    {
+      "name": "16_sensor_decoupling",
+      "group": "sensor",
+      "color": "#a18e76",
+      "material": "0201 capacitor envelope",
+      "note": "100 nF adjacent VDD/GND; land pattern and routing to be designed",
+      "bbox_mm": [
+        1.65,
+        -0.15,
+        0.45,
+        2.25,
+        0.15,
+        0.75
+      ],
+      "volume_mm3": 0.054000000000000006,
+      "valid": true,
+      "solid_count": 1
+    }
+  ],
+  "interferences": [],
+  "clearances": {
+    "radial_magnetic_airgap_mm": 0.25,
+    "magnet_yoke_bond_radial_mm": 0.05,
+    "stator_carrier_bond_radial_mm": 0.05,
+    "sensor_magnet_to_max_IC_top_mm": 0.6299999999999999,
+    "coil_to_cap_axial_mm": 1.12,
+    "nominal_cartridge_to_9mm_limit_mm": 0.1999999999999993
+  },
+  "limitations": [
+    "Nominal geometry only; no bearing fit, dynamic runout, flex routing, adhesive or deformation simulation.",
+    "Windings, bearings, PCB and sensor packages are envelopes; no motor FEM, thermal test, firmware or electrical PCB sign-off.",
+    "Separate case mounting adapter and external cable harness remain to be designed; cartridge envelope excludes them."
+  ],
+  "envelope_bbox_mm": [
+    -8.5,
+    -8.5,
+    0.0,
+    8.5,
+    8.5,
+    8.8
+  ],
+  "axial_height_mm": 8.8,
+  "volume_outside_D17_H9_mm3": 0.0,
+  "sources": {
+    "ref/WalkieTalkieBodyV8.3.step.step": "729be468c65d2977c5c7ff4f35ed047d7ccb77bdeafc6b43b3c276183b8f5aa8",
+    "hardware/rev-b/3d/main-revb-populated-bodyv6.13.step": "ed5ca8bd83189cab8f511137aab2e10041281067665f878e9aa1ba5035f23c64"
+  },
+  "fit_checks": [
+    {
+      "obstacle": "V8.3_MainCase",
+      "overlap_mm3": 0.0,
+      "minimum_distance_mm": 0.1999999999999993
+    },
+    {
+      "obstacle": "V8.3_BackCover",
+      "overlap_mm3": 0.0,
+      "minimum_distance_mm": 1.4999999999999996
+    },
+    {
+      "obstacle": "RevB populated board in existing BodyV6.13 datum",
+      "overlap_mm3": 0.0,
+      "minimum_distance_mm": 0.31999953268260606
+    }
+  ],
+  "step_roundtrip": {
+    "valid": true,
+    "solid_count": 41,
+    "volume_difference_mm3": 1.9758772396016866e-10
+  },
+  "rotor_to_stationary_minimum_excluding_bearings_mm": 0.09999999999999964,
+  "all_angle_external_clearance": [
+    {
+      "name": "MainCase",
+      "swept_envelope_overlap_mm3": 0.0,
+      "clearance_mm": 0.1999999999999993
+    },
+    {
+      "name": "BackCover",
+      "swept_envelope_overlap_mm3": 0.0,
+      "clearance_mm": 2.0701751133660244
+    },
+    {
+      "name": "MainBoard",
+      "swept_envelope_overlap_mm3": 0.0,
+      "clearance_mm": 0.3199995313631856
+    }
+  ]
+}

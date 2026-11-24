@@ -1,0 +1,57 @@
+HW17-R0 电机滚轮 — Fusion 原生三维结构
+2026-10-29
+
+打开文件
+在 Fusion 使用 File > Open > Open from my computer，选择 HW17-R0-Fusion.f3d。
+这是本地原生归档；需要保存到自己的 Fusion 项目时，再使用 Save。
+HW17-R0-Fusion.step 为通用交换文件，不含 Fusion 草图和建模历史。
+
+模型内容
+本体名义外形 Φ17 × 8.8 mm，符合 Φ17 × 9 mm 上限；只旋转，无按压。
+12 槽／14 极三相外转子，共 41 个独立零件组件。
+组件树分为 A 旋转总成、B 固定总成，包含外圈、钢轭、端盖、轴、14 片磁钢、
+定子铁芯、12 个绕组包络、双轴承、隔垫／挡环、测角磁铁及传感器板包络。
+零件采用中文名称并保留 R0 零件编号；组件 Description 中有材料和工艺备注。
+外观颜色用于辨识零件，磁钢红色表示朝内 N 极、蓝色表示朝内 S 极。
+默认物理材质没有逐件配置；请勿用本文件直接读取成品重量。
+
+编辑与查看
+保留原生草图、拉伸／切除特征及 235 项时间线记录；并非只有导入的无历史实体。
+Modify > Change Parameters 中可查看 R0 长度参数；圆直径和轴向拉伸已关联相应参数。
+齿形、磁钢扇形角度、线圈横截面和部分位置仍用数值草图定义，不是全尺寸联动模型。
+大幅改尺寸时，需要同时编辑相关草图或修改生成脚本并重新检查干涉。
+Relationships / Joints 下有“滚轮旋转 Z | Revolute 360deg”；可右键 Drive Joint 查看转动。
+Analysis 下有轴向剖视与 Z=4.3 mm 横剖视；每次启用一个即可。
+Named Views 下有总装轴测和沿轴俯视。
+隐藏旋转总成中的 01 外圈、02 磁轭、03 端盖可直接查看内部。
+
+预览文件
+assembled.png — 完整外观
+internal.png — 隐去外圈、磁轭、端盖及部分磁钢，展示内部
+section-axial.png — 轴向剖面，显示双轴承、测角磁铁与芯片
+section-radial.png — 通过磁路中部的横剖面
+图片由 Fusion 直接导出；剖切填色是 Fusion 的截面辨识色，不代表磁极或材料。
+
+检查结果
+41 个实体的体积逐件与原 R0 相符，最大差值小于 0.000000001 mm³。
+外包络为 X/Y = -8.5…+8.5 mm，Z = 0…8.8 mm；名义磁气隙 0.25 mm。
+F3D 重开后保留 41 件、235 项时间线、1 个旋转关节、2 个剖视、2 个命名视图。
+Fusion 建模历史无警告，名义装配干涉检查为零。
+STEP 重开后仍为 41 个实体，体积校验通过。
+旋转关节已试转 15°并恢复 0°。
+证据见 verification.json、archive-roundtrip.json、step-check.json、joint-verification.json。
+
+设计阶段
+本次是在 Fusion 中重建已有 R0 机械方案，没有改变电机拓扑或把方案升级为量产设计。
+轴承、绕组、芯片和刚柔板是空间包络；未建滚珠、单根铜线、焊盘和实际布线。
+磁路有限元、转矩／温升、轴承公差与测角串扰仍需验证。
+机壳安装转接件、驱动板和外部线束未包含；本次未重新验证最新版机壳装配。
+其余假设与限制见 source/DESIGN-NOTES.txt。
+
+重建
+FusionBuild/FusionBuild.py 使用 Autodesk Fusion 官方 Python API 创建新文档。
+在 Scripts and Add-Ins 中添加 FusionBuild 文件夹并运行 FusionBuild。
+输入来自 source/design.json；小特征和部分二维位置在脚本内显式定义。
+每次运行新建文档并更新本目录导出文件。请先另存自己的修改版本。
+verify_archive.py 是本次验收脚本，依赖构建脚本的运行环境；不是独立插件。
+这些文件位于 hardware/haptic-wheel，未加入 Git 提交。

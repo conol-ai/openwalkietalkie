@@ -1,0 +1,28 @@
+{
+  "coordinate_system": "Shaft center X=Y=0; carrier underside Z=0; tail +135 degrees",
+  "flex_z_mm": [
+    0.25,
+    0.4
+  ],
+  "island_total_thickness_mm": 0.4,
+  "chip_max_top_z_mm": 1.25,
+  "nominal_magnet_bottom_z_mm": 1.88,
+  "nominal_magnet_gap_mm": 0.63,
+  "models": "Clearance envelopes, not supplier package detail or copper solids",
+  "valid_solids": true,
+  "fit_checks": [
+    {
+      "carrier": "d17x9-r0/cad/06_stator_carrier.step",
+      "carrier_sha256": "72c7d90af01608db86377868ed69528af2e5b13260d03daf456edd18a9773700",
+      "encoder_rotation_deg": 0,
+      "intersection_volume_mm3": 0.0
+    },
+    {
+      "carrier": "n52-block-r1/STEP/HW18-B1-P05.step",
+      "carrier_sha256": "7b995f948d80dbce8d687ef87497a09ec4e757dd1ddba67e907e9c14d1851d7c",
+      "encoder_rotation_deg": -15,
+      "intersection_volume_mm3": 0.0
+    }
+  ],
+  "step_roundtrip_volume_error_mm3": 3.808509063674137e-12
+}

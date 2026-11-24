@@ -1,0 +1,56 @@
+{
+  "revision": "HW18-B1",
+  "date": "2026-10-30",
+  "purpose": "Bench prototype supplier quotation only",
+  "user_authorized_envelope_relaxation": true,
+  "nominal_envelope_mm": [
+    18,
+    8.8
+  ],
+  "inspection_envelope_max_mm": [
+    18.05,
+    9.0
+  ],
+  "magnet_size_axial_tangential_radial_mm": [
+    4,
+    3,
+    1
+  ],
+  "magnet_incoming_dimension_tolerance_mm": 0.05,
+  "magnet_grade": "N52",
+  "pole_count": 14,
+  "slot_count": 12,
+  "stator_OD_mm": 13,
+  "stack_mm": 4,
+  "turns_per_tooth": 32,
+  "wire_Cu_diameter_mm": 0.13,
+  "max_finished_wire_OD_mm": 0.145,
+  "phase_sequence_CCW": [
+    "A+",
+    "A-",
+    "B-",
+    "B+",
+    "C+",
+    "C-",
+    "A-",
+    "A+",
+    "B+",
+    "B-",
+    "C-",
+    "C+"
+  ],
+  "changed_from_R0": [
+    "N52 rectangular magnets,14-flat yoke",
+    "Nominal OD18, central gap0.45",
+    "Round pilot counterbore for cap",
+    "Carrier lower shoulder + separate outer spacer replaces thin central web",
+    "Defined slip-fit selection and measured axial endplay",
+    "Plain POM sleeve and bench fixtures"
+  ],
+  "limitations": [
+    "No validated torque, thermal rating, demagnetization margin or encoder field",
+    "Original enclosure fit not retained or approved",
+    "Bearing and winding geometry are envelopes; thread modeled at nominal minor diameter",
+    "Generic edge breaks governed by 2D notes, not modeled"
+  ]
+}

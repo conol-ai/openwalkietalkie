@@ -1,0 +1,46 @@
+HW17 Fusion native build 2026-10-29 11:14:16
+PART 01_grip_ring
+PART 02_rotor_back_iron
+PART 03_rotor_cap
+PART 04_rotor_shaft
+PART 05_magnet_01_N
+PART 05_magnet_02_S
+PART 05_magnet_03_N
+PART 05_magnet_04_S
+PART 05_magnet_05_N
+PART 05_magnet_06_S
+PART 05_magnet_07_N
+PART 05_magnet_08_S
+PART 05_magnet_09_N
+PART 05_magnet_10_S
+PART 05_magnet_11_N
+PART 05_magnet_12_S
+PART 05_magnet_13_N
+PART 05_magnet_14_S
+PART 06_stator_carrier
+PART 07_stator_stack
+PART 08_coil_01_Ap
+PART 08_coil_02_An
+PART 08_coil_03_Bn
+PART 08_coil_04_Bp
+PART 08_coil_05_Cp
+PART 08_coil_06_Cn
+PART 08_coil_07_An
+PART 08_coil_08_Ap
+PART 08_coil_09_Bp
+PART 08_coil_10_Bn
+PART 08_coil_11_Cn
+PART 08_coil_12_Cp
+PART 09_bearing_1
+PART 09_bearing_2
+PART 10_inner_spacer
+PART 11_lower_outer_retainer
+PART 12_upper_outer_retainer
+PART 13_sensor_magnet
+PART 14_sensor_flex
+PART 15_MT6701_max_envelope
+PART 16_sensor_decoupling
+VERIFIED {"source": "HW17-R0", "format": "Fusion native sketches and extrudes", "warnings": [], "bbox_mm": [-8.5, -8.5, 0.0, 8.5, 8.5, 8.8], "timeline_count": 235, "part_count": 41, "max_volume_error_mm3": 1.7820411812863313e-11}
+VIEW EXPORT COMPLETE
+SUCCESS
+NATIVE ARCHIVE REOPEN VERIFIED

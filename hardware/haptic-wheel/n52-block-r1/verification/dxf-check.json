@@ -1,0 +1,9 @@
+{
+  "dxf_units": "mm",
+  "outer_curve_entities": 96,
+  "inner_circles": 1,
+  "closed_outer_loop": true,
+  "dxf_area_mm2": 52.834245266503686,
+  "step_area_mm2": 52.83424526655511,
+  "difference_mm2": 5.142197778695845e-11
+}

@@ -1,0 +1,638 @@
+[
+  {
+    "library": "Favorites Library",
+    "appearances": []
+  },
+  {
+    "library": "Fusion Additive Material Library",
+    "appearances": [
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-306_physmat_aspects:Prism-028"
+      }
+    ]
+  },
+  {
+    "library": "Fusion Appearance Library",
+    "appearances": [
+      {
+        "name": "Aluminum - Anodized Glossy (Blue)",
+        "id": "Prism-029"
+      },
+      {
+        "name": "Aluminum - Anodized Glossy (Grey)",
+        "id": "Prism-031"
+      },
+      {
+        "name": "Aluminum - Anodized Glossy (Red)",
+        "id": "Prism-033"
+      },
+      {
+        "name": "Aluminum - Anodized Rough (Blue)",
+        "id": "Prism-030"
+      },
+      {
+        "name": "Aluminum - Anodized Rough (Grey)",
+        "id": "Prism-032"
+      },
+      {
+        "name": "Aluminum - Anodized Rough (Red)",
+        "id": "Prism-034"
+      },
+      {
+        "name": "Aluminum - Bead Blasted",
+        "id": "Prism-624"
+      },
+      {
+        "name": "Aluminum - Polished",
+        "id": "Prism-027"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "Prism-028"
+      },
+      {
+        "name": "Aluminum nitride (AlN)",
+        "id": "Prism-3002"
+      },
+      {
+        "name": "Copper - Patina",
+        "id": "Prism-049"
+      },
+      {
+        "name": "Copper - Polished",
+        "id": "Prism-050"
+      },
+      {
+        "name": "Copper - Raw",
+        "id": "Prism-137"
+      },
+      {
+        "name": "Paint - Enamel Glossy (Black)",
+        "id": "Prism-089"
+      },
+      {
+        "name": "Paint - Enamel Glossy (Blue)",
+        "id": "Prism-090"
+      },
+      {
+        "name": "Paint - Enamel Glossy (Dark Grey)",
+        "id": "Prism-204"
+      },
+      {
+        "name": "Paint - Enamel Glossy (Green)",
+        "id": "Prism-091"
+      },
+      {
+        "name": "Paint - Enamel Glossy (Grey)",
+        "id": "Prism-092"
+      },
+      {
+        "name": "Paint - Enamel Glossy (Red)",
+        "id": "Prism-093"
+      },
+      {
+        "name": "Paint - Enamel Glossy (White)",
+        "id": "Prism-094"
+      },
+      {
+        "name": "Paint - Enamel Glossy (Yellow)",
+        "id": "Prism-095"
+      },
+      {
+        "name": "Paint - Metallic (Black)",
+        "id": "Prism-003"
+      },
+      {
+        "name": "Paint - Metallic (Blue)",
+        "id": "Prism-004"
+      },
+      {
+        "name": "Paint - Metallic (Dark Grey)",
+        "id": "Prism-009"
+      },
+      {
+        "name": "Paint - Metallic (Green)",
+        "id": "Prism-005"
+      },
+      {
+        "name": "Paint - Metallic (Red)",
+        "id": "Prism-006"
+      },
+      {
+        "name": "Paint - Metallic (Silver)",
+        "id": "Prism-007"
+      },
+      {
+        "name": "Paint - Metallic (Yellow)",
+        "id": "Prism-008"
+      },
+      {
+        "name": "Plastic - Glossy (Black)",
+        "id": "Prism-112"
+      },
+      {
+        "name": "Plastic - Glossy (Blue)",
+        "id": "Prism-114"
+      },
+      {
+        "name": "Plastic - Glossy (Green)",
+        "id": "Prism-117"
+      },
+      {
+        "name": "Plastic - Glossy (Grey)",
+        "id": "Prism-119"
+      },
+      {
+        "name": "Plastic - Glossy (Red)",
+        "id": "Prism-120"
+      },
+      {
+        "name": "Plastic - Glossy (White)",
+        "id": "Prism-126"
+      },
+      {
+        "name": "Plastic - Glossy (Yellow)",
+        "id": "Prism-128"
+      },
+      {
+        "name": "Plastic - Matte (Black)",
+        "id": "Prism-113"
+      },
+      {
+        "name": "Plastic - Matte (Blue)",
+        "id": "Prism-115"
+      },
+      {
+        "name": "Plastic - Matte (Gray)",
+        "id": "Prism-116"
+      },
+      {
+        "name": "Plastic - Matte (Green)",
+        "id": "Prism-118"
+      },
+      {
+        "name": "Plastic - Matte (Red)",
+        "id": "Prism-121"
+      },
+      {
+        "name": "Plastic - Matte (White)",
+        "id": "Prism-127"
+      },
+      {
+        "name": "Plastic - Matte (Yellow)",
+        "id": "Prism-129"
+      },
+      {
+        "name": "Plastic - Translucent Glossy (Blue)",
+        "id": "Prism-386"
+      },
+      {
+        "name": "Plastic - Translucent Glossy (Gray)",
+        "id": "Prism-387"
+      },
+      {
+        "name": "Plastic - Translucent Glossy (Green)",
+        "id": "Prism-388"
+      },
+      {
+        "name": "Plastic - Translucent Glossy (Red)",
+        "id": "Prism-389"
+      },
+      {
+        "name": "Plastic - Translucent Glossy (White)",
+        "id": "Prism-390"
+      },
+      {
+        "name": "Plastic - Translucent Glossy (Yellow)",
+        "id": "Prism-391"
+      },
+      {
+        "name": "Plastic - Translucent Matte (Blue)",
+        "id": "Prism-380"
+      },
+      {
+        "name": "Plastic - Translucent Matte (Gray)",
+        "id": "Prism-381"
+      },
+      {
+        "name": "Plastic - Translucent Matte (Green)",
+        "id": "Prism-382"
+      },
+      {
+        "name": "Plastic - Translucent Matte (Red)",
+        "id": "Prism-383"
+      },
+      {
+        "name": "Plastic - Translucent Matte (White)",
+        "id": "Prism-384"
+      },
+      {
+        "name": "Plastic - Translucent Matte (Yellow)",
+        "id": "Prism-385"
+      }
+    ]
+  },
+  {
+    "library": "Fusion Material Library",
+    "appearances": [
+      {
+        "name": "Aluminum - Anodized Glossy (Blue)",
+        "id": "PrismMaterial-041_physmat_aspects:Prism-029"
+      },
+      {
+        "name": "Aluminum - Anodized Glossy (Grey)",
+        "id": "PrismMaterial-043_physmat_aspects:Prism-031"
+      },
+      {
+        "name": "Aluminum - Anodized Glossy (Red)",
+        "id": "PrismMaterial-042_physmat_aspects:Prism-033"
+      },
+      {
+        "name": "Aluminum - Polished",
+        "id": "PrismMaterial-404_physmat_aspects:Prism-027"
+      },
+      {
+        "name": "Aluminum - Polished",
+        "id": "PrismMaterial-405_physmat_aspects:Prism-027"
+      },
+      {
+        "name": "Aluminum - Polished",
+        "id": "PrismMaterial-406_physmat_aspects:Prism-027"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-002_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-060_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-061_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-062_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-063_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-064_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-065_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-066_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-067-1-2_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-067_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-100_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-103_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-104_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-105_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-106_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-107_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-108_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-109_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-110_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-111_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-112_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-113_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-114_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-115_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-116_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-117_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-118_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-119_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-120_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-121_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-122_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-123_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-124_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-125_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-126_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-159_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-160_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-161_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-162_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-163_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-164_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-215_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-231_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-232_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-238_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-301_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "PrismMaterial-302_physmat_aspects:Prism-028"
+      },
+      {
+        "name": "Aluminum nitride (AlN)",
+        "id": "PrismMaterial-408_physmat_aspects:Prism-3002"
+      },
+      {
+        "name": "Copper - Patina",
+        "id": "PrismMaterial-044_physmat_aspects:Prism-049"
+      },
+      {
+        "name": "Copper - Patina",
+        "id": "PrismMaterial-089_physmat_aspects:Prism-049"
+      },
+      {
+        "name": "Copper - Patina",
+        "id": "PrismMaterial-090_physmat_aspects:Prism-049"
+      },
+      {
+        "name": "Copper - Patina",
+        "id": "PrismMaterial-097_physmat_aspects:Prism-049"
+      },
+      {
+        "name": "Copper - Polished",
+        "id": "PrismMaterial-005_physmat_aspects:Prism-050"
+      },
+      {
+        "name": "Paint - Enamel Glossy (Blue)",
+        "id": "PrismMaterial-047_physmat_aspects:Prism-090"
+      },
+      {
+        "name": "Paint - Enamel Glossy (Blue)",
+        "id": "PrismMaterial-218_physmat_aspects:Prism-090"
+      },
+      {
+        "name": "Paint - Enamel Glossy (Dark Grey)",
+        "id": "PrismMaterial-216_physmat_aspects:Prism-204"
+      },
+      {
+        "name": "Paint - Enamel Glossy (Grey)",
+        "id": "PrismMaterial-224_physmat_aspects:Prism-092"
+      },
+      {
+        "name": "Paint - Enamel Glossy (Red)",
+        "id": "PrismMaterial-217_physmat_aspects:Prism-093"
+      },
+      {
+        "name": "Paint - Enamel Glossy (White)",
+        "id": "PrismMaterial-213_physmat_aspects:Prism-094"
+      },
+      {
+        "name": "Plastic - Glossy (Black)",
+        "id": "PrismMaterial-050_physmat_aspects:Prism-112"
+      },
+      {
+        "name": "Plastic - Glossy (Black)",
+        "id": "PrismMaterial-236_physmat_aspects:Prism-112"
+      },
+      {
+        "name": "Plastic - Glossy (Black)",
+        "id": "PrismMaterial-237_physmat_aspects:Prism-112"
+      },
+      {
+        "name": "Plastic - Glossy (Grey)",
+        "id": "PrismMaterial-012_physmat_aspects:Prism-119"
+      },
+      {
+        "name": "Plastic - Glossy (Grey)",
+        "id": "PrismMaterial-077_physmat_aspects:Prism-119"
+      },
+      {
+        "name": "Plastic - Glossy (Grey)",
+        "id": "PrismMaterial-277_physmat_aspects:Prism-119"
+      },
+      {
+        "name": "Plastic - Glossy (Grey)",
+        "id": "PrismMaterial-284_physmat_aspects:Prism-119"
+      },
+      {
+        "name": "Plastic - Glossy (White)",
+        "id": "PrismMaterial-051_physmat_aspects:Prism-126"
+      },
+      {
+        "name": "Plastic - Glossy (White)",
+        "id": "PrismMaterial-240-1-2_physmat_aspects:Prism-126"
+      },
+      {
+        "name": "Plastic - Glossy (White)",
+        "id": "PrismMaterial-240_physmat_aspects:Prism-126"
+      },
+      {
+        "name": "Plastic - Matte (Black)",
+        "id": "PrismMaterial-281_physmat_aspects:Prism-113"
+      },
+      {
+        "name": "Plastic - Matte (Black)",
+        "id": "PrismMaterial-285_physmat_aspects:Prism-113"
+      },
+      {
+        "name": "Plastic - Matte (Black)",
+        "id": "PrismMaterial-402_physmat_aspects:Prism-113"
+      },
+      {
+        "name": "Plastic - Matte (Blue)",
+        "id": "PrismMaterial-080_physmat_aspects:Prism-115"
+      },
+      {
+        "name": "Plastic - Matte (Gray)",
+        "id": "PrismMaterial-222_physmat_aspects:Prism-116"
+      },
+      {
+        "name": "Plastic - Matte (Gray)",
+        "id": "PrismMaterial-225_physmat_aspects:Prism-116"
+      },
+      {
+        "name": "Plastic - Matte (Gray)",
+        "id": "PrismMaterial-228_physmat_aspects:Prism-116"
+      },
+      {
+        "name": "Plastic - Matte (Gray)",
+        "id": "PrismMaterial-239_physmat_aspects:Prism-116"
+      },
+      {
+        "name": "Plastic - Matte (Gray)",
+        "id": "PrismMaterial-278_physmat_aspects:Prism-116"
+      },
+      {
+        "name": "Plastic - Matte (Gray)",
+        "id": "PrismMaterial-282_physmat_aspects:Prism-116"
+      },
+      {
+        "name": "Plastic - Matte (Gray)",
+        "id": "PrismMaterial-287_physmat_aspects:Prism-116"
+      },
+      {
+        "name": "Plastic - Matte (Red)",
+        "id": "PrismMaterial-079_physmat_aspects:Prism-121"
+      },
+      {
+        "name": "Plastic - Matte (White)",
+        "id": "PrismMaterial-078_physmat_aspects:Prism-127"
+      },
+      {
+        "name": "Plastic - Matte (White)",
+        "id": "PrismMaterial-214_physmat_aspects:Prism-127"
+      },
+      {
+        "name": "Plastic - Translucent Glossy (White)",
+        "id": "PrismMaterial-241_physmat_aspects:Prism-390"
+      },
+      {
+        "name": "Plastic - Translucent Matte (White)",
+        "id": "PrismMaterial-227_physmat_aspects:Prism-384"
+      },
+      {
+        "name": "Plastic - Translucent Matte (White)",
+        "id": "PrismMaterial-286_physmat_aspects:Prism-384"
+      }
+    ]
+  },
+  {
+    "library": "Fusion Nonlinear Material Library",
+    "appearances": [
+      {
+        "name": "Aluminum - Anodized Glossy (Grey)",
+        "id": "C5F2133D-0660-40A6-8BA2-BD45E31374EA_physmat_aspects_2:Prism-031"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "4FB9B57A-F157-448C-A618-8861594CD0A6_physmat_aspects_1:Prism-028"
+      },
+      {
+        "name": "Aluminum - Satin",
+        "id": "F5CEA218-3A0A-4C3D-83AC-171D5B52DA86_physmat_aspects_1:Prism-028"
+      },
+      {
+        "name": "Copper - Patina",
+        "id": "7972C86C-E1FD-4330-B713-65CA8884391B_physmat_aspects_1:Prism-049"
+      },
+      {
+        "name": "Copper - Polished",
+        "id": "6BEDC50A-1C9B-4400-B9C7-FDAC71BE134B_physmat_aspects_1:Prism-050"
+      }
+    ]
+  },
+  {
+    "library": "Private Visual Library",
+    "appearances": []
+  }
+]

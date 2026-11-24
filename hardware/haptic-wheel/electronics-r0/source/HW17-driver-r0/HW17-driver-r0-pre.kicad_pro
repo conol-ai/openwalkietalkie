@@ -1,0 +1,44 @@
+{
+  "meta": {
+    "filename": "HW17-driver-r0.kicad_pro",
+    "version": 1
+  },
+  "board": {
+    "design_settings": {
+      "rules": {
+        "min_clearance": 0.12,
+        "min_track_width": 0.12,
+        "min_via_diameter": 0.4,
+        "min_through_hole_diameter": 0.2,
+        "min_hole_to_hole": 0.2,
+        "min_copper_edge_clearance": 0.2,
+        "solder_mask_to_copper_clearance": 0.0
+      },
+      "rule_severities": {
+        "silk_over_copper": "warning",
+        "courtyards_overlap": "error",
+        "missing_courtyard": "warning",
+        "lib_footprint_mismatch": "warning"
+      }
+    }
+  },
+  "net_settings": {
+    "classes": [
+      {
+        "name": "Default",
+        "clearance": 0.12,
+        "track_width": 0.15,
+        "via_diameter": 0.5,
+        "via_drill": 0.25,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "wire_width": 6,
+        "bus_width": 12
+      }
+    ],
+    "meta": {
+      "version": 4
+    },
+    "netclass_assignments": {}
+  }
+}

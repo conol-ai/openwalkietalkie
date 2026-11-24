@@ -1,0 +1,123 @@
+{
+  "name": "HW17-encoder-r0",
+  "title": "HW17 / MT6701 magnetic encoder flex - BENCH PROTOTYPE",
+  "parts": [
+    {
+      "ref": "U1",
+      "value": "MT6701QT-STD",
+      "footprint": "HW17:MT6701QT_QFN16_3x3_P0p5",
+      "nets": {
+        "1": null,
+        "2": null,
+        "3": null,
+        "4": null,
+        "5": null,
+        "6": "SDA",
+        "7": "SCL",
+        "8": "VDD",
+        "9": null,
+        "10": null,
+        "11": null,
+        "12": null,
+        "13": "VDD",
+        "14": "VDD",
+        "15": null,
+        "16": "GND",
+        "17": null
+      },
+      "xy": [
+        0,
+        0
+      ],
+      "rot": 0,
+      "names": {
+        "1": "NC",
+        "2": "NC",
+        "3": "NC",
+        "4": "NC",
+        "5": "PUSH",
+        "6": "SDA/A",
+        "7": "SCL/B",
+        "8": "CSN/Z",
+        "9": "W",
+        "10": "NC",
+        "11": "U",
+        "12": "V",
+        "13": "VDD",
+        "14": "MODE",
+        "15": "OUT",
+        "16": "GND",
+        "17": "EP_ISOLATED"
+      },
+      "types": {
+        "6": "bidirectional",
+        "7": "input",
+        "8": "input",
+        "13": "power_in",
+        "14": "input",
+        "16": "power_in"
+      },
+      "mpn": "MT6701QT-STD",
+      "lcsc": "C2913974",
+      "notes": "MODE and CSN tied VDD for I2C. EP soldered to isolated island; confirm EP policy with manufacturer.",
+      "sch": [
+        105,
+        65
+      ],
+      "uuid": "53cbf0ed-25ad-421a-bfb7-cb3d53aa7c4f"
+    },
+    {
+      "ref": "C1",
+      "value": "100nF 10V",
+      "footprint": "Capacitor_SMD:C_0201_0603Metric",
+      "nets": {
+        "1": "VDD",
+        "2": "GND"
+      },
+      "xy": [
+        0,
+        -2.25
+      ],
+      "rot": 0,
+      "names": {},
+      "types": {},
+      "mpn": "",
+      "lcsc": "",
+      "notes": "",
+      "sch": [
+        200,
+        85
+      ],
+      "uuid": "6cb08c26-d1ec-4cdf-8e22-9b881a37fd96"
+    },
+    {
+      "ref": "J1",
+      "value": "WIRE TAIL",
+      "footprint": "HW17:Flex_Tail_4_SolderPads_P0p35",
+      "nets": {
+        "1": "GND",
+        "2": "SDA",
+        "3": "SCL",
+        "4": "VDD"
+      },
+      "xy": [
+        -7.071068,
+        -7.071068
+      ],
+      "rot": 135,
+      "names": {},
+      "types": {},
+      "mpn": "",
+      "lcsc": "",
+      "notes": "Four solder lands at 10mm radius; solder only beyond motor perimeter; strain-relieve wires.",
+      "sch": [
+        200,
+        45
+      ],
+      "uuid": "a67c4d64-7236-4854-a884-16742d92fdd1"
+    }
+  ],
+  "thickness": 0.15,
+  "kind": "sensor",
+  "root_uuid": "604a49b1-ee6c-4f41-b91a-e889ba0e1406"
+}
