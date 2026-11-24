@@ -35,6 +35,7 @@
 <link rel="stylesheet" href="/css/blog.css" />
 <link rel="stylesheet" href="/css/docs.css" />
 <script src="/js/i18n/zh-Hant.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 <!-- No optional analytics or advertising scripts. -->
 </head>
@@ -52,7 +53,7 @@
     </a>
 
     <nav class="nav__links" aria-label="網站區塊">
-      <a href="/zh-Hant/#pile">The Pile</a>
+      <a href="/zh-Hant/#pile">The Pile（分頁堆）</a>
       <a href="/zh-Hant/#features">功能</a>
       <a href="/zh-Hant/#demo">試用</a>
       <a href="/zh-Hant/#faces">頁面</a>
@@ -60,15 +61,6 @@
       <a href="/zh-Hant/docs/" aria-current="true">說明文件</a>
       <a href="/zh-Hant/blog/">部落格</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="語言: 繁體中文">繁體中文</summary>
-        <ul>
-          <li><a href="/docs/omarchy/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/docs/omarchy/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
-          <li><a href="/zh-Hant/docs/omarchy/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
-          <li><a href="/ja/docs/omarchy/" hreflang="ja" lang="ja">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="切換日間與夜間主題" aria-pressed="false">
@@ -100,7 +92,7 @@
   <li><strong>清單上的工作階段</strong>，顯示為執行中、已完成或正在提問。選取其中一個，會把它的終端機帶到最前面。</li>
   <li><strong>語音指令：</strong>在工作階段上按住 PTT 說話。說的話會輸入到它的終端機，這一輪結束時，回覆會顯示並朗讀出來。</li>
   <li><strong>「快捷鍵」、「系統」與「用量」頁面</strong>，資料來自這台筆電。</li>
-  <li><strong>配套應用程式</strong>，與 Mac 上是同一個視窗，位於 Omarchy 的應用程式啟動器中。</li>
+  <li><strong>應用程式</strong>，與 Mac 上是同一個視窗，位於 Omarchy 的應用程式啟動器中。</li>
 </ul>
 <p>Linux 版還沒有可下載的套件：你需要從原始碼建置 <code>deckd</code> 與應用程式，第一次大約需要十分鐘。以下每一道指令都在 Omarchy 筆電的終端機中執行。</p>
 
@@ -177,7 +169,7 @@ sh omarchy/install.sh target/x86_64-unknown-linux-gnu/release/deckd target/x86_6
 <h2>Omarchy 上暫時還沒有</h2>
 <ul>
   <li>在裝置上回應權限請求：它們仍留在終端機中。</li>
-  <li>Codex 的用量條，以及 Omarchy 工作階段在閱讀檢視中的歷史與工具列。</li>
+  <li>Codex 用量條，以及在閱讀畫面中查看 Omarchy 工作階段的歷程與工具活動記錄。</li>
   <li>系統匣圖示與應用程式自動更新：應用程式是從原始碼建置的，請依上面的方式更新。</li>
 </ul>
 
@@ -199,7 +191,7 @@ sudo rm -f /etc/udev/rules.d/70-openwalkietalkie.rules /etc/udev/rules.d/71-open
   <div class="inner">
     <span>OpenWalkieTalkie · COHDL 專案 · MIT 授權軟體 · CERN-OHL-P 授權硬體</span>
     <nav aria-label="頁尾">
-      <a href="/zh-Hant/#waitlist">加入候補名單</a>
+      <a href="/zh-Hant/#waitlist">加入等候名單</a>
       <a href="/zh-Hant/privacy/">隱私權政策</a>
       <a href="/zh-Hant/cookies/">Cookie 說明</a>
       <a href="/zh-Hant/cookies/" data-privacy-open>隱私權聲明</a>
@@ -215,5 +207,14 @@ sudo rm -f /etc/udev/rules.d/70-openwalkietalkie.rules /etc/udev/rules.d/71-open
 
 <script src="/js/main.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 語言: 繁體中文">Language</summary>
+        <ul>
+          <li><a href="/docs/omarchy/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/docs/omarchy/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/docs/omarchy/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
+          <li><a href="/ja/docs/omarchy/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

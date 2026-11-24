@@ -9,7 +9,7 @@
   "omarchy.content.li2": "<strong>清單上的工作階段</strong>，顯示為執行中、已完成或正在提問。選取其中一個，會把它的終端機帶到最前面。",
   "omarchy.content.li3": "<strong>語音指令：</strong>在工作階段上按住 PTT 說話。說的話會輸入到它的終端機，這一輪結束時，回覆會顯示並朗讀出來。",
   "omarchy.content.li4": "<strong>「快捷鍵」、「系統」與「用量」頁面</strong>，資料來自這台筆電。",
-  "omarchy.content.li5": "<strong>配套應用程式</strong>，與 Mac 上是同一個視窗，位於 Omarchy 的應用程式啟動器中。",
+  "omarchy.content.li5": "<strong>應用程式</strong>，與 Mac 上是同一個視窗，位於 Omarchy 的應用程式啟動器中。",
   "omarchy.content.p4": "Linux 版還沒有可下載的套件：你需要從原始碼建置 <code>deckd</code> 與應用程式，第一次大約需要十分鐘。以下每一道指令都在 Omarchy 筆電的終端機中執行。",
   "omarchy.content.h21": "1. 安裝工具",
   "omarchy.content.p5": "與 <code>clang</code> 用來建置本機語音辨識器，<code>espeak-ng</code> 在裝置上朗讀回覆，<code>wtype</code> 把指令輸入到終端機。建置所需的其他函式庫（udev、ALSA、D-Bus）Omarchy 都已內建。",
@@ -43,7 +43,7 @@
   "omarchy.content.p19": "再次執行 <code>install.sh</code> 會以新程式碼重新啟動兩個服務；結束並重新開啟應用程式即可執行新版本。若要更新裝置的韌體，請用 USB-C 連接裝置，執行 <code>deckd firmware check</code>，再執行 <code>deckd firmware install</code>，或使用應用程式的「服務」頁面。裝置會在安裝前要求你按 ENTER。這與 Mac 使用的是同一條 USB 路徑，但尚未在 Omarchy 上試過。",
   "omarchy.content.h211": "Omarchy 上暫時還沒有",
   "omarchy.content.li11": "在裝置上回應權限請求：它們仍留在終端機中。",
-  "omarchy.content.li12": "Codex 的用量條，以及 Omarchy 工作階段在閱讀檢視中的歷史與工具列。",
+  "omarchy.content.li12": "Codex 用量條，以及在閱讀畫面中查看 Omarchy 工作階段的歷程與工具活動記錄。",
   "omarchy.content.li13": "系統匣圖示與應用程式自動更新：應用程式是從原始碼建置的，請依上面的方式更新。",
   "omarchy.content.p20": "解除安裝掛鉤只會移除它在各個助理設定中加入的內容。",
   "omarchy.content.p21": "遇到問題嗎？請<a href=\"https://github.com/conol-ai/openwalkietalkie/issues\">回報 Issue</a>，並附上 <code>deckd care checks</code> 的輸出與 <code>journalctl --user -u deckd -u omarchy-deck</code> 的最後幾行。完整參考資料請見 <a href=\"https://github.com/conol-ai/openwalkietalkie/blob/main/host/omarchy/README.md\">Omarchy 橋接的 README</a>。"

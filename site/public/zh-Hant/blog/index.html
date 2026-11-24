@@ -34,6 +34,7 @@
 <link rel="stylesheet" href="/css/style.css" />
 <link rel="stylesheet" href="/css/blog.css" />
 <script src="/js/i18n/zh-Hant.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 <!-- No optional analytics or advertising scripts. -->
 </head>
@@ -51,7 +52,7 @@
     </a>
 
     <nav class="nav__links" aria-label="網站區塊">
-      <a href="/zh-Hant/#pile">The Pile</a>
+      <a href="/zh-Hant/#pile">The Pile（分頁堆）</a>
       <a href="/zh-Hant/#features">功能</a>
       <a href="/zh-Hant/#demo">試用</a>
       <a href="/zh-Hant/#faces">頁面</a>
@@ -59,15 +60,6 @@
       <a href="/zh-Hant/docs/">說明文件</a>
       <a href="/zh-Hant/blog/" aria-current="true">部落格</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="語言: 繁體中文">繁體中文</summary>
-        <ul>
-          <li><a href="/blog/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/blog/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
-          <li><a href="/zh-Hant/blog/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
-          <li><a href="/ja/blog/" hreflang="ja" lang="ja">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="切換日間與夜間主題" aria-pressed="false">
@@ -102,22 +94,22 @@
 
 <a class="post-card" href="/zh-Hant/blog/dictation-that-knows-the-window/">
   <p class="post-card__date">2026 · 11 · 22</p>
-  <p class="post-card__title">OpenWalkieTalkie v0.16.0：懂得視窗的口述</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.16.0：依目前視窗改寫口述內容</p>
   <p class="post-card__excerpt">實驗性功能，預設關閉：在游標處口述的內容，可以依聚焦的視窗改寫。只根據視窗的應用程式名稱與標題（純文字），並透過你在新的「模型接入」頁面中選擇的模型完成。</p>
   <p class="post-card__read">閱讀版本資訊 →</p>
 </a>
 
 <a class="post-card" href="/zh-Hant/blog/companion-app-on-omarchy/">
   <p class="post-card__date">2026 · 11 · 17</p>
-  <p class="post-card__title">OpenWalkieTalkie v0.15.0：配套應用程式登上 Omarchy</p>
-  <p class="post-card__excerpt">配套應用程式可以在 Omarchy 上執行，在 Omarchy 頁面上按住 PTT 可在游標處聽寫，滾輪依視窗列的順序移動，Linux 服務把所有內容放在同一個資料夾。</p>
+  <p class="post-card__title">OpenWalkieTalkie v0.15.0：應用程式登上 Omarchy</p>
+  <p class="post-card__excerpt">應用程式可以在 Omarchy 上執行，在 Omarchy 頁面上按住 PTT 可在游標處聽寫，滾輪依視窗列的順序移動，Linux 服務把所有內容放在同一個資料夾。</p>
   <p class="post-card__read">閱讀版本資訊 →</p>
 </a>
 
 <a class="post-card" href="/zh-Hant/blog/one-deck-mac-windows-omarchy/">
   <p class="post-card__date">2026 · 11 · 16</p>
   <p class="post-card__title">OpenWalkieTalkie v0.14.0：一台裝置，支援 Mac、Windows 與 Omarchy</p>
-  <p class="post-card__excerpt">Mac 應用程式成為裝置的配套應用程式，服務也能在 Windows 和 Omarchy 上執行，Grok Bot 與 Claude Code、Codex 一起出現在裝置上，韌體安裝由裝置自己確認。</p>
+  <p class="post-card__excerpt">Mac 應用程式成為裝置的應用程式，服務也能在 Windows 和 Omarchy 上執行，Grok Bot 與 Claude Code、Codex 一起出現在裝置上，韌體安裝由裝置自己確認。</p>
   <p class="post-card__read">閱讀版本資訊 →</p>
 </a>
 
@@ -234,7 +226,7 @@
   <div class="inner">
     <span>OpenWalkieTalkie · COHDL 專案 · MIT 授權軟體 · CERN-OHL-P 授權硬體</span>
     <nav aria-label="頁尾">
-      <a href="/zh-Hant/#waitlist">加入候補名單</a>
+      <a href="/zh-Hant/#waitlist">加入等候名單</a>
       <a href="/zh-Hant/privacy/">隱私權政策</a>
       <a href="/zh-Hant/cookies/">Cookie 說明</a>
       <a href="/zh-Hant/cookies/" data-privacy-open>隱私權聲明</a>
@@ -250,5 +242,14 @@
 
 <script src="/js/main.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 語言: 繁體中文">Language</summary>
+        <ul>
+          <li><a href="/blog/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
+          <li><a href="/ja/blog/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

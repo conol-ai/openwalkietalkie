@@ -16,7 +16,7 @@
     <summary>Windows プレビュー版では、PTT を押して話しても文字が出ませんでした。whisper.cpp が最適化なしでコンパイルされ、Windows が Mac 向けのデコード設定を使っていたためです。両方を直し、テスト用 PC では離してから文字が出るまで 1.1 秒になりました。</summary>
   </entry>
   <entry>
-    <title>OpenWalkieTalkie v0.16.0：ウィンドウがわかる口述</title>
+    <title>OpenWalkieTalkie v0.16.0：入力先のウィンドウに合わせた口述</title>
     <id>https://openwalkietalkie.org/ja/blog/dictation-that-knows-the-window/</id>
     <link href="https://openwalkietalkie.org/ja/blog/dictation-that-knows-the-window/" />
     <published>2026-11-22T09:04:46Z</published>
@@ -37,7 +37,7 @@
     <link href="https://openwalkietalkie.org/ja/blog/one-deck-mac-windows-omarchy/" />
     <published>2026-11-16T05:04:33Z</published>
     <updated>2026-11-16T05:04:33Z</updated>
-    <summary>Mac アプリがデバイスの管理アプリになり、サービスは Windows と Omarchy でも動くようになりました。Grok Bot が Claude Code と Codex に加わり、ファームウェアのインストールはデバイス自身が確認します。</summary>
+    <summary>Macアプリがデバイスの管理アプリになり、サービスは Windows と Omarchy でも動くようになりました。Grok Bot が Claude Code と Codex に加わり、ファームウェアのインストールはデバイス自身が確認します。</summary>
   </entry>
   <entry>
     <title>OpenWalkieTalkie v0.13.0：4 つの言語、1 つの設定</title>
@@ -85,7 +85,7 @@
     <link href="https://openwalkietalkie.org/ja/blog/usb-audio-and-reset-reminders/" />
     <published>2026-10-22T08:23:08Z</published>
     <updated>2026-10-22T08:23:08Z</updated>
-    <summary>USB 経由で 48 kHz のスピーカー再生、16 kHz の音質改善、そして未使用の手動リセットが期限切れになる前に Mac とデバイスでお知らせします。</summary>
+    <summary>USB 経由で 48 kHz のスピーカー再生、16 kHz の音質改善、そして利用枠を手動でリセットできる未使用のクレジットが期限切れになる前に Mac とデバイスでお知らせします。</summary>
   </entry>
   <entry>
     <title>OpenWalkieTalkie v0.8.0：画面ロックとそろったホイール操作</title>
@@ -93,7 +93,7 @@
     <link href="https://openwalkietalkie.org/ja/blog/screen-lock-and-wheel-navigation/" />
     <published>2026-10-21T09:02:39Z</published>
     <updated>2026-10-21T09:02:39Z</updated>
-    <summary>自動の画面ロックがバッグの中の PTT を守ります。反時計回りに4クリックで解除でき、ページと項目の選択は同じ方向で動きます。</summary>
+    <summary>自動の画面ロックがバッグの中の PTT を守ります。ホイールを反時計回りに 4 段回すと解除でき、ページと項目の選択は同じ方向で動きます。</summary>
   </entry>
   <entry>
     <title>OpenWalkieTalkie v0.7.0：声はより明瞭に、ノイズはより少なく</title>
@@ -157,6 +157,6 @@
     <link href="https://openwalkietalkie.org/ja/blog/introducing-openwalkietalkie/" />
     <published>2026-10-13T00:00:00Z</published>
     <updated>2026-10-13T00:00:00Z</updated>
-    <summary>Mac アプリとファームウェアの最初の正式リリースです。押して話す機能、デバイス上での会話、アプリとデバイスの更新に対応しました。</summary>
+    <summary>Macアプリとファームウェアの最初の正式リリースです。押して話す機能、デバイス上での会話、アプリとデバイスの更新に対応しました。</summary>
   </entry>
 </feed>

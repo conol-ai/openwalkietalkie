@@ -1,16 +1,16 @@
 {
   "cookies.head.title1": "Cookie 说明 · OpenWalkieTalkie",
-  "cookies.head.meta-content1": "openwalkietalkie.org 上的 Cookie、本地存储和隐私选项。",
-  "cookies.content.p1": "本网站目前不包含任何广告或分析脚本。你无需接受可选的跟踪，就能浏览网站并加入候补名单。",
-  "cookies.content.h21": "你的浏览器会记住什么",
+  "cookies.head.meta-content1": "openwalkietalkie.org 的 Cookie、本地存储和隐私选项说明。",
+  "cookies.content.p1": "本网站目前不包含广告或分析脚本。你无需接受可选跟踪，即可浏览网站或加入等候名单。",
+  "cookies.content.h21": "浏览器会记住什么",
   "cookies.content.li1": "<strong>日间/夜间主题：</strong>本地存储中的 <code>owt-theme</code> 会记住你选择的主题。它会一直保留在此浏览器中，直到你清除它。如果没有保存选择，我们会使用你操作系统的偏好。",
   "cookies.content.li2": "<strong>隐私声明：</strong>选择“知道了”会在本地存储中保存 <code>owt-privacy-notice</code>，使声明在 180 天内保持关闭。它包含声明版本和过期时间，不含标识符。确认声明并不表示同意跟踪。",
-  "cookies.content.p2": "这些偏好不会发送到候补名单 API。本地存储与 Cookie 类似，都会在你的设备上保存信息，但它不会自动附加到请求中。",
+  "cookies.content.p2": "这些偏好不会发送给等候名单 API。本地存储和 Cookie 一样，会在你的设备上保存信息，但不会自动附加到网络请求中。",
   "cookies.content.h22": "Cloudflare 安全 Cookie",
-  "cookies.content.p3": "Cloudflare 托管并保护本网站，在使用安全功能或质询时可能会设置 Cookie。会出现哪些 Cookie、保留多久，取决于这些功能。详情请阅读 <a href=\"https://developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/\" rel=\"noopener\">Cloudflare 的 Cookie 说明</a>。",
+  "cookies.content.p3": "Cloudflare 为网站提供托管和安全防护，启用安全功能或验证时，可能会设置 Cookie。具体 Cookie 及保留时间取决于所使用的功能。详情请参阅 <a href=\"https://developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/\" rel=\"noopener\">Cloudflare 的 Cookie 说明</a>。",
   "cookies.content.h23": "管理浏览器存储",
-  "cookies.content.p4": "你可以在浏览器的网站数据设置中删除本网站的 Cookie 和本地存储。清除存储会重置主题，并再次显示隐私声明。阻止安全 Cookie 可能导致 Cloudflare 安全质询无法完成。",
-  "cookies.content.p5": "<a href=\"/cookies/\" data-privacy-open>再次显示隐私声明</a>。如果 JavaScript 已停用，此页面仍会说明本网站使用的全部存储。",
-  "cookies.content.h24": "你的候补名单邮箱",
-  "cookies.content.p6": "提交候补名单表单时，你的邮箱会被安全地存储在服务器上。清除浏览器存储不会删除登记。如需退出名单，请发邮件至 <a href=\"mailto:privacy@cohdl.ai\">privacy@cohdl.ai</a>。关于收集、保留和其他请求，请参见<a href=\"/privacy/\">隐私政策</a>。"
+  "cookies.content.p4": "你可以在浏览器的网站数据设置中，删除本站的 Cookie 和本地存储。清除后，主题会重置，隐私提示也会再次出现。阻止安全 Cookie 可能导致 Cloudflare 安全验证无法完成。",
+  "cookies.content.p5": "<a href=\"/cookies/\" data-privacy-open>重新显示隐私提示</a>。即使禁用 JavaScript，本页仍会说明网站使用的全部存储方式。",
+  "cookies.content.h24": "你在等候名单中留下的邮箱",
+  "cookies.content.p6": "提交等候名单表单后，你的邮箱会安全地保存在服务器上。清除浏览器存储不会取消登记。想退出名单，请发邮件到 <a href=\"mailto:privacy@cohdl.ai\">privacy@cohdl.ai</a>。有关信息收集、保存期限和其他请求，请查看<a href=\"/privacy/\">隐私政策</a>。"
 }

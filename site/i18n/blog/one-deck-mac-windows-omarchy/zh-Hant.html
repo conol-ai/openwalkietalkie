@@ -1,30 +1,30 @@
 ---
 title: OpenWalkieTalkie v0.14.0：一台裝置，支援 Mac、Windows 與 Omarchy · OpenWalkieTalkie
-description: Mac 應用程式成為裝置的配套應用程式，服務也能在 Windows 和 Omarchy 上執行，Grok Bot 與 Claude Code、Codex 一起出現在裝置上，韌體安裝由裝置自己確認。
+description: Mac 應用程式成為裝置的應用程式，服務也能在 Windows 和 Omarchy 上執行，Grok Bot 與 Claude Code、Codex 一起出現在裝置上，安裝韌體前須在裝置上按鍵確認。
 heading: OpenWalkieTalkie v0.14.0：一台裝置，支援 Mac、Windows 與 Omarchy
 kind: Mac 與 Windows 應用程式、Omarchy、服務與韌體
 date: 2026-11-16
 published: 2026-11-16T05:04:33Z
 updated: 2026-11-16T05:04:33Z
-summary: Mac 應用程式成為裝置的配套應用程式，服務也能在 Windows 和 Omarchy 上執行，Grok Bot 與 Claude Code、Codex 一起出現在裝置上，韌體安裝由裝置自己確認。
-excerpt: Mac 應用程式成為裝置的配套應用程式，服務也能在 Windows 和 Omarchy 上執行，Grok Bot 與 Claude Code、Codex 一起出現在裝置上，韌體安裝由裝置自己確認。
+summary: Mac 應用程式成為裝置的應用程式，服務也能在 Windows 和 Omarchy 上執行，Grok Bot 與 Claude Code、Codex 一起出現在裝置上，韌體安裝由裝置自己確認。
+excerpt: Mac 應用程式成為裝置的應用程式，服務也能在 Windows 和 Omarchy 上執行，Grok Bot 與 Claude Code、Codex 一起出現在裝置上，韌體安裝由裝置自己確認。
 lastmod: 2026-11-16
 navDocs: yes
 ---
-  <p>0.14.0 版是到目前為止規模最大的一次發行。Mac 應用程式成為裝置的配套應用程式，服務也能在 Windows 和 Omarchy 上執行，Grok Bot 與 Claude Code、Codex 一起出現在裝置上，韌體安裝由裝置自己確認。</p>
-  <h2>裝置的配套應用程式</h2>
+  <p>0.14.0 版是到目前為止規模最大的一次發行。Mac 應用程式成為裝置的應用程式，服務也能在 Windows 和 Omarchy 上執行，Grok Bot 與 Claude Code、Codex 一起出現在裝置上，安裝韌體前須在裝置上按鍵確認。</p>
+  <h2>裝置的應用程式</h2>
   <p>工作階段在裝置上閱讀與回覆，工作階段的內容不會進入應用程式的視窗。視窗負責照顧裝置和它周邊的服務，共有五個頁面：<strong>裝置</strong>、<strong>頁面與按鍵</strong>、<strong>整合</strong>、<strong>語音</strong>和<strong>服務</strong>。「整合」會顯示每個來源是否有資料進來，每個來源都有<strong>傳送測試提問</strong>，以及<strong>設定</strong>或<strong>修復</strong>。「服務」提供<strong>檢查安裝狀態</strong>、<strong>匯出支援檔案</strong>、各項更新和所有已安裝的內容，並附有<strong>解除安裝</strong>。第一次執行時，在你選擇<strong>新增這些項目</strong>之前，什麼都不會安裝。</p>
   <p>助理清單、卡片上的回覆、指令輸入框和「用量」頁面都已從視窗移除，因為裝置上都有。在工作階段的卡片上按 ENTER，會把該工作階段所屬的應用程式帶到前景，不需要「自動化」權限。設定依裝置分別儲存，服務會自行檢查更新，裝置中斷連線 10 分鐘後，服務就停止收集資料。</p>
   <h2>Grok Bot 與 Claude Code、Codex 一起加入</h2>
   <p>Grok Bot 是 xAI 的團隊協作應用程式，也是最新的整合。每個機器人在裝置本身的<strong>Grok Bot</strong>頁面上佔一列，並附有 Grok 標誌。在某個機器人上按下按鍵，會送到該機器人中某個例行任務的 Webhook。機器人會在你的電腦上執行 <code>deckd grokbot say</code> 來回覆：回覆的精簡版本會顯示在裝置上並朗讀出來，完整回覆則留在機器人的聊天中。機器人也可以在裝置上向你提問，並取得你的選擇。</p>
   <p>要在 Mac 上新增機器人，請開啟<strong>整合 → Grok Bot → 機器人…</strong>，輸入它的名稱，再選擇<strong>複製提示詞</strong>。在 Grok Bot 的聊天中把提示詞傳給該機器人，機器人就會自己建立例行任務。把例行任務的<strong>POST 到</strong>網址和<strong>金鑰</strong>複製回對話框，然後在 Grok Bot 的<strong>設定 → 電腦</strong>中允許機器人執行指令。機器人執行的指令可以回報給裝置，但無法回覆其他工作階段的卡片，也無法變更設定。</p>
   <h2>Windows 預覽版</h2>
-  <p>服務和配套應用程式現在可以在 Windows 10 和 11（x64）上執行：「系統」頁面、Claude Code、Claude Channels、Codex、「快捷鍵」頁面、語音、Grok Bot、系統匣圖示、登入時啟動，以及應用程式內更新。每個版本現在都附有一個未簽署的 Windows ZIP 檔。因為未簽署，SmartScreen 會要求你選擇<strong>其他資訊 → 仍要執行</strong>，而智慧型應用程式控制會封鎖它。<a href="/docs/windows/">Windows 安裝指南</a>會逐步說明。</p>
+  <p>服務和應用程式現在可以在 Windows 10 和 11（x64）上執行：「系統」頁面、Claude Code、Claude Channels、Codex、「快捷鍵」頁面、語音、Grok Bot、系統匣圖示、登入時啟動，以及應用程式內更新。每個版本現在都附有一個未簽署的 Windows ZIP 檔。因為未簽署，SmartScreen 會要求你選擇<strong>其他資訊 → 仍要執行</strong>，而智慧型應用程式控制會封鎖它。<a href="/docs/windows/">Windows 安裝指南</a>會逐步說明。</p>
   <h2>Omarchy</h2>
   <p>在 Omarchy（Hyprland）電腦上，Linux 服務和 Omarchy 橋接程式會把這台電腦上的 Claude Code、Codex 和 Kimi Code 工作階段放到裝置上。Omarchy 頁面可以切換視窗和工作區，語音指令會輸入到該工作階段的終端機。裝有 Superwhisper 時，由它辨識你每次按鍵說的話；「快捷鍵」頁面透過 uinput 輸入，所以 Omarchy 的 Super 組合鍵都能使用。<a href="/docs/omarchy/">Omarchy 指南</a>說明了建置與安裝。</p>
-  <h2>裝置自己確認更新</h2>
+  <h2>在裝置上按鍵確認更新</h2>
   <p>從韌體 0.14.0 開始，只有在裝置上按下 ENTER，韌體更新才會開始。CANCEL、逾時、語音和 API 都不會安裝任何東西。從 0.13 到 0.14 的更新仍在應用程式中確認，處於復原模式的裝置則會立即安裝。</p>
-  <p>提問的通知現在會接下下一次 ENTER，所以下一次按鍵會開啟提問，再下一次則回覆它。跳到新的提問時，也不會打斷正在執行的計時器、正在響的鬧鈴和遊戲。</p>
+  <p>出現提問通知後，按一下 ENTER 會開啟提問，再按一次可送出回答。新的提問也不會打斷執行中的計時器、正在響的鬧鈴或遊戲。</p>
   <h2>需要知道的變更</h2>
   <ul>
     <li>上層程序檢查現在也能辨識原生安裝的 Claude Code。在 Claude Code 或 Codex 內執行的管理用 <code>deckd</code> 指令會被拒絕；請在你自己開的終端機中執行。</li>
@@ -33,5 +33,5 @@ navDocs: yes
   </ul>
   <h2>更新</h2>
   <p>在 Mac 上，選擇<strong>檢查更新…</strong>，或安裝已簽署並經過公證的 <strong>0.14.0</strong> 應用程式，支援 Apple Silicon 或 Intel（macOS 13 或更新版本）。接著用 USB 連接裝置，開啟<strong>服務 → 更新</strong>，選擇裝置旁的<strong>檢查</strong>，再選擇<strong>檢視…</strong>和<strong>安裝</strong>。一般更新會保留設定和藍牙配對。在 Windows 上，請從發行頁面下載 ZIP 檔，並依照 Windows 指南操作。</p>
-  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.14.0" rel="noopener">在 GitHub 上取得 OpenWalkieTalkie v0.14.0 與總和檢查碼 →</a></p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.14.0" rel="noopener">在 GitHub 上取得 OpenWalkieTalkie v0.14.0 與檢查碼 →</a></p>
   <p class="post-back"><a href="/blog/">← 返回部落格</a></p>

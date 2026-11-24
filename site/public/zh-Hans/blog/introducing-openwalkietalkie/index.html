@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>OpenWalkieTalkie v0.1.0 · OpenWalkieTalkie</title>
-<meta name="description" content="OpenWalkieTalkie 的制作日志和文章。OpenWalkieTalkie 是为你的 AI 助手打造的开源手持对讲机。" />
+<meta name="description" content="OpenWalkieTalkie 的开发日志与版本介绍——为 AI 助手打造的开源手持对讲机。" />
 <link rel="canonical" href="https://openwalkietalkie.org/zh-Hans/blog/introducing-openwalkietalkie/" />
 <link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/introducing-openwalkietalkie/" />
 <link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/introducing-openwalkietalkie/" />
@@ -15,7 +15,7 @@
 <meta property="og:type" content="article" />
 <meta property="og:site_name" content="OpenWalkieTalkie" />
 <meta property="og:title" content="OpenWalkieTalkie v0.1.0 · OpenWalkieTalkie" />
-<meta property="og:description" content="OpenWalkieTalkie 的制作日志和文章。OpenWalkieTalkie 是为你的 AI 助手打造的开源手持对讲机。" />
+<meta property="og:description" content="OpenWalkieTalkie 的开发日志与版本介绍——为 AI 助手打造的开源手持对讲机。" />
 <meta property="og:url" content="https://openwalkietalkie.org/zh-Hans/blog/introducing-openwalkietalkie/" />
 <meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
 <meta name="twitter:card" content="summary_large_image" />
@@ -34,12 +34,13 @@
 <link rel="stylesheet" href="/css/style.css" />
 <link rel="stylesheet" href="/css/blog.css" />
 <script src="/js/i18n/zh-Hans.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 <!-- No optional analytics or advertising scripts. -->
 </head>
 <body>
 
-<a class="skip-link" href="#content">跳至正文</a>
+<a class="skip-link" href="#content">跳转到正文</a>
 
 <div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
 
@@ -50,26 +51,17 @@
       <span class="brand__text">OPEN WALKIE TALKIE</span>
     </a>
 
-    <nav class="nav__links" aria-label="栏目">
-      <a href="/zh-Hans/#pile">The Pile</a>
+    <nav class="nav__links" aria-label="页面章节">
+      <a href="/zh-Hans/#pile">窗口太多了</a>
       <a href="/zh-Hans/#features">功能</a>
-      <a href="/zh-Hans/#demo">试用</a>
-      <a href="/zh-Hans/#faces">页面</a>
-      <a href="/zh-Hans/#blueprint">设计图纸</a>
+      <a href="/zh-Hans/#demo">试试看</a>
+      <a href="/zh-Hans/#faces">功能页面</a>
+      <a href="/zh-Hans/#blueprint">设计蓝图</a>
       <a href="/zh-Hans/blog/" aria-current="true">博客</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="语言: 简体中文">简体中文</summary>
-        <ul>
-          <li><a href="/blog/introducing-openwalkietalkie/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/blog/introducing-openwalkietalkie/" hreflang="zh-Hans" lang="zh-Hans" aria-current="true">简体中文</a></li>
-          <li><a href="/zh-Hant/blog/introducing-openwalkietalkie/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
-          <li><a href="/ja/blog/introducing-openwalkietalkie/" hreflang="ja" lang="ja">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
-    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换日间和夜间主题" aria-pressed="false">
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换日间与夜间主题" aria-pressed="false">
       <span class="theme-toggle__track" aria-hidden="true">
         <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
         <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
@@ -86,44 +78,53 @@
 
 <main class="blog-main" id="content">
 <header class="post-head">
-  <p class="section-kicker">博客 · 更新说明</p>
-  <h1>OpenWalkieTalkie v0.1.0：给你的助手一台手持设备</h1>
-  <p class="post-meta"><span>2026年10月13日</span><span>首个正式版本</span></p>
+  <p class="section-kicker">博客 · 发布说明</p>
+  <h1>OpenWalkieTalkie v0.1.0：把 AI 助手带到手边</h1>
+  <p class="post-meta"><span>2026年10月13日</span><span>首次正式发布</span></p>
 </header>
 <article class="post-body">
-  <p>OpenWalkieTalkie 把你的编程助手放到一块小小的手持屏幕上。看清哪个会话需要你，按住说话来回复，用滚轮和按键回答提问。</p>
-  <h2>可以随身带着的对话</h2>
-  <p>480 × 480 的触摸屏显示助手会话及其对话。消息会用满可用的屏幕空间，工具活动在你展开之前保持紧凑，代码带有语法高亮。当你停在末尾时，视图会跟随新消息。</p>
-  <p>松开按住说话后，在语音识别完成期间，转写文字会留在屏幕上。完成的转写会发送给所选的助手。“用量”页面显示当前使用的 Claude 或 Codex 账户及其限额。</p>
+  <p>OpenWalkieTalkie 把编程助手带到手持小屏幕上。哪个会话需要你，看一眼就知道；按住 PTT 说话，用滚轮和按键回答问题。</p>
+  <h2>可以随身携带的对话</h2>
+  <p>480 × 480 触摸屏显示助手会话和对话内容。消息充分利用屏幕空间，工具执行记录默认收起，展开后可查看详情，代码支持语法高亮。停留在对话底部时，画面会自动跟随新消息。</p>
+  <p>松开 PTT 后，转写文字会继续留在屏幕上，等待语音识别完成，再将完整文字发给选中的助手。Usage（用量统计）会同时显示当前 Claude 或 Codex 账号及其限额。</p>
   <h2>Mac 应用和设备更新</h2>
-  <p>0.1.0 版包含一个经过签名和公证的 Mac 应用，支持 Apple Silicon 和 Intel，需要 macOS 13 或更高版本。应用支持自动更新应用本身，也支持通过 USB 更新固件，刷写前会先检查所连接的主板。</p>
-  <p>Rev A 和 Rev B 固件、校验和以及构建证明随版本一同提供。首次刷写仍需要兼容的引导程序；之后的更新可以通过应用完成。</p>
-  <p><a href="/zh-Hans/#download">下载 Mac 应用</a>，或阅读<a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.1.0">完整的更新说明和固件说明</a>。</p>
-  <h2>从主板开始全部开源</h2>
-  <p>仓库包含固件、Mac 应用和主机服务、可编辑的 CoHDL 原理图、KiCad 电路板布局以及外壳 CAD。软件采用 MIT 许可证；硬件设计采用 CERN-OHL-P 2.0。第三方组件保留各自的许可证。</p>
-  <p><a href="https://github.com/conol-ai/openwalkietalkie">浏览源代码</a>，或<a href="/zh-Hans/#demo">在浏览器中试用交互式设备</a>。</p>
+  <p>版本 0.1.0 包含一个已签名和经过公证的 Mac 应用程序，适用于 Apple Silicon 和 Intel，适用于 macOS 13 或更高版本。该应用程序包含自动应用更新和 USB 固件更新，更新前会检查连接的板卡。</p>
+  <p>Rev A 和 Rev B 固件、校验和及构建认证信息在发布时提供。首次刷机仍需兼容的引导程序；后续更新可通过应用完成。</p>
+  <p><a href="/zh-Hans/#download">下载 Mac 版本应用</a> 或阅读 <a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.1.0">完整发布说明和固件说明</a>。</p>
+  <h2>从电路板到软件，全部开源</h2>
+  <p>该仓库包含固件、Mac 版本应用和主机服务，可编辑的 CoHDL 原理图，KiCad 板级布局，以及外壳 CAD 文件。软件采用 MIT 许可；硬件设计使用 CERN-OHL-P 2.0。第三方组件保留其各自的许可证。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie">探索源代码</a>, 或 <a href="/zh-Hans/#demo">在浏览器中尝试交互式对讲机</a>.</p>
 </article>
 </main>
 
 <footer class="footer--mini">
   <div class="inner">
-    <span>OpenWalkieTalkie · COHDL 项目 · MIT 许可的软件 · CERN-OHL-P 许可的硬件</span>
+    <span>OpenWalkieTalkie · 一个 COHDL 项目 · MIT 软件 · CERN-OHL-P 硬件</span>
     <nav aria-label="页脚">
-      <a href="/zh-Hans/#waitlist">加入候补名单</a>
+      <a href="/zh-Hans/#waitlist">加入等候名单</a>
       <a href="/zh-Hans/privacy/">隐私政策</a>
       <a href="/zh-Hans/cookies/">Cookie 说明</a>
-      <a href="/zh-Hans/cookies/" data-privacy-open>隐私声明</a>
+      <a href="/zh-Hans/cookies/" data-privacy-open>隐私说明</a>
       <a href="/zh-Hans/">首页</a>
-      <a href="/zh-Hans/#demo">试用</a>
+      <a href="/zh-Hans/#demo">试试看</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
       <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
-      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="在 Discord 上加入 CoHDL 和 OpenWalkieTalkie 社区">Discord</a>
-      <a href="/zh-Hans/blog/feed.xml">订阅源</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="加入 CoHDL 和 OpenWalkieTalkie 的 Discord 社区">Discord</a>
+      <a href="/zh-Hans/blog/feed.xml">订阅更新</a>
     </nav>
   </div>
 </footer>
 
 <script src="/js/main.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 语言: 简体中文">Language</summary>
+        <ul>
+          <li><a href="/blog/introducing-openwalkietalkie/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/introducing-openwalkietalkie/" hreflang="zh-Hans" lang="zh-Hans" aria-current="true">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/introducing-openwalkietalkie/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/blog/introducing-openwalkietalkie/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

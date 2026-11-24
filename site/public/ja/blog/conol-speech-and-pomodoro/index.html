@@ -34,6 +34,7 @@
 <link rel="stylesheet" href="/css/style.css" />
 <link rel="stylesheet" href="/css/blog.css" />
 <script src="/js/i18n/ja.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 <!-- No optional analytics or advertising scripts. -->
 </head>
@@ -59,15 +60,6 @@
       <a href="/ja/docs/">ドキュメント</a>
       <a href="/ja/blog/" aria-current="true">ブログ</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="言語: 日本語">日本語</summary>
-        <ul>
-          <li><a href="/blog/conol-speech-and-pomodoro/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/blog/conol-speech-and-pomodoro/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
-          <li><a href="/zh-Hant/blog/conol-speech-and-pomodoro/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
-          <li><a href="/ja/blog/conol-speech-and-pomodoro/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="昼と夜のテーマを切り替える" aria-pressed="false">
@@ -94,8 +86,8 @@
 <article class="post-body">
   <p>デバイスから Conol のチャットに話しかけたとき、その言葉は Conol に直接入力した場合に Conol が聞き取るものと同じであるべきです。バージョン 0.12.0 では、その録音を Conol 自身の音声モデルに渡し、話している間は録音のタイムラインを表示し、Conol がいま何をしているかを映し出し、ポモドーロ付きの「タイマー」ページを追加しました。</p>
   <h2>Conol が自分のチャットを文字起こし</h2>
-  <p>Conol のチャットや <strong>+ New chat</strong> で PTT を押すと、Mac のサービスがその録音を Conol デスクトップアプリに渡します。Conol は入力欄のマイクに使っているクラウド音声モデルで文字起こしし、キーを離したあとデバイスに表示され、送信されるのはそのテキストです。Conol の質問への口述の回答も同じです。</p>
-  <p>押している間は Mac 自身の認識エンジンも動いています。Conol が応答できない、失敗した、または 20 秒以上かかった場合は Mac の文字起こしが使われるため、録音が失われることはありません。ほかのエージェントや、デバイス上での声による名前付けは Mac 上で処理されたままです。Mac の外に出るのは Conol のチャット宛ての録音だけで、送り先はサインインしている Conol アプリだけです。<code>[voice.stt] companion = false</code> を設定すると、すべての録音をローカルに留められます。これには更新された Conol のデスクトップ版と Web 版が必要です。古い Conol アプリでは何も変わりません。</p>
+  <p>Conol のチャットや <strong>+ New chat</strong> で PTT を押しながら話すと、Mac のサービスが音声を録音して Conol デスクトップアプリに渡します。Conol は入力欄のマイクに使っているクラウド音声モデルで文字起こしし、キーを離したあとデバイスに表示され、送信されるのはそのテキストです。Conol の質問への口述の回答も同じです。</p>
+  <p>押している間は Mac 自身の認識エンジンも動いています。Conol が応答できない、失敗した、または 20 秒を超えても応答しない場合は、同じ録音から得た Mac の認識結果を使います。ほかのエージェントや、デバイス上での声による名前付けは Mac 上で処理されたままです。サービスが Conol アプリに渡すのは Conol のチャット宛ての録音だけで、受け取るのはサインイン済みのアプリです。クラウドでの文字起こしは Conol が行います。<code>[voice.stt] companion = false</code> を設定すると、すべての録音をローカルに留められます。これには更新された Conol のデスクトップ版と Web 版が必要です。古い Conol アプリでは何も変わりません。</p>
   <h2>話している間のタイムライン</h2>
   <p>Mac のライブの文字起こしは Conol が聞き取る内容とは異なるため、これらの録音ではデバイスに表示しなくなりました。代わりに<strong>録音中</strong>、大きな経過時間、タイムラインを表示します。赤い再生ヘッドが左から右へ進み、その後ろにデバイス自身のマイクで測ったあなたの声の波形が描かれていきます。長く押すとスクロールします。キーを離すとデバイスは<strong>文字起こし中</strong>を表示し、続いて Conol の文字起こしを表示します。</p>
   <h2>Conol がしていることを見る</h2>
@@ -103,7 +95,7 @@
   <h2>タイマーとポモドーロ</h2>
   <p>ページ管理の <strong>+</strong> テンプレートから<strong>タイマー</strong>を追加すると、ラップ付きのストップウォッチ、プリセット付きのカウントダウン、そしてポモドーロが使えます。ポモドーロは集中 25 分と休憩 5 分で、集中を 4 回終えると 15 分の休憩になります。各フェーズは<strong>次へ / Enter</strong>を押すまで待ちます。タイマーはデバイス本体で動き、ほかのページにいるときや画面がスリープしている間も進み、終了すると画面を点けて通知を表示します。</p>
   <h2>コンパニオンアプリの開発者向け</h2>
-  <p>独自の認識エンジンを持つネイティブのコンパニオンアプリは、<code>caps.transcribe: "push"</code> を登録し、<code>agent.transcribe</code> の依頼を受け取り、<code>agent.transcribe.audio</code> で 16 kHz の WAV をページ単位で取得し、<code>agent.transcribe.result</code> で回答できます。アクティビティ行には <code>agent.reply</code> の <code>message.summary</code> を使います。<a href="/ja/docs/native-companions/">ネイティブコンパニオンのガイド</a>と <a href="/docs/deckd-api.md">API リファレンス</a>で両方を説明しています。</p>
+  <p>独自の認識エンジンを持つネイティブのコンパニオンアプリは、<code>caps.transcribe: "push"</code> を登録し、<code>agent.transcribe</code> の依頼を受け取り、<code>agent.transcribe.audio</code> で 16 kHz の WAV をページ単位で取得し、<code>agent.transcribe.result</code> で回答できます。アクティビティ行には <code>agent.reply</code> の <code>message.summary</code> を使います。<a href="/ja/docs/native-companions/">ネイティブコンパニオンのガイド</a>と <a href="/ja/docs/deckd-api.md">API リファレンス</a>で両方を説明しています。</p>
   <h2>更新</h2>
   <p><strong>アップデートを確認</strong>を選ぶか、署名・公証済みの 0.12.0 Macアプリ（Apple Silicon または Intel）をインストールしてください。macOS 13 以降が必要です。録音のタイムラインと「タイマー」ページにはファームウェア <strong>0.12.0</strong> が必要です。デバイスを USB で接続した状態で、<strong>サービス → 更新 → ファームウェア更新を確認</strong>を開いてください。設定と Bluetooth のペアリングは保持されます。</p>
   <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.12.0" rel="noopener">OpenWalkieTalkie v0.12.0 とチェックサムを GitHub で入手 →</a></p>
@@ -131,5 +123,14 @@
 
 <script src="/js/main.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 言語: 日本語">Language</summary>
+        <ul>
+          <li><a href="/blog/conol-speech-and-pomodoro/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/conol-speech-and-pomodoro/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/conol-speech-and-pomodoro/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/blog/conol-speech-and-pomodoro/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

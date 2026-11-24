@@ -419,3 +419,16 @@ app; use the main table for them.
 | Speech-to-text | 语音识别 | 語音辨識 | 音声認識 | The app's recognition words. |
 | Email (waitlist email) | 邮箱 / 电子邮件 | 電子郵件 | メールアドレス | |
 | Subscribe / sign up | 订阅 / 注册 | 訂閱 / 註冊 | 登録 | |
+
+## Approved Chinese website wording, 2026-11-24
+
+The reviewed website preview deliberately uses **等候名单**, **加入等候名单**
+and **宏键盘** in its explanatory copy. These user-approved site choices take
+precedence over the corresponding website recommendations above. Literal
+localized app labels remain as listed in this glossary. The illustrated manual
+uses the English labels visible in its screenshots. See TRANSLATING.md for the
+review scope and status. The same product-context review also covers Japanese
+and Traditional Chinese (Taiwan): website waitlist copy uses 等候名單 / 加入等候名單
+in Traditional Chinese, while literal app labels keep the wording shown in the app.
+Translate functional pages and computer/service references by their actual role,
+not by the isolated English words “face” or “host”.

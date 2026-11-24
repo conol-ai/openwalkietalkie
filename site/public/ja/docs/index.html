@@ -36,6 +36,7 @@
 <link rel="stylesheet" href="/css/blog.css" />
 <link rel="stylesheet" href="/css/docs.css" />
 <script src="/js/i18n/ja.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 <!-- No optional analytics or advertising scripts. -->
 </head>
@@ -61,15 +62,6 @@
       <a href="/ja/docs/" aria-current="true">ドキュメント</a>
       <a href="/ja/blog/">ブログ</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="言語: 日本語">日本語</summary>
-        <ul>
-          <li><a href="/docs/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/docs/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
-          <li><a href="/zh-Hant/docs/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
-          <li><a href="/ja/docs/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="昼と夜のテーマを切り替える" aria-pressed="false">
@@ -95,17 +87,17 @@
 </header>
 <article class="post-body">
 
-<p>エージェントの会話をデバイスに表示しましょう。セッションとモデルへの接続はあなたのアプリが管理し、物理的な操作、音声入力、小さな画面の表示は OpenWalkieTalkie が受け持ちます。</p>
+<p>エージェントの会話をデバイスに表示しましょう。セッションとモデルへの接続はあなたのアプリが管理し、本体のキー操作、音声入力、画面表示は OpenWalkieTalkie が受け持ちます。</p>
 <a class="post-card" href="/ja/docs/native-companions/">
   <p class="post-card__date">アプリ + サービス + ファームウェア 0.11.0+</p>
   <h2 class="post-card__title">ネイティブコンパニオン API</h2>
-  <p class="post-card__excerpt">グループ化されたセッション、新しいチャットの起動、リアルタイムのメッセージ、複数ステップの質問、モデルと思考の深さの設定、そして Omarchy のページへのフィード。Conol と Omarchy ブリッジが使うのと同じインターフェースを、どのエージェントでも使えます。</p>
+  <p class="post-card__excerpt">グループ化されたセッション、新規チャット用のランチャー、リアルタイムのメッセージ、複数ステップの質問、モデルと思考の深さの設定、そして Omarchy のページへのフィード。Conol と Omarchy ブリッジが使うのと同じインターフェースを、どのエージェントでも使えます。</p>
   <span class="post-card__read">ガイドを読む →</span>
 </a>
 <a class="post-card" href="/ja/docs/windows/">
   <p class="post-card__date">プレビュー版 · 0.14.0+</p>
   <h2 class="post-card__title">Windows 版 OpenWalkieTalkie</h2>
-  <p class="post-card__excerpt">署名なしの Windows プレビュー版のアプリとサービスをインストールし、SmartScreen を通過して、USB-C でデバイスのファームウェアを更新します。</p>
+  <p class="post-card__excerpt">署名なしの Windows プレビュー版のアプリとサービスをインストールし、SmartScreen の警告を確認して、USB-C でデバイスのファームウェアを更新します。</p>
   <span class="post-card__read">ガイドを読む →</span>
 </a>
 <a class="post-card" href="/ja/docs/omarchy/">
@@ -118,7 +110,7 @@
 <h2>動くサンプルから始める</h2>
 <p><a href="/examples/native_companion.py" download>Python のコンパニオンのサンプルをダウンロード</a>。OpenWalkieTalkie を開いた状態で Python 3.10 以降で実行します。返信はあらかじめ用意したもので、パッケージ、モデルの API キー、Conol のアカウントは不要です。</p>
 <h2>仕様を調べる</h2>
-<p><a href="/docs/deckd-api.md">JSON-RPC API の完全なリファレンス（Markdown）</a>。デーモンのリクエストスキーマとメソッドの権限から生成しています。<a href="https://github.com/conol-ai/openwalkietalkie">ソースリポジトリ</a>にはサンプルと連携テストも含まれます。</p>
+<p><a href="/ja/docs/deckd-api.md">JSON-RPC API の完全なリファレンス（Markdown）</a>。デーモンのリクエストスキーマとメソッドの権限から生成しています。<a href="https://github.com/conol-ai/openwalkietalkie">ソースリポジトリ</a>にはサンプルと連携テストも含まれます。</p>
 
 </article>
 </main>
@@ -143,5 +135,14 @@
 
 <script src="/js/main.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 言語: 日本語">Language</summary>
+        <ul>
+          <li><a href="/docs/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/docs/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/docs/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/docs/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

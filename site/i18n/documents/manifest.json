@@ -1,0 +1,10 @@
+{
+  "docs/deckd-api.md": {
+    "source_sha256": "ebddfde4c17323ccf711ecbb4052247c7b6fe35a29e9c9e906c66f5bda4863b8",
+    "locales": {
+      "zh-Hans": "zh-Hans/deckd-api.md",
+      "ja": "ja/deckd-api.md",
+      "zh-Hant": "zh-Hant/deckd-api.md"
+    }
+  }
+}

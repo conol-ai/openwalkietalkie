@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom" xml:lang="zh-Hans">
   <title>OpenWalkieTalkie 博客</title>
-  <subtitle>为你的 AI 助手打造的开源手持对讲机：开发日志和文章。</subtitle>
+  <subtitle>OpenWalkieTalkie 的开发记录与产品更新：和 AI 助手对话的开源手持对讲机。</subtitle>
   <id>https://openwalkietalkie.org/zh-Hans/blog/</id>
   <link href="https://openwalkietalkie.org/zh-Hans/blog/" />
   <link rel="self" type="application/atom+xml" href="https://openwalkietalkie.org/zh-Hans/blog/feed.xml" />
@@ -24,20 +24,20 @@
     <summary>实验性功能，默认关闭：在光标处口述的内容，可以根据聚焦的窗口进行改写。只依据窗口的应用名称和标题（纯文本），并通过你在新的“模型接入”页面中选择的模型完成。</summary>
   </entry>
   <entry>
-    <title>OpenWalkieTalkie v0.15.0：配套应用来到 Omarchy</title>
+    <title>OpenWalkieTalkie v0.15.0：在 Omarchy 上的配套应用</title>
     <id>https://openwalkietalkie.org/zh-Hans/blog/companion-app-on-omarchy/</id>
     <link href="https://openwalkietalkie.org/zh-Hans/blog/companion-app-on-omarchy/" />
     <published>2026-11-17T12:58:57Z</published>
     <updated>2026-11-17T12:58:57Z</updated>
-    <summary>配套应用可在 Omarchy 上运行，在 Omarchy 页面上按住 PTT 可在光标处听写，滚轮按窗口行的顺序移动，Linux 服务把所有内容放在一个文件夹中。</summary>
+    <summary>配套软件现已支持 Omarchy；在 Omarchy 界面按住 PTT 说话，文字会输入到光标处。滚轮按窗口列表顺序导航，Linux 服务的数据统一存放在一个目录中。</summary>
   </entry>
   <entry>
-    <title>OpenWalkieTalkie v0.14.0：一台设备，支持 Mac、Windows 和 Omarchy</title>
+    <title>OpenWalkieTalkie v0.14.0：一台对讲机，连接 Mac、Windows 和 Omarchy</title>
     <id>https://openwalkietalkie.org/zh-Hans/blog/one-deck-mac-windows-omarchy/</id>
     <link href="https://openwalkietalkie.org/zh-Hans/blog/one-deck-mac-windows-omarchy/" />
     <published>2026-11-16T05:04:33Z</published>
     <updated>2026-11-16T05:04:33Z</updated>
-    <summary>Mac 应用成为设备的配套应用，服务也能在 Windows 和 Omarchy 上运行，Grok Bot 与 Claude Code、Codex 一起出现在设备上，固件安装由设备自己确认。</summary>
+    <summary>Mac 应用成为设备的配套应用，服务也能在 Windows 和 Omarchy 上运行，Grok Bot 与 Claude Code、Codex 一起出现在设备上，安装固件前，需要用户在对讲机上确认。</summary>
   </entry>
   <entry>
     <title>OpenWalkieTalkie v0.13.0：四种语言，一个设置</title>
@@ -45,118 +45,118 @@
     <link href="https://openwalkietalkie.org/zh-Hans/blog/four-languages-one-setting/" />
     <published>2026-11-08T02:41:16Z</published>
     <updated>2026-11-08T02:41:16Z</updated>
-    <summary>Mac 应用和设备支持 English、简体中文、繁體中文和日本語，保存的语言选择双向同步。另有百分之一秒显示和有声的计时结束提醒。</summary>
+    <summary>Mac 软件与对讲机支持英语、简体中文、繁体中文和日语，语言选择会保存并双向同步。秒表新增百分之一秒显示，计时结束会播放提示音。</summary>
   </entry>
   <entry>
-    <title>OpenWalkieTalkie v0.12.0：Conol 听得懂你，还有番茄钟</title>
+    <title>OpenWalkieTalkie v0.12.0：Conol 语音接入与番茄钟</title>
     <id>https://openwalkietalkie.org/zh-Hans/blog/conol-speech-and-pomodoro/</id>
     <link href="https://openwalkietalkie.org/zh-Hans/blog/conol-speech-and-pomodoro/" />
     <published>2026-11-05T03:40:00Z</published>
     <updated>2026-11-05T03:40:00Z</updated>
-    <summary>Conol 用自己的语音模型转写你对它的聊天说的话，设备显示实时的录音时间线，新的“计时器”页面提供秒表、倒计时和番茄钟。</summary>
+    <summary>Conol 会使用其内置的语音模型转录你所说的话，用于聊天内容；对讲机界面会实时显示录音时间线，同时新增一个计时功能页面，提供秒表、倒计时和番茄工作法功能。</summary>
   </entry>
   <entry>
-    <title>OpenWalkieTalkie v0.11.1：停顿时保留你说过的话</title>
+    <title>OpenWalkieTalkie v0.11.1：说话停顿，也不丢前文</title>
     <id>https://openwalkietalkie.org/zh-Hans/blog/ptt-pauses-keep-your-words/</id>
     <link href="https://openwalkietalkie.org/zh-Hans/blog/ptt-pauses-keep-your-words/" />
     <published>2026-10-28T06:26:49Z</published>
     <updated>2026-10-28T06:26:49Z</updated>
-    <summary>按住 PTT 时可以停顿后继续说。使用 Apple 本地运行的语音识别时，之前说的句子现在会保留在预览和最终转写中。</summary>
+    <summary>按住 PTT，说到一半可以停下来想想再继续。使用 Apple 本地识别时，之前说过的话现在会保留在预览和最终转写结果中。</summary>
   </entry>
   <entry>
-    <title>OpenWalkieTalkie v0.11.0：Conol 与原生配套程序</title>
+    <title>OpenWalkieTalkie v0.11.0：Conol 与原生应用接入</title>
     <id>https://openwalkietalkie.org/zh-Hans/blog/conol-and-native-companions/</id>
     <link href="https://openwalkietalkie.org/zh-Hans/blog/conol-and-native-companions/" />
     <published>2026-10-28T03:07:14Z</published>
     <updated>2026-10-28T03:07:14Z</updated>
-    <summary>在设备上查看 Conol 对话、口述新建聊天、回答多步提问，并为其他应用提供开放的配套程序 API。</summary>
+    <summary>在对讲机上查看 Conol 对话、用语音新建聊天、逐步回答表单；同一套原生应用接入 API 也向其他应用开放。</summary>
   </entry>
   <entry>
-    <title>OpenWalkieTalkie v0.10.0：在设备上查看电脑资源</title>
+    <title>OpenWalkieTalkie v0.10.0：对讲机上的计算机资源</title>
     <id>https://openwalkietalkie.org/zh-Hans/blog/computer-resources-on-the-deck/</id>
     <link href="https://openwalkietalkie.org/zh-Hans/blog/computer-resources-on-the-deck/" />
     <published>2026-10-26T06:52:06Z</published>
     <updated>2026-10-26T06:52:06Z</updated>
-    <summary>一个实时显示 Mac 的 CPU、内存、GPU 和存储空间的页面，更高效的像素小鸟渲染，以及更长的原创游戏音乐。</summary>
+    <summary>Mac 的实时 CPU、内存、GPU 和存储状态页面，更高效的 Flappy Bird 渲染，以及更长的原创小游戏音乐。</summary>
   </entry>
   <entry>
-    <title>OpenWalkieTalkie v0.9.0：更清晰的 USB 语音和重置提醒</title>
+    <title>OpenWalkieTalkie v0.9.0：更清晰的 USB 语音与重置次数到期提醒</title>
     <id>https://openwalkietalkie.org/zh-Hans/blog/usb-audio-and-reset-reminders/</id>
     <link href="https://openwalkietalkie.org/zh-Hans/blog/usb-audio-and-reset-reminders/" />
     <published>2026-10-22T08:23:08Z</published>
     <updated>2026-10-22T08:23:08Z</updated>
-    <summary>通过 USB 以 48 kHz 在扬声器播放，16 kHz 音频也有改进；未使用的手动用量重置即将过期前，Mac 和设备上都会提醒。</summary>
+    <summary>USB 扬声器播放升级到 48 kHz，16 kHz 音频也有改善；未使用的手动额度重置次数快到期时，Mac 和对讲机会提醒你。</summary>
   </entry>
   <entry>
-    <title>OpenWalkieTalkie v0.8.0：锁屏与一致的滚轮导航</title>
+    <title>OpenWalkieTalkie v0.8.0：屏幕锁定和一致的滚轮导航</title>
     <id>https://openwalkietalkie.org/zh-Hans/blog/screen-lock-and-wheel-navigation/</id>
     <link href="https://openwalkietalkie.org/zh-Hans/blog/screen-lock-and-wheel-navigation/" />
     <published>2026-10-21T09:02:39Z</published>
     <updated>2026-10-21T09:02:39Z</updated>
-    <summary>自动锁屏防止 PTT 在包里被误按，逆时针转四格即可解锁；切换页面和选择项目使用同一个方向。</summary>
+    <summary>自动锁屏避免放在包里时误触 PTT，逆时针转动滚轮四格即可解锁；页面和列表的选择方向也统一了。</summary>
   </entry>
   <entry>
-    <title>OpenWalkieTalkie v0.7.0：语音更清楚，底噪更少</title>
+    <title>OpenWalkieTalkie v0.7.0：更清晰的语音，减少杂音</title>
     <id>https://openwalkietalkie.org/zh-Hans/blog/speaker-eq-and-less-hiss/</id>
     <link href="https://openwalkietalkie.org/zh-Hans/blog/speaker-eq-and-less-hiss/" />
     <published>2026-10-20T15:08:13Z</published>
     <updated>2026-10-20T15:08:13Z</updated>
-    <summary>为语音和提示音加入扬声器均衡，并让 Rev A 从 RAM 运行，以减少与闪存相关的底噪，同时保留设置和蓝牙配对。</summary>
+    <summary>语音和铃声的扬声器均衡，Rev A 版本中使用 RAM 执行以减少闪存耦合杂音，同时保持设置和蓝牙配对不变。</summary>
   </entry>
   <entry>
-    <title>OpenWalkieTalkie v0.6.0：设备上的小游戏</title>
+    <title>OpenWalkieTalkie v0.6.0：对讲机里的小游戏</title>
     <id>https://openwalkietalkie.org/zh-Hans/blog/arcade-on-the-deck/</id>
     <link href="https://openwalkietalkie.org/zh-Hans/blog/arcade-on-the-deck/" />
     <published>2026-10-19T08:27:59Z</published>
     <updated>2026-10-19T08:27:59Z</updated>
-    <summary>三款全屏游戏、实体按键操作，以及原创 8-bit 音乐和音效，并且可以关闭。</summary>
+    <summary>三款全屏小游戏，使用实体按键操作。原创 8 位音乐和音效可随时关闭。</summary>
   </entry>
   <entry>
-    <title>OpenWalkieTalkie v0.5.0：Desktop 已连接，出厂准备就绪</title>
+    <title>OpenWalkieTalkie v0.5.0：修复 Desktop 连接，提供出厂镜像</title>
     <id>https://openwalkietalkie.org/zh-Hans/blog/desktop-connection-and-factory-images/</id>
     <link href="https://openwalkietalkie.org/zh-Hans/blog/desktop-connection-and-factory-images/" />
     <published>2026-10-19T05:00:00Z</published>
     <updated>2026-10-19T05:00:00Z</updated>
-    <summary>Codex Desktop 连接修复、可靠的简短回复、替代闪存芯片支持，以及用于工厂烧录的出厂固件。</summary>
+    <summary>修复 Codex Desktop 连接和短任务回复丢失的问题，新增两种兼容闪存芯片，并提供出厂烧录镜像。</summary>
   </entry>
   <entry>
-    <title>OpenWalkieTalkie v0.4.0：恢复过程显示在屏幕上，留出成长空间</title>
+    <title>OpenWalkieTalkie v0.4.0：看得见的恢复进度，更充足的固件空间</title>
     <id>https://openwalkietalkie.org/zh-Hans/blog/recovery-and-more-room/</id>
     <link href="https://openwalkietalkie.org/zh-Hans/blog/recovery-and-more-room/" />
     <published>2026-10-18T05:00:00Z</published>
     <updated>2026-10-18T05:00:00Z</updated>
-    <summary>引导式引导程序升级、设备上的恢复进度、更快的 USB 传输，以及中文文字支持。</summary>
+    <summary>引导式引导程序升级，对讲机上的恢复进度，更快的 USB 传输，以及中文文本。</summary>
   </entry>
   <entry>
-    <title>OpenWalkieTalkie v0.3.0：图片和待回答的提问</title>
+    <title>OpenWalkieTalkie v0.3.0：聊天图片与待回答问题</title>
     <id>https://openwalkietalkie.org/zh-Hans/blog/images-and-questions/</id>
     <link href="https://openwalkietalkie.org/zh-Hans/blog/images-and-questions/" />
     <published>2026-10-15T14:20:00Z</published>
     <updated>2026-10-15T14:20:00Z</updated>
-    <summary>在 Mac 和设备上查看聊天图片，图片预览更稳定，还能在手持设备上回答 Codex 的提问。</summary>
+    <summary>在 Mac 和对讲机上查看聊天图片，保持图片预览稳定，并直接在手持设备上回答 Codex 的问题。</summary>
   </entry>
   <entry>
-    <title>OpenWalkieTalkie v0.2.1：我们的对讲机，无处不在</title>
+    <title>OpenWalkieTalkie v0.2.1：统一的像素对讲机标识</title>
     <id>https://openwalkietalkie.org/zh-Hans/blog/radio-branding/</id>
     <link href="https://openwalkietalkie.org/zh-Hans/blog/radio-branding/" />
     <published>2026-10-15T09:00:00Z</published>
     <updated>2026-10-15T09:00:00Z</updated>
-    <summary>网站上的对讲机来到了应用图标、菜单栏、设备启动画面和“关于”页面。一个 COHDL 项目。</summary>
+    <summary>网站上的像素对讲机图标，现在也出现在软件图标、菜单栏、设备启动画面和关于页面中。这是一个 CoHDL 项目。</summary>
   </entry>
   <entry>
-    <title>OpenWalkieTalkie v0.2.0：工作流一目了然</title>
+    <title>OpenWalkieTalkie v0.2.0：工作流一览无余</title>
     <id>https://openwalkietalkie.org/zh-Hans/blog/workflows-and-usage/</id>
     <link href="https://openwalkietalkie.org/zh-Hans/blog/workflows-and-usage/" />
     <published>2026-10-13T14:00:00Z</published>
     <updated>2026-10-13T14:00:00Z</updated>
-    <summary>在 Mac 和手持设备上实时查看工作流进度，查看 Claude Fable 用量限额，并修复了工作流页面闪烁的问题。</summary>
+    <summary>Mac 和手持设备上的实时工作流进度，Claude Fable 的使用限制，以及修复闪烁的工作流页面问题。</summary>
   </entry>
   <entry>
-    <title>OpenWalkieTalkie v0.1.0：给你的助手一台手持设备</title>
+    <title>OpenWalkieTalkie v0.1.0：把 AI 助手带到手边</title>
     <id>https://openwalkietalkie.org/zh-Hans/blog/introducing-openwalkietalkie/</id>
     <link href="https://openwalkietalkie.org/zh-Hans/blog/introducing-openwalkietalkie/" />
     <published>2026-10-13T00:00:00Z</published>
     <updated>2026-10-13T00:00:00Z</updated>
-    <summary>首个正式的 Mac 应用和固件版本：按住说话、在设备上查看对话，以及应用和设备更新。</summary>
+    <summary>首次正式发布 Mac 软件和固件：按键通话、在对讲机上查看对话，以及软件和设备更新。</summary>
   </entry>
 </feed>

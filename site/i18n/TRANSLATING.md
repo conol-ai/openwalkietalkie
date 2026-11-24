@@ -109,3 +109,51 @@ example `<code>cmake</code> {{key}}` ("and `clang` build the local speech
 recogniser…"). Write those so the sentence reads with the identifier as its
 subject: `<code>cmake</code> 和 <code>clang</code> 用于…`,
 `<code>cmake</code> と <code>clang</code> は…`.
+
+## Product-context review, 2026-11-24
+
+The user requested a fresh review of all three translations before submitting
+a new PR. This revision starts from the current main branch (609ec6e) and uses
+its i18n source structure. It does not merge the withdrawn inventory PR or the
+older preview branch. Release-specific articles retain their historical context;
+current download information remains at 0.17.0.
+
+For each language, an independent model first back-translated 1,375 numbered
+segments without the English source. Only after saving that pass did it compare
+every segment against English, the product glossary, the firmware and companion
+service documentation, and the actual website demo handlers. Corrections include
+held versus momentary presses, PTT elapsed recording time, the number of ENTER
+presses, computer-side speech recognition, usage-limit periods, API access,
+firmware update conditions and the scope of privacy promises. Final corrections
+were not independently back-translated a second time. This is not native review.
+
+The illustrated manual follows an English software interface: its quoted menu
+and button names match the screenshots. Explanatory text and the hardware button
+diagram are localized, including nine final accessibility descriptions per locale
+checked during browser review (model review, not a separate blind pass). Physical control names, commands, code, project identifiers,
+version numbers and authentic screenshots remain intact. The original pixel art,
+day/night models and animations are preserved.
+
+| Language | Batch | Translated / reviewed by | Review | Date | Notes |
+|---|---|---|---|---|---|
+| zh-Hans (你) | 1,375 static page/blog segments | Codex and independent blind model pass | back-translated | 2026-11-24 | 203 corrections in the recorded comparison; final integration also reconciles source corrections. |
+| zh-Hant (Taiwan, 你) | 1,375 static page/blog segments | Codex and independent blind model pass | back-translated | 2026-11-24 | 253 corrections, including previously imported diagram labels. Translated from English, not character-converted from Simplified Chinese. |
+| ja (です／ます in prose) | 1,375 static page/blog segments | Codex and independent blind model pass | back-translated | 2026-11-24 | 191 corrections, including previously imported diagram labels. Final diagram wording shortened to fit its annotation lines. |
+| zh-Hans / zh-Hant / ja | 201 runtime strings and 46 dynamic patterns per language | Codex and separate contextual model passes | machine | 2026-11-24 | 192 strings plus all patterns reviewed in the separate pass; 9 final strings cover composed activity messages and literal physical controls. Placeholders and commands checked. |
+| zh-Hans | 230 unique API-reference segments | Codex and prior independent blind pass, followed by current-source comparison | back-translated | 2026-11-24 | Rechecked against current schema and ten added method rows; 52 lines corrected. |
+| zh-Hant / ja | 230 unique API-reference segments per language | Model translation from current English and structural checks | machine | 2026-11-24 | All 106 methods, 92 named types, code and schema fields preserved. |
+
+Mechanical review preserves deliberate English brands, identifiers, schema types
+and the English controls shown in screenshots. Those identical technical strings
+are accepted warnings. The generic printf checker misreads the English prose
+`51.5% fewer` as `% f`; the comparison fixture escapes that percent only for this
+check, while the site's actual text keeps the original percentage. No target
+prose or protocol value is changed to satisfy that false positive. Policy pages
+were checked against the source, not reviewed by a native-language legal editor.
+
+The localized API references live under `documents/<locale>/`. Their shared
+manifest pins the English source SHA-256: the build stops when it changes, so
+update every translation and the hash together. Do not edit the generated English
+API reference to fix a translation. Runtime catalogs live under `runtime/`;
+`demo-i18n.js` translates their variable activity messages without altering user
+commands or adding a language-storage preference.

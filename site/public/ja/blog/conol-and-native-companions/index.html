@@ -34,6 +34,7 @@
 <link rel="stylesheet" href="/css/style.css" />
 <link rel="stylesheet" href="/css/blog.css" />
 <script src="/js/i18n/ja.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 <!-- No optional analytics or advertising scripts. -->
 </head>
@@ -59,15 +60,6 @@
       <a href="/ja/docs/">ドキュメント</a>
       <a href="/ja/blog/" aria-current="true">ブログ</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="言語: 日本語">日本語</summary>
-        <ul>
-          <li><a href="/blog/conol-and-native-companions/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/blog/conol-and-native-companions/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
-          <li><a href="/zh-Hant/blog/conol-and-native-companions/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
-          <li><a href="/ja/blog/conol-and-native-companions/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="昼と夜のテーマを切り替える" aria-pressed="false">
@@ -101,12 +93,12 @@
   <p>セッションのパネルには、会話で実際に使われているモデルと思考の深さが表示されます。Conol では今のところ読み取り専用なので、変更は Conol で行ってください。会話の履歴には公開のユーザーとアシスタントのテキストが反映されます。画像、ツールの出力、非公開の推論は所有するアプリに残ります。</p>
   <h2>ほかのアプリにも開かれている</h2>
   <p>この連携は公開の JSON-RPC のインターフェースを使います。アプリは <code>agent.companion.set</code> で独自のグループ分けと新しいチャットのランチャーを提供し、メッセージや質問を公開し、<code>agent.session.set</code> で実際のモデルと思考の深さを報告できます。変更可能な設定に対応するアプリは、要求された変更をそれぞれ正確なリビジョンに対して確定します。</p>
-  <p>新しい<a href="/ja/docs/native-companions/">ネイティブコンパニオンのガイド</a>では、検出、登録、会話の履歴、フォーム、設定、再接続を説明しています。<a href="/examples/native_companion.py">単体で動く Python のサンプル</a>も試してください。用意された返信を使うので、モデルの API キーは不要で、Conol をインストールしていなくても動きます。<a href="/docs/deckd-api.md">自動生成した API リファレンス</a>には、リクエストのスキーマと権限が載っています。</p>
+  <p>新しい<a href="/ja/docs/native-companions/">ネイティブコンパニオンのガイド</a>では、検出、登録、会話の履歴、フォーム、設定、再接続を説明しています。<a href="/examples/native_companion.py">単体で動く Python のサンプル</a>も試してください。用意された返信を使うので、モデルの API キーは不要で、Conol をインストールしていなくても動きます。<a href="/ja/docs/deckd-api.md">自動生成した API リファレンス</a>には、リクエストのスキーマと権限が載っています。</p>
   <h2>新しいチャットにフォーカスを保つ</h2>
   <p>サービスは、入れ替えたスロットの新しい持ち主を、フォーカスする前に知らせるようになりました。デバイスは PTT を離した直後にコンパニオンの明示的な選択に従い、入力が押されている間は待ち、あなたがほかへ移動したら譲ります。終わっていない質問は開いたままです。</p>
-  <p>共有の 8 スロットの上限は変わりません。あふれたコンパニオンのチャットを開くと、同じ接続・同じアプリ・同じアカウントの、固定されていない同列のチャットと入れ替わることがあります。ランチャーと、ほかのアカウントの作業中のチャットは残ります。</p>
+  <p>共有の 8 スロットの上限は変わりません。スロット不足で表示されていないコンパニオンのチャットを開くと、同じ接続・同じアプリ・同じアカウントの、固定されていない同列のチャットと入れ替わることがあります。ランチャーと、ほかのアカウントの作業中のチャットは残ります。</p>
   <h2>0.11.0 に更新する</h2>
-  <p>Apple シリコン用または Intel 用の、署名・公証済みの Mac アプリをインストールするか、<strong>アップデートを確認</strong>を選んでください。macOS 13 以降が必要です。デバイスを USB-C で接続し、<strong>サービス → 更新 → ファームウェア更新を確認</strong>を選びます。ネイティブコンパニオンに対応するには、Mac のサービスとファームウェアの両方が 0.11.0 である必要があります。古いサービスがまだ動いている場合は、<strong>サービス → 再起動</strong>を選びます。Conol も、OpenWalkieTalkie ブリッジを備えたビルドに更新してください。</p>
+  <p>Apple シリコン用または Intel 用の、署名・公証済みの Macアプリをインストールするか、<strong>アップデートを確認</strong>を選んでください。macOS 13 以降が必要です。デバイスを USB-C で接続し、<strong>サービス → 更新 → ファームウェア更新を確認</strong>を選びます。ネイティブコンパニオンに対応するには、Mac のサービスとファームウェアの両方が 0.11.0 である必要があります。古いサービスがまだ動いている場合は、<strong>サービス → 再起動</strong>を選びます。Conol も、OpenWalkieTalkie ブリッジを備えたビルドに更新してください。</p>
   <p>通常の更新では、設定と Bluetooth のペアリングは保たれます。リカバリープロトコル 2 とフラッシュの配置は変わりません。別の工場用 ZIP は製造用で、設定とペアリングを上書きします。</p>
   <p>自動テストは、所有権、グループ分け、スロットの繰り上げ、設定の確定、フォーカスの順番、押されている入力、プロトコルの解析、描画、サンプルのフォームと再接続を確認しています。このリリースでは、実際の Conol の会話と基板でのテストは繰り返していません。</p>
   <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.11.0" rel="noopener">GitHub で OpenWalkieTalkie v0.11.0、ファームウェア、出荷時イメージ、チェックサムを入手 →</a></p>
@@ -134,5 +126,14 @@
 
 <script src="/js/main.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 言語: 日本語">Language</summary>
+        <ul>
+          <li><a href="/blog/conol-and-native-companions/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/conol-and-native-companions/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/conol-and-native-companions/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/blog/conol-and-native-companions/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

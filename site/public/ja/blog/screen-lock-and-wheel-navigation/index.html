@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>OpenWalkieTalkie v0.8.0：画面ロックとそろったホイール操作 · OpenWalkieTalkie</title>
-<meta name="description" content="自動の画面ロックがバッグの中の PTT を守ります。反時計回りに4クリックで解除でき、ページと項目の選択は同じ方向で動きます。" />
+<meta name="description" content="自動の画面ロックがバッグの中の PTT を守ります。ホイールを反時計回りに 4 段回すと解除でき、ページと項目の選択は同じ方向で動きます。" />
 <link rel="canonical" href="https://openwalkietalkie.org/ja/blog/screen-lock-and-wheel-navigation/" />
 <link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/screen-lock-and-wheel-navigation/" />
 <link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/screen-lock-and-wheel-navigation/" />
@@ -15,7 +15,7 @@
 <meta property="og:type" content="article" />
 <meta property="og:site_name" content="OpenWalkieTalkie" />
 <meta property="og:title" content="OpenWalkieTalkie v0.8.0：画面ロックとそろったホイール操作 · OpenWalkieTalkie" />
-<meta property="og:description" content="自動の画面ロックがバッグの中の PTT を守ります。反時計回りに4クリックで解除でき、ページと項目の選択は同じ方向で動きます。" />
+<meta property="og:description" content="自動の画面ロックがバッグの中の PTT を守ります。ホイールを反時計回りに 4 段回すと解除でき、ページと項目の選択は同じ方向で動きます。" />
 <meta property="og:url" content="https://openwalkietalkie.org/ja/blog/screen-lock-and-wheel-navigation/" />
 <meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
 <meta name="twitter:card" content="summary_large_image" />
@@ -34,6 +34,7 @@
 <link rel="stylesheet" href="/css/style.css" />
 <link rel="stylesheet" href="/css/blog.css" />
 <script src="/js/i18n/ja.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 <!-- No optional analytics or advertising scripts. -->
 </head>
@@ -58,15 +59,6 @@
       <a href="/ja/#blueprint">設計図</a>
       <a href="/ja/blog/" aria-current="true">ブログ</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="言語: 日本語">日本語</summary>
-        <ul>
-          <li><a href="/blog/screen-lock-and-wheel-navigation/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/blog/screen-lock-and-wheel-navigation/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
-          <li><a href="/zh-Hant/blog/screen-lock-and-wheel-navigation/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
-          <li><a href="/ja/blog/screen-lock-and-wheel-navigation/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="昼と夜のテーマを切り替える" aria-pressed="false">
@@ -92,17 +84,17 @@
 </header>
 <article class="post-body">
   <p>手に取ったらすぐ使えて、しかもバッグの中から誤って音声メッセージを送らない。携帯機器にはそれが必要です。バージョン 0.8.0 では自動の画面ロックを追加し、ページの切り替えやリストの移動でホイールの向きがそろうようにしました。</p>
-  <h2>2分でロック、4クリックで解除</h2>
+  <h2>2 分でロック、ホイールを 4 段回して解除</h2>
   <p>本体での操作が2分間ないと、画面がスリープし、押して話す機能を含むすべての本体操作がロックされます。キーを押す、画面に触れる、ホイールを回すと、ロック画面が点灯しますが、その下にある操作は実行されません。</p>
-  <p>解除するには、ホイールを<strong>反時計回りに4クリック続けて</strong>回します。最初の1クリックで画面が点灯した場合、それも4クリックに数えます。時計回りに回すか、画面がもう一度スリープすると、カウントはやり直しになります。</p>
-  <p>最後の1クリックはロックを解除するだけで、選択は動きません。ロック中に押していたキーは、一度離してから押し直すまで動作しません。そのため、押されたままの PTT がロック解除と同時に送信を始めることはありません。通知で画面が点灯することはありますが、ロックは解除されません。また、キーを押し続けてもロック中の画面がずっと点灯したままになることはありません。</p>
+  <p>解除するには、ホイールを<strong>反時計回りに続けて 4 段</strong>回します。最初の 1 段で画面が点灯した場合、その 1 段も数えます。時計回りに回すか、画面がもう一度スリープすると、カウントはやり直しになります。</p>
+  <p>最後の 1 段はロックを解除するだけで、選択は動きません。ロック中に押していたキーは、一度離してから押し直すまで動作しません。そのため、押されたままの PTT がロック解除と同時に送信を始めることはありません。通知で画面が点灯することはありますが、ロックは解除されません。また、キーを押し続けてもロック中の画面がずっと点灯したままになることはありません。</p>
   <h2>ページもリストも同じ方向</h2>
   <p>エンコーダーの物理的な向きを修正しました。<strong>反時計回りで次または下、時計回りで前または上を選択します。</strong>これは SHIFT ＋ホイールでのページ選択にも、メニュー項目、エージェントとセッションのリスト、カードの選択肢、リストのスクロールにも当てはまります。使い方のページの向きも同じです。</p>
   <p>音量などの数値設定は、これまでどおり時計回りで増えます。マクロパッドのキーに割り当てた操作と、ゲーム内の旋回は、物理的な向きのままです。</p>
   <h2>音声の改善はそのまま</h2>
   <p>このリリースでは、<a href="/ja/blog/speaker-eq-and-less-hiss/">0.7.0 で導入したスピーカー EQ と Rev A の RAM 実行</a>を引き続き使います。Rev B はこれまでどおり NOR フラッシュから実行します。フラッシュのパーティションとリカバリープロトコルは変わりません。</p>
   <h2>アプリとデバイスを更新する</h2>
-  <p>署名・公証済みの Mac アプリ（Apple Silicon または Intel）をインストールするか、アプリで<strong>アップデートを確認</strong>を選びます。macOS 13 以降が必要です。デバイスを USB-C で接続し、<strong>サービス → 更新 → ファームウェア更新を確認</strong>を使います。アプリ、サービス、ファームウェアがすべて 0.8.0 と表示されるはずです。</p>
+  <p>署名・公証済みの Macアプリ（Apple Silicon または Intel）をインストールするか、アプリで<strong>アップデートを確認</strong>を選びます。macOS 13 以降が必要です。デバイスを USB-C で接続し、<strong>サービス → 更新 → ファームウェア更新を確認</strong>を使います。アプリ、サービス、ファームウェアがすべて 0.8.0 と表示されるはずです。</p>
   <p>すでにリカバリープロトコル 2 を使っているデバイスには通常のアプリケーション更新が届き、設定と Bluetooth のペアリングは保持されます。それより古いリカバリーのバージョンでは、アプリの既存のガイド付き移行を使います。お使いのデバイスにはアプリのアップデーターを使ってください。Rev A 用と Rev B 用に分かれた出荷時 ZIP にはチップ全体のイメージが入っており、設定とペアリングを上書きします。</p>
   <h2>確認したこと</h2>
   <p>開発版ファームウェアを USB で Rev A のデバイスに書き込んで検証し、操作担当者がホイールの物理的な向きの修正を確認しました。自動チェックでは、ロックのタイミング、押したままの入力とキューに入った入力、PTT の抑止、ホイールの選択と端の扱い、描画、基板ごとの実行レイアウトを確認しています。このセッションでは Rev B のハードウェアを実機で試していません。</p>
@@ -131,5 +123,14 @@
 
 <script src="/js/main.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 言語: 日本語">Language</summary>
+        <ul>
+          <li><a href="/blog/screen-lock-and-wheel-navigation/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/screen-lock-and-wheel-navigation/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/screen-lock-and-wheel-navigation/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/blog/screen-lock-and-wheel-navigation/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

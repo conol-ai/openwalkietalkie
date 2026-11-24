@@ -292,22 +292,39 @@ html[data-theme="night"] .btn--primary { --btn-ink: #1a1030; --btn-edge: #05070f
 }
 .nav__links a:hover { color: var(--ink); background: var(--panel-2); transform: translateY(-1px); }
 
-/* Language switcher: the last of the header links, a menu of the four languages */
-.lang-switch { position: relative; }
-.lang-switch summary {
-  list-style: none; cursor: pointer; font-size: 19px; padding: 6px 10px; color: var(--ink-soft); white-space: nowrap;
-  transition: color 160ms var(--ease), background-color 160ms var(--ease);
-}
-.lang-switch summary::-webkit-details-marker { display: none; }
-.lang-switch summary::after { content: " \25BE"; }
-.lang-switch summary:hover, .lang-switch[open] summary { color: var(--ink); background: var(--panel-2); }
-.lang-switch ul {
-  position: absolute; right: 0; top: calc(100% + 6px); z-index: 1; min-width: 100%;
-  margin: 0; padding: 6px; list-style: none; background: var(--panel);
-  box-shadow: 0 0 0 var(--px) var(--panel-edge-2), 0 var(--px) 0 rgba(0,0,0,.2);
-}
-.lang-switch li a { display: block; }
-.nav__links .lang-switch a[aria-current] { color: var(--ink); background: var(--panel-2); }
+/* A small edge-mounted language control, in the site's paper/pixel palette. */
+.lang-switch{position:fixed;right:0;top:46%;z-index:150;color:var(--ink);font:10px/1.6 'Press Start 2P',monospace}
+.lang-switch summary{list-style:none;cursor:pointer;padding:13px 10px;background:var(--panel);border:2px solid var(--panel-edge);border-right:0;box-shadow:3px 3px 0 var(--panel-edge);writing-mode:vertical-rl}
+.lang-switch summary::-webkit-details-marker{display:none}
+.lang-switch summary:focus-visible,.lang-switch a:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.lang-switch ul{position:absolute;right:calc(100% + 10px);top:0;min-width:165px;padding:8px;background:var(--panel);border:2px solid var(--panel-edge);box-shadow:4px 4px 0 var(--panel-edge)}
+.lang-switch a{display:block;padding:11px 14px;white-space:nowrap;text-decoration:none;font:15px/1.5 system-ui,sans-serif;letter-spacing:0}
+.lang-switch a:hover,.lang-switch a[aria-current]{background:var(--accent);color:var(--accent-ink)}
+html:not([lang=en]){--cjk-font:'PingFang SC','Hiragino Sans','Microsoft YaHei',system-ui,sans-serif}
+html[lang=zh-Hant]{--cjk-font:'PingFang TC','Microsoft JhengHei',system-ui,sans-serif}
+html[lang=ja]{--cjk-font:'Hiragino Kaku Gothic ProN','Yu Gothic',system-ui,sans-serif}
+html:not([lang=en]) body{font-family:'VT323',var(--cjk-font);line-height:1.65}
+html:not([lang=en]) .nav__links{font-family:var(--cjk-font);font-size:13px;font-weight:600;gap:20px}
+html:not([lang=en]) .btn{font-family:var(--cjk-font);font-size:14px;font-weight:700;letter-spacing:0;line-height:1.65}
+html:not([lang=en]) .hero__sub{max-width:30em;line-height:1.7;font-size:19px}html:not([lang=en]) .hero__tagline{line-height:1.6;font-size:26px}
+html:not([lang=en]) .hero__desc{max-width:32em;line-height:1.65;font-size:20px}
+html:not([lang=en]) .section-head h2,html:not([lang=en]) .post-head h1{font-family:var(--cjk-font);letter-spacing:0;line-height:1.5}
+html:not([lang=en]) .post-body{font-family:var(--cjk-font);font-size:17px;line-height:1.9}
+html:not([lang=en]) .post-body h2,html:not([lang=en]) .post-body h3{line-height:1.6;letter-spacing:0}
+html:not([lang=en]) .privacy-notice{font-family:var(--cjk-font);font-size:14px;line-height:1.8}
+html:not([lang=en]) .manual-sheet p,html:not([lang=en]) .manual-sheet li,html:not([lang=en]) .manual-sheet dd{font-family:var(--cjk-font);font-size:17px;line-height:1.75}
+html:not([lang=en]) .manual-index{font:14px/1.7 var(--cjk-font);flex-wrap:wrap;gap:12px 24px}
+html:not([lang=en]) .manual-sheet h1,html:not([lang=en]) .manual-sheet h2,html:not([lang=en]) .manual-sheet h3{font-family:var(--cjk-font);letter-spacing:0;line-height:1.6}
+html:not([lang=en]) .manual-sheet h3{font-size:16px}
+html:not([lang=en]) .map-callout text{font-family:var(--cjk-font);font-size:16px}
+html:not([lang=en]) .map-callout .map-callout-title{font-size:17px;font-weight:700}
+html:not([lang=en]) .focus-copy>strong{font-family:var(--cjk-font);font-size:15px}
+html:not([lang=en]) .manual-note>strong{font-family:var(--cjk-font);font-size:14px}
+html:not([lang=en]) .demo-guide{min-height:180px}
+@media(max-width:700px){.lang-switch{top:auto;bottom:16px}.lang-switch summary{writing-mode:horizontal-tb;padding:11px 10px;font-size:9px}.lang-switch ul{top:auto;bottom:calc(100% + 8px);right:8px}html:not([lang=en]) .manual-sheet{padding:24px 18px}html:not([lang=en]) .hero__desc{max-width:none;font-size:18px}}
+@media print{.lang-switch{display:none!important}html:not([lang=en]) .manual-sheet{height:auto;max-height:none;break-inside:auto}html:not([lang=en]) .manual-sheet p,html:not([lang=en]) .manual-sheet li,html:not([lang=en]) .manual-sheet dd{font-size:10pt;line-height:1.55}}
+
+.lang-switch ul{list-style:none;margin:0}.lang-switch li a{color:var(--ink)}
 
 /* Day/Night toggle */
 .theme-toggle {
@@ -1446,8 +1463,6 @@ html[data-theme="night"] .footer__banner-fade::after  { opacity: 1; }
   .nav__inner { position: relative; }
   .nav__links.is-open { display: flex; }
   .nav__links a { font-size: 22px; padding: 10px; }
-  .lang-switch summary { font-size: 22px; padding: 10px; }
-  .lang-switch ul { position: static; box-shadow: none; padding: 0 0 0 18px; }
   .nav__burger { display: block; order: 5; }
   .theme-toggle { margin-left: auto; }
   .theme-toggle__label { display: none; }

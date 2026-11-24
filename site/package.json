@@ -9,7 +9,7 @@
     "types": "wrangler types --include-runtime=false",
     "typecheck": "tsc --noEmit",
     "build:i18n": "node tools/i18n/build.mjs",
-    "test": "node --test tests/worker.test.mjs tests/home.test.mjs tests/i18n.test.mjs",
+    "test": "node --test tests/worker.test.mjs tests/home.test.mjs tests/i18n.test.mjs tests/demo-i18n.test.mjs",
     "test:browser": "playwright test",
     "db:init:local": "wrangler d1 migrations apply openwalkietalkie-site --local",
     "db:init": "wrangler d1 migrations apply openwalkietalkie-site --remote",

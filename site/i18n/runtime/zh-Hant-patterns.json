@@ -1,0 +1,186 @@
+[
+  [
+    "^Released after ([\\d.]+) s\\. The transcript goes to the active agent as its next prompt\\.$",
+    "已放開按鍵，共按住 $1 秒。辨識出的文字會作為下一則提示詞傳給目前的助理。"
+  ],
+  [
+    "^Answer · (\\d+) choices$",
+    "回覆 · $1 個選項"
+  ],
+  [
+    "^EDIT KEY (\\d+)$",
+    "編輯按鍵 $1"
+  ],
+  [
+    "^Workspace (\\d+) · (\\d+) windows$",
+    "工作區 $1 · $2 個視窗"
+  ],
+  [
+    "^Score (\\d+) · try again$",
+    "得分 $1 · 再試一次"
+  ],
+  [
+    "^(\\d+) (?:pts|points)$",
+    "$1 分"
+  ],
+  [
+    "^best (\\d+)$",
+    "最高分 $1"
+  ],
+  [
+    "^SOUND: (ON|OFF)$",
+    "音效：$1"
+  ],
+  [
+    "^Focused · (.+)$",
+    "目前焦點 · $1"
+  ],
+  [
+    "^resets in (\\d+) h$",
+    "$1 小時後重設"
+  ],
+  [
+    "^resets in (\\d+) days$",
+    "$1 天後重設"
+  ],
+  [
+    "^(.+) is working$",
+    "$1 正在執行"
+  ],
+  [
+    "^prompt delivered · (.+)$",
+    "提示詞已送達 · $1"
+  ],
+  [
+    "^HOST → DECK$",
+    "電腦 → 裝置"
+  ],
+  [
+    "^DECK → HOST$",
+    "裝置 → 電腦"
+  ],
+  [
+    "^(\\d+) agents$",
+    "$1 個助理"
+  ],
+  [
+    "^usage$",
+    "用量"
+  ],
+  [
+    "^macros$",
+    "巨集按鍵"
+  ],
+  [
+    "^macropad$",
+    "快捷鍵"
+  ],
+  [
+    "^system$",
+    "系統"
+  ],
+  [
+    "^arcade$",
+    "遊戲"
+  ],
+  [
+    "^(.+) asks a question$",
+    "$1 提出問題"
+  ],
+  [
+    "^channel (\\d+)$",
+    "頻道 $1"
+  ],
+  [
+    "^face (\\d+)$",
+    "頁面 $1"
+  ],
+  [
+    "^Key (\\d+) saved$",
+    "按鍵 $1 已儲存"
+  ],
+  [
+    "^Key (\\d+) cleared$",
+    "按鍵 $1 已清除"
+  ],
+  [
+    "^Workspace (\\d+) selected$",
+    "已選取工作區 $1"
+  ],
+  [
+    "^ws (\\d+)$",
+    "工作區 $1"
+  ],
+  [
+    "^ws go (\\d+)$",
+    "切換至工作區 $1"
+  ],
+  [
+    "^enter · nothing pending for (.+)$",
+    "按下 ENTER · $1 沒有待處理事項"
+  ],
+  [
+    "^Preview$",
+    "預覽"
+  ],
+  [
+    "^LISTENING$",
+    "正在聆聽"
+  ],
+  [
+    "^ptt down$",
+    "按下 PTT"
+  ],
+  [
+    "^ptt up$",
+    "放開 PTT"
+  ],
+  [
+    "^prompt delivered$",
+    "提示詞已送達"
+  ],
+  [
+    "^Window focus$",
+    "視窗焦點"
+  ],
+  [
+    "^card cleared$",
+    "卡片已清除"
+  ],
+  [
+    "^nothing on this face$",
+    "這個按鍵在此頁面沒有作用"
+  ],
+  [
+    "^0(\\d) / (.+)$",
+    "0$1 / $2"
+  ],
+  [
+    "^(\\d+)m$",
+    "$1 分鐘"
+  ],
+  [
+    "^([\\d.]+) s$",
+    "$1 秒"
+  ],
+  [
+    "^\"(Refactor the auth module, then run the test suite\\.|Go ahead on staging, and tell me when the migrations finish\\.|Summarise what changed and open the pull request\\.)\"$",
+    "「$1」"
+  ],
+  [
+    "^key left$",
+    "按下 LEFT"
+  ],
+  [
+    "^key right$",
+    "按下 RIGHT"
+  ],
+  [
+    "^key left shift$",
+    "按下 SHIFT + LEFT"
+  ],
+  [
+    "^key right shift$",
+    "按下 SHIFT + RIGHT"
+  ]
+]

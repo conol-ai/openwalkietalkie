@@ -34,6 +34,7 @@
 <link rel="stylesheet" href="/css/style.css" />
 <link rel="stylesheet" href="/css/blog.css" />
 <script src="/js/i18n/zh-Hant.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 <!-- No optional analytics or advertising scripts. -->
 </head>
@@ -51,22 +52,13 @@
     </a>
 
     <nav class="nav__links" aria-label="網站區塊">
-      <a href="/zh-Hant/#pile">The Pile</a>
+      <a href="/zh-Hant/#pile">The Pile（分頁堆）</a>
       <a href="/zh-Hant/#features">功能</a>
       <a href="/zh-Hant/#demo">試用</a>
       <a href="/zh-Hant/#faces">頁面</a>
       <a href="/zh-Hant/#blueprint">設計藍圖</a>
       <a href="/zh-Hant/blog/" aria-current="true">部落格</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="語言: 繁體中文">繁體中文</summary>
-        <ul>
-          <li><a href="/blog/screen-lock-and-wheel-navigation/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/blog/screen-lock-and-wheel-navigation/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
-          <li><a href="/zh-Hant/blog/screen-lock-and-wheel-navigation/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
-          <li><a href="/ja/blog/screen-lock-and-wheel-navigation/" hreflang="ja" lang="ja">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="切換日間與夜間主題" aria-pressed="false">
@@ -106,7 +98,7 @@
   <p>已使用復原協定 2 的裝置會收到一般的應用程式更新，設定和藍牙配對都會保留。較舊的復原版本使用應用程式現有的引導式移轉。現有裝置請使用應用程式的更新功能：Rev A 與 Rev B 各自的原廠 ZIP 含有整顆晶片的映像檔，會覆寫設定和配對。</p>
   <h2>我們檢查了什麼</h2>
   <p>開發版韌體已透過 USB 燒錄到一台 Rev A 裝置並完成驗證，操作人員也確認了滾輪實體方向的修正。自動檢查涵蓋鎖定計時、按住與排隊中的輸入、PTT 抑制、滾輪選擇與邊界、算繪，以及各主機板的執行配置。這次沒有在 Rev B 硬體上實機測試。</p>
-  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.8.0" rel="noopener">在 GitHub 上取得 OpenWalkieTalkie v0.8.0、韌體、原廠韌體與檢查碼 →</a></p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.8.0" rel="noopener">在 GitHub 上取得 OpenWalkieTalkie v0.8.0、韌體、原廠映像檔與檢查碼 →</a></p>
   <p class="post-back"><a href="/zh-Hant/blog/">← 返回部落格</a></p>
 </article>
 </main>
@@ -115,7 +107,7 @@
   <div class="inner">
     <span>OpenWalkieTalkie · COHDL 專案 · MIT 授權軟體 · CERN-OHL-P 授權硬體</span>
     <nav aria-label="頁尾">
-      <a href="/zh-Hant/#waitlist">加入候補名單</a>
+      <a href="/zh-Hant/#waitlist">加入等候名單</a>
       <a href="/zh-Hant/privacy/">隱私權政策</a>
       <a href="/zh-Hant/cookies/">Cookie 說明</a>
       <a href="/zh-Hant/cookies/" data-privacy-open>隱私權聲明</a>
@@ -131,5 +123,14 @@
 
 <script src="/js/main.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 語言: 繁體中文">Language</summary>
+        <ul>
+          <li><a href="/blog/screen-lock-and-wheel-navigation/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/screen-lock-and-wheel-navigation/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/screen-lock-and-wheel-navigation/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
+          <li><a href="/ja/blog/screen-lock-and-wheel-navigation/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

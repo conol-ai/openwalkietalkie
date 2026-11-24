@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OpenWalkieTalkie — 给 AI 助手用的开源手持对讲机。</title>
-<meta name="description" content="OpenWalkieTalkie 是一台开放的手持设备，给同时运行多个 AI 助手的人使用：一块 480×480 触摸屏显示谁在等你，一个滚轮，还有一个按住说话键，把你的声音送给那个助手。开放硬件、开放固件、开放主机端。" />
+<title>OpenWalkieTalkie — 和 AI 助手对话的开源手持对讲机</title>
+<meta name="description" content="OpenWalkieTalkie 是为同时使用多个 AI 助手的人设计的开源手持对讲机。480×480 触摸屏让你一眼看到谁在等你，滚轮方便浏览，按住 PTT 就能向对应助手说话。硬件、固件和配套软件全部开源。" />
 <link rel="canonical" href="https://openwalkietalkie.org/zh-Hans/" />
 <link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/" />
 <link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/" />
@@ -14,16 +14,16 @@
 
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="OpenWalkieTalkie" />
-<meta property="og:title" content="OpenWalkieTalkie — 给 AI 助手用的开源手持对讲机。" />
-<meta property="og:description" content="一台巴掌大的设备，有触摸屏、滚轮和按住说话键。它显示哪个助手在等你，你的声音就送到那个助手。硬件、固件和主机端全部开放。" />
+<meta property="og:title" content="OpenWalkieTalkie — 和 AI 助手对话的开源手持对讲机" />
+<meta property="og:description" content="一台放得进手心的对讲机，配有触摸屏、滚轮和通话键。哪个 AI 助手需要你，抬眼就能看到；按住 PTT，就能把话传给它。硬件、固件和配套软件全部开源。" />
 <meta property="og:url" content="https://openwalkietalkie.org/zh-Hans/" />
 <meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
-<meta property="og:image:alt" content="一台 OpenWalkieTalkie 原型机立在桌上，屏幕亮着，旁边写着 Open Walkie Talkie——给 AI 助手用的开源手持对讲机。" />
+<meta property="og:image:alt" content="一台 OpenWalkieTalkie 原型立在桌面上，屏幕亮起，旁边写着 Open Walkie Talkie，这是开源的便携式对讲机，专为你的 AI 助手设计。" />
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="OpenWalkieTalkie — 给 AI 助手用的开源手持对讲机。" />
-<meta name="twitter:description" content="一台显示哪个助手在等你的设备。按住 PTT 跟它说话。硬件、固件和主机端全部开放。" />
+<meta name="twitter:title" content="OpenWalkieTalkie — 和 AI 助手对话的开源手持对讲机" />
+<meta name="twitter:description" content="哪个助手需要你，看一眼对讲机就知道。按住 PTT，直接和它说话。硬件、固件和配套软件全部开源。" />
 <meta name="twitter:image" content="https://openwalkietalkie.org/assets/og.jpg" />
 
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
@@ -41,6 +41,7 @@
 <link rel="stylesheet" href="/css/style.css" />
 <!-- Sets data-theme from localStorage/OS before first paint to avoid a theme flash -->
 <script src="/js/i18n/zh-Hans.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 
 <script type="application/ld+json">
@@ -68,7 +69,7 @@
 </head>
 <body>
 
-<a class="skip-link" href="#top">跳至正文</a>
+<a class="skip-link" href="#top">跳转到正文</a>
 
 <!-- ============ SCROLL PROGRESS BAR ============ -->
 <div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
@@ -81,25 +82,16 @@
       <span class="brand__text">OPEN WALKIE TALKIE</span>
     </a>
 
-    <nav class="nav__links" aria-label="栏目">
-      <a href="#waitlist">候补名单</a>
-      <a href="#demo">试用</a>
+    <nav class="nav__links" aria-label="页面章节">
+      <a href="#waitlist">等候名单</a>
+      <a href="#demo">试试看</a>
       <a href="#download">下载</a>
       <a href="/zh-Hans/docs/">文档</a>
       <a href="/zh-Hans/blog/">博客</a>
       <a href="#blueprint">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="语言: 简体中文">简体中文</summary>
-        <ul>
-          <li><a href="/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/" hreflang="zh-Hans" lang="zh-Hans" aria-current="true">简体中文</a></li>
-          <li><a href="/zh-Hant/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
-          <li><a href="/ja/" hreflang="ja" lang="ja">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
-    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换日间和夜间主题" aria-pressed="false">
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换日间与夜间主题" aria-pressed="false">
       <span class="theme-toggle__track" aria-hidden="true">
         <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
         <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
@@ -134,22 +126,22 @@
 
   <div class="hero__inner">
     <div class="hero__copy">
-      <p class="hero__eyebrow">开放硬件 · 开放固件 · 开放主机端</p>
+      <p class="hero__eyebrow">硬件开源 · 固件开源 · 配套软件开源</p>
       <h1 class="hero__title">
         <span class="hero__title-line">OPEN</span>
         <span class="hero__title-line">WALKIE</span>
         <span class="hero__title-line hero__title-line--accent">TALKIE</span>
       </h1>
-      <p class="press-start"><span class="blink">▮</span> PRESS START</p>
-      <p class="hero__tagline">给 AI 助手用的开源手持对讲机。</p>
-      <p class="hero__sub">一台巴掌大的设备，有触摸屏、滚轮和按住说话键。它显示哪个助手在等你，你的声音就送到那个助手。</p>
+      <p class="press-start"><span class="blink"> ▮ </span> 按下 START</p>
+      <p class="hero__tagline">和 AI 助手对话的开源手持对讲机。</p>
+      <p class="hero__sub">一台放得进手心的对讲机，配有触摸屏、滚轮和通话键。哪个 AI 助手需要你，抬眼就能看到；按住 PTT 说话，松开后就能把话发给它。</p>
       <div class="hero__cta">
-        <a class="btn btn--primary" href="#waitlist">加入候补名单</a>
-        <a class="btn btn--ghost" href="#demo">在线试用</a>
+        <a class="btn btn--primary" href="#waitlist">加入等候名单</a>
+        <a class="btn btn--ghost" href="#demo">现在试试看</a>
         <!-- No Mac download in the hero while the deck is waitlist-only. Put "Download for Mac" (#download) back here when it is for sale. -->
-        <a class="btn btn--ghost" href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">在 GitHub 上查看</a>
+        <a class="btn btn--ghost" href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">去 GitHub 看看</a>
       </div>
-      <p class="hero__platforms">macOS 13+ · Apple 芯片 + Intel · 开放固件</p>
+      <p class="hero__platforms">macOS 13+ · Apple Silicon + Intel · 固件开源</p>
       <ul class="hero__stats">
         <li><b>2.16"</b><span>AMOLED</span></li>
         <li><b>6+1</b><span>按键 · 滚轮</span></li>
@@ -160,13 +152,13 @@
 
     <div class="hero__art" id="heroArt">
       <div class="hero__art-frame hero-product">
-        <img class="swap-img swap-img--day" src="/assets/hero-radio-v93b-day-screen.png" alt="白橙配色 V9.3B OpenWalkieTalkie 的像素插画，屏幕上是助手列表" width="1254" height="1254" fetchpriority="high" />
-        <img class="swap-img swap-img--night" src="/assets/hero-radio-v93b-night-screen.png" alt="黑薄荷配色 V9.3B OpenWalkieTalkie 的像素插画，屏幕上是按住说话的聆听界面" width="1254" height="1254" />
+        <img class="swap-img swap-img--day" src="/assets/hero-radio-v93b-day-screen.png" alt="像素风格插图，展示白色和橙色的 V9.3B OpenWalkieTalkie 显示助手列表" width="1254" height="1254" fetchpriority="high" />
+        <img class="swap-img swap-img--night" src="/assets/hero-radio-v93b-night-screen.png" alt="黑色与薄荷绿配色 V9.3B OpenWalkieTalkie 的像素风插图，屏幕显示 PTT 语音输入界面" width="1254" height="1254" />
       </div>
     </div>
   </div>
 
-  <a class="scroll-hint" href="#pile" aria-label="向下滚动">
+  <a class="scroll-hint" href="#pile" aria-label="继续往下看">
     <span class="scroll-hint__txt">向下滚动</span>
     <span class="scroll-hint__arrow" aria-hidden="true"></span>
   </a>
@@ -176,55 +168,55 @@
 <div class="ticker" aria-hidden="true">
   <div class="ticker__track">
     <div class="ticker__group">
-      <span>硬件开放</span><b>✦</b><span>固件开放</span><b>✦</b><span>主机端开放</span><b>✦</b><span>按住 · 说话 · 松开</span><b>✦</b><span>谁在等你，一眼可见</span><b>✦</b><span>人人都能复刻的设计图纸</span><b>✦</b>
+      <span>硬件开源</span><b>✦</b><span>固件开源</span><b>✦</b><span>配套软件开源</span><b>✦</b><span>按住 · 说话 · 松开</span><b>✦</b><span>谁在等你，一眼就知道</span><b>✦</b><span>设计公开，谁都可以做一台</span><b>✦</b>
     </div>
     <div class="ticker__group">
-      <span>硬件开放</span><b>✦</b><span>固件开放</span><b>✦</b><span>主机端开放</span><b>✦</b><span>按住 · 说话 · 松开</span><b>✦</b><span>谁在等你，一眼可见</span><b>✦</b><span>人人都能复刻的设计图纸</span><b>✦</b>
+      <span>硬件开源</span><b>✦</b><span>固件开源</span><b>✦</b><span>配套软件开源</span><b>✦</b><span>按住 · 说话 · 松开</span><b>✦</b><span>谁在等你，一眼就知道</span><b>✦</b><span>设计公开，谁都可以做一台</span><b>✦</b>
     </div>
   </div>
 </div>
-<p class="sr-only">硬件开放。固件开放。主机端开放。按住、说话、松开。谁在等你，一眼可见。人人都能复刻的设计图纸。</p>
+<p class="sr-only">硬件、固件、配套软件全部开源。按住，说话，松手发送。谁在等你，一眼就知道。设计公开，你也能照着做一台。</p>
 
 <!-- ============ 3. THE TAB PILE ============ -->
 <section class="section paradox" id="pile">
   <div class="wrap">
     <header class="section-head reveal">
       <p class="section-kicker">第一章</p>
-      <h2 class="section-title">标签页堆</h2>
-      <p class="section-lede">三个助手在运行，其中一个卡在一个问题上，而你在一个个终端里翻找是哪一个。这台设备就是告诉你答案的对讲机。</p>
+      <h2 class="section-title">不用再翻一堆窗口</h2>
+      <p class="section-lede">三个 AI 助手同时忙着，其中一个遇到问题停了下来，你却还在翻终端找它。现在，看一眼对讲机就知道是谁在等你。</p>
     </header>
 
     <div class="vs">
       <article class="card card--rival reveal reveal--left">
-        <div class="card__tag">老办法</div>
-        <h3 class="card__title">满桌子的终端</h3>
-        <p class="card__price card__price--bad">N 个标签页</p>
+        <div class="card__tag">以前，你得这样</div>
+        <h3 class="card__title">满桌都是终端窗口</h3>
+        <p class="card__price card__price--bad">一堆标签页</p>
         <ul class="speclist">
-          <li class="no">哪个助手在等？翻一遍才知道。</li>
-          <li class="no">权限请求被埋在其他工作下面</li>
-          <li class="no">每个提示都要打字，每条回复都要读</li>
-          <li class="no">你被拴在屏幕前</li>
-          <li class="no">没有任何东西能拆开或重新组装</li>
+          <li class="no">谁在等你？先翻翻窗口再说。</li>
+          <li class="no">授权提示被其他工作盖住了</li>
+          <li class="no">每次都得打字提问、盯着回复</li>
+          <li class="no">想离开屏幕一会儿都难</li>
+          <li class="no">没法自己拆开、改装或重做</li>
         </ul>
-        <p class="card__foot">助手很快。你很慢。</p>
+        <p class="card__foot">助手跑得快，你却跟不上。</p>
       </article>
 
       <div class="vs__badge reveal" aria-hidden="true">
-        <span class="vs__badge-inner">VS</span>
+        <span class="vs__badge-inner">对比</span>
       </div>
 
       <article class="card card--ours reveal reveal--right">
-        <div class="card__tag card__tag--good">我们的</div>
+        <div class="card__tag card__tag--good">现在，换个方式</div>
         <h3 class="card__title">Open Walkie Talkie</h3>
-        <p class="card__price card__price--good">1 台设备</p>
+        <p class="card__price card__price--good">一台对讲机</p>
         <ul class="speclist">
-          <li class="yes">一块屏幕，所有助手，谁先等你</li>
-          <li class="yes">提问变成卡片。按一下就回答。</li>
-          <li class="yes">按住 PTT 说话。听回复。</li>
-          <li class="yes">用蓝牙在房间里走动，用 USB-C 接回桌面</li>
-          <li class="yes">开放的硬件、固件和主机端。它属于你。</li>
+          <li class="yes">一个屏幕看全所有助手，先处理最需要你的那个</li>
+          <li class="yes">问题变成卡片，按一下就能回答</li>
+          <li class="yes">按住 PTT 说话，回复也能直接听</li>
+          <li class="yes">插上 USB-C 放桌上用，拔下来走动时用蓝牙</li>
+          <li class="yes">硬件、固件、配套软件都开源，怎么用由你决定</li>
         </ul>
-        <p class="card__foot">人人都能复刻的设计图纸。</p>
+        <p class="card__foot">设计公开，你也可以照着做一台。</p>
       </article>
     </div>
   </div>
@@ -235,26 +227,26 @@
   <div class="wrap">
     <header class="section-head reveal">
       <p class="section-kicker">第二章</p>
-      <h2 class="section-title">三个通道，各司其职</h2>
-      <p class="section-lede">屏幕是状态板。PTT 是对讲机。按键是决定。读对话，看谁在等你，然后在设备上回应。</p>
+      <h2 class="section-title">看屏幕，说句话，按一下</h2>
+      <p class="section-lede">屏幕负责告诉你进展，PTT 负责传话，按键负责做决定。看对话、找出谁在等你，再直接用对讲机回应。</p>
     </header>
 
     <!-- featured: the PTT key you can actually hold -->
     <article class="feat feat--ptt reveal">
       <div class="ptt-stage">
-        <button class="pttbtn" id="featPtt" type="button" aria-label="按住说话演示——按住按钮或按住空格键说话">PTT</button>
+        <button class="pttbtn" id="featPtt" type="button" aria-label="按键通话演示——按住按钮或空格键说话">PTT</button>
         <p class="ptt-stage__hint" aria-hidden="true">▼ 按住我 ▼</p>
       </div>
 
       <div class="ptt-copy">
         <div class="feat__icon icon-voice" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
-        <h3 class="feat__title">按住说话</h3>
-        <p class="feat__body">在工作页面上按住这个键，屏幕就会变成“正在聆听”界面。松开后，识别完成之前转写内容会一直显示。设备的麦克风把声音传到你的 Mac，说的话会作为下一条提示词进入当前助手，回复还可以通过设备的扬声器朗读出来。</p>
-        <p class="ptt-readout" id="featPttReadout" role="status">待机中。按住按键开始。</p>
+        <h3 class="feat__title">按键通话</h3>
+        <p class="feat__body">在工作界面按住 PTT，屏幕就会显示正在聆听。松手后，识别完成前，转写文字仍会留在屏幕上。麦克风把声音传到 Mac，识别出的文字会成为当前助手的下一条指令；回复也可以从对讲机的扬声器播出来。</p>
+        <p class="ptt-readout" id="featPttReadout" role="status">准备好了。按住按键，开始说话。</p>
       </div>
 
       <div class="ptt-out" id="featPttOut" aria-hidden="true">
-        <div class="ptt-out__idle">按住 PTT 时设备的屏幕</div>
+        <div class="ptt-out__idle">按住 PTT 时的屏幕画面</div>
         <div class="ptt" id="featPttOverlay">
           <div class="ptt__head"><span class="ptt__who">Claude · web-ui</span><span class="ptt__pill">正在聆听</span></div>
           <div class="ptt__wave" id="featPttWave"></div>
@@ -267,43 +259,43 @@
     <div class="feat-grid" data-stagger>
       <article class="feat reveal" tabindex="0">
         <div class="feat__icon icon-roster" aria-hidden="true"><i></i><i></i><i></i></div>
-        <h3 class="feat__title">列表</h3>
-        <p class="feat__body">每个助手都是一个频道。红点是提问，绿点是已完成，蓝点是运行中。提问排在最上面，所以你第一眼看到的那一行，就是需要你的那一个。</p>
-        <p class="feat__meta">提问 · 已完成 · 运行中</p>
+        <h3 class="feat__title">助手列表</h3>
+        <p class="feat__body">每个助手都是一个频道。红点表示有问题等你处理，绿点表示本轮已完成，蓝点表示正在运行。待回答的问题会排在最上面，不用再挨个找。</p>
+        <p class="feat__meta">待回答 · 已完成 · 运行中</p>
       </article>
 
       <article class="feat reveal" tabindex="0">
         <div class="feat__icon icon-card" aria-hidden="true"><i class="frame"></i><i class="tick"></i></div>
-        <h3 class="feat__title">卡片</h3>
-        <p class="feat__body">权限请求或选择题会变成一张卡片。滚动到一个选项按 ENTER、点按它，或者用语音回答。Claude Code 或 Codex 的权限卡片只能由人来批准。</p>
-        <p class="feat__meta">按一下 · 完整上下文</p>
+        <h3 class="feat__title">交互卡片</h3>
+        <p class="feat__body">需要授权或选择答案时，屏幕会弹出一张卡片。转动滚轮选好，再按 ENTER；也可以触屏或语音回答。Claude Code 和 Codex 的授权卡片必须由你亲自确认。</p>
+        <p class="feat__meta">看清来龙去脉，按一下就回应</p>
       </article>
 
       <article class="feat reveal" tabindex="0">
         <div class="feat__icon icon-wheel" aria-hidden="true"><i class="drum"></i></div>
         <h3 class="feat__title">滚轮</h3>
-        <p class="feat__body">转一格，移一行。按住 SHIFT，同一个滚轮就在页面之间滑动：助手、Omarchy、快捷键、用量、系统和游戏。连按两次 SHIFT 可以重新排序。</p>
+        <p class="feat__body">滚轮每转一格，就移动一行。按住 SHIFT 再转，就能切换助手、Omarchy、宏键盘、用量、系统和小游戏界面。双击 SHIFT，还可以调整它们的顺序。</p>
         <p class="feat__meta">SCROLL · SHIFT+SCROLL</p>
       </article>
 
       <article class="feat reveal" tabindex="0">
         <div class="feat__icon icon-pad" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-        <h3 class="feat__title">“快捷键”页面</h3>
-        <p class="feat__body">触摸屏上的九个按键，每个都有标签和按键组合。主机端把组合键发到你的桌面。直接在设备上编辑按键，用 PTT 口述它的标签。</p>
+        <h3 class="feat__title">宏键盘</h3>
+        <p class="feat__body">触摸屏上有九个自定义按键，每个都能设置名称和快捷键组合。点一下，配套软件就会在电脑上执行。你也能直接在对讲机上编辑按键，按住 PTT 说出它的名字。</p>
         <p class="feat__meta">⌘⇧4 · 点按或绑定</p>
       </article>
 
       <article class="feat reveal" tabindex="0">
         <div class="feat__icon icon-usage" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-        <h3 class="feat__title">“用量”页面</h3>
-        <p class="feat__body">你的 Claude 和 Codex 速率限制窗口显示为进度条，带有当前账户和每次重置的倒计时。主机端只用你已有的登录来读取，别无其他。</p>
-        <p class="feat__meta">会话 · 每周 · 重置</p>
+        <h3 class="feat__title">用量统计</h3>
+        <p class="feat__body">用进度条查看 Claude 和 Codex 各个限额周期的用量，同时显示当前账号和重置倒计时。配套服务使用你已有的登录信息读取这些数据。</p>
+        <p class="feat__meta">会话额度 · 每周额度 · 重置时间</p>
       </article>
 
       <article class="feat reveal" tabindex="0">
         <div class="feat__icon icon-link" aria-hidden="true"><i class="plug"></i><i class="wave"></i></div>
-        <h3 class="feat__title">有线或无线</h3>
-        <p class="feat__body">插上 USB-C，主机端写入一次报告不到一毫秒。拔掉后，同一条连接（包括语音）改走低功耗蓝牙。只要有线连着，主机端就用有线。</p>
+        <h3 class="feat__title">插线用，也能无线用</h3>
+        <p class="feat__body">通过 USB-C 连接时，电脑端写入一条 HID 报文用不到一毫秒。拔掉数据线，数据和语音就改走低功耗蓝牙；插线时优先使用 USB。</p>
         <p class="feat__meta">USB HID · BLE · 1209:5754</p>
       </article>
     </div>
@@ -315,19 +307,19 @@
   <div class="wrap">
     <header class="section-head reveal">
       <p class="section-kicker">第三章</p>
-      <h2 class="section-title">试用</h2>
-      <p class="section-lede demo-intro"><span>六个页面。一台设备。</span><span>选一个模式。点按或转动滚轮。</span><span><kbd>↑ ↓</kbd> 滚动 · <kbd>↵</kbd> 打开 · <kbd>esc</kbd> 返回</span><span><kbd>shift</kbd> + 滚动：切换页面 · <kbd>space</kbd>：说话</span></p>
+      <h2 class="section-title">试试看</h2>
+      <p class="section-lede demo-intro"><span>六种功能页面，一台对讲机。</span><span>选个模式，点屏幕或转动滚轮试试。</span><span><kbd>↑ ↓</kbd> 滚动 · <kbd>↵</kbd> 打开 · <kbd>esc</kbd> 返回</span><span><kbd>shift</kbd> + 滚动：切换界面 · <kbd>space</kbd>：说话</span></p>
     </header>
 
-    <div class="demo-tabs reveal" role="group" aria-label="选择一个演示页面">
+    <div class="demo-tabs reveal" role="group" aria-label="选择一个演示界面">
       <button type="button" class="demo-tab" data-demo-face="0" aria-pressed="true"><span>01</span>助手</button>
       <button type="button" class="demo-tab" data-demo-face="1" aria-pressed="false"><span>02</span>Omarchy</button>
-      <button type="button" class="demo-tab" data-demo-face="2" aria-pressed="false"><span>03</span>快捷键</button>
-      <button type="button" class="demo-tab" data-demo-face="3" aria-pressed="false"><span>04</span>用量</button>
+      <button type="button" class="demo-tab" data-demo-face="2" aria-pressed="false"><span>03</span>宏键盘</button>
+      <button type="button" class="demo-tab" data-demo-face="3" aria-pressed="false"><span>04</span>用量统计</button>
       <button type="button" class="demo-tab" data-demo-face="4" aria-pressed="false"><span>05</span>系统</button>
-      <button type="button" class="demo-tab" data-demo-face="5" aria-pressed="false"><span>06</span>游戏</button>
+      <button type="button" class="demo-tab" data-demo-face="5" aria-pressed="false"><span>06</span>小游戏</button>
     </div>
-    <p class="demo-disclaimer">交互式预览 · 示例数据。不会访问麦克风，也不会连接你的电脑。</p>
+    <p class="demo-disclaimer">交互演示 · 使用示例数据，不会访问麦克风，也不会连接你的电脑。</p>
 
     <div class="demo__grid reveal">
       <!-- ---- the handheld replica ---- -->
@@ -345,7 +337,7 @@
                 <div class="face is-active" id="faceAgents">
                   <ul class="roster" id="roster" data-view="roster" aria-label="助手列表"></ul>
                   <div data-view="channel" hidden>
-                    <p class="chan__state" id="chanState">提问 · 2m</p>
+                    <p class="chan__state" id="chanState">待回答 · 2 分钟</p>
                     <p class="chan__reply" id="chanReply"></p>
                     <div id="chanPending"></div>
                     <span class="sr-only" id="chanWho"></span>
@@ -373,13 +365,13 @@
                 </div>
                 <div class="face" id="faceSystem"><div id="systemMeters"></div><button type="button" class="screen-button" id="refreshSystem">刷新示例</button></div>
                 <div class="face" id="faceArcade">
-                  <div id="arcadeMenu"><button type="button" class="arcade-choice" data-game="flappy"><span>01</span> 像素小鸟 <small>按 PTT 飞行</small></button><button type="button" class="arcade-choice" data-game="snake"><span>02</span> 贪吃蛇 <small>用滚轮转向</small></button><button type="button" class="arcade-choice" data-game="raiden"><span>03</span> 雷电 <small>移动 · 自动射击</small></button></div>
-                  <div id="arcadePlay" hidden><canvas id="arcadeCanvas" width="320" height="240" aria-label="游戏画面"></canvas><div class="arcade-status" id="arcadeStatus" role="status">准备就绪</div><button type="button" class="screen-button" id="arcadeStart">开始游戏</button><button type="button" class="screen-button" id="arcadeBack">游戏列表</button></div>
+                  <div id="arcadeMenu"><button type="button" class="arcade-choice" data-game="flappy"><span>01</span> 像素小鸟 <small>点按 PTT 飞行</small></button><button type="button" class="arcade-choice" data-game="snake"><span>02</span> 贪吃蛇 <small>转动滚轮来转向</small></button><button type="button" class="arcade-choice" data-game="raiden"><span>03</span> 雷电 <small>控制移动 · 自动开火</small></button></div>
+                  <div id="arcadePlay" hidden><canvas id="arcadeCanvas" width="320" height="240" aria-label="游戏区域"></canvas><div class="arcade-status" id="arcadeStatus" role="status">就绪</div><button type="button" class="screen-button" id="arcadeStart">开始游戏</button><button type="button" class="screen-button" id="arcadeBack">游戏列表</button></div>
                 </div>
               </div>
               <form id="macroEditor" class="macro-editor" hidden>
                 <h3 id="macroEditorTitle">编辑按键</h3>
-                <label>标签<input id="macroLabel" maxlength="18" required autocomplete="off" /></label>
+                <label>Screenshot<input id="macroLabel" maxlength="18" required autocomplete="off" /></label>
                 <label>快捷键<input id="macroShortcut" maxlength="32" placeholder="cmd+shift+4" autocomplete="off" /></label>
                 <div><button type="submit" class="screen-button">保存按键</button><button type="button" class="screen-button" id="macroRemove">移除</button><button type="button" class="screen-button" id="macroCancel">取消</button></div>
               </form>
@@ -393,29 +385,29 @@
               <div class="screen__hint" id="screenHint" aria-hidden="true"></div>
             </div>
 
-            <div class="wheel" id="wheel" role="slider" tabindex="0" aria-label="滚轮——拖动、滚动或使用方向键；按住 Shift 切换页面" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">
+            <div class="wheel" id="wheel" role="slider" tabindex="0" aria-label="滚轮——拖动、滚动或使用方向键；按住 Shift 切换功能页面" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">
               <span class="wheel__drum" id="wheelDrum" aria-hidden="true"></span>
               <span class="wheel__lbl" aria-hidden="true">SCROLL</span>
             </div>
           </div>
 
           <div class="deck__keys">
-            <button class="dkey" data-key="left" type="button" aria-label="左前键"><span class="dkey__cap">‹</span></button>
+            <button class="dkey" data-key="left" type="button" aria-label="正面左键"><span class="dkey__cap">‹</span></button>
             <button class="dkey" data-key="cancel" type="button"><span class="dkey__cap">ESC</span></button>
-            <button class="dkey dkey--ptt" data-key="ptt" type="button" aria-label="按住说话——按住"><span class="dkey__cap">PTT</span></button>
+            <button class="dkey dkey--ptt" data-key="ptt" type="button" aria-label="按键通话——按住说话"><span class="dkey__cap">PTT</span></button>
             <button class="dkey" data-key="enter" type="button"><span class="dkey__cap">ENTER</span></button>
-            <button class="dkey" data-key="right" type="button" aria-label="右前键"><span class="dkey__cap">›</span></button>
+            <button class="dkey" data-key="right" type="button" aria-label="正面右键"><span class="dkey__cap">›</span></button>
           </div>
           <div class="deck__keys" style="grid-template-columns: 1fr 5fr;">
-            <button class="dkey" data-key="shift" type="button" aria-label="Shift——点击以按住" aria-pressed="false"><span class="dkey__cap">SHIFT</span></button>
-            <p class="deck__hint" style="align-self:center;margin:0">触摸屏 · 滚轮 · PTT · ENTER · ESC · SHIFT · 两个前键</p>
+            <button class="dkey" data-key="shift" type="button" aria-label="SHIFT — 点击锁定按住状态" aria-pressed="false"><span class="dkey__cap">SHIFT</span></button>
+            <p class="deck__hint" style="align-self:center;margin:0">触摸屏 · 滚轮 · PTT · ENTER · ESC · SHIFT · 两个正面按键</p>
           </div>
         </div>
       </div>
 
       <!-- ---- the host console: what deckd sees ---- -->
       <div class="demo-companion">
-        <div class="demo-guide"><p class="demo-guide__eyebrow" id="demoEyebrow">01 / 助手</p><h3 id="demoTitle">直通你的助手。</h3><p id="demoDescription">选一个会话，打开它的提问卡片，或按住 PTT 发送一条示例语音提示词。</p><p class="demo-guide__tip" id="demoTip">试试：按两次 ENTER 回答第一个问题。</p></div>
+        <div class="demo-guide"><p class="demo-guide__eyebrow" id="demoEyebrow">01 / AI 助手</p><h3 id="demoTitle">直接和你的 AI 助手对话。</h3><p id="demoDescription">选一个会话，打开问题卡片，或按住 PTT 发送一条示例语音指令。</p><p class="demo-guide__tip" id="demoTip">试试：按两次 ENTER 打开第一个问题，选好答案后再按 ENTER 提交。</p></div>
       <div class="monitor">
         <div class="monitor__bezel">
           <div class="monitor__screen" id="hostScreen">
@@ -431,7 +423,7 @@
         </div>
         <div class="monitor__foot">
           <button class="pxbtn pxbtn--sound" id="soundToggle" type="button" aria-pressed="true">
-            <span class="spk" aria-hidden="true"></span><span id="soundLabel">声音：开</span>
+            <span class="spk" aria-hidden="true"></span><span id="soundLabel">声音：开启</span>
           </button>
           <span class="monitor__log" id="lastEvent" role="status">—</span>
         </div>
@@ -446,36 +438,36 @@
   <div class="wrap">
     <header class="section-head reveal">
       <p class="section-kicker">第四章</p>
-      <h2 class="section-title">与你的助手对话</h2>
-      <p class="section-lede">主机端服务 deckd 运行在你的 Mac 上，负责连接。助手通过钩子或本地套接字上的开放 API 接入设备。</p>
+      <h2 class="section-title">把你的 AI 助手连进来</h2>
+      <p class="section-lede">对讲机通过电脑上的后台服务 deckd 连接助手。助手可以使用钩子，也可以通过本地套接字调用开放 API。</p>
     </header>
 
     <p class="row-label reveal">助手</p>
     <div class="badge-row" data-stagger>
-      <div class="badge reveal"><span class="badge__mark badge__mark--claude-code" aria-hidden="true"></span><b>Claude Code</b><i>带钩子的插件</i></div>
-      <div class="badge reveal"><span class="badge__mark badge__mark--codex" aria-hidden="true"></span><b>Codex CLI</b><i>通过它的应用服务器</i></div>
-      <div class="badge reveal"><span class="badge__mark badge__mark--api" aria-hidden="true"></span><b>你的脚本</b><i>本地套接字上的 JSON-RPC</i></div>
-      <div class="badge badge--wild reveal"><span class="badge__mark badge__mark--any" aria-hidden="true"></span><b>+ 任何助手</b><i>一行 curl 也可以</i></div>
+      <div class="badge reveal"><span class="badge__mark badge__mark--claude-code" aria-hidden="true"></span><b>Claude Code</b><i>通过带钩子的插件连接</i></div>
+      <div class="badge reveal"><span class="badge__mark badge__mark--codex" aria-hidden="true"></span><b>Codex CLI</b><i>通过 Codex 应用服务器连接</i></div>
+      <div class="badge reveal"><span class="badge__mark badge__mark--api" aria-hidden="true"></span><b>你自己的脚本</b><i>通过本地套接字使用 JSON-RPC</i></div>
+      <div class="badge badge--wild reveal"><span class="badge__mark badge__mark--any" aria-hidden="true"></span><b>以及其他 AI 助手</b><i>脚本也能通过本地 API 接入</i></div>
     </div>
 
-    <p class="row-label reveal">还有你桌上的其他东西</p>
+    <p class="row-label reveal">桌上的其他事情，也能顺手搞定</p>
     <div class="badge-row" data-stagger>
-      <div class="badge badge--alt reveal"><span class="badge__mark badge__mark--omarchy" aria-hidden="true"></span><b>Omarchy</b><i>Hyprland 遥控页面</i></div>
-      <div class="badge badge--alt reveal"><span class="badge__mark badge__mark--keys" aria-hidden="true"></span><b>按键输入</b><i>macOS 上的快捷键组合</i></div>
-      <div class="badge badge--alt reveal"><span class="badge__mark badge__mark--voice" aria-hidden="true"></span><b>语音回复</b><i>Apple 语音，或你自己的 API 密钥</i></div>
-      <div class="badge badge--alt badge--wild reveal"><span class="badge__mark badge__mark--whisper" aria-hidden="true"></span><b>本机语音识别</b><i>Apple 识别器，可选 Whisper</i></div>
+      <div class="badge badge--alt reveal"><span class="badge__mark badge__mark--omarchy" aria-hidden="true"></span><b>Omarchy</b><i>远程操作 Hyprland 桌面</i></div>
+      <div class="badge badge--alt reveal"><span class="badge__mark badge__mark--keys" aria-hidden="true"></span><b>按键输入</b><i>在 macOS 上执行宏键盘快捷键</i></div>
+      <div class="badge badge--alt reveal"><span class="badge__mark badge__mark--voice" aria-hidden="true"></span><b>语音回复</b><i>用 Apple 语音，或你自己的 API 密钥</i></div>
+      <div class="badge badge--alt badge--wild reveal"><span class="badge__mark badge__mark--whisper" aria-hidden="true"></span><b>本地语音识别</b><i>Mac 默认用 Apple 识别，也可选 Whisper</i></div>
     </div>
 
-    <p class="works__punch reveal">语音识别在你的 Mac 上运行。转写内容发给你选择的助手。</p>
+    <p class="works__punch reveal">使用 Mac 本地识别时，电脑先把语音转成文字，再发给选中的助手。Conol 对话也可以使用 Conol 自己的语音模型。</p>
   </div>
 </section>
 
 <!-- ============ 7. THE FACES ============ -->
 <section class="section faces" id="faces">
   <div class="wrap">
-    <header class="section-head reveal"><p class="section-kicker">第五章 · 屏幕图集</p><h2 class="section-title">页面</h2><p class="section-lede">一块小屏幕。一整张桌面的可能。<br>逐个页面浏览真实的固件界面。</p></header>
+    <header class="section-head reveal"><p class="section-kicker">第五章 · 屏幕图谱</p><h2 class="section-title">一屏多用</h2><p class="section-lede">一块小屏幕，帮你管好桌上的事。<br>逐个看看对讲机固件中的实际界面。</p></header>
     <div class="face-atlas reveal">
-      <div class="face-atlas__index" role="tablist" aria-label="固件界面" aria-orientation="vertical"><button class="face-atlas__tab" type="button" role="tab" id="atlasTab0" aria-controls="atlasPanel0" aria-selected="true" tabindex="0"><span>01</span><b>助手 · 首页</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab1" aria-controls="atlasPanel1" aria-selected="false" tabindex="-1"><span>02</span><b>提问卡片</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab2" aria-controls="atlasPanel2" aria-selected="false" tabindex="-1"><span>03</span><b>正在聆听</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab3" aria-controls="atlasPanel3" aria-selected="false" tabindex="-1"><span>04</span><b>快捷键</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab4" aria-controls="atlasPanel4" aria-selected="false" tabindex="-1"><span>05</span><b>用量</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab5" aria-controls="atlasPanel5" aria-selected="false" tabindex="-1"><span>06</span><b>OMARCHY</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab6" aria-controls="atlasPanel6" aria-selected="false" tabindex="-1"><span>07</span><b>页面管理</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab7" aria-controls="atlasPanel7" aria-selected="false" tabindex="-1"><span>08</span><b>游戏 · 贪吃蛇</b><span aria-hidden="true">↗</span></button></div><div class="face-atlas__stage"><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel0" aria-labelledby="atlasTab0" tabindex="0" ><div class="face-atlas__image"><img src="/assets/screens/roster.png" alt="“助手”列表：四个助手，带有彩色状态点，第一个正在提问" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">01 / 08</span><h3>助手 · 首页</h3><p>谁先需要你。提问排在最上面；左侧的竖条标出当前频道。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel1" aria-labelledby="atlasTab1" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/card-question.png" alt="一张有三个选项的提问卡片，第一个是推荐选项" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">02 / 08</span><h3>提问卡片</h3><p>滚动、ENTER 或点按。主机端确认期间卡片会锁定，然后界面回到频道。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel2" aria-labelledby="atlasTab2" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/ptt-roster.png" alt="“正在聆听”界面，显示波形和正在输入的转写" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">03 / 08</span><h3>正在聆听</h3><p>在工作页面上按住 PTT。松开发送。最后一条回复留在底部，让你知道自己在回答什么。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel3" aria-labelledby="atlasTab3" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/macropad.png" alt="“快捷键”页面：3×3 的按键网格，每个按键带标签和按键符号" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">04 / 08</span><h3>快捷键</h3><p>九个触摸按键，每个都有标签和组合键。SHIFT+CANCEL 在设备上打开按键编辑器。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel4" aria-labelledby="atlasTab4" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/usage.png" alt="“用量”页面：服务商的进度条，带百分比和重置倒计时" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">05 / 08</span><h3>用量</h3><p>每个速率限制窗口一条进度条，带有到重置的倒计时。ENTER 同时查询两个服务商。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel5" aria-labelledby="atlasTab5" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/omarchy.png" alt="Omarchy 页面：工作区标签和窗口列表" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">06 / 08</span><h3>OMARCHY</h3><p>Hyprland 桌面的遥控器：工作区和窗口，由主机端推送。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel6" aria-labelledby="atlasTab6" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/manager.png" alt="页面管理：页面列表排成方块，可以重新排序" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">07 / 08</span><h3>页面管理</h3><p>连按两次 SHIFT。重新排序、添加和移除页面，最多八个。“助手”和“设置”固定不动。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel7" aria-labelledby="atlasTab7" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/arcade-snake-1920.png" alt="设备上运行的贪吃蛇：游戏区中的绿色小蛇和食物" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">08 / 08</span><h3>游戏 · 贪吃蛇</h3><p>内置的小小休息。贪吃蛇、像素小鸟和雷电在设备本地运行。PTT 变成游戏按键。</p></figcaption></figure></div></div><div class="face-atlas__specs"><span><b>480 × 480</b> AMOLED</span><span><b>触摸 + 滚轮</b> 为双手而做</span><span><b>真实固件</b> 逐像素渲染</span></div>
+      <div class="face-atlas__index" role="tablist" aria-label="固件屏幕" aria-orientation="vertical"><button class="face-atlas__tab" type="button" role="tab" id="atlasTab0" aria-controls="atlasPanel0" aria-selected="true" tabindex="0"><span>01</span><b>助手 · 首页</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab1" aria-controls="atlasPanel1" aria-selected="false" tabindex="-1"><span>02</span><b>问题卡片</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab2" aria-controls="atlasPanel2" aria-selected="false" tabindex="-1"><span>03</span><b>正在聆听</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab3" aria-controls="atlasPanel3" aria-selected="false" tabindex="-1"><span>04</span><b>宏键盘</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab4" aria-controls="atlasPanel4" aria-selected="false" tabindex="-1"><span>05</span><b>用量统计</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab5" aria-controls="atlasPanel5" aria-selected="false" tabindex="-1"><span>06</span><b>OMARCHY</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab6" aria-controls="atlasPanel6" aria-selected="false" tabindex="-1"><span>07</span><b>页面管理器</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab7" aria-controls="atlasPanel7" aria-selected="false" tabindex="-1"><span>08</span><b>小游戏 · 贪吃蛇</b><span aria-hidden="true">↗</span></button></div><div class="face-atlas__stage"><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel0" aria-labelledby="atlasTab0" tabindex="0" ><div class="face-atlas__image"><img src="/assets/screens/roster.png" alt="助手列表：四个助手，带有彩色状态点，第一个正在提问" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">01 / 08</span><h3>助手 · 首页</h3><p>先处理最需要你的助手。有问题的会话排在顶部，左侧标记指示当前选中的频道。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel1" aria-labelledby="atlasTab1" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/card-question.png" alt="一个问题卡片，包含三个选项，第一个选项被推荐" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">02 / 08</span><h3>问题卡片</h3><p>转动滚轮选择，按 ENTER 确认，也可以触屏操作。等待电脑端确认时，卡片会暂时锁定；确认完成后返回会话。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel2" aria-labelledby="atlasTab2" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/ptt-roster.png" alt="语音输入界面，显示音频波形和正在识别的文字" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">03 / 08</span><h3>正在聆听</h3><p>在工作界面按住 PTT 说话，松手发送。上一条回复会留在屏幕底部，方便你接着聊。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel3" aria-labelledby="atlasTab3" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/macropad.png" alt="宏键盘界面：九宫格触摸按键，带有名称和快捷键符号" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">04 / 08</span><h3>宏键盘</h3><p>九个触摸按键，每个都能设置名称和快捷键组合。按 SHIFT+CANCEL，在对讲机上打开按键编辑器。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel4" aria-labelledby="atlasTab4" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/usage.png" alt="用量页面：显示各服务的用量百分比和重置倒计时" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">05 / 08</span><h3>用量统计</h3><p>每个限额周期都有一条用量进度条，并显示重置倒计时。按 ENTER，同时查询两个服务的最新用量。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel5" aria-labelledby="atlasTab5" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/omarchy.png" alt="Omarchy 界面：工作区按钮和窗口列表" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">06 / 08</span><h3>OMARCHY</h3><p>遥控 Hyprland 桌面：电脑端推送工作区和窗口信息，你可以直接在对讲机上切换。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel6" aria-labelledby="atlasTab6" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/manager.png" alt="页面管理器：以方块形式排列的界面，可重新排序" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">07 / 08</span><h3>页面管理器</h3><p>双击 SHIFT，即可调整顺序、添加或移除功能页面，最多八个。助手和设置的位置固定。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel7" aria-labelledby="atlasTab7" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/arcade-snake-1920.png" alt="对讲机上运行的贪吃蛇：游戏区域里有一条绿色小蛇和食物" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">08 / 08</span><h3>小游戏 · 贪吃蛇</h3><p>忙里偷闲，玩一小会儿。贪吃蛇、像素小鸟和雷电都在对讲机本地运行，此时 PTT 就是游戏操作键。</p></figcaption></figure></div></div><div class="face-atlas__specs"><span><b>480 × 480</b> AMOLED</span><span><b>触屏 + 滚轮</b> 方便手持操作</span><span><b>真实固件</b> 逐像素渲染</span></div>
   </div>
 </section>
 
@@ -484,67 +476,67 @@
   <div class="wrap">
     <header class="section-head reveal">
       <p class="section-kicker">第六章</p>
-      <h2 class="section-title">设计图纸</h2>
-      <p class="section-lede">按开放的设计自己动手做一台，或加入候补名单等成品。主板、固件、主机端服务和通信协议都在同一个仓库里。</p>
+      <h2 class="section-title">开源设计</h2>
+      <p class="section-lede">想自己做，就用公开的设计文件；想买成品，就加入等候名单。电路板、固件、配套服务和通信协议，都放在同一个仓库里。</p>
     </header>
 
     <div class="inv reveal">
       <div class="inv__bar">
-        <span class="inv__bar-title">清单 · openwalkietalkie</span>
+        <span class="inv__bar-title">仓库内容 · openwalkietalkie</span>
         <span class="inv__bar-meta">MIT + CERN-OHL-P</span>
       </div>
       <ul class="tree">
         <li class="tree__row tree__row--root">
           <span class="tree__glyph glyph-folder" aria-hidden="true"></span>
           <span class="tree__name">openwalkietalkie/</span>
-          <span class="tree__desc">主板、固件和 Mac 应用，全在一起。克隆下来就能开始。</span>
+          <span class="tree__desc">电路板、固件和 Mac 软件都在这里，克隆仓库就能开始。</span>
         </li>
         <li class="tree__row">
           <span class="tree__branch" aria-hidden="true">├─</span>
           <span class="tree__glyph glyph-folder" aria-hidden="true"></span>
           <span class="tree__name">hardware/rev-b/</span>
-          <span class="tree__desc">Rev B 主板：一个 KiCad 项目，含 Gerber、BOM 和贴片坐标。CERN-OHL-P 2.0。</span>
+          <span class="tree__desc">Rev B 主板：KiCad 工程，附 Gerber、物料清单和贴片坐标文件。采用 CERN-OHL-P 2.0 许可。</span>
         </li>
         <li class="tree__row">
           <span class="tree__branch" aria-hidden="true">├─</span>
           <span class="tree__glyph glyph-folder" aria-hidden="true"></span>
           <span class="tree__name">hardware/rev-a/</span>
-          <span class="tree__desc">一切的起点：CoHDL 原理图源文件、四个已打样的版本、外壳 CAD。</span>
+          <span class="tree__desc">项目的起点：CoHDL 原理图源码、四个已打样版本，以及外壳 CAD 文件。</span>
         </li>
         <li class="tree__row">
           <span class="tree__branch" aria-hidden="true">├─</span>
           <span class="tree__glyph glyph-folder" aria-hidden="true"></span>
           <span class="tree__name">src/</span>
-          <span class="tree__desc">基于 embassy 的 Rust 固件：各个页面、经 BLE 和 USB 的 HID 连接、配对日志、电源管理。</span>
+          <span class="tree__desc">基于 embassy 的 Rust 固件：各功能页面、蓝牙与 USB HID 连接、配对记录和电源管理。</span>
         </li>
         <li class="tree__row">
           <span class="tree__branch" aria-hidden="true">├─</span>
           <span class="tree__glyph glyph-folder" aria-hidden="true"></span>
           <span class="tree__name">native/</span>
-          <span class="tree__desc">带蓝牙音频的 RT-Thread 镜像，挂载同一套界面核心。</span>
+          <span class="tree__desc">支持蓝牙音频的 RT-Thread 镜像，使用同一套界面核心。</span>
         </li>
         <li class="tree__row">
           <span class="tree__branch" aria-hidden="true">├─</span>
           <span class="tree__glyph glyph-folder" aria-hidden="true"></span>
           <span class="tree__name">host/</span>
-          <span class="tree__desc">deckd 和 Mac 应用，Rust + gpui：连接、Claude Code 和 Codex 适配器、语音、开放 API。</span>
+          <span class="tree__desc">deckd 和 Mac 软件，使用 Rust + gpui：设备连接、Claude Code 与 Codex 适配、语音，以及开放 API。</span>
         </li>
         <li class="tree__row">
           <span class="tree__branch" aria-hidden="true">└─</span>
           <span class="tree__glyph glyph-file" aria-hidden="true"></span>
           <span class="tree__name">docs/deck-protocol.md</span>
-          <span class="tree__desc">通道 5 上的通信约定。读完它，你的脚本就能成为设备上的助手。</span>
+          <span class="tree__desc">第 5 通道的通信协议。照着接入，你的脚本也能作为助手出现在对讲机上。</span>
         </li>
       </ul>
       <div class="inv__foot">
-        <p>软件采用 MIT 许可。主板、外壳和所有设计文件采用宽松的 CERN 开放硬件许可证。制作、修改、出售，都无需许可。</p>
-        <p class="inv__cohdl"><strong>硬件设计始于 CoHDL。</strong>Rev A 原理图是用开源硬件语言写成的源代码，见 <a href="https://cohdl.org/" target="_blank" rel="noopener">cohdl.org</a>，由它的编译器检查；Rev B 沿着这条脉络，在 KiCad 中手工布局布线。</p>
+        <p>软件采用 MIT 许可；电路板、外壳和全部设计文件采用宽松的 CERN 开源硬件许可。你可以制作、修改和销售，无需另行申请许可。</p>
+        <p class="inv__cohdl"><strong>硬件设计从 CoHDL 起步。</strong>Rev A 的原理图用开源硬件语言编写，并由其编译器检查；语言介绍见 <a href="https://cohdl.org/" target="_blank" rel="noopener">cohdl.org</a>。Rev B 延续这一设计，在 KiCad 中手工布局和布线。</p>
         <div class="inv__ctas">
-          <a class="btn btn--primary btn--big" href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">★ 在 GitHub 获取设计图纸</a>
+          <a class="btn btn--primary btn--big" href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">★ 去 GitHub 获取设计文件</a>
           <a class="btn btn--ghost btn--big" href="#download">▼ 下载 Mac 版</a>
-          <a class="btn btn--ghost btn--big" href="https://discord.gg/x7DXPvK66" target="_blank" rel="noopener" aria-label="加入 Discord——CoHDL 和 OpenWalkieTalkie 社区">加入 Discord</a>
+          <a class="btn btn--ghost btn--big" href="https://discord.gg/x7DXPvK66" target="_blank" rel="noopener" aria-label="加入 Discord — CoHDL 和 OpenWalkieTalkie 社区">加入 Discord 社区</a>
         </div>
-        <p class="inv__note">Mac 应用包含 deckd、应用自动更新，以及 Rev A 和 Rev B 的固件更新。源代码中包含首次通过 USB-C 或 UART 烧录所需的工具。</p>
+        <p class="inv__note">Mac 软件内置 deckd、软件自动更新，以及 Rev A 和 Rev B 的固件更新。源码中也包含首次通过 USB-C 或 UART 刷写所需的工具。</p>
       </div>
     </div>
   </div>
@@ -555,44 +547,44 @@
   <div class="wrap">
     <header class="section-head reveal">
       <p class="section-kicker">第七章</p>
-      <h2 class="section-title">实物</h2>
-      <p class="section-lede">重新设计的机身，两种配色，摄于 2026 年 11 月；后面是 Rev A 电路板的渲染图。电路板设计和早期的 BodyV6.13 外壳都在仓库里。</p>
+      <h2 class="section-title">看看实机</h2>
+      <p class="section-lede">这里先展示 2026 年 11 月拍摄的新外壳，两种配色都有；后面是 Rev A 电路板的渲染图。电路板设计和早期 BodyV6.13 外壳文件都在仓库里。</p>
     </header>
 
     <div class="polaroid-wrap reveal">
       <div class="shots-col">
-        <div class="shots" role="group" aria-label="原型机照片和开放硬件设计的渲染图">
+        <div class="shots" role="group" aria-label="原型照片和开源硬件设计的渲染图">
           <figure class="shot">
-            <div class="shot__win"><img class="shot__img" src="/assets/photos/fully-open.webp" alt="一台黑绿配色的设备平放在白色桌面上，周围是它的电路板、散落的绿色键帽，还有一张写着 Fully open source 的纸条" width="750" height="1000" loading="lazy" /></div>
-            <figcaption class="shot__cap"><span class="shot__cap-title">完全开放</span><span class="shot__cap-body">设备、它的电路板和按键，摆在一起。从原理图到外壳，每一样都在仓库里。</span></figcaption>
+            <div class="shot__win"><img class="shot__img" src="/assets/photos/fully-open.webp" alt="黑绿配色的对讲机平放在白桌上，两旁摆着电路板，周围散落着绿色键帽，旁边的便条写着“完全开源”" width="750" height="1000" loading="lazy" /></div>
+            <figcaption class="shot__cap"><span class="shot__cap-title">完全开源</span><span class="shot__cap-body">对讲机、电路板和按键，一一摆开。从原理图到外壳，每一部分的设计文件都在仓库里。</span></figcaption>
           </figure>
           <figure class="shot">
-            <div class="shot__win"><img class="shot__img" src="/assets/photos/black-front.webp" alt="立着的黑绿配色设备，屏幕上正在跟踪一个 Codex 工作流：运行了三条命令，详情按一下就能看到" width="750" height="1000" loading="lazy" /></div>
-            <figcaption class="shot__cap"><span class="shot__cap-title">打开一个会话</span><span class="shot__cap-body">打开一行，设备就会跟随那个会话。这里是一个 Codex 工作流：它运行过的命令，详情按一下就能看到。</span></figcaption>
+            <div class="shot__win"><img class="shot__img" src="/assets/photos/black-front.webp" alt="黑绿配色的对讲机立在桌上，屏幕显示 Codex 工作流执行过的三条命令，按一下就能查看详情" width="750" height="1000" loading="lazy" /></div>
+            <figcaption class="shot__cap"><span class="shot__cap-title">打开会话，跟进进展</span><span class="shot__cap-body">从列表打开一个会话，对讲机就会跟随它的进展。图中是 Codex 工作流：执行了哪些命令，按一下就能查看详情。</span></figcaption>
           </figure>
           <figure class="shot">
-            <div class="shot__win"><img class="shot__img" src="/assets/photos/white-front.webp" alt="立着的白橙配色设备，屏幕上显示一条已完成的 Codex 命令" width="750" height="1000" loading="lazy" /></div>
-            <figcaption class="shot__cap"><span class="shot__cap-title">白 · 橙</span><span class="shot__cap-body">同样的机身和按键，白橙配色。屏幕底部的提示栏说明每个按键此刻的作用。</span></figcaption>
+            <div class="shot__win"><img class="shot__img" src="/assets/photos/white-front.webp" alt="白色和橙色的对讲机竖立着，屏幕显示一个已完成的 Codex 命令" width="750" height="1000" loading="lazy" /></div>
+            <figcaption class="shot__cap"><span class="shot__cap-title">白 · 橙</span><span class="shot__cap-body">同样的机身和按键，换上白橙配色。屏幕底部会提示各个按键在当前界面的作用。</span></figcaption>
           </figure>
           <figure class="shot">
-            <div class="shot__win"><img class="shot__img" src="/assets/photos/faces.webp" alt="白橙配色的设备，旁边是一块电路板和一个橙色滚轮，屏幕上是页面选择：助手、Omarchy、用量和设置" width="750" height="1000" loading="lazy" /></div>
-            <figcaption class="shot__cap"><span class="shot__cap-title">每一个页面</span><span class="shot__cap-body">按住 SHIFT，滚轮就在页面之间滑动：助手、Omarchy、用量、设置。</span></figcaption>
+            <div class="shot__win"><img class="shot__img" src="/assets/photos/faces.webp" alt="白橙配色对讲机，旁边放着电路板和橙色滚轮；屏幕中的界面选择器列出助手、Omarchy、用量统计和设置" width="750" height="1000" loading="lazy" /></div>
+            <figcaption class="shot__cap"><span class="shot__cap-title">切换功能页面</span><span class="shot__cap-body">按住 SHIFT 并转动滚轮，在助手、Omarchy、用量统计和设置等界面之间切换。</span></figcaption>
           </figure>
           <figure class="shot">
-            <div class="shot__win"><img class="shot__img" src="/assets/photos/pair-top.webp" alt="从上方看两台平放在白色桌面上的设备，黑绿和白橙并排，周围是散落的键帽和一块电路板" width="750" height="1000" loading="lazy" /></div>
-            <figcaption class="shot__cap"><span class="shot__cap-title">一对</span><span class="shot__cap-body">顶部是滚轮和 USB-C，左侧一个长键，右侧三个，屏幕下方两个，再往下是麦克风开孔和扬声器。</span></figcaption>
+            <div class="shot__win"><img class="shot__img" src="/assets/photos/pair-top.webp" alt="两个对讲机平放在白色桌面上，从上方视角看，黑色和绿色在左，白色和橙色在右，周围散落着键帽和电路板" width="750" height="1000" loading="lazy" /></div>
+            <figcaption class="shot__cap"><span class="shot__cap-title">两种配色，一起亮相</span><span class="shot__cap-body">顶部是滚轮和 USB-C，左侧一个长键，右侧三个按键，屏幕下方两个按键，再下面是麦克风开孔和扬声器。</span></figcaption>
           </figure>
           <figure class="shot">
-            <div class="shot__win"><img class="shot__img" src="/assets/photos/white-top.webp" alt="从上方看白橙配色的设备，旁边是一块黑色电路板和一个散落的橙色按键" width="750" height="1000" loading="lazy" /></div>
-            <figcaption class="shot__cap"><span class="shot__cap-title">俯视</span><span class="shot__cap-body">从上方看，旁边是它的一块电路板。电路板布局在后面两张。</span></figcaption>
+            <div class="shot__win"><img class="shot__img" src="/assets/photos/white-top.webp" alt="从上方视角看的白色和橙色对讲机，旁边是一块黑色电路板和一枚单独摆放的橙色按键" width="750" height="1000" loading="lazy" /></div>
+            <figcaption class="shot__cap"><span class="shot__cap-title">从上方看看</span><span class="shot__cap-body">俯视对讲机，旁边放着一块电路板。再往后翻两张，就能看到电路板布局。</span></figcaption>
           </figure>
           <figure class="shot">
-            <div class="shot__win"><img class="shot__img" src="/assets/main-board.png" alt="由 KiCad 设计渲染的 Rev A 主板" loading="lazy" style="object-fit:contain" /></div>
-            <figcaption class="shot__cap"><span class="shot__cap-title">主板 · REV A</span><span class="shot__cap-body">Rev A 主板的 KiCad 渲染图。可编辑的布局和生产文件都在源代码中。</span></figcaption>
+            <div class="shot__win"><img class="shot__img" src="/assets/main-board.png" alt="Rev A 主电路板基于其 KiCad 设计的渲染图" loading="lazy" style="object-fit:contain" /></div>
+            <figcaption class="shot__cap"><span class="shot__cap-title">主板 · REV A</span><span class="shot__cap-body">用 KiCad 渲染的 Rev A 主板。可编辑的布局和制造文件都在源码仓库中。</span></figcaption>
           </figure>
           <figure class="shot">
-            <div class="shot__win"><img class="shot__img" src="/assets/encoder-board.png" alt="由 KiCad 设计渲染的 Rev A 编码器板" loading="lazy" style="object-fit:contain" /></div>
-            <figcaption class="shot__cap"><span class="shot__cap-title">编码器板</span><span class="shot__cap-body">滚轮装在一块单独的编码器板上，通过排线连接主板。</span></figcaption>
+            <div class="shot__win"><img class="shot__img" src="/assets/encoder-board.png" alt="Rev A 编码器电路板基于其 KiCad 设计的渲染图" loading="lazy" style="object-fit:contain" /></div>
+            <figcaption class="shot__cap"><span class="shot__cap-title">滚轮编码器板</span><span class="shot__cap-body">滚轮安装在独立的编码器板上，通过柔性排线连接主板。</span></figcaption>
           </figure>
         </div>
         <div class="shots-bar">
@@ -603,28 +595,28 @@
       </div>
 
       <ul class="build-notes">
-        <li><b>大脑</b><span>SiFli SF32LB52x，Cortex-M33，16 MB 闪存，8 MB PSRAM，运行基于 embassy 的 Rust</span></li>
-        <li><b>屏幕</b><span>2.16" CO5300 AMOLED，480 × 480，配 CST9220 触摸</span></li>
-        <li><b>电路板</b><span>四层主板和两层编码器板，都在仓库里</span></li>
-        <li><b>外壳</b><span>3D 打印，2026 年 11 月重新设计；早期的 BodyV6.13 Fusion 源文件随硬件一起提供</span></li>
-        <li><b>音频</b><span>MP34DT05 PDM 麦克风和 NS4150B 扬声器功放</span></li>
-        <li><b>连接</b><span>USB-C 和低功耗蓝牙，同一个 HID 设备：VID 1209，PID 5754</span></li>
-        <li><b>电池</b><span>3.7 V、500 mAh 电芯，通过 USB-C 充电</span></li>
-        <li><b>状态</b><span>Rev A 原型机在工作台上 · Rev B 主板已完成设计</span></li>
+        <li><b>处理器</b><span>SiFli SF32LB52x，Cortex-M33，16 MB 闪存，8 MB PSRAM，运行基于 embassy 的 Rust 固件</span></li>
+        <li><b>屏幕</b><span>2.16" CO5300 AMOLED，480 × 480，搭配 CST9220 触摸屏</span></li>
+        <li><b>PCB</b><span>四层主板和两层编码器板，设计文件都在仓库中</span></li>
+        <li><b>外壳</b><span>3D 打印外壳，2026 年 11 月重新设计；硬件目录中还提供早期 BodyV6.13 的 Fusion 设计源文件</span></li>
+        <li><b>音频</b><span>MP34DT05 PDM 麦克风和 NS4150B 扬声器放大器</span></li>
+        <li><b>连接</b><span>USB-C 和 Bluetooth LE，一个 HID 设备：VID 1209，PID 5754</span></li>
+        <li><b>电池</b><span>3.7 V，500 mAh 电池，通过 USB-C 充电</span></li>
+        <li><b>进度</b><span>Rev A 原型已制作 · Rev B 主板已完成设计</span></li>
       </ul>
     </div>
 
     <!-- One studio photo per colourway (tools/photos.sh crops them from ../ref/OpenWalkieTalkie) -->
     <div class="colourways reveal" id="colourways">
-      <p class="section-kicker">外观设计 · 两种配色</p>
+      <p class="section-kicker">同一个设计，两种配色</p>
       <div class="colourways__grid">
         <figure class="colourway">
-          <img class="colourway__img" src="/assets/photos/black-green.webp" alt="黑绿配色设备的正面：屏幕、左侧的绿色长键、右侧三个键、屏幕下方两个绿色按键和圆形扬声器网罩" width="1536" height="1024" loading="lazy" />
-          <figcaption class="colourway__cap"><span class="shot__cap-title">黑 · 绿</span><span class="shot__cap-body">炭黑机身，绿色按键和滚轮。顶部是滚轮和 USB-C，左侧一个长键，右侧三个，屏幕下方两个，再往下是麦克风开孔和扬声器。</span></figcaption>
+          <img class="colourway__img" src="/assets/photos/black-green.webp" alt="从正面看的黑色和绿色对讲机：屏幕、左侧的长绿色键、右侧的三个键、屏幕下方的两个绿色键，以及圆形扬声器格栅" width="1536" height="1024" loading="lazy" />
+          <figcaption class="colourway__cap"><span class="shot__cap-title">黑 · 绿</span><span class="shot__cap-body">深灰色机身，搭配绿色按键和滚轮。顶部是滚轮和 USB-C，左侧一个长键，右侧三个按键，屏幕下方两个按键，再下面是麦克风开孔和扬声器。</span></figcaption>
         </figure>
         <figure class="colourway">
-          <img class="colourway__img" src="/assets/photos/white-orange.webp" alt="白橙配色设备的正面：屏幕、橙色侧键、屏幕下方两个橙色按键和圆形扬声器网罩" width="1536" height="1024" loading="lazy" />
-          <figcaption class="colourway__cap"><span class="shot__cap-title">白 · 橙</span><span class="shot__cap-body">同样的机身和按键，白橙配色，与黑色那台一起制作和拍摄。</span></figcaption>
+          <img class="colourway__img" src="/assets/photos/white-orange.webp" alt="从正面看的白色和橙色对讲机：屏幕、橙色侧键、屏幕下方的两个橙色键，以及圆形扬声器格栅" width="1536" height="1024" loading="lazy" />
+          <figcaption class="colourway__cap"><span class="shot__cap-title">白 · 橙</span><span class="shot__cap-body">相同的机身与按键设计，换上白橙配色；与黑绿款一起制作、拍摄。</span></figcaption>
         </figure>
       </div>
     </div>
@@ -636,26 +628,26 @@
   <div class="wrap">
     <div class="waitlist__panel">
       <div class="waitlist__intro">
-        <p class="section-kicker">你的下一台手持设备</p>
+        <p class="section-kicker">下一台，放进你手心</p>
         <h2 class="section-title" id="waitlist-title">想在桌上<br />放一台吗？</h2>
-        <p>加入候补名单，等一台成品 OpenWalkieTalkie。可以购买时，我们会发邮件通知你。</p>
-        <p class="waitlist__note">无需付款，也无需承诺。价格和发货日期确定后会公布。</p>
-        <a class="waitlist__source" href="https://github.com/conol-ai/openwalkietalkie">想自己做？获取源代码 →</a>
+        <p>加入 OpenWalkieTalkie 成品等候名单，开售时我们会发邮件告诉你。</p>
+        <p class="waitlist__note">不用付款，也不代表必须购买。价格和发货时间确定后会公布。</p>
+        <a class="waitlist__source" href="https://github.com/conol-ai/openwalkietalkie">更想自己动手做？源码在这里 →</a>
       </div>
       <form class="waitlist__form" id="waitlist-form" action="/api/waitlist" method="post">
         <input type="hidden" name="lang" value="zh-Hans" />
-        <label for="waitlist-email">你的电子邮件地址</label>
+        <label for="waitlist-email">你的邮箱</label>
         <input id="waitlist-email" name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" maxlength="254" required aria-describedby="waitlist-note" />
         <div class="waitlist__trap" aria-hidden="true">
-          <label for="waitlist-company">此栏请留空</label>
+          <label for="waitlist-company">这一栏请留空</label>
           <input id="waitlist-company" name="company" type="text" tabindex="-1" autocomplete="off" />
         </div>
         <label class="waitlist__consent" for="waitlist-consent">
           <input id="waitlist-consent" name="consent" type="checkbox" value="yes" required />
-          <span>设备可以购买时发邮件给我。我已阅读<a href="/zh-Hans/privacy/">隐私政策</a>。</span>
+          <span>设备开售时，请发邮件通知我。我已阅读<a href="/zh-Hans/privacy/">隐私政策</a>。</span>
         </label>
-        <button class="btn btn--primary btn--big" type="submit">加入候补名单</button>
-        <p class="waitlist__note" id="waitlist-note">只发送设备上市的通知。随时发邮件到 <a href="mailto:privacy@cohdl.ai">privacy@cohdl.ai</a> 即可退出名单。</p>
+        <button class="btn btn--primary btn--big" type="submit">加入等候名单</button>
+        <p class="waitlist__note" id="waitlist-note">只发送设备开售相关消息。想退出名单，随时发邮件到 <a href="mailto:privacy@cohdl.ai">privacy@cohdl.ai</a>。</p>
         <p class="waitlist__status" id="waitlist-status" role="status" aria-live="polite" aria-atomic="true"></p>
       </form>
     </div>
@@ -666,22 +658,22 @@
 <section class="section" id="download">
   <div class="wrap">
     <header class="section-head reveal">
-      <p class="section-kicker">准备好说话了</p>
-      <h2 class="section-title">获取应用</h2>
-      <p class="section-lede">v0.17.0，适用于 macOS 13 及更高版本，已签名并经过公证：你的设备的配套应用，支持 Mac、Windows 和 Omarchy。Windows 10 和 11 为未签名的预览版。</p>
+      <p class="section-kicker">准备好开聊了吗</p>
+      <h2 class="section-title">下载配套软件</h2>
+      <p class="section-lede">下载 v0.17.0 配套软件，连接你的对讲机，支持 Mac、Windows 和 Omarchy。Mac 版适用于 macOS 13 及以上，已完成签名和公证；Windows 10 / 11 版目前为未签名的预览版。</p>
     </header>
     <div class="inv reveal">
       <div class="inv__foot">
         <div class="inv__ctas">
-          <a class="btn btn--primary btn--big" href="https://github.com/conol-ai/openwalkietalkie/releases/download/v0.17.0/OpenWalkieTalkie-0.17.0-macos-aarch64.dmg">↓ Mac · Apple 芯片</a>
+          <a class="btn btn--primary btn--big" href="https://github.com/conol-ai/openwalkietalkie/releases/download/v0.17.0/OpenWalkieTalkie-0.17.0-macos-aarch64.dmg">↓ Mac · Apple Silicon</a>
           <a class="btn btn--ghost btn--big" href="https://github.com/conol-ai/openwalkietalkie/releases/download/v0.17.0/OpenWalkieTalkie-0.17.0-macos-x86_64.dmg">↓ Mac · Intel</a>
             <a class="btn btn--ghost btn--big" href="https://github.com/conol-ai/openwalkietalkie/releases/download/v0.17.0/OpenWalkieTalkie-0.17.0-windows-x86_64.zip">↓ Windows · x64 预览版</a>
           <a class="btn btn--ghost btn--big" href="/zh-Hans/docs/omarchy/">Omarchy · Linux</a>
         </div>
-        <p>打开磁盘映像，把 OpenWalkieTalkie 拖进“应用程序”，然后按照应用中的设置操作。M 系列 Mac 选择 Apple 芯片，Intel Mac 选择 Intel。</p>
-          <p>在 Windows 10 或 11（x64）上，未签名的预览版支持语音、Claude Code、Codex CLI 和 Grok Bot。设置和 SmartScreen 请阅读 <a href="/zh-Hans/docs/windows/">Windows 安装指南</a>，并<a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/windows-preview-20261116">查看预览版的发布说明和校验和</a>。</p>
-        <p>在 Omarchy（Hyprland）笔记本上，服务和 Omarchy 桥接需要从源代码构建：<a href="/zh-Hans/docs/omarchy/">按照 Omarchy 指南</a>设置桌面遥控、助手会话和语音指令。</p>
-        <p class="inv__note">应用包含自动更新，以及能识别主板的 Rev A 和 Rev B USB 固件更新。首次烧录需要兼容的引导程序。<a href="https://github.com/conol-ai/openwalkietalkie/releases/latest">发布说明、固件与校验和 →</a></p>
+        <p>打开磁盘映像，将 OpenWalkieTalkie 拖到“应用程序”，启动后按提示设置。M 系列芯片的 Mac 选 Apple Silicon 版，Intel 芯片的 Mac 选 Intel 版。</p>
+          <p>在 Windows 10 或 11（x64）上，未签名预览版支持语音、Claude Code、Codex CLI 和 Grok Bot。安装和 SmartScreen 提示的处理方法见 <a href="/zh-Hans/docs/windows/">Windows 安装指南</a>，也请<a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/windows-preview-20261116">查看预览版的更新说明与校验和</a>。</p>
+        <p>在 Omarchy（Hyprland）笔记本上，需要从源码构建服务和 Omarchy 桥接程序。按 <a href="/zh-Hans/docs/omarchy/">Omarchy 指南</a>操作，即可使用桌面遥控、助手会话和语音指令。</p>
+        <p class="inv__note">软件支持自动更新，也支持通过 USB 识别 Rev A 和 Rev B 电路板并更新对应固件。首次刷写需要兼容的引导程序。<a href="https://github.com/conol-ai/openwalkietalkie/releases/latest">更新说明、固件与校验和 →</a></p>
       </div>
     </div>
   </div>
@@ -699,28 +691,28 @@
 
   <div class="footer__inner">
     <div class="footer__panel">
-      <p class="footer__slogan">给 AI 助手用的开源手持对讲机。</p>
+      <p class="footer__slogan">和 AI 助手对话的开源手持对讲机。</p>
       <div class="footer__cta">
-        <a class="btn btn--primary" href="#waitlist">加入候补名单</a>
-        <a class="btn btn--ghost" href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">在 GitHub 上查看</a>
-        <a class="btn btn--ghost" href="#demo">试用</a>
-        <a class="btn btn--ghost" href="#top">回到顶部 ▲</a>
+        <a class="btn btn--primary" href="#waitlist">加入等候名单</a>
+        <a class="btn btn--ghost" href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">去 GitHub 看看</a>
+        <a class="btn btn--ghost" href="#demo">试试看</a>
+        <a class="btn btn--ghost" href="#top">返回顶部 ▲</a>
       </div>
       <nav class="footer__links" aria-label="页脚">
-      <a href="/zh-Hans/manual/">使用手册</a>
+      <a href="/zh-Hans/manual/">使用说明书</a>
         <a href="/zh-Hans/privacy/">隐私政策</a>
         <a href="/zh-Hans/cookies/">Cookie 说明</a>
-        <a href="/zh-Hans/cookies/" data-privacy-open>隐私声明</a>
+        <a href="/zh-Hans/cookies/" data-privacy-open>隐私说明</a>
         <a href="https://github.com/conol-ai/openwalkietalkie/tree/main/hardware" target="_blank" rel="noopener">hardware/</a>
         <a href="https://github.com/conol-ai/openwalkietalkie/tree/main/src" target="_blank" rel="noopener">src/</a>
         <a href="https://github.com/conol-ai/openwalkietalkie/tree/main/host" target="_blank" rel="noopener">host/</a>
         <a href="https://github.com/conol-ai/openwalkietalkie#readme" target="_blank" rel="noopener">README.md</a>
         <a href="https://openmicrokbd.org/" target="_blank" rel="noopener">OpenMicroKbd</a>
         <a href="https://cohdl.org/" target="_blank" rel="noopener">CoHDL</a>
-        <a href="https://discord.gg/x7DXPvK66" target="_blank" rel="noopener" aria-label="在 Discord 上加入 CoHDL 和 OpenWalkieTalkie 社区">Discord</a>
+        <a href="https://discord.gg/x7DXPvK66" target="_blank" rel="noopener" aria-label="加入 CoHDL 和 OpenWalkieTalkie 的 Discord 社区">Discord</a>
         <a href="/zh-Hans/blog/">博客</a>
       </nav>
-      <p class="footer__fine">MIT 许可的软件 · CERN-OHL-P 许可的硬件 · 无需许可</p>
+      <p class="footer__fine">软件采用 MIT 许可 · 硬件采用 CERN-OHL-P 许可 · 无需另行授权</p>
       <p class="footer__heart"><a class="project-credit" href="https://cohdl.org/"><img src="/assets/cohdl-mark.svg" alt="" width="20" height="25" />一个 COHDL 项目</a></p>
     </div>
   </div>
@@ -730,5 +722,14 @@
 <script src="/js/main.js"></script>
 <script src="/js/waitlist.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 语言: 简体中文">Language</summary>
+        <ul>
+          <li><a href="/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/" hreflang="zh-Hans" lang="zh-Hans" aria-current="true">简体中文</a></li>
+          <li><a href="/zh-Hant/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

@@ -34,6 +34,7 @@
 <link rel="stylesheet" href="/css/style.css" />
 <link rel="stylesheet" href="/css/blog.css" />
 <script src="/js/i18n/zh-Hant.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 <!-- No optional analytics or advertising scripts. -->
 </head>
@@ -51,7 +52,7 @@
     </a>
 
     <nav class="nav__links" aria-label="網站區塊">
-      <a href="/zh-Hant/#pile">The Pile</a>
+      <a href="/zh-Hant/#pile">The Pile（分頁堆）</a>
       <a href="/zh-Hant/#features">功能</a>
       <a href="/zh-Hant/#demo">試用</a>
       <a href="/zh-Hant/#faces">頁面</a>
@@ -59,15 +60,6 @@
       <a href="/zh-Hant/docs/">說明文件</a>
       <a href="/zh-Hant/blog/" aria-current="true">部落格</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="語言: 繁體中文">繁體中文</summary>
-        <ul>
-          <li><a href="/blog/conol-and-native-companions/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/blog/conol-and-native-companions/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
-          <li><a href="/zh-Hant/blog/conol-and-native-companions/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
-          <li><a href="/ja/blog/conol-and-native-companions/" hreflang="ja" lang="ja">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="切換日間與夜間主題" aria-pressed="false">
@@ -101,7 +93,7 @@
   <p>工作階段面板顯示對話實際使用的模型與思考強度。對 Conol 而言，這些目前是唯讀的；請在 Conol 中變更。對話記錄同步公開的使用者與助理文字。圖片、工具輸出與私人的推理過程則留在所屬的應用程式中。</p>
   <h2>對其他應用程式開放</h2>
   <p>這個整合使用公開的 JSON-RPC 介面。應用程式可以透過 <code>agent.companion.set</code> 提供自己的分組與新聊天啟動器，發布訊息與提問，並透過 <code>agent.session.set</code> 回報實際的模型與思考強度。支援可編輯設定的應用程式，會依確切的修訂版本確認每一次要求的變更。</p>
-  <p>新的<a href="/zh-Hant/docs/native-companions/">原生配套程式指南</a>說明了探索、註冊、對話記錄、表單、設定與重新連線。試試<a href="/examples/native_companion.py">獨立的 Python 範例</a>：它使用預先寫好的回覆，不需要模型 API 金鑰，沒有安裝 Conol 也能執行。<a href="/docs/deckd-api.md">自動產生的 API 參考資料</a>記錄了請求結構描述與權限。</p>
+  <p>新的<a href="/zh-Hant/docs/native-companions/">原生配套程式指南</a>說明了探索、註冊、對話記錄、表單、設定與重新連線。試試<a href="/examples/native_companion.py">獨立的 Python 範例</a>：它使用預先寫好的回覆，不需要模型 API 金鑰，沒有安裝 Conol 也能執行。<a href="/zh-Hant/docs/deckd-api.md">自動產生的 API 參考資料</a>記錄了請求結構描述與權限。</p>
   <h2>讓新的聊天保持焦點</h2>
   <p>服務現在會在聚焦之前，先告知被取代的槽位由誰接手。裝置會在放開 PTT 後立刻跟隨配套程式的明確選擇；有輸入被按住時會等待；如果你瀏覽到別處，它會讓步。未完成的提問會維持開啟。</p>
   <p>八個共用槽位的上限不變。開啟一個溢出的配套程式聊天，可以取代同一連線、同一應用程式與同一帳號下一個未釘選的同層聊天，同時保留啟動器與其他帳號正在忙碌的聊天。</p>
@@ -109,7 +101,7 @@
   <p>安裝已簽署並經過公證的 Mac 應用程式（Apple Silicon 或 Intel），或選擇<strong>檢查更新</strong>。需要 macOS 13 或更新版本。透過 USB-C 連接裝置，然後選擇<strong>服務 → 更新 → 檢查韌體更新</strong>。原生配套程式支援需要 Mac 上的服務與韌體都是 0.11.0。如果舊的服務仍在執行，請選擇<strong>服務 → 重新啟動</strong>。另外也請把 Conol 更新到具備 OpenWalkieTalkie 橋接的版本。</p>
   <p>一般更新會保留設定與藍牙配對。復原協定 2 與快閃記憶體配置不變。另外的原廠 ZIP 用於生產，會覆寫設定與配對。</p>
   <p>自動化測試涵蓋擁有權、分組、槽位提升、設定確認、焦點順序、按住的輸入、協定解析、繪製，以及範例中的表單與重新連線。本版本沒有重做實際的 Conol 對話測試與主機板測試。</p>
-  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.11.0" rel="noopener">在 GitHub 取得 OpenWalkieTalkie v0.11.0、韌體、原廠映像檔與總和檢查碼 →</a></p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.11.0" rel="noopener">在 GitHub 取得 OpenWalkieTalkie v0.11.0、韌體、原廠映像檔與檢查碼 →</a></p>
   <p class="post-back"><a href="/zh-Hant/blog/">← 返回部落格</a></p>
 </article>
 </main>
@@ -118,7 +110,7 @@
   <div class="inner">
     <span>OpenWalkieTalkie · COHDL 專案 · MIT 授權軟體 · CERN-OHL-P 授權硬體</span>
     <nav aria-label="頁尾">
-      <a href="/zh-Hant/#waitlist">加入候補名單</a>
+      <a href="/zh-Hant/#waitlist">加入等候名單</a>
       <a href="/zh-Hant/privacy/">隱私權政策</a>
       <a href="/zh-Hant/cookies/">Cookie 說明</a>
       <a href="/zh-Hant/cookies/" data-privacy-open>隱私權聲明</a>
@@ -134,5 +126,14 @@
 
 <script src="/js/main.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 語言: 繁體中文">Language</summary>
+        <ul>
+          <li><a href="/blog/conol-and-native-companions/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/conol-and-native-companions/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/conol-and-native-companions/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
+          <li><a href="/ja/blog/conol-and-native-companions/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

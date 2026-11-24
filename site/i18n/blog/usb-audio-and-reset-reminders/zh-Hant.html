@@ -23,12 +23,12 @@ navDocs: no
   <h2>在到期前用掉重設</h2>
   <p>當未使用的手動重設額度將在 <strong>72 小時</strong>內到期時，Mac 上的「用量」頁和裝置上的「用量」頁面會在每週用量條下方顯示一則琥珀色的小提示。例如：<strong>「2 次重設將在 1 天 6 小時後到期。」</strong></p>
   <figure class="post-figure" style="max-width:480px;margin-left:auto;margin-right:auto"><img src="/assets/screens/usage-reset-expiring-090.png" alt="裝置的「用量」畫面，Claude 每週用量條下方顯示琥珀色提醒：2 次重設將在 1 天 6 小時後到期" width="480" height="480" loading="lazy" /><figcaption>實際裝置介面上的重設到期提醒，以示意用的展示資料算繪。</figcaption></figure>
-  <p>這和每週額度更新前的一般倒數是兩回事。提示會採用最近的額度到期時間，只計算在這個期限到期的額度。額度用掉或到期後提示就會消失；切換帳號時會清除前一個帳號的額度；中斷連線時提示會隱藏。如果服務商沒有提供這項資料，就不會出現提醒。裝置不會替你兌換重設。</p>
+  <p>這和每週額度更新前的一般倒數是兩回事。提示會採用最近的額度到期時間，只計算在這個期限到期的額度。額度用掉或到期後提示就會消失；切換帳號時會清除畫面上先前帳號的額度資料；中斷連線時提示會隱藏。如果服務商沒有提供這項資料，就不會出現提醒。裝置不會替你兌換重設。</p>
   <h2>兩邊都要更新</h2>
   <p>安裝已簽署並經過公證的 Mac 應用程式（Apple Silicon 或 Intel），或選擇<strong>檢查更新</strong>。需要 macOS 13 或更新版本。接著透過 USB-C 連接裝置，使用<strong>服務 → 更新 → 檢查韌體更新</strong>。應用程式、服務和韌體都應顯示 0.9.0。</p>
   <p>在使用復原協定 2 的裝置上，一般更新會保留設定和藍牙配對。較舊的復原版本使用現有的引導式移轉。各主機板的原廠 ZIP 仍會提供，用於生產；其中整顆晶片的映像檔會覆寫設定和配對，所以現有裝置請使用應用程式的更新功能。</p>
   <h2>部落格是版本發行的一部分</h2>
   <p>發行驗證程式現在要求先備妥一篇部落格文章、它的訂閱來源項目、部落格索引連結、網站地圖項目，以及最新的 Mac 下載檔，才能發行版本。先前缺少的 <a href="/blog/speaker-eq-and-less-hiss/">0.7.0</a> 和 <a href="/blog/screen-lock-and-wheel-navigation/">0.8.0</a> 文章現在也已補上。</p>
   <p>開發版韌體和語音比較都在 Rev A 上透過 USB 檢查過；重新啟動更新後的服務後，也確認了常駐程式的一般播放為 48 kHz。自動檢查涵蓋取樣率協商、連線切換、音訊編碼與濾波、重設到期與帳號切換，以及算繪。這次沒有在 Rev B 上實機測試音訊。</p>
-  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.9.0" rel="noopener">在 GitHub 上取得 OpenWalkieTalkie v0.9.0、韌體、原廠韌體與檢查碼 →</a></p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.9.0" rel="noopener">在 GitHub 上取得 OpenWalkieTalkie v0.9.0、韌體、原廠映像檔與檢查碼 →</a></p>
   <p class="post-back"><a href="/blog/">← 返回部落格</a></p>

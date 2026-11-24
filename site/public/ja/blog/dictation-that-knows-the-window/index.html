@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OpenWalkieTalkie v0.16.0：ウィンドウがわかる口述 · OpenWalkieTalkie</title>
+<title>OpenWalkieTalkie v0.16.0：入力先のウィンドウに合わせた口述 · OpenWalkieTalkie</title>
 <meta name="description" content="試験的な機能で、既定ではオフ：カーソル位置への口述を、フォーカス中のウィンドウに合わせて書き直せます。使うのはアプリ名とタイトルのテキストだけで、新しい「モデルへの接続」ページで選んだモデルを通します。" />
 <link rel="canonical" href="https://openwalkietalkie.org/ja/blog/dictation-that-knows-the-window/" />
 <link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/dictation-that-knows-the-window/" />
@@ -14,7 +14,7 @@
 
 <meta property="og:type" content="article" />
 <meta property="og:site_name" content="OpenWalkieTalkie" />
-<meta property="og:title" content="OpenWalkieTalkie v0.16.0：ウィンドウがわかる口述 · OpenWalkieTalkie" />
+<meta property="og:title" content="OpenWalkieTalkie v0.16.0：入力先のウィンドウに合わせた口述 · OpenWalkieTalkie" />
 <meta property="og:description" content="試験的な機能で、既定ではオフ：カーソル位置への口述を、フォーカス中のウィンドウに合わせて書き直せます。使うのはアプリ名とタイトルのテキストだけで、新しい「モデルへの接続」ページで選んだモデルを通します。" />
 <meta property="og:url" content="https://openwalkietalkie.org/ja/blog/dictation-that-knows-the-window/" />
 <meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
@@ -34,6 +34,7 @@
 <link rel="stylesheet" href="/css/style.css" />
 <link rel="stylesheet" href="/css/blog.css" />
 <script src="/js/i18n/ja.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 <!-- No optional analytics or advertising scripts. -->
 </head>
@@ -59,15 +60,6 @@
       <a href="/ja/docs/">ドキュメント</a>
       <a href="/ja/blog/" aria-current="true">ブログ</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="言語: 日本語">日本語</summary>
-        <ul>
-          <li><a href="/blog/dictation-that-knows-the-window/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/blog/dictation-that-knows-the-window/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
-          <li><a href="/zh-Hant/blog/dictation-that-knows-the-window/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
-          <li><a href="/ja/blog/dictation-that-knows-the-window/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="昼と夜のテーマを切り替える" aria-pressed="false">
@@ -88,7 +80,7 @@
 <main class="blog-main" id="content">
 <header class="post-head">
   <p class="section-kicker">ブログ · リリースノート</p>
-  <h1>OpenWalkieTalkie v0.16.0：ウィンドウがわかる口述</h1>
+  <h1>OpenWalkieTalkie v0.16.0：入力先のウィンドウに合わせた口述</h1>
   <p class="post-meta"><span>2026年11月22日</span><span>試験的な口述とモデルへの接続</span></p>
 </header>
 <article class="post-body">
@@ -103,7 +95,7 @@
   <h2>モデルへの接続</h2>
   <p>モデルは、<strong>音声</strong>の下の新しいページ<strong>モデルへの接続</strong>から選びます。プロバイダーの一覧が 1 つあり、プロバイダーごとにキーが 1 つです。キーは OS のキーの保管場所に保存し、<code>config.toml</code> には書きません。ページでは、キーは最後の 4 文字だけを表示します。プロバイダーが使うプロトコルは 2 つのうちどちらかです。OpenAI 互換の chat completions（OpenAI、OpenRouter、Ollama、または指定したアドレスの互換サーバー）か、Anthropic の Messages API です。ElevenLabs はクラウドの音声専用として載っています。Omarchy では、独自のローカルモデルが自動的に見つかります。</p>
   <h2>試験的である理由</h2>
-  <p>まだ確かめられていないことが 3 つあります。このリリースまで、macOS と Windows の部分は一度もビルドされていませんでした。0.16.0 では CI が両方のシステムでビルドしてテストしましたが、実際のウィンドウを読んだのは Hyprland のウィンドウ読み取りだけです。自分のパソコンで動くモデルはまだ使っておらず、その代役しか使っていません。Anthropic の API も代役に対して試しただけで、本物のサービスでは試していません。デバイスでの実際の口述が、このコードで最初から最後まで正しく書き直されることはまだ確認できていません。また macOS と Windows にはまだ <strong>Dictate</strong> 項目がないため、そこではこの機能に書き直すものがありません。</p>
+  <p>まだ確かめられていないことが 3 つあります。このリリースまで、macOS と Windows の部分は一度もビルドされていませんでした。0.16.0 では CI が両方のシステムでビルドしてテストしましたが、実際のウィンドウを読んだのは Hyprland のウィンドウ読み取りだけです。自分のパソコンで動くモデルはまだ使っておらず、テスト用の代替実装でしか試していません。Anthropic の API も模擬サービスで試しただけで、本物のサービスでは試していません。デバイスでの実際の口述が、このコードで最初から最後まで正しく書き直されることはまだ確認できていません。また macOS と Windows にはまだ <strong>Dictate</strong> 項目がないため、そこではこの機能に書き直すものがありません。</p>
   <h2>更新</h2>
   <p>Mac では<strong>アップデートを確認…</strong>を選ぶか、署名・公証済みの <strong>0.16.0</strong> のアプリ（Apple シリコン用または Intel 用、macOS 13 以降）をインストールします。Windows では、リリースから ZIP をダウンロードします。Omarchy では、<a href="/ja/docs/omarchy/">Omarchy のガイド</a>のとおりに、最新のコードを取得してサービスとアプリをビルドし、両方で <code>install.sh</code> を実行します。このリリースではデバイスのファームウェアの更新は不要です。</p>
   <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.16.0" rel="noopener">GitHub で OpenWalkieTalkie v0.16.0 とチェックサムを入手 →</a></p>
@@ -131,5 +123,14 @@
 
 <script src="/js/main.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 言語: 日本語">Language</summary>
+        <ul>
+          <li><a href="/blog/dictation-that-knows-the-window/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/dictation-that-knows-the-window/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/dictation-that-knows-the-window/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/blog/dictation-that-knows-the-window/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

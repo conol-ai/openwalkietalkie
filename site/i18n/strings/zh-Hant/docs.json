@@ -9,7 +9,7 @@
   "docs.content.p4": "預覽版 · 0.14.0+",
   "docs.content.p5": "安裝未簽署的 Windows 預覽版應用程式與服務，略過 SmartScreen 的阻擋，再透過 USB-C 更新裝置韌體。",
   "docs.content.p6": "LINUX · OMARCHY · 0.13.0+",
-  "docs.content.p7": "建置並安裝服務與 Omarchy 橋接程式：裝置成為 Hyprland 的遙控器，你的 Claude Code、Codex 和 Kimi Code 工作階段會出現在列表中，語音指令直接送進它們的終端機。",
+  "docs.content.p7": "建置並安裝服務與 Omarchy 橋接程式：裝置成為 Hyprland 的遙控器，你的 Claude Code、Codex 和 Kimi Code 工作階段會出現在清單中，辨識出的語音指令會輸入對應工作階段的終端機。",
   "docs.content.h21": "正在使用裝置？",
   "docs.content.p8": "<a href=\"/manual/\">閱讀圖解使用手冊</a>，了解設定、操作與疑難排解，也可以列印一份放在桌邊。",
   "docs.content.h22": "從可執行的範例開始",
