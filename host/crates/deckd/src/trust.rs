@@ -348,7 +348,17 @@ pub fn exe_path(pid: u32) -> Option<PathBuf> {
     crate::winproc::exe_path(pid)
 }
 
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(target_os = "linux")]
+pub fn exe_path(pid: u32) -> Option<PathBuf> {
+    linux_exe_path(&Path::new("/proc").join(pid.to_string()))
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn linux_exe_path(directory: &Path) -> Option<PathBuf> {
+    std::fs::read_link(directory.join("exe")).ok()
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 pub fn exe_path(_pid: u32) -> Option<PathBuf> {
     None
 }
@@ -654,14 +664,25 @@ mod tests {
 
     #[cfg(not(any(target_os = "macos", windows)))]
     #[test]
-    fn off_macos_no_executable_is_read_and_nothing_is_capped() {
+    fn unix_fallback_does_not_grant_trust_or_cap_ancestry() {
         let me = std::process::id();
-        assert_eq!(exe_path(me), None);
+        let expected_exe = if cfg!(target_os = "linux") {
+            Some(std::env::current_exe().expect("the running test binary"))
+        } else {
+            None
+        };
+        assert_eq!(exe_path(me), expected_exe);
         assert!(!ancestry_capped(me));
         assert!(!ancestry_capped_within(me, ANCESTRY_MAX_HOPS));
         assert!(ancestry_chain(me).is_empty());
         let verdict = verifier().verify(me);
-        assert_eq!(verdict, PeerVerdict::default(), "untrusted, uncapped, no exe");
+        assert_eq!(
+            verdict,
+            PeerVerdict {
+                exe: expected_exe,
+                ..PeerVerdict::default()
+            }
+        );
     }
 
     /// Set on the fixture half of `a_grandchild_of_a_process_named_node_is_

@@ -327,12 +327,40 @@ impl PeerError {
         match self {
             PeerError::OtherExecutable { pid, exe: None } => Some(*pid),
             PeerError::OtherExecutable { pid, exe: Some(exe) }
-                if exe.file_name() == own.file_name() =>
+                if executable_name(exe) == executable_name(own) =>
             {
                 Some(*pid)
             }
             _ => None,
         }
+    }
+}
+
+// Linux appends this suffix to procfs links after an executable is
+// unlinked. The name is only a hint for telemetry, never for admission.
+fn executable_name(path: &Path) -> Option<&[u8]> {
+    let name = path.file_name()?.as_encoded_bytes();
+    #[cfg(target_os = "linux")]
+    let name = name.strip_suffix(b" (deleted)").unwrap_or(name);
+    Some(name)
+}
+
+#[cfg(target_os = "linux")]
+fn executable_identity(path: &Path) -> io::Result<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    let metadata = std::fs::metadata(path)?;
+    Ok((metadata.dev(), metadata.ino()))
+}
+
+#[cfg(target_os = "linux")]
+fn verify_executable(pid: u32) -> Result<(), PeerError> {
+    let own = executable_identity(Path::new("/proc/self/exe")).map_err(PeerError::Rejected)?;
+    let peer = PathBuf::from(format!("/proc/{pid}/exe"));
+    let exe = std::fs::read_link(&peer).ok();
+    match executable_identity(&peer) {
+        Ok(identity) if exe.is_some() && identity == own => Ok(()),
+        Ok(_) => Err(PeerError::OtherExecutable { pid, exe }),
+        Err(_) => Err(PeerError::OtherExecutable { pid, exe: None }),
     }
 }
 
@@ -342,16 +370,21 @@ fn peer(stream: &UnixStream) -> Result<u32, PeerError> {
     let pid = pid.ok_or_else(|| PeerError::Rejected(io::Error::other("missing peer pid")))?;
     // No script or general API client can impersonate either end of this door.
     // The same deckd executable implements both the daemon and MCP helper.
-    let own_executable = std::env::current_exe().map_err(PeerError::Rejected)?;
     if uid != unsafe { libc::geteuid() } {
         return Err(PeerError::Rejected(io::Error::new(
             io::ErrorKind::PermissionDenied,
             "channel peer",
         )));
     }
-    let exe = crate::trust::exe_path(pid);
-    if exe.as_ref() != Some(&own_executable) {
-        return Err(PeerError::OtherExecutable { pid, exe });
+    #[cfg(target_os = "linux")]
+    verify_executable(pid)?;
+    #[cfg(not(target_os = "linux"))]
+    {
+        let own_executable = std::env::current_exe().map_err(PeerError::Rejected)?;
+        let exe = crate::trust::exe_path(pid);
+        if exe.as_ref() != Some(&own_executable) {
+            return Err(PeerError::OtherExecutable { pid, exe });
+        }
     }
     Ok(pid)
 }
@@ -728,6 +761,45 @@ mod tests {
         // An unrelated same-user program, or a rejected peer, is not.
         assert_eq!(refused(Some("/usr/bin/python3")).other_deckd(own), None);
         assert_eq!(PeerError::Rejected(io::Error::other("x")).other_deckd(own), None);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_deleted_executables_are_different_by_identity_and_count_as_stale() {
+        use std::process::Command;
+        let dir = std::env::temp_dir().join(format!("deckd-executable-{}", std::process::id()));
+        std::fs::create_dir(&dir).unwrap();
+        let path = dir.join("deckd");
+        let spawn = || {
+            std::fs::copy("/usr/bin/sleep", &path).unwrap();
+            let child = Command::new(&path).arg("30").spawn().unwrap();
+            std::fs::remove_file(&path).unwrap();
+            child
+        };
+        let mut first = spawn();
+        let mut second = spawn();
+        let first_exe = PathBuf::from(format!("/proc/{}/exe", first.id()));
+        let second_exe = PathBuf::from(format!("/proc/{}/exe", second.id()));
+        let first_identity = executable_identity(&first_exe);
+        let second_identity = executable_identity(&second_exe);
+        let first_name = std::fs::read_link(first_exe);
+        let second_name = std::fs::read_link(second_exe);
+        let refusal = verify_executable(first.id());
+        let first_pid = first.id();
+        first.kill().unwrap();
+        second.kill().unwrap();
+        first.wait().unwrap();
+        second.wait().unwrap();
+        std::fs::remove_dir(&dir).unwrap();
+
+        let own_deleted = dir.join("deckd (deleted)");
+        assert_eq!(first_name.unwrap(), own_deleted);
+        assert_eq!(second_name.unwrap(), own_deleted);
+        assert_ne!(first_identity.unwrap(), second_identity.unwrap());
+        let refusal = refusal.unwrap_err();
+        assert_eq!(refusal.other_deckd(&path), Some(first_pid));
+        assert_eq!(refusal.other_deckd(&own_deleted), Some(first_pid));
+        assert!(verify_executable(std::process::id()).is_ok());
     }
 
     #[test]
