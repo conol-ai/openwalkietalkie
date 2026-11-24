@@ -291,12 +291,21 @@ impl Ledger {
         self.refresh(sessions, snapshot);
         let mut tally: BTreeMap<Source, Tally> = BTreeMap::new();
         let mut other = 0;
-        let ready_sessions = around.channels.ready_session_ids();
+        // Distinct ready Claude session IDs correlated with slotted Claude entries.
+        // This is display-only. Omarchy bridge slots deliver orders by push.
+        let ready_sessions = around.channels.ready_session_pids();
         let channels_on_deck = snapshot
             .agents
             .values()
-            .filter_map(slotted_claude_session_id)
-            .filter(|id| ready_sessions.contains(*id))
+            .filter_map(|agent| {
+                let id = slotted_claude_session_id(agent)?;
+                let pids = ready_sessions.get(id)?;
+                agent
+                    .session
+                    .pid
+                    .is_none_or(|pid| pids.contains(&pid))
+                    .then_some(id)
+            })
             .collect::<BTreeSet<_>>()
             .len();
         for agent in snapshot.agents.values() {
@@ -470,14 +479,23 @@ impl Ledger {
     }
 }
 
-/// Native and Omarchy entries use different key prefixes for the same Claude
-/// session. Compare the final segment for display counts without granting a route.
+/// Native and Omarchy keys encode the same Claude session under different
+/// prefixes. Accept just those forms when correlating the display count.
 fn slotted_claude_session_id(agent: &Agent) -> Option<&str> {
     if agent.kind != Kind::Claude || agent.slot.is_none() {
         return None;
     }
-    let (_, session_id) = agent.session.key.as_deref()?.rsplit_once(':')?;
-    (!session_id.is_empty()).then_some(session_id)
+    let key = agent.session.key.as_deref()?;
+    let session_id = if let Some(id) = key.strip_prefix("claude:") {
+        id
+    } else {
+        let (host, key) = key.strip_prefix("omarchy:")?.split_once(':')?;
+        if host.is_empty() {
+            return None;
+        }
+        key.strip_prefix("claude:")?
+    };
+    (!session_id.is_empty() && !session_id.contains(':')).then_some(session_id)
 }
 
 fn channels_row(around: &Around<'_>, on_deck: usize) -> Row {
@@ -1324,6 +1342,9 @@ mod tests {
             ("unslotted", &["claude:one"], 0),
             ("two-sessions", &["claude:one", "omarchy:host:claude:two"], 2),
             ("partial-suffix", &["omarchy:host:claude:someone"], 0),
+            ("foreign-prefix", &["other:claude:one"], 0),
+            ("non-claude-bridge-key", &["omarchy:host:codex:one"], 0),
+            ("nested-native-key", &["claude:other:one"], 0),
         ];
         for &(name, keys, expected) in cases {
             let (mut c, _ops, _lines, _debug, dir) = detached_core(name);
@@ -1364,6 +1385,35 @@ mod tests {
             );
             std::fs::remove_dir_all(dir).unwrap();
         }
+    }
+
+    #[test]
+    fn channels_count_requires_the_agents_pid_when_known() {
+        let (mut c, _ops, _lines, _debug, dir) = detached_core("sources-channel-pid");
+        let now = Instant::now();
+        reconfigure(&mut c, now, |config| {
+            config.sources.claude_channels = Some(true);
+        });
+        let owner = adapter(&mut c, AdapterKind::Claude, now);
+        let mut registration = testkit::register("Claude", Some("claude:shared"));
+        registration.kind = Kind::Claude;
+        registration.pid = Some(101);
+        let result = c
+            .api_call(
+                Principal::Adapter(AdapterKind::Claude),
+                owner,
+                false,
+                Request::AgentRegister(registration),
+                now,
+            )
+            .unwrap();
+        let id = serde_json::from_value(result["agent"].clone()).unwrap();
+        assert!(slot(&c, &id).is_some());
+        let _other = c.adapters().claude_channels.test_channel(102, "shared");
+        assert_eq!(row(&list(&mut c, now), "claude_channels")["on_deck"], 0);
+        let _matching = c.adapters().claude_channels.test_channel(101, "shared");
+        assert_eq!(row(&list(&mut c, now), "claude_channels")["on_deck"], 1);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     /// The shape of a column, for comparing the reply with the fixture the
