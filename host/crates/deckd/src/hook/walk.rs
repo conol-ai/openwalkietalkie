@@ -188,7 +188,35 @@ impl Procs for MacProcs {
         Some(Proc { pid, ppid, names })
     }
 
-    #[cfg(not(any(target_os = "macos", windows)))]
+    #[cfg(target_os = "linux")]
+    fn get(&self, pid: u32) -> Option<Proc> {
+        let directory = std::path::Path::new("/proc").join(pid.to_string());
+        let (ppid, started) = linux_stat(&directory)?;
+        let comm = std::fs::read(directory.join("comm")).ok()?;
+        let exe = std::fs::read_link(directory.join("exe")).ok()?;
+        // A reused parent PID cannot belong to a process younger than this one.
+        if ppid != 0 {
+            let parent = std::path::Path::new("/proc").join(ppid.to_string());
+            if linux_stat(&parent)?.1 > started {
+                return None;
+            }
+        }
+        // The PID or parent could have changed while reading the files.
+        if linux_stat(&directory)? != (ppid, started) {
+            return None;
+        }
+        let mut names = vec![
+            String::from_utf8_lossy(&comm)
+                .trim_end_matches('\n')
+                .to_owned(),
+            exe.to_string_lossy().into_owned(),
+        ];
+        names.retain(|name| !name.is_empty());
+        names.dedup();
+        Some(Proc { pid, ppid, names })
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
     fn get(&self, _pid: u32) -> Option<Proc> {
         None
     }
@@ -234,6 +262,20 @@ impl Procs for MacProcs {
             names,
         })
     }
+}
+
+/// Parent PID and process start time (Linux stat fields 4 and 22).
+#[cfg(target_os = "linux")]
+fn linux_stat(directory: &std::path::Path) -> Option<(u32, u64)> {
+    let stat = std::fs::read(directory.join("stat")).ok()?;
+    // comm can contain spaces, closing parentheses, or non-UTF-8 bytes.
+    let end = stat.iter().rposition(|&byte| byte == b')')?;
+    let mut fields = std::str::from_utf8(&stat[end + 1..])
+        .ok()?
+        .split_whitespace();
+    let ppid = fields.nth(1)?.parse().ok()?;
+    let started = fields.nth(17)?.parse().ok()?;
+    Some((ppid, started))
 }
 
 /// A NUL-terminated `c_char` array as a `String` (lossy; process names,
@@ -399,6 +441,22 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn proc_walk_reads_this_process_and_its_parent() {
+        let pid = std::process::id();
+        // SAFETY: getppid takes no arguments and does not change process state.
+        let parent_pid = unsafe { libc::getppid() } as u32;
+        let walk = from_process();
+        assert_eq!(walk.chain.first().map(|hop| hop.0), Some(pid), "{walk:?}");
+        assert_eq!(
+            walk.chain.get(1).map(|hop| hop.0),
+            Some(parent_pid),
+            "{walk:?}"
+        );
+        assert!(MacProcs.get(u32::MAX).is_none());
+    }
+
     #[test]
     fn the_kernel_table_answers_for_this_process() {
         // Identity is deliberately not asserted: this test runs under
@@ -406,7 +464,7 @@ mod tests {
         // hold is that the real table answers, and answers about *us*.
         let procs = MacProcs;
         let me = procs.get(std::process::id());
-        if cfg!(any(target_os = "macos", windows)) {
+        if cfg!(any(target_os = "macos", target_os = "linux", windows)) {
             let me = me.expect("the kernel knows this process");
             assert_eq!(me.pid, std::process::id());
             assert!(me.ppid > 0, "{me:?}");
