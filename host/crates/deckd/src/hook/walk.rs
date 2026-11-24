@@ -193,7 +193,7 @@ impl Procs for MacProcs {
         let directory = std::path::Path::new("/proc").join(pid.to_string());
         let (ppid, started) = linux_stat(&directory)?;
         let comm = std::fs::read(directory.join("comm")).ok()?;
-        let exe = std::fs::read_link(directory.join("exe")).ok()?;
+        let exe = crate::trust::exe_path(pid)?;
         // A reused parent PID cannot belong to a process younger than this one.
         if ppid != 0 {
             let parent = std::path::Path::new("/proc").join(ppid.to_string());
@@ -455,6 +455,14 @@ mod tests {
             "{walk:?}"
         );
         assert!(MacProcs.get(u32::MAX).is_none());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn proc_exe_resolves_this_process_to_the_test_binary() {
+        let exe = std::env::current_exe().expect("the running test binary");
+        assert_eq!(crate::trust::exe_path(std::process::id()), Some(exe));
+        assert!(crate::trust::exe_path(u32::MAX).is_none());
     }
 
     #[test]
