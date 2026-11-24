@@ -26,8 +26,20 @@ use ui::{scene, splash, UiState};
 
 use std::io::Write;
 
-/// The power-on demo session as it stands, and the boot splash.
-const BASE_SCENES: [&str; 2] = ["default", "splash"];
+/// Standalone screens, including the charging view outside the normal deck.
+const BASE_SCENES: [&str; 7] = ["default", "splash", "charging", "charging-full", "charging-unavailable", "charging-idle", "charging-empty"];
+
+fn charging_battery(scene: &str) -> Option<battery::BatteryState> {
+    let (percent, charge) = match scene {
+        "charging" => (Some(72), battery::ChargeState::Charging),
+        "charging-full" => (Some(100), battery::ChargeState::Full),
+        "charging-unavailable" => (None, battery::ChargeState::Unknown),
+        "charging-idle" => (Some(72), battery::ChargeState::Usb),
+        "charging-empty" => (Some(0), battery::ChargeState::Charging),
+        _ => return None,
+    };
+    Some(battery::BatteryState { estimated_percent: percent, charge, ..battery::BatteryState::UNKNOWN })
+}
 
 /// Deck scenes; the first eight are the mockups (`tools/preview-all.py` knows
 /// which `mock/*.png` each one reproduces).
@@ -854,11 +866,14 @@ fn main() {
     let mut output = std::io::BufWriter::new(std::fs::File::create(path).unwrap());
     writeln!(output, "P6\n480 480\n255").unwrap();
     let mut band = display::Band::new();
+    let charging = charging_battery(scene_name);
     let start = std::time::Instant::now();
     for index in 0..display::BANDS {
         band.set_row(index);
         if scene_name == "splash" {
             splash::draw(&mut band);
+        } else if let Some(battery) = charging {
+            ui::charging::draw(&mut band, battery, language);
         } else {
             scene::draw(&mut band, &ui);
         }

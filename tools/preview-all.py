@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Render every ui-preview scene to PNG and lay the mockup scenes over the mockups.
 
-    tools/preview-all.py [--out DIR] [--mock DIR] [--board lilygo|hw-a|hw-b] [SCENE ...]
+    tools/preview-all.py [--out DIR] [--mock DIR] [--board lilygo|hw-a|hw-b]
+                         [--language en|zh-Hans|zh-Hant|ja] [SCENE ...]
 
 Builds native/core's `ui-preview` example for the host (offline, locked), asks
 it for its scene table (`--list`), renders each scene to DIR/<scene>.png
@@ -15,8 +16,9 @@ as a ghost. Mockups are looked up in --mock, $OWT_MOCK_DIR, then docs/mockups; w
 them only the plain PNGs are written. `1-face-strip.png` shows the strip at
 rest, so its sheet pairs `slide-50` with the two half faces cut from it.
 
-Naming scenes limits the run to those. Needs Pillow. Exit status is non-zero
-if any scene fails to render.
+Naming scenes limits the run to those. The standalone charging, charging-full,
+charging-unavailable, charging-idle and charging-empty scenes also accept the
+language option. Needs Pillow. Exit status is non-zero if any scene fails to render.
 """
 import argparse
 import os

@@ -127,6 +127,25 @@ pub static UI_BLUETOOTH: Signal<CriticalSectionRawMutex, BluetoothStatus> = Sign
 /// Parsed channel-5 lines (or why one could not be), for the app task.
 pub static DECK_RX: Channel<CriticalSectionRawMutex, Result<HostMsg, ErrWhy>, 8> = Channel::new();
 
+static CHARGING_ONLY: AtomicBool = AtomicBool::new(false);
+static STOP_BLUETOOTH: Signal<CriticalSectionRawMutex, ()> = Signal::new();
+
+/// A charging-only shutdown has no deck controls or voice activity. System
+/// RPC remains available over USB so firmware recovery still works.
+pub fn charging_only() -> bool {
+    CHARGING_ONLY.load(Ordering::Acquire)
+}
+
+#[cfg(feature = "hw-b")]
+pub fn enter_charging_only() {
+    CHARGING_ONLY.store(true, Ordering::Release);
+    reset_hosts(Link::Usb);
+    reset_hosts(Link::Ble);
+    DECK_RX.clear();
+    crate::audio::voice::power_down();
+    STOP_BLUETOOTH.signal(());
+}
+
 fn any_up() -> bool {
     FLAGS.iter().any(|f| f.up.load(Ordering::Acquire))
 }
@@ -426,6 +445,11 @@ pub async fn task(p: RadioPeripherals, address: [u8; 6]) {
         async {
             loop {
                 link_down(Link::Ble);
+                if charging_only() {
+                    // PTT returns to normal through a reboot, so there is no
+                    // advertising again during this charging-only session.
+                    core::future::pending::<()>().await;
+                }
                 let mut adv_data = [0; 31];
                 let len = AdStructure::encode_slice(
                     &[
@@ -465,7 +489,11 @@ pub async fn task(p: RadioPeripherals, address: [u8; 6]) {
                     }
                 };
                 logln!("link: advertising as OpenWalkieTalkie");
-                let connection = match advertising.accept().await {
+                let accepted = match select(advertising.accept(), STOP_BLUETOOTH.wait()).await {
+                    Either::First(result) => result,
+                    Either::Second(()) => continue,
+                };
+                let connection = match accepted {
                     Ok(c) => c,
                     Err(e) => {
                         logln!("link: connection failed: {:?}", e);
@@ -506,11 +534,14 @@ pub async fn task(p: RadioPeripherals, address: [u8; 6]) {
                     server: &server,
                     conn: &conn,
                 };
-                select4(
-                    gatt_task(&server, &conn, &mut saved_bond),
-                    transmit_task(Link::Ble, &mut sink),
-                    voice_task(&stack, &server, &conn),
-                    rssi_task(&stack, &conn),
+                select(
+                    select4(
+                        gatt_task(&server, &conn, &mut saved_bond),
+                        transmit_task(Link::Ble, &mut sink),
+                        voice_task(&stack, &server, &conn),
+                        rssi_task(&stack, &conn),
+                    ),
+                    STOP_BLUETOOTH.wait(),
                 )
                 .await;
                 conn.raw().disconnect();
@@ -725,10 +756,16 @@ impl Inbound {
 /// request. Replies go back on `link`.
 async fn dispatch_frame(link: Link, inbound: &mut Inbound, frame: &[u8]) {
     if is_deck(frame) {
+        if charging_only() {
+            return;
+        }
         deck_report(link, &mut inbound.deck_rx, frame).await;
         return;
     }
     if let Some(voice) = crate::audio::codec::report_frame(frame) {
+        if charging_only() {
+            return;
+        }
         voice_report(link, voice);
         return;
     }

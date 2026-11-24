@@ -38,6 +38,57 @@ use crate::{board::BusDevice, logln};
 
 pub static BATTERY: Signal<CriticalSectionRawMutex, BatteryState> = Signal::new();
 
+// Rev B's physical CHG output remains useful without USB enumeration: a
+// wall supply can charge the cell too. High means charging stopped (done,
+// cable removed, or a charger fault), not proof of a particular cause.
+#[cfg(feature = "hw-b")]
+static CHARGER_ACTIVE: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+#[cfg(feature = "hw-b")]
+static CHARGER_READ_AT: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+#[cfg(feature = "hw-b")]
+static CHARGING_SCREEN: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+#[cfg(feature = "hw-b")]
+static POLL_CHARGER: Signal<CriticalSectionRawMutex, ()> = Signal::new();
+#[cfg(feature = "hw-b")]
+const CHARGER_FRESH_MS: u32 = 1250;
+// One cached inactive observation must expire before it can finish shutdown.
+#[cfg(feature = "hw-b")]
+const _: () = assert!(CHARGER_FRESH_MS < crate::power::CHARGING_STOP_MS);
+
+/// Request fresh physical charger observations for a pending power-off.
+/// The ordinary ADC/watchdog service deadline remains independent.
+#[cfg(feature = "hw-b")]
+pub fn prepare_power_off() {
+    use core::sync::atomic::Ordering;
+    CHARGER_ACTIVE.store(0, Ordering::Release);
+    CHARGING_SCREEN.store(true, Ordering::Release);
+    POLL_CHARGER.signal(());
+}
+
+/// A recent CHG-pin observation, never a cached USB configured/suspend state.
+#[cfg(feature = "hw-b")]
+pub fn charging_active() -> Option<bool> {
+    use core::sync::atomic::Ordering;
+    let value = CHARGER_ACTIVE.load(Ordering::Acquire);
+    let at = CHARGER_READ_AT.load(Ordering::Acquire);
+    let now = Instant::now().as_millis() as u32;
+    if now.wrapping_sub(at) > CHARGER_FRESH_MS {
+        return None;
+    }
+    match value {
+        1 => Some(false),
+        2 => Some(true),
+        _ => None,
+    }
+}
+
+fn charging_screen() -> bool {
+    #[cfg(feature = "hw-b")]
+    { CHARGING_SCREEN.load(core::sync::atomic::Ordering::Acquire) }
+    #[cfg(not(feature = "hw-b"))]
+    { false }
+}
+
 #[embassy_executor::task]
 pub async fn task(
     adc: Adc<'static, Async>,
@@ -102,7 +153,7 @@ pub async fn task(
         let now = Instant::now().as_millis() as u32;
         let service_due =
             service_at.is_none_or(|at| now.wrapping_sub(at) >= crate::power::BATTERY_INTERVAL_MS);
-        let fast_status = previous.near_full() || estimator.completion_since().is_some();
+        let fast_status = charging_screen() || previous.near_full() || estimator.completion_since().is_some();
         let status_due =
             service_due || fast_status && status_at.is_none_or(|at| now.wrapping_sub(at) >= 1000);
         if status_due {
@@ -125,15 +176,18 @@ pub async fn task(
             // Rev B: the CHG pin, read against the last published voltage
             // (the sample below is fresh for the estimate itself).
             #[cfg(feature = "hw-b")]
-            let raw_status = Some(
-                ChargeState::from_chg_pin(
-                    charge_status.is_low(),
+            let raw_status = {
+                use core::sync::atomic::Ordering;
+                let charging = charge_status.is_low();
+                CHARGER_READ_AT.store(now, Ordering::Release);
+                CHARGER_ACTIVE.store(if charging { 2 } else { 1 }, Ordering::Release);
+                Some(ChargeState::from_chg_pin(
+                    charging,
                     crate::link::usb_up(),
                     previous.millivolts,
                     previous.full_mv,
-                )
-                .as_register(),
-            );
+                ).as_register())
+            };
             let done_edge = estimator.observe_charger(raw_status, now);
             if service_due && charger_ready {
                 if let (Some(status), Ok(faults)) =
@@ -197,12 +251,16 @@ pub async fn task(
         let now = Instant::now().as_millis() as u32;
         let until_service = crate::power::BATTERY_INTERVAL_MS
             .saturating_sub(now.wrapping_sub(service_at.unwrap_or(now)));
-        let until_status = if previous.near_full() || estimator.completion_since().is_some() {
+        let until_status = if charging_screen() || previous.near_full() || estimator.completion_since().is_some() {
             1000u32.saturating_sub(now.wrapping_sub(status_at.unwrap_or(now)))
         } else {
             until_service
         };
-        Timer::after_millis(until_service.min(until_status).max(1) as u64).await;
+        let wait = Timer::after_millis(until_service.min(until_status).max(1) as u64);
+        #[cfg(feature = "hw-b")]
+        embassy_futures::select::select(wait, POLL_CHARGER.wait()).await;
+        #[cfg(not(feature = "hw-b"))]
+        wait.await;
     }
 }
 

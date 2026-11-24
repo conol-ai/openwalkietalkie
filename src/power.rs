@@ -27,6 +27,90 @@ pub const DIM_BRIGHTNESS: u8 = 32;
 /// Panel level for each user brightness setting 1..=5.
 const LEVELS: [u8; 5] = [40, 80, 130, 190, FULL_BRIGHTNESS];
 
+/// Confirm that charging stopped before completing an explicit shutdown.
+pub const CHARGING_STOP_MS: u32 = 2_000;
+/// A fresh deliberate PTT hold leaves the charging-only screen.
+pub const CHARGING_POWER_ON_HOLD_MS: u32 = 2_000;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChargingDecision {
+    Stay,
+    RunNormally,
+    PowerOff,
+}
+
+/// Charging-only mode after an explicit power-off while charging is active.
+///
+/// The caller supplies fresh charger evidence, not USB configuration state:
+/// `Some(true)` is actively charging, `Some(false)` is stopped, and `None`
+/// is unknown. Stopped may mean full, unplugged, paused or faulted; this
+/// policy never infers which, nor does it infer cable presence or battery SOC.
+pub struct ChargingShutdown {
+    stopped_since: Option<u32>,
+    ptt_since: Option<u32>,
+    ptt_armed: bool,
+    decision: ChargingDecision,
+}
+
+impl ChargingShutdown {
+    pub const fn new(ptt_down_on_entry: bool) -> Self {
+        Self {
+            stopped_since: None,
+            ptt_since: None,
+            ptt_armed: !ptt_down_on_entry,
+            decision: ChargingDecision::Stay,
+        }
+    }
+
+    /// Consume a PTT edge at its original wrapping millisecond stamp, before
+    /// polling with the current time. Process queued edges in order: a short
+    /// release cancels that hold even when it is dequeued after its deadline.
+    /// A release after a complete fresh hold can itself finish the hold.
+    /// Charger confirmation is unaffected, and terminal decisions stay latched.
+    pub fn observe_ptt(&mut self, at_ms: u32, ptt_down: bool) -> ChargingDecision {
+        if self.decision != ChargingDecision::Stay {
+            return self.decision;
+        }
+        if !ptt_down {
+            if self.ptt_since.is_some_and(|since| {
+                at_ms.wrapping_sub(since) >= CHARGING_POWER_ON_HOLD_MS
+            }) {
+                self.decision = ChargingDecision::RunNormally;
+            }
+            self.ptt_armed = true;
+            self.ptt_since = None;
+        } else if self.ptt_armed {
+            let since = *self.ptt_since.get_or_insert(at_ms);
+            if at_ms.wrapping_sub(since) >= CHARGING_POWER_ON_HOLD_MS {
+                self.decision = ChargingDecision::RunNormally;
+            }
+        }
+        self.decision
+    }
+
+    /// Poll with monotonic milliseconds (wrapping u32) and current inputs.
+    /// Drain stamped PTT edges through `observe_ptt` first. Unknown/active
+    /// charging cancels stop confirmation. A PTT held on entry is ignored
+    /// until released; subsequent short holds restart the hold clock. A
+    /// completed hold wins a simultaneous stop deadline, and either terminal
+    /// decision remains latched until this policy is dropped.
+    pub fn update(&mut self, now_ms: u32, charging: Option<bool>, ptt_down: bool) -> ChargingDecision {
+        if self.observe_ptt(now_ms, ptt_down) != ChargingDecision::Stay {
+            return self.decision;
+        }
+        match charging {
+            Some(false) => {
+                let since = *self.stopped_since.get_or_insert(now_ms);
+                if now_ms.wrapping_sub(since) >= CHARGING_STOP_MS {
+                    self.decision = ChargingDecision::PowerOff;
+                }
+            }
+            Some(true) | None => self.stopped_since = None,
+        }
+        self.decision
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Screen {
@@ -290,6 +374,161 @@ mod tests {
             assert!(!p.input(Control::Wheel(Wheel::Ccw), at.wrapping_add(tick as u32)));
         }
         assert_eq!(p.lock_progress(), None);
+    }
+
+    #[test]
+    fn charging_shutdown_waits_through_active_or_unknown_charging() {
+        let mut policy = ChargingShutdown::new(false);
+        for now in [0, 2_000, 60_000, 3_600_000] {
+            for charging in [Some(true), None] {
+                assert_eq!(policy.update(now, charging, false), ChargingDecision::Stay);
+            }
+        }
+        assert_eq!(policy.update(3_600_001, Some(false), false), ChargingDecision::Stay);
+        assert_eq!(policy.update(3_602_000, Some(false), false), ChargingDecision::Stay);
+        assert_eq!(policy.update(3_602_001, Some(false), false), ChargingDecision::PowerOff);
+    }
+
+    #[test]
+    fn charging_shutdown_requires_two_continuous_seconds_of_stopped_evidence() {
+        for interruption in [Some(true), None] {
+            let mut policy = ChargingShutdown::new(false);
+            assert_eq!(policy.update(100, Some(false), false), ChargingDecision::Stay);
+            assert_eq!(policy.update(2_099, Some(false), false), ChargingDecision::Stay);
+            assert_eq!(policy.update(2_100, interruption, false), ChargingDecision::Stay);
+            assert_eq!(policy.update(2_101, Some(false), false), ChargingDecision::Stay);
+            assert_eq!(policy.update(4_100, Some(false), false), ChargingDecision::Stay);
+            assert_eq!(policy.update(4_101, Some(false), false), ChargingDecision::PowerOff);
+        }
+    }
+
+    #[test]
+    fn charging_shutdown_ignores_ptt_held_on_entry_until_release_and_a_fresh_hold() {
+        let mut policy = ChargingShutdown::new(true);
+        for now in [0, 1_999, 2_000, 60_000] {
+            assert_eq!(policy.update(now, Some(true), true), ChargingDecision::Stay);
+        }
+        assert_eq!(policy.update(60_001, Some(true), false), ChargingDecision::Stay);
+        assert_eq!(policy.update(61_000, Some(true), true), ChargingDecision::Stay);
+        assert_eq!(policy.update(62_999, Some(true), true), ChargingDecision::Stay);
+        assert_eq!(policy.update(63_000, Some(true), true), ChargingDecision::RunNormally);
+    }
+
+    #[test]
+    fn charging_shutdown_short_ptt_holds_do_not_accumulate() {
+        let mut policy = ChargingShutdown::new(false);
+        for start in [0, 2_000, 4_000] {
+            assert_eq!(policy.update(start, Some(true), true), ChargingDecision::Stay);
+            assert_eq!(policy.update(start + 1_999, Some(true), false), ChargingDecision::Stay);
+        }
+        assert_eq!(policy.update(6_000, None, true), ChargingDecision::Stay);
+        assert_eq!(policy.update(7_999, None, true), ChargingDecision::Stay);
+        assert_eq!(policy.update(8_000, None, true), ChargingDecision::RunNormally);
+    }
+
+    #[test]
+    fn charging_shutdown_queued_short_release_cancels_before_a_late_poll() {
+        let mut policy = ChargingShutdown::new(false);
+        assert_eq!(policy.observe_ptt(0, true), ChargingDecision::Stay);
+        assert_eq!(policy.update(1_900, Some(true), true), ChargingDecision::Stay);
+        // Dequeued after 2 seconds, but the actual hold ended at 1,999 ms.
+        assert_eq!(policy.observe_ptt(1_999, false), ChargingDecision::Stay);
+        assert_eq!(policy.update(2_050, Some(true), false), ChargingDecision::Stay);
+        assert_eq!(policy.update(60_000, Some(true), false), ChargingDecision::Stay);
+    }
+
+    #[test]
+    fn charging_shutdown_release_and_repress_between_polls_start_a_new_hold() {
+        let mut policy = ChargingShutdown::new(false);
+        assert_eq!(policy.update(0, Some(true), true), ChargingDecision::Stay);
+        assert_eq!(policy.update(1_900, Some(true), true), ChargingDecision::Stay);
+        assert_eq!(policy.observe_ptt(1_999, false), ChargingDecision::Stay);
+        assert_eq!(policy.observe_ptt(2_000, true), ChargingDecision::Stay);
+        assert_eq!(policy.update(2_050, Some(true), true), ChargingDecision::Stay);
+        assert_eq!(policy.update(3_999, Some(true), true), ChargingDecision::Stay);
+        assert_eq!(policy.update(4_000, Some(true), true), ChargingDecision::RunNormally);
+    }
+
+    #[test]
+    fn charging_shutdown_a_completed_hold_can_finish_on_its_release_stamp() {
+        for start in [0u32, u32::MAX - 1_000] {
+            for duration in [2_000, 2_500] {
+                let mut policy = ChargingShutdown::new(false);
+                assert_eq!(policy.update(start, Some(false), true), ChargingDecision::Stay);
+                assert_eq!(
+                    policy.observe_ptt(start.wrapping_add(duration), false),
+                    ChargingDecision::RunNormally,
+                );
+                // PTT wins even if the charger deadline also elapsed while
+                // these controls waited for the next app poll.
+                assert_eq!(
+                    policy.update(start.wrapping_add(3_000), Some(false), false),
+                    ChargingDecision::RunNormally,
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn charging_shutdown_queued_entry_held_release_only_arms_a_fresh_hold() {
+        let mut policy = ChargingShutdown::new(true);
+        assert_eq!(policy.observe_ptt(60_000, false), ChargingDecision::Stay);
+        assert_eq!(policy.observe_ptt(60_001, true), ChargingDecision::Stay);
+        assert_eq!(policy.observe_ptt(62_000, false), ChargingDecision::Stay);
+        assert_eq!(policy.update(62_100, None, false), ChargingDecision::Stay);
+        assert_eq!(policy.observe_ptt(63_000, true), ChargingDecision::Stay);
+        assert_eq!(policy.observe_ptt(65_000, false), ChargingDecision::RunNormally);
+    }
+
+    #[test]
+    fn charging_shutdown_ptt_edges_do_not_reset_the_charger_stop_timer() {
+        let mut policy = ChargingShutdown::new(false);
+        assert_eq!(policy.update(100, Some(false), false), ChargingDecision::Stay);
+        assert_eq!(policy.observe_ptt(1_000, true), ChargingDecision::Stay);
+        assert_eq!(policy.observe_ptt(1_500, false), ChargingDecision::Stay);
+        assert_eq!(policy.update(2_100, Some(false), false), ChargingDecision::PowerOff);
+        assert_eq!(policy.observe_ptt(3_000, true), ChargingDecision::PowerOff);
+        assert_eq!(policy.observe_ptt(5_000, false), ChargingDecision::PowerOff);
+    }
+
+    #[test]
+    fn charging_shutdown_stop_and_ptt_deadlines_survive_clock_wrap() {
+        for start in [0u32, u32::MAX - 1_000] {
+            for (charging, ptt, expected) in [
+                (Some(false), false, ChargingDecision::PowerOff),
+                (Some(true), true, ChargingDecision::RunNormally),
+            ] {
+                let mut policy = ChargingShutdown::new(false);
+                assert_eq!(policy.update(start, charging, ptt), ChargingDecision::Stay);
+                assert_eq!(policy.update(start.wrapping_add(1_999), charging, ptt), ChargingDecision::Stay);
+                assert_eq!(policy.update(start.wrapping_add(2_000), charging, ptt), expected);
+            }
+        }
+    }
+
+    #[test]
+    fn charging_shutdown_completed_ptt_hold_wins_a_simultaneous_stop_deadline() {
+        let mut policy = ChargingShutdown::new(false);
+        assert_eq!(policy.update(100, Some(false), true), ChargingDecision::Stay);
+        assert_eq!(policy.update(2_099, Some(false), true), ChargingDecision::Stay);
+        assert_eq!(policy.update(2_100, Some(false), true), ChargingDecision::RunNormally);
+    }
+
+    #[test]
+    fn charging_shutdown_timers_are_independent_and_terminal_decisions_are_latched() {
+        let mut resume = ChargingShutdown::new(false);
+        assert_eq!(resume.update(0, Some(false), true), ChargingDecision::Stay);
+        assert_eq!(resume.update(1_000, Some(true), true), ChargingDecision::Stay);
+        assert_eq!(resume.update(2_000, Some(true), true), ChargingDecision::RunNormally);
+        assert_eq!(resume.update(9_000, Some(false), false), ChargingDecision::RunNormally);
+        assert_eq!(resume.update(11_000, Some(false), false), ChargingDecision::RunNormally);
+        let mut stop = ChargingShutdown::new(false);
+        assert_eq!(stop.update(0, Some(false), false), ChargingDecision::Stay);
+        assert_eq!(stop.update(1_000, Some(false), true), ChargingDecision::Stay);
+        assert_eq!(stop.update(1_999, Some(false), false), ChargingDecision::Stay);
+        assert_eq!(stop.update(2_000, Some(false), false), ChargingDecision::PowerOff);
+        assert_eq!(stop.update(9_000, Some(true), true), ChargingDecision::PowerOff);
+        assert_eq!(stop.update(11_000, None, true), ChargingDecision::PowerOff);
     }
 
     #[test]

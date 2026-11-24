@@ -455,20 +455,33 @@ follows Settings → Display brightness 1–5 (panel 40/80/130/190/255); dim is 
 or the lit level if lower. Bluetooth audio, host status, deck messages and
 charger servicing continue while dark.
 
-**Power off (Rev A).** The board has no power switch: with a cell fitted it
+**Power off (Rev A and Rev B).** The board has no power switch: with a cell fitted it
 runs until the firmware stops it. Hold CANCEL for 3 s (a `Power off?` dialog
 with a filling bar appears after 0.7 s; letting go earlier cancels): the deck
 releases every host-visible key, sends `up`, darkens and unpowers the panel
 and puts the SF32LB52x into its PMU shutdown state (`src/pmu.rs`, the SDK's
 `HAL_PMU_EnterShutdown` sequence through the PAC). The always-on 3.3 V rail,
 the touch controller and the charger stay up, so the cell keeps charging on
-USB. Holding PTT for 2 s powers it on again: the PMU wakes on PTT alone, and
+USB. On Rev B, powering off while the charger is active instead opens a dim,
+localized charging-only screen. Bluetooth disconnects and stops advertising,
+and the microphone, speaker and normal deck controls stop. Hold PTT for 2 s
+to return to the normal deck. When charging stops for 2 s—because charging
+finished, USB was unplugged, or the charger paused/faulted—the display powers
+down and the chip enters real shutdown. A battery already finished charging
+goes straight to shutdown. This uses the physical CHG pin, so a computer's
+USB suspend or reset is not mistaken for unplugging.
+
+Holding PTT for 2 s powers a fully shut-down deck on again: the PMU wakes on PTT alone, and
 the firmware goes straight back to sleep, panel still dark, if PTT is let go
 before 2 s after the application starts; held through, it is a cold boot
 through the bootloader with the press itself consumed. The dev board has no
 such path at all. A deck that never finished the tutorial starts in it
 (Settings → Display → Tutorial replays it), and Settings → About → Factory
 reset blanks the pairing and the preferences and restarts.
+USB insertion cannot wake the unmodified Rev B from true shutdown: its MCU
+VBUS and charger PGOOD signals are unconnected, and CHG on PA33 is not a
+shutdown wake pin. Reliable USB power-on needs a hardware connection to a
+supported wake input; see [power-off and charging](docs/power-off-charging.md).
 The unused physical keypad LED rail stays off, and battery samples are taken
 every 15 seconds. The native audio target also uses guarded idle clock scaling
 and a 500ms dark-screen recovery poll, with immediate interrupt wake. Full system

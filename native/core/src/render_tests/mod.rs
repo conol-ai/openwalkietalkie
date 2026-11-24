@@ -23,6 +23,7 @@ use embedded_graphics::{pixelcolor::Rgb565, prelude::*, primitives::Rectangle};
 mod agents;
 mod arcade;
 mod bluetooth;
+mod charging;
 mod fuzz;
 mod kit;
 mod i18n;

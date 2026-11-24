@@ -6,7 +6,8 @@
 //! active, they are answered by the built-in host (`demo_loopback`). An
 //! `Update` overflow ends the link after `up` (`link::overflow`). An
 //! `Update` power-off (CANCEL held for `global::POWER_HOLD_MS`) ends the
-//! session, darkens the panel and hands the chip to the PMU (`power_off`).
+//! session and hands the chip to the PMU (`power_off`). On Rev B, active
+//! charging keeps a dedicated dim charging screen until charging stops.
 use crate::{
     battery::BATTERY,
     control::{now_ms, Stamped, CONTROLS},
@@ -202,7 +203,7 @@ pub async fn run(mut display: Option<Co5300>, band: &'static mut Band) -> ! {
         dirty |= state.set_screen_lock(power.lock_progress());
         if POWER_OFF.swap(false, Ordering::AcqRel) {
             #[cfg(feature = "hw-a")]
-            power_off(display.take(), state, &mut power, scratch).await;
+            power_off(display.take(), band, state, &mut power, scratch).await;
             #[cfg(not(feature = "hw-a"))]
             logln!("power: off requested; this board has no soft power-off");
         }
@@ -441,13 +442,14 @@ pub async fn power_on_gate(
 /// PMU. Its own frame, so `run`'s stays under the stack gate.
 #[cfg(feature = "hw-a")]
 async fn power_off(
-    mut display: Option<Co5300>,
+    display: Option<Co5300>,
+    band: &mut Band,
     state: &mut UiState,
     power: &mut Policy,
     scratch: &mut HostMsg,
 ) -> ! {
-    use crate::control::{Button, Control, Edge};
-    use embassy_time::{with_deadline, Duration, Instant, Timer};
+    use crate::control::Button;
+    use embassy_time::Timer;
     logln!(
         "power: off (CANCEL held {} ms); releasing the hosts",
         ui::state::global::POWER_HOLD_MS
@@ -458,6 +460,38 @@ async fn power_off(
     // The last lines cross the link meanwhile: about a millisecond over USB,
     // up to half a second over BLE.
     Timer::after_millis(500).await;
+
+    #[cfg(feature = "hw-b")]
+    {
+        crate::battery::prepare_power_off();
+        // The normal CHG poll may be up to 15 seconds old. Request and wait
+        // for a fresh physical observation before choosing the off state.
+        let deadline = embassy_time::Instant::now() + embassy_time::Duration::from_millis(1500);
+        loop {
+            match crate::battery::charging_active() {
+                Some(true) => charging_shutdown(
+                    display, band, state.battery, state.language,
+                    power.is_down(Button::PushToTalk),
+                ).await,
+                Some(false) => break,
+                None if embassy_time::Instant::now() < deadline => Timer::after_millis(20).await,
+                None => {
+                    logln!("power: charger status unavailable; completing shutdown");
+                    break;
+                }
+            }
+        }
+    }
+    #[cfg(not(feature = "hw-b"))]
+    let _ = band;
+    finish_power_off(display, power.is_down(Button::PushToTalk)).await
+}
+
+/// Final shutdown is shared by ordinary power-off and the end of charging.
+#[cfg(feature = "hw-a")]
+async fn finish_power_off(mut display: Option<Co5300>, ptt_down: bool) -> ! {
+    use crate::control::{Button, Control, Edge};
+    use embassy_time::{with_deadline, Duration, Instant, Timer};
     if let Some(driver) = display.as_mut() {
         if let Err(error) = driver.sleep() {
             logln!("power: panel sleep failed: {:?}", error);
@@ -470,7 +504,7 @@ async fn power_off(
     // (a hand on both buttons), wait for it to come up (capped, in case its
     // release never arrives). The CANCEL of the hold no longer matters: it
     // is not a wake pin.
-    if power.is_down(Button::PushToTalk) {
+    if ptt_down {
         let deadline = Instant::now() + Duration::from_secs(10);
         loop {
             match with_deadline(deadline, CONTROLS.receive()).await {
@@ -487,6 +521,122 @@ async fn power_off(
     // Let that line leave the UART before the clocks stop.
     Timer::after_millis(20).await;
     crate::pmu::power_off()
+}
+
+/// An explicit power-off while the physical charger is active. The display
+/// stays dim; no deck control, microphone, speaker or Bluetooth advertising
+/// remains active. CHG going inactive means full, unplugged or faulted, all
+/// of which complete the shutdown without claiming a particular cause.
+#[cfg(feature = "hw-b")]
+async fn charging_shutdown(
+    mut display: Option<Co5300>,
+    band: &mut Band,
+    mut battery: crate::battery::BatteryState,
+    language: ui::i18n::Language,
+    mut ptt_down: bool,
+) -> ! {
+    use crate::battery::ChargeState;
+    use crate::control::{Button, Control, Edge};
+    use embassy_time::Timer;
+    logln!("power: charging-only screen; hold PTT 2 s to switch on");
+    crate::link::enter_charging_only();
+    drain_charging_controls(&mut ptt_down, None);
+    let mut policy = power::ChargingShutdown::new(ptt_down);
+    let mut shown = None;
+    if let Some(panel) = display.as_mut() {
+        if let Err(error) = panel.wake() {
+            logln!("power: charging display wake failed: {:?}", error);
+        }
+        Timer::after_millis(120).await;
+        let _ = panel.set_brightness(power::DIM_BRIGHTNESS);
+    }
+    loop {
+        // Teardown, panel transfers and settling may have queued a release.
+        // Apply every edge before deciding whether a hold finished, rather
+        // than extending a released button through time spent rendering.
+        drain_charging_controls(&mut ptt_down, Some(&mut policy));
+        // A USB recovery request remains usable while the normal deck is off.
+        let reboot_request = REBOOT.swap(0, Ordering::AcqRel);
+        if reboot_request != 0 {
+            reboot(display.take(), reboot_request == 2).await;
+        }
+        let charging = crate::battery::charging_active();
+        match policy.update(now_ms(), charging, ptt_down) {
+            power::ChargingDecision::RunNormally => reboot(display.take(), false).await,
+            power::ChargingDecision::PowerOff => {
+                logln!("power: charging stopped; completing shutdown");
+                finish_power_off(display.take(), ptt_down).await;
+            }
+            power::ChargingDecision::Stay => {}
+        }
+        battery.charge = match charging {
+            Some(true) => ChargeState::Charging,
+            Some(false) => ChargeState::Usb, // Stopped; do not invent a Full diagnosis.
+            None => ChargeState::Unknown,
+        };
+        crate::link::battery(battery);
+        let next = (battery.percentage(), battery.charge);
+        if shown != Some(next) {
+            if let Some(panel) = display.as_mut() {
+                match render_charging(panel, band, battery, language).await {
+                    Ok(()) => {
+                        if shown.is_none() {
+                            if let Err(error) = panel.enable() {
+                                logln!("power: charging display-on failed: {:?}", error);
+                            }
+                        }
+                        shown = Some(next);
+                    }
+                    Err(error) => logln!("power: charging display render failed: {:?}", error),
+                }
+            } else {
+                shown = Some(next);
+            }
+        }
+        // A frame already waiting when the mode changed must not obstruct
+        // system RPC or keep a normal host session alive in charging mode.
+        while DECK_RX.try_receive().is_ok() {}
+        match select3(CONTROLS.receive(), BATTERY.wait(), Timer::after_millis(50)).await {
+            Either3::First((Control::Button(Button::PushToTalk, edge), at)) => {
+                ptt_down = edge == Edge::Press;
+                policy.observe_ptt(at, ptt_down);
+            }
+            Either3::Second(sample) => battery = sample,
+            _ => {}
+        }
+    }
+}
+
+/// Discard normal controls but retain each PTT edge and its original time.
+#[cfg(feature = "hw-b")]
+fn drain_charging_controls(
+    ptt_down: &mut bool,
+    mut policy: Option<&mut power::ChargingShutdown>,
+) {
+    use crate::control::{Button, Control, Edge};
+    while let Ok((control, at)) = CONTROLS.try_receive() {
+        if let Control::Button(Button::PushToTalk, edge) = control {
+            *ptt_down = edge == Edge::Press;
+            if let Some(policy) = policy.as_deref_mut() {
+                policy.observe_ptt(at, *ptt_down);
+            }
+        }
+    }
+}
+
+#[cfg(feature = "hw-b")]
+async fn render_charging(
+    display: &mut Co5300,
+    band: &mut Band,
+    battery: crate::battery::BatteryState,
+    language: ui::i18n::Language,
+) -> Result<(), Error> {
+    for index in 0..BANDS {
+        band.set_row(panel_band(index));
+        ui::charging::draw(band, battery, language);
+        display.write_band(band).await?;
+    }
+    Ok(())
 }
 fn tick(state: &mut UiState, power: &mut Policy, scratch: &mut HostMsg) -> bool {
     let now = now_ms();

@@ -75,7 +75,8 @@ impl Speaker {
 }
 
 fn muted() -> bool {
-    voice::CAPTURING.load(Ordering::Acquire) && !voice::LOOPBACK.load(Ordering::Acquire)
+    crate::link::charging_only()
+        || voice::CAPTURING.load(Ordering::Acquire) && !voice::LOOPBACK.load(Ordering::Acquire)
 }
 
 /// A DMA write that takes this long means the TX DMA has stopped.

@@ -139,6 +139,9 @@ pub fn on_deck_event(event: &Event, online: bool) {
 /// everything else queues for the speaker. Returns false when a frame had
 /// to be dropped.
 pub fn host_frame(link: Link, bytes: &[u8]) -> bool {
+    if crate::link::charging_only() {
+        return false;
+    }
     match policy::host_frame(&codec::parse(bytes)) {
         policy::HostFrame::Mic(r) => {
             request(r);
@@ -170,6 +173,18 @@ pub fn link_lost(link: Link) {
     SUBSCRIBED[link.index()].store(false, Ordering::Release);
     MAX_VALUE[link.index()].store(20, Ordering::Release);
     MIC_FRAMES[link.index()].clear();
+}
+
+/// End every microphone owner and discard pending playback before a
+/// charging-only shutdown. The microphone task closes its own DMA session.
+#[cfg(feature = "hw-b")]
+pub fn power_down() {
+    MIC.clear();
+    request(MicRequest::Stop { reason: codec::END_ABORT, host: false });
+    SPEAKER_FRAMES.clear();
+    link_lost(Link::Usb);
+    link_lost(Link::Ble);
+    super::arcade::publish(0);
 }
 
 /// How many samples a microphone frame may carry on `link`.

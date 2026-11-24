@@ -14,6 +14,7 @@
 //! to redraw.
 
 pub mod bluetooth;
+pub mod charging;
 pub mod damage;
 pub mod faces;
 pub mod font;
