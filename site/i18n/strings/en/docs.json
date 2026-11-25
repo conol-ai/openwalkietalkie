@@ -15,5 +15,13 @@
   "docs.content.h22": "Start with a working example",
   "docs.content.p9": "<a href=\"/examples/native_companion.py\" download>Download the Python companion example</a>. Run it with Python 3.10+ while OpenWalkieTalkie is open. It uses scripted replies and needs no packages, model API keys or Conol account.",
   "docs.content.h23": "Look up the contract",
-  "docs.content.p10": "<a href=\"/docs/deckd-api.md\">Complete JSON-RPC API reference (Markdown)</a>, generated from the daemon’s request schemas and method permissions. The <a href=\"https://github.com/conol-ai/openwalkietalkie\">source repository</a> includes the example and integration tests."
+  "docs.content.p10": "<a href=\"/docs/deckd-api.md\">Complete JSON-RPC API reference (Markdown)</a>, generated from the daemon’s request schemas and method permissions. The <a href=\"https://github.com/conol-ai/openwalkietalkie\">source repository</a> includes the example and integration tests.",
+  "docs.guides.get-started.title": "Get started",
+  "docs.guides.get-started.blurb": "Install the app, connect the deck, connect one coding agent.",
+  "docs.guides.claude-code.title": "Connect Claude Code",
+  "docs.guides.claude-code.blurb": "Install the plugin, start a session with Channels.",
+  "docs.guides.codex.title": "Connect Codex",
+  "docs.guides.codex.blurb": "The CLI through the shared daemon, Desktop through the launcher.",
+  "docs.guides.grok-bot.title": "Connect Grok Bot",
+  "docs.guides.grok-bot.blurb": "Make the routine, paste its webhook, read its states."
 }

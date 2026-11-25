@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="day">
+<head>
+<script>window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'default', {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+  wait_for_update: 500
+});</script>
+<script defer src="/js/cookie-consent.js"></script>
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Grok Bot を接続する · OpenWalkieTalkie</title>
+<meta name="description" content="Grok Bot をデバイスにつなぐ：Grok Bot でルーティンを作り、その Webhook をアプリに貼り、表示される状態を読みます。" />
+<link rel="canonical" href="https://openwalkietalkie.org/ja/docs/grok-bot/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/grok-bot/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/grok-bot/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/grok-bot/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/grok-bot/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/grok-bot/" />
+
+<meta property="og:type" content="website" />
+<meta name="owt-api-version" content="0.11.0" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="Grok Bot を接続する · OpenWalkieTalkie" />
+<meta property="og:description" content="Grok Bot をデバイスにつなぐ：Grok Bot でルーティンを作り、その Webhook をアプリに貼り、表示される状態を読みます。" />
+<meta property="og:url" content="https://openwalkietalkie.org/ja/docs/grok-bot/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie ブログ" href="/ja/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<link rel="stylesheet" href="/css/docs.css" />
+<script src="/js/i18n/ja.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">本文へスキップ</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/ja/" aria-label="OpenWalkieTalkie — ホーム">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="セクション">
+      <a href="/ja/#pile">The Pile</a>
+      <a href="/ja/#features">機能</a>
+      <a href="/ja/#demo">試す</a>
+      <a href="/ja/#faces">ページ</a>
+      <a href="/ja/#blueprint">設計図</a>
+      <a href="/ja/docs/" aria-current="true">ドキュメント</a>
+      <a href="/ja/blog/">ブログ</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="言語: 日本語">日本語</summary>
+        <ul>
+          <li><a href="/docs/grok-bot/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/docs/grok-bot/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/docs/grok-bot/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/docs/grok-bot/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="昼と夜のテーマを切り替える" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">昼</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="メニューを開く" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main docs-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">チュートリアル · GROK BOT · アプリ 0.17.0</p>
+  <h1>Grok Bot を接続する</h1>
+  <p class="post-meta">ルーティン 1 つ、Webhook 1 つ、キー 1 つ · 所要時間は 10 分ほど</p>
+</header>
+<article class="post-body">
+<p>Grok Bot はほかの 2 つとは逆です。載せるローカルセッションはありません。Grok Bot でルーティンを作り、このマシンに向ければ、デバイスがそのボットのマイクと画面になります。</p>
+<h2>何がつながるのか</h2>
+<p>ボットは、アプリの設定ファイルの 1 行と、システムが預かるキー 1 つでできています。Webhook は Grok Bot 側にあり、アプリは送って返事を読むだけです。</p>
+<ul>
+<li><strong>ボット</strong> — <code>config.toml</code> の <code>[grokbot.bots.&lt;id&gt;]</code> 1 件：名前、Webhook の URL、設定。</li>
+<li><strong>キー</strong> — システムが保管し、そのファイルには入りません。macOS はキーチェーン（service <code>ai.cohdl.openwalkietalkie</code>、account <code>grokbot.bots.&lt;id&gt;.key</code>）、Windows は資格情報マネージャー、Linux や隔離したデータディレクトリでは <code>grokbot-keys.toml</code> になります。</li>
+<li><strong>ルーティン</strong> — Grok Bot 側で作るもので、ここではありません。URL とキーはこれが渡してくれます。</li>
+</ul>
+<h2>1 · Grok Bot でルーティンを作る</h2>
+<ol>
+<li>Grok Bot で使いたいボットを開き、<strong>Settings → Computer</strong> でコマンドの実行を許可します。許可しないと、ルーティンは返事はできても何も実行できません。</li>
+<li>ルーティンを作り、チャット上部のボット名 → <strong>Details</strong> → <strong>routine</strong> → <strong>Webhook</strong> を開きます。<strong>POST to</strong> の URL と<strong>キー</strong>が出ます。</li>
+</ol>
+<h2>2 · ここにボットを追加する</h2>
+<ol>
+<li><strong>連携 → Grok Bot → ボット… → 追加</strong> を開きます。</li>
+<li>デバイスに出したい名前を付け、<strong>POST to</strong> の URL と<strong>キー</strong>を貼って、<strong>追加</strong> を押します。</li>
+<li><strong>テスト</strong> を押します。Webhook に 1 回リクエストを送り、ルーティンが受け付けたかを返します。</li>
+</ol>
+<p>その行に<strong>プロンプトをコピー</strong>がある場合、それは同じルーティンを Grok Bot 自身の言葉で書いたものです。ボットのチャットに送れば、Grok Bot がルーティンを作ってくれます。どちらでも最後は URL とキーが 1 つずつ残ります。</p>
+<h2>3 · 何が見えるはずか</h2>
+<ul>
+<li><strong>Grok Bot</strong> の行：<em>設定済み</em> とボットの数。最初の 1 つを入れるまでは <em>未設定</em>。</li>
+<li><em>キーがありません</em> は、設定にボットがあるのにシステムにキーがない状態です。ルーティンの現在のキーでもう一度追加します。</li>
+<li>デバイス側：<strong>CANCEL</strong> → <em>Agents</em> にボットが名前で並びます。どこかでチャットを開いておく必要はありません。</li>
+</ul>
+<h2>うまくいかないとき</h2>
+<dl>
+<dt>Grok Bot がキーを拒否しました（HTTP 401）</dt>
+<dd>ルーティンを作り直したか、キーが入れ替わっています。ルーティンのキーをもう一度コピーして、ボットを追加し直します。HTTP 403 も同じ扱いです。</dd>
+<dt>Grok Bot はこの Webhook を認識していません（HTTP 404）</dt>
+<dd>その URL のルーティンはもう存在しません。ルーティンの <strong>POST to</strong> の URL をもう一度コピーして、ボットを追加し直します。</dd>
+<dt>キーがありません</dt>
+<dd>設定にボットがあり、システムにキーがありません。もう一度追加します。同じボットを追加し直すと、新しいキーを渡さない限り元のキーが使われます。</dd>
+<dt>ボットは返事をするが、コンピュータを使えない</dt>
+<dd>Grok Bot の <strong>Settings → Computer</strong> で許可されていません。ルーティンは動き、デバイスにも言葉は出ますが、何も実行されません。</dd>
+<dt>Grok Bot は実行を開始しませんでした</dt>
+<dd>キーは受け付けられましたが、この実行は始まっていません。一時停止中のルーティンがこうなります。アプリは <em>「ルーティンが一時停止していませんか？」</em> と尋ねるので、Grok Bot で再開してから、もう一度 <strong>テスト</strong> を押します。</dd>
+</dl>
+<h2>このページの確認方法</h2>
+<p>行の状態とエラー文はアプリと 0.17.0 のサービスのソースから、保存場所はサービス自身のドキュメントから取っています。このページは実際の Grok Bot ルーティンに対して実行していません。上の HTTP の答えはアプリ側の文字列で、生きたルーティンの観察ではありません。</p>
+<h2>次に読むもの</h2>
+<p><a href="/ja/docs/get-started/">はじめかた</a> はアプリとデバイスを扱います。<a href="/ja/docs/claude-code/">Claude Code</a> と <a href="/ja/docs/codex/">Codex</a> がほかの 2 つの連携です。<a href="/ja/manual/">フィールドマニュアル</a> はすべての操作を扱います。</p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL のプロジェクト · ソフトウェアは MIT · ハードウェアは CERN-OHL-P</span>
+    <nav aria-label="フッター">
+      <a href="/ja/#waitlist">ウェイトリストに登録</a>
+      <a href="/ja/privacy/">プライバシーポリシー</a>
+      <a href="/ja/cookies/">Cookie について</a>
+      <a href="#cookie-consent" data-cookie-settings hidden>Cookie の設定</a>
+      <a href="/ja/">ホーム</a>
+      <a href="/ja/#demo">試す</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Discord で CoHDL と OpenWalkieTalkie のコミュニティに参加">Discord</a>
+      <a href="/ja/blog/feed.xml">フィード</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<section id="cookie-consent" class="privacy-notice" role="dialog" aria-label="Cookie の設定" aria-describedby="cookie-consent-message" hidden>
+  <div>
+    <p id="cookie-consent-message">これらのドキュメントがどう使われているかを把握するために Google Tag Manager を使用します。同意するまで計測は行いません。</p>
+    <p><a href="/ja/privacy/">プライバシー</a></p>
+  </div>
+  <div class="cookie-consent-actions">
+    <button class="btn btn--primary" type="button" value="granted">同意する</button>
+    <button class="btn" type="button" value="denied">拒否する</button>
+  </div>
+</section>
+</body>
+</html>

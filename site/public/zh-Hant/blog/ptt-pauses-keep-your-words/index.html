@@ -1,6 +1,17 @@
 <!DOCTYPE html>
 <html lang="zh-Hant" data-theme="day">
 <head>
+<script>window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'default', {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+  wait_for_update: 500
+});</script>
+<script defer src="/js/cookie-consent.js"></script>
+
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>OpenWalkieTalkie v0.11.1：停頓時保留你說過的話 · OpenWalkieTalkie</title>
@@ -113,7 +124,7 @@
       <a href="/zh-Hant/#waitlist">加入候補名單</a>
       <a href="/zh-Hant/privacy/">隱私權政策</a>
       <a href="/zh-Hant/cookies/">Cookie 說明</a>
-      <a href="/zh-Hant/cookies/" data-privacy-open>隱私權聲明</a>
+      <a href="#cookie-consent" data-cookie-settings hidden>Cookie 設定</a>
       <a href="/zh-Hant/">首頁</a>
       <a href="/zh-Hant/#demo">試用</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
@@ -125,6 +136,15 @@
 </footer>
 
 <script src="/js/main.js"></script>
-<script src="/js/privacy.js"></script>
+<section id="cookie-consent" class="privacy-notice" role="dialog" aria-label="Cookie 設定" aria-describedby="cookie-consent-message" hidden>
+  <div>
+    <p id="cookie-consent-message">我們用 Google Tag Manager 了解這些文件的使用情況。在你接受之前，不會進行任何統計。</p>
+    <p><a href="/zh-Hant/privacy/">隱私</a></p>
+  </div>
+  <div class="cookie-consent-actions">
+    <button class="btn btn--primary" type="button" value="granted">接受</button>
+    <button class="btn" type="button" value="denied">拒絕</button>
+  </div>
+</section>
 </body>
 </html>

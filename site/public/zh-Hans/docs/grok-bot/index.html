@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" data-theme="day">
+<head>
+<script>window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'default', {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+  wait_for_update: 500
+});</script>
+<script defer src="/js/cookie-consent.js"></script>
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>连接 Grok Bot · OpenWalkieTalkie</title>
+<meta name="description" content="把 Grok Bot 接到设备上：在 Grok Bot 里建 routine，把它的 webhook 粘进应用，读懂它报的状态。" />
+<link rel="canonical" href="https://openwalkietalkie.org/zh-Hans/docs/grok-bot/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/grok-bot/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/grok-bot/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/grok-bot/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/grok-bot/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/grok-bot/" />
+
+<meta property="og:type" content="website" />
+<meta name="owt-api-version" content="0.11.0" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="连接 Grok Bot · OpenWalkieTalkie" />
+<meta property="og:description" content="把 Grok Bot 接到设备上：在 Grok Bot 里建 routine，把它的 webhook 粘进应用，读懂它报的状态。" />
+<meta property="og:url" content="https://openwalkietalkie.org/zh-Hans/docs/grok-bot/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie 博客" href="/zh-Hans/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<link rel="stylesheet" href="/css/docs.css" />
+<script src="/js/i18n/zh-Hans.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">跳至正文</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/zh-Hans/" aria-label="OpenWalkieTalkie — 首页">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="栏目">
+      <a href="/zh-Hans/#pile">The Pile</a>
+      <a href="/zh-Hans/#features">功能</a>
+      <a href="/zh-Hans/#demo">试用</a>
+      <a href="/zh-Hans/#faces">页面</a>
+      <a href="/zh-Hans/#blueprint">设计图纸</a>
+      <a href="/zh-Hans/docs/" aria-current="true">文档</a>
+      <a href="/zh-Hans/blog/">博客</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="语言: 简体中文">简体中文</summary>
+        <ul>
+          <li><a href="/docs/grok-bot/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/docs/grok-bot/" hreflang="zh-Hans" lang="zh-Hans" aria-current="true">简体中文</a></li>
+          <li><a href="/zh-Hant/docs/grok-bot/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/docs/grok-bot/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换日间和夜间主题" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">日间</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="打开菜单" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main docs-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">教程 · GROK BOT · 应用 0.17.0</p>
+  <h1>连接 Grok Bot</h1>
+  <p class="post-meta">一个 routine、一个 webhook、一把 key · 约十分钟</p>
+</header>
+<article class="post-body">
+<p>Grok Bot 跟前两个反着来：没有本地会话可以挂。你在 Grok Bot 里建一个 routine，把它指向这台机器，设备就成了那个机器人的麦克风和屏幕。</p>
+<h2>连接的是什么</h2>
+<p>一个机器人 = 应用配置文件里的一行 + 系统替它保管的一把 key。webhook 在 Grok Bot 那边；应用只负责发过去、读回来。</p>
+<ul>
+<li><strong>机器人</strong> —— <code>config.toml</code> 里的一条 <code>[grokbot.bots.&lt;id&gt;]</code>：名字、webhook 地址和设置。</li>
+<li><strong>key</strong> —— 由系统保管，不在那个文件里：macOS 进钥匙串（service <code>ai.cohdl.openwalkietalkie</code>，account <code>grokbot.bots.&lt;id&gt;.key</code>），Windows 进凭据管理器，Linux 或隔离的数据目录才落到 <code>grokbot-keys.toml</code>。</li>
+<li><strong>routine</strong> —— 在 Grok Bot 里建，不在这里。地址和 key 都是它给的。</li>
+</ul>
+<h2>1 · 在 Grok Bot 里建 routine</h2>
+<ol>
+<li>在 Grok Bot 里打开你要的那个机器人，进 <strong>Settings → Computer</strong>，允许它执行命令：不允许的话，routine 能回话，但什么都做不了。</li>
+<li>建一个 routine，然后在聊天顶部点机器人的名字 → <strong>Details</strong> → <strong>routine</strong> → <strong>Webhook</strong>。那里会给出一个 <strong>POST to</strong> 地址和一个 <strong>key</strong>。</li>
+</ol>
+<h2>2 · 在这里添加机器人</h2>
+<ol>
+<li>打开 <strong>集成 → Grok Bot → 机器人… → 添加</strong>。</li>
+<li>起一个你希望显示在设备上的名字，粘贴 <strong>POST to</strong> 地址和 <strong>key</strong>，按 <strong>添加</strong>。</li>
+<li>按 <strong>测试</strong>：它会给 webhook 发一个请求，并告诉你 routine 有没有接受。</li>
+</ol>
+<p>如果那一行给了 <strong>复制提示词</strong>，那段话是用 Grok Bot 自己的说法描述同一个 routine：发到机器人的聊天里，Grok Bot 会替你把 routine 建好。两种做法最后都是拿到一个地址和一把 key。</p>
+<h2>3 · 应该看到什么</h2>
+<ul>
+<li><strong>Grok Bot</strong> 行：<em>已设置</em>，带机器人数量；第一个加进来之前是 <em>未设置</em>。</li>
+<li><em>缺少密钥</em> 表示配置里有这个机器人，但系统里没有它的 key：拿 routine 当前的 key 再加一次。</li>
+<li>设备上：<strong>CANCEL</strong> → <em>Agents</em> 会按名字列出这个机器人，哪里都不用开着聊天。</li>
+</ul>
+<h2>出问题的时候</h2>
+<dl>
+<dt>Grok Bot 拒绝了密钥（HTTP 401）</dt>
+<dd>routine 重建过，或者 key 轮换了。重新复制 routine 的 key，再加一次机器人。HTTP 403 也是同一个处理。</dd>
+<dt>Grok Bot 不认识这个 Webhook（HTTP 404）</dt>
+<dd>这个地址指向的 routine 已经不存在了。重新复制 routine 的 <strong>POST to</strong> 地址，再加一次机器人。</dd>
+<dt>缺少密钥</dt>
+<dd>配置里有这个机器人，系统里没有它的 key。再加一次：同一个机器人重复添加会沿用原来的 key，除非你给了新的。</dd>
+<dt>机器人会回话，但用不了电脑</dt>
+<dd>Grok Bot 的 <strong>Settings → Computer</strong> 没允许。routine 照旧跑，设备照旧显示出字，但什么都不会执行。</dd>
+<dt>Grok Bot 没有开始运行</dt>
+<dd>key 被接受了，但这一次运行没有起来。暂停中的 routine 就是这样——应用会问 <em>「例行任务是否已暂停？」</em>——所以去 Grok Bot 里恢复它，回来再按 <strong>测试</strong>。</dd>
+</dl>
+<h2>这一页是怎么核对的</h2>
+<p>各行状态和报错原文取自应用与 0.17.0 的服务源码，存放位置取自服务自己的文档。这一页没有对着真实 Grok Bot routine 跑过：上面那些 HTTP 回答是应用自己的字符串，不是对活 routine 的观察。</p>
+<h2>接下来看什么</h2>
+<p><a href="/zh-Hans/docs/get-started/">入门指南</a>讲装应用和连设备。<a href="/zh-Hans/docs/claude-code/">Claude Code</a> 与 <a href="/zh-Hans/docs/codex/">Codex</a> 是另外两个集成。<a href="/zh-Hans/manual/">现场手册</a>讲每一个控件。</p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL 项目 · MIT 许可的软件 · CERN-OHL-P 许可的硬件</span>
+    <nav aria-label="页脚">
+      <a href="/zh-Hans/#waitlist">加入候补名单</a>
+      <a href="/zh-Hans/privacy/">隐私政策</a>
+      <a href="/zh-Hans/cookies/">Cookie 说明</a>
+      <a href="#cookie-consent" data-cookie-settings hidden>Cookie 设置</a>
+      <a href="/zh-Hans/">首页</a>
+      <a href="/zh-Hans/#demo">试用</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="在 Discord 上加入 CoHDL 和 OpenWalkieTalkie 社区">Discord</a>
+      <a href="/zh-Hans/blog/feed.xml">订阅源</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<section id="cookie-consent" class="privacy-notice" role="dialog" aria-label="Cookie 设置" aria-describedby="cookie-consent-message" hidden>
+  <div>
+    <p id="cookie-consent-message">我们用 Google Tag Manager 了解这些文档的使用情况。在你接受之前，不会进行任何统计。</p>
+    <p><a href="/zh-Hans/privacy/">隐私</a></p>
+  </div>
+  <div class="cookie-consent-actions">
+    <button class="btn btn--primary" type="button" value="granted">接受</button>
+    <button class="btn" type="button" value="denied">拒绝</button>
+  </div>
+</section>
+</body>
+</html>

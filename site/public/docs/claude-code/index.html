@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="day">
+<head>
+<script>window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'default', {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+  wait_for_update: 500
+});</script>
+<script defer src="/js/cookie-consent.js"></script>
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Connect Claude Code · OpenWalkieTalkie</title>
+<meta name="description" content="Connect Claude Code to the deck: install the plugin, start a session with Channels, and read the exact states the app shows." />
+<link rel="canonical" href="https://openwalkietalkie.org/docs/claude-code/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/claude-code/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/claude-code/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/claude-code/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/claude-code/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/claude-code/" />
+
+<meta property="og:type" content="website" />
+<meta name="owt-api-version" content="0.11.0" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="Connect Claude Code · OpenWalkieTalkie" />
+<meta property="og:description" content="Connect Claude Code to the deck: install the plugin, start a session with Channels, and read the exact states the app shows." />
+<meta property="og:url" content="https://openwalkietalkie.org/docs/claude-code/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie Blog" href="/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<link rel="stylesheet" href="/css/docs.css" />
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">Skip to content</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/" aria-label="OpenWalkieTalkie — home">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="Sections">
+      <a href="/#pile">The Pile</a>
+      <a href="/#features">Features</a>
+      <a href="/#demo">Try It</a>
+      <a href="/#faces">Faces</a>
+      <a href="/#blueprint">Blueprint</a>
+      <a href="/docs/" aria-current="true">Docs</a>
+      <a href="/blog/">Blog</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="Language: English">English</summary>
+        <ul>
+          <li><a href="/docs/claude-code/" hreflang="en" lang="en" aria-current="true">English</a></li>
+          <li><a href="/zh-Hans/docs/claude-code/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/docs/claude-code/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/docs/claude-code/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle day and night theme" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">DAY</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="Open menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main docs-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">TUTORIAL · CLAUDE CODE · APP 0.17.0</p>
+  <h1>Connect Claude Code</h1>
+  <p class="post-meta">Plugin, Channels and one live session · about ten minutes</p>
+</header>
+<article class="post-body">
+<p>The deck talks to a Claude Code session that is already running on your machine. Two things have to be true: the plugin has to be installed in Claude Code, and the session has to be started with Channels on.</p>
+<h2>What gets connected</h2>
+<p>Set Up in the app does not install Claude Code. It writes a local plugin marketplace under <code>~/Library/Application Support/OpenWalkieTalkie/claude-marketplace/</code> and registers it, so this machine's Claude Code learns that the deck exists.</p>
+<ul>
+<li>The plugin: hooks that let a session report itself to the background service.</li>
+<li>Channels: the live channel the app reads to put a session on the deck. Separate row, separate switch.</li>
+<li>Your projects: not touched. The plugin is installed at user scope, never per project.</li>
+</ul>
+<h2>Linux</h2>
+<p>On Linux, the Omarchy bridge puts your Claude Code session on the deck. Claude Code Channels, the two-way message route, is not available in this release; the fix is in the next one. Until then, the steps below apply to macOS and Windows.</p>
+<h2>1 · Install the plugin</h2>
+<ol>
+<li>Open <strong>Integrations</strong> and find <strong>Claude Code</strong>. If the row says <strong>Set Up</strong>, press it.</li>
+<li>If the row offers <strong>Copy Command</strong>, run the two commands below in a terminal. Both are idempotent.</li>
+<li>A session that was already open when the plugin was installed will not see it. Start a new one, or run <code>/reload-plugins</code>.</li>
+</ol>
+<pre><code>claude plugin marketplace add '&lt;marketplace path&gt;' --scope user --json
+claude plugin install openwalkietalkie@openwalkietalkie --scope user --json</code></pre>
+<p>The row reads <strong>Connected</strong> once the plugin is registered at user scope. That is a statement about files, not about a running session.</p>
+<h2>2 · Start a session with Channels</h2>
+<p>Claude Code does not load Channels unless you ask for them at launch.</p>
+<pre><code>claude --dangerously-load-development-channels plugin:openwalkietalkie@openwalkietalkie</code></pre>
+<p>The app has this command behind <strong>Integrations → Claude Channels → How to Connect… → Copy Command</strong>; the path is the same. Claude asks for a confirmation on the first launch: accept it.</p>
+<h2>3 · What you should see</h2>
+<ul>
+<li><strong>Claude Code</strong> row: Connected, plus a session count once a session is open.</li>
+<li><strong>Claude Channels</strong> row: its own state, <em>No session connected</em> until a Channels session runs.</li>
+<li>On the deck: <strong>CANCEL</strong> → <em>Agents</em> lists the session. Nothing else on the deck needs configuring.</li>
+</ul>
+<h2>When it doesn't work</h2>
+<dl>
+<dt>Needs repair</dt>
+<dd>If you just upgraded the app, <strong>Needs repair</strong> is the expected state: the managed plugin files no longer match what Claude Code recorded. Press <strong>Repair</strong> once, and the plugin is rewritten and registered again.</dd>
+<dt>No session connected on Claude Channels</dt>
+<dd>The session was not started with the Channels flag, or the confirmation was dismissed. Quit it and start again with the copied command.</dd>
+<dt>Connected, but no entry on the deck</dt>
+<dd>A project's own <code>.claude/settings.json</code> can turn the plugin off for that repository with <code>enabledPlugins["openwalkietalkie@openwalkietalkie"]: false</code>. The app cannot see that switch.</dd>
+<dt>Nothing works right after an update</dt>
+<dd>A plugin is read at session start. A session that was open before the update needs <code>/reload-plugins</code> or a restart.</dd>
+</dl>
+<h2>How this page was checked</h2>
+<p>Every label and path comes from the app itself and from the background service's source in 0.17.0, and both commands are the ones the app copies. The page was not walked through end to end with a live Claude Code session, so read the order as the one the code assumes, not as a transcript of a run.</p>
+<h2>Where next</h2>
+<p><a href="/docs/get-started/">Get started</a> covers the app and the deck. <a href="/manual/">The field manual</a> covers every control. <a href="/docs/">Developer docs</a> has the API the plugin talks to.</p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · A COHDL project · MIT software · CERN-OHL-P hardware</span>
+    <nav aria-label="Footer">
+      <a href="/#waitlist">Join the waitlist</a>
+      <a href="/privacy/">Privacy Policy</a>
+      <a href="/cookies/">Cookie information</a>
+      <a href="#cookie-consent" data-cookie-settings hidden>Cookie settings</a>
+      <a href="/">Home</a>
+      <a href="/#demo">Try It</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Join the CoHDL and OpenWalkieTalkie community on Discord">Discord</a>
+      <a href="/blog/feed.xml">Feed</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<section id="cookie-consent" class="privacy-notice" role="dialog" aria-label="Cookie settings" aria-describedby="cookie-consent-message" hidden>
+  <div>
+    <p id="cookie-consent-message">We use Google Tag Manager to understand how these docs are used. Nothing is measured until you accept.</p>
+    <p><a href="/privacy/">Privacy</a></p>
+  </div>
+  <div class="cookie-consent-actions">
+    <button class="btn btn--primary" type="button" value="granted">Accept</button>
+    <button class="btn" type="button" value="denied">Reject</button>
+  </div>
+</section>
+</body>
+</html>

@@ -1,5 +1,16 @@
 <!DOCTYPE html>
 <html lang="zh-Hans" data-theme="day"><head>
+<script>window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'default', {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+  wait_for_update: 500
+});</script>
+<script defer src="/js/cookie-consent.js"></script>
+
 <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>隐私政策 · OpenWalkieTalkie</title><meta name="description" content="OpenWalkieTalkie 如何处理你的设备候补名单登记和网站数据。" />
 <link rel="canonical" href="https://openwalkietalkie.org/zh-Hans/privacy/" />
@@ -62,10 +73,10 @@
 <h2>我们收集什么</h2>
 <ul><li><strong>候补名单：</strong>你提交的电子邮件地址、登记日期，以及你同意接收设备开售动态时所显示的声明版本。</li>
 <li><strong>连接信息：</strong>Cloudflare 会处理请求元数据（包括你的 IP 地址），以提供和保护网站。我们的登记端点会使用你的 IP 进行短时的频率限制。我们不会把 IP、你的浏览器信息或来源 URL 存入候补名单数据库。</li>
-<li><strong>浏览器偏好：</strong>你选择的日间/夜间主题，以及你对隐私声明的确认，都保存在你的浏览器中。参见 <a href="/zh-Hans/cookies/">Cookie 说明</a>。</li></ul>
+<li><strong>浏览器偏好：</strong>你选择的日间/夜间主题和 Cookie 同意选择都保存在你的浏览器中。参见 <a href="/zh-Hans/cookies/">Cookie 说明</a>。</li></ul>
 <h2>我们为何使用</h2>
 <p>在你同意的前提下，我们使用你的邮箱告诉你设备何时开售，并发送相关的开售动态。加入名单不构成订单、预订或付款，也不保证交付日期。我们不会把你加入 Cohdl 软件候补名单或无关的邮件列表。</p>
-<p>连接元数据用于提供网站、防止垃圾信息和诊断故障。我们的应用日志不包含登记表单的内容。本网站没有广告或分析脚本。</p>
+<p>连接元数据用于提供网站、防止垃圾信息和诊断故障。我们的应用日志不包含登记表单的内容。我们使用 Google Tag Manager 管理网站标签。容器加载时，Google 会处理相关请求。根据启用的标签，它们可能收集页面浏览记录、来源网址、设备和浏览器信息，以及根据 IP 地址推断的大致位置。详情请参阅<a href="https://policies.google.com/privacy" rel="noopener">Google 的隐私权政策</a>。</p>
 <h2>谁处理这些数据</h2>
 <p>运营 OpenWalkieTalkie 的团队可以访问该名单，以管理登记并发送你所要求的动态。Cloudflare 托管本网站，并将名单存储在其 D1 数据库中；处理可能在 Cloudflare 开展业务的国家进行。参见 <a href="https://www.cloudflare.com/privacypolicy/" rel="noopener">Cloudflare 的隐私政策</a>。我们不会出售你的候补名单数据。</p>
 <p>指向 GitHub、Discord 和其他网站的链接会把你带到各自有隐私政策的服务。</p>
@@ -86,7 +97,7 @@
       <a href="/zh-Hans/#waitlist">加入候补名单</a>
       <a href="/zh-Hans/privacy/">隐私政策</a>
       <a href="/zh-Hans/cookies/">Cookie 说明</a>
-      <a href="/zh-Hans/cookies/" data-privacy-open>隐私声明</a>
+      <a href="#cookie-consent" data-cookie-settings hidden>Cookie 设置</a>
       <a href="/zh-Hans/">首页</a>
       <a href="/zh-Hans/#demo">试用</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
@@ -98,6 +109,15 @@
 </footer>
 
 <script src="/js/main.js"></script>
-<script src="/js/privacy.js"></script>
+<section id="cookie-consent" class="privacy-notice" role="dialog" aria-label="Cookie 设置" aria-describedby="cookie-consent-message" hidden>
+  <div>
+    <p id="cookie-consent-message">我们用 Google Tag Manager 了解这些文档的使用情况。在你接受之前，不会进行任何统计。</p>
+    <p><a href="/zh-Hans/privacy/">隐私</a></p>
+  </div>
+  <div class="cookie-consent-actions">
+    <button class="btn btn--primary" type="button" value="granted">接受</button>
+    <button class="btn" type="button" value="denied">拒绝</button>
+  </div>
+</section>
 </body>
 </html>

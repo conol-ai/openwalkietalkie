@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="day">
+<head>
+<script>window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'default', {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+  wait_for_update: 500
+});</script>
+<script defer src="/js/cookie-consent.js"></script>
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>連接 Codex · OpenWalkieTalkie</title>
+<meta name="description" content="把 Codex 接到裝置上：CLI 走共用 daemon，Codex Desktop 走啟動器，以及各自會顯示的狀態。" />
+<link rel="canonical" href="https://openwalkietalkie.org/zh-Hant/docs/codex/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/codex/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/codex/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/codex/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/codex/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/codex/" />
+
+<meta property="og:type" content="website" />
+<meta name="owt-api-version" content="0.11.0" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="連接 Codex · OpenWalkieTalkie" />
+<meta property="og:description" content="把 Codex 接到裝置上：CLI 走共用 daemon，Codex Desktop 走啟動器，以及各自會顯示的狀態。" />
+<meta property="og:url" content="https://openwalkietalkie.org/zh-Hant/docs/codex/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie 部落格" href="/zh-Hant/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<link rel="stylesheet" href="/css/docs.css" />
+<script src="/js/i18n/zh-Hant.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">跳至主要內容</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/zh-Hant/" aria-label="OpenWalkieTalkie — 首頁">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="網站區塊">
+      <a href="/zh-Hant/#pile">The Pile</a>
+      <a href="/zh-Hant/#features">功能</a>
+      <a href="/zh-Hant/#demo">試用</a>
+      <a href="/zh-Hant/#faces">頁面</a>
+      <a href="/zh-Hant/#blueprint">設計藍圖</a>
+      <a href="/zh-Hant/docs/" aria-current="true">說明文件</a>
+      <a href="/zh-Hant/blog/">部落格</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="語言: 繁體中文">繁體中文</summary>
+        <ul>
+          <li><a href="/docs/codex/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/docs/codex/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/docs/codex/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
+          <li><a href="/ja/docs/codex/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切換日間與夜間主題" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">日間</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="開啟選單" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main docs-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">教學 · CODEX · 應用程式 0.17.0</p>
+  <h1>連接 Codex</h1>
+  <p class="post-meta">CLI、Codex Desktop 與一個本機 daemon · 約十分鐘</p>
+</header>
+<article class="post-body">
+<p>有兩條路，而且它們不一樣。Codex CLI 自己就能接到裝置上；Codex Desktop 需要一個啟動器，把它放到同一個本機 daemon 上。</p>
+<h2>連接的是什麼</h2>
+<p>應用程式不安裝 Codex，也不代理它。它對話的是 Codex 跑的那個本機 daemon，所以裝置上顯示的就是那個 daemon 手裡的工作階段。</p>
+<ul>
+<li><strong>Codex CLI</strong> —— 共用 daemon。不用寫檔案，也沒有安裝程式；那一列就是個開關。</li>
+<li><strong>Codex Desktop</strong> —— <code>~/Applications</code> 裡的一個啟動器，負責拉起或重用那個 daemon，並把 Desktop 指到它的 Unix socket 上。 這個啟動器僅適用於 macOS。</li>
+<li><strong>hooks 備援</strong> —— 只在 daemon 這條路走不通時才用：往 <code>$CODEX_HOME</code> 裡寫一份 <code>hooks.json</code>。</li>
+</ul>
+<h2>1 · Codex CLI</h2>
+<ol>
+<li>照平常的方式，在你要的專案裡開工作階段：<code>codex</code>。</li>
+<li>工作階段執行後，<strong>Codex CLI</strong> 那一列會自動開啟，顯示工作階段數，裝置上也會出現項目。在 Omarchy 上，安裝後這一列顯示「關閉」，因為安裝指令碼設定了 <code>codex.daemon=false</code>，由 Omarchy 橋接登記這些工作階段。</li>
+</ol>
+<h2>2 · Codex Desktop</h2>
+<ol>
+<li>在 <strong>Codex Desktop</strong> 那一列按 <strong>設定</strong>。它會把 <strong>Codex with OpenWalkieTalkie.app</strong> 寫進 <code>~/Applications</code>。</li>
+<li>把 Codex Desktop 和 ChatGPT 完全結束。啟動器不會打斷已經在跑的工作階段。</li>
+<li>Finder → <strong>前往</strong> → <strong>前往檔案夾…</strong> → <code>~/Applications</code> → 開啟 <strong>Codex with OpenWalkieTalkie.app</strong>。</li>
+</ol>
+<p>啟動器會拉起或重用本機 daemon，並透過它的 Unix socket 把 Desktop 接上。以後每次都從這個啟動器開啟 Desktop：從正常圖示開啟，它就回到自己的 daemon，裝置上就讀不到東西了。</p>
+<h2>3 · 應該看到什麼</h2>
+<ul>
+<li><strong>Codex CLI</strong> 列：daemon 能連上時顯示已連接；CLI 與 Desktop 的執行緒共用這個計數。</li>
+<li><strong>Codex Desktop</strong> 列：<em>已安裝</em> 只說明啟動器檔案就位了。</li>
+<li>裝置上：<strong>CANCEL</strong> → <em>Agents</em>，Desktop 的執行緒就排在 CLI 工作階段旁邊。</li>
+</ul>
+<h2>出問題的時候</h2>
+<dl>
+<dt>Codex 沒在執行</dt>
+<dd>這一列需要一個活著的 daemon。開一個本機 <code>codex</code> 工作階段，或從啟動器啟動 Desktop。</dd>
+<dt>啟動器不讓啟動</dt>
+<dd><em>Quit Codex Desktop / ChatGPT first, then open Codex with OpenWalkieTalkie again. Running sessions are not interrupted automatically.</em> 把兩個都結束掉，再開一次啟動器。</dd>
+<dt>顯示已安裝，但裝置上什麼都沒有</dt>
+<dd><em>已安裝</em> 說的是檔案。Desktop 必須從啟動器起，裝置才看得到。</dd>
+<dt>hooks 備援不響了</dt>
+<dd>hook 的信任是按位置、按 <code>hooks.json</code> 的真實路徑算的。檔案或路徑一變，Codex 就把它當成 modified，然後靜默失效：回到應用程式裡重新授予信任。</dd>
+</dl>
+<h2>這一頁是怎麼核對的</h2>
+<p>標籤與路徑取自應用程式與 0.17.0 的背景服務原始碼，啟動器自己那句提示也是原文。兩條路都沒有在這個建置上端到端跑過：寫這一頁時，沒有任何 CLI 執行緒或 Desktop 執行緒真的上過裝置。</p>
+<h2>接下來看什麼</h2>
+<p><a href="/zh-Hant/docs/get-started/">入門指南</a>講裝應用程式和連裝置。<a href="/zh-Hant/docs/claude-code/">Claude Code</a> 與 <a href="/zh-Hant/docs/grok-bot/">Grok Bot</a> 是另外兩個整合。<a href="/zh-Hant/manual/">現場手冊</a>講每一個控制項。</p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL 專案 · MIT 授權軟體 · CERN-OHL-P 授權硬體</span>
+    <nav aria-label="頁尾">
+      <a href="/zh-Hant/#waitlist">加入候補名單</a>
+      <a href="/zh-Hant/privacy/">隱私權政策</a>
+      <a href="/zh-Hant/cookies/">Cookie 說明</a>
+      <a href="#cookie-consent" data-cookie-settings hidden>Cookie 設定</a>
+      <a href="/zh-Hant/">首頁</a>
+      <a href="/zh-Hant/#demo">試用</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="在 Discord 加入 CoHDL 與 OpenWalkieTalkie 社群">Discord</a>
+      <a href="/zh-Hant/blog/feed.xml">訂閱來源</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<section id="cookie-consent" class="privacy-notice" role="dialog" aria-label="Cookie 設定" aria-describedby="cookie-consent-message" hidden>
+  <div>
+    <p id="cookie-consent-message">我們用 Google Tag Manager 了解這些文件的使用情況。在你接受之前，不會進行任何統計。</p>
+    <p><a href="/zh-Hant/privacy/">隱私</a></p>
+  </div>
+  <div class="cookie-consent-actions">
+    <button class="btn btn--primary" type="button" value="granted">接受</button>
+    <button class="btn" type="button" value="denied">拒絕</button>
+  </div>
+</section>
+</body>
+</html>

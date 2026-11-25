@@ -1,5 +1,16 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="day"><head>
+<script>window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'default', {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+  wait_for_update: 500
+});</script>
+<script defer src="/js/cookie-consent.js"></script>
+
 <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Cookie information · OpenWalkieTalkie</title><meta name="description" content="Cookies, local storage, and privacy choices on openwalkietalkie.org." />
 <link rel="canonical" href="https://openwalkietalkie.org/cookies/" />
@@ -57,16 +68,16 @@
 <header class="post-head"><p class="section-kicker">OPENWALKIETALKIE</p><h1>Cookie information</h1>
 <p class="post-meta">Updated October 16, 2026</p></header>
 <article class="post-body">
-<p>The website currently includes no advertising or analytics scripts. You can browse and join the waitlist without accepting optional tracking.</p>
+<p>The site loads Google Tag Manager after you accept in Cookie settings. Google processes the container request. Enabled tags can collect page views, referrers, device and browser information, and approximate location inferred from IP addresses, and may set cookies. See <a href="https://policies.google.com/privacy" rel="noopener">Google’s Privacy Policy</a> for details.</p>
 <h2>What your browser remembers</h2>
 <ul><li><strong>Day/night theme:</strong> <code>owt-theme</code> in local storage remembers the theme you select. It stays on this browser until you clear it. If no choice is saved, we use your operating system's preference.</li>
-<li><strong>Privacy notice:</strong> selecting “Got it” saves <code>owt-privacy-notice</code> in local storage so the notice stays dismissed for 180 days. It contains a notice version and expiry time, not an identifier. Acknowledging it does not consent to tracking.</li></ul>
+<li><strong>Cookie choice:</strong> Select “Accept” or “Reject” in the cookie choice dialog. Your choice is saved in localStorage under <code>owt-cookie-consent-v1</code> with no time-based expiry. You can change it from “Cookie settings” in the footer.</li></ul>
 <p>These preferences are not sent to the waitlist API. Local storage is similar to cookies in that it saves information on your device, but it is not automatically attached to requests.</p>
 <h2>Cloudflare security cookies</h2>
 <p>Cloudflare hosts and protects the website and may set cookies when security features or challenges are used. Which cookies appear and how long they last depend on those features. Read <a href="https://developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/" rel="noopener">Cloudflare's cookie descriptions</a> for details.</p>
 <h2>Manage browser storage</h2>
-<p>You can remove this site's cookies and local storage using your browser's site-data settings. Clearing storage resets the theme and shows the privacy notice again. Blocking security cookies may prevent a Cloudflare security challenge from completing.</p>
-<p><a href="/cookies/" data-privacy-open>Show the privacy notice again</a>. If JavaScript is disabled, this page still explains all the storage used by the site.</p>
+<p>You can remove this site's cookies and local storage using your browser's site-data settings. Clearing storage resets the theme and shows the cookie choice dialog again. Blocking security cookies may prevent a Cloudflare security challenge from completing.</p>
+<p><a href="/cookies/" data-privacy-open>Open the cookie choice dialog</a>. You can read this page with JavaScript disabled.</p>
 <h2>Your waitlist email</h2>
 <p>Your email is stored securely on the server when you submit the waitlist form. Clearing browser storage does not remove a signup. To leave the list, email <a href="mailto:privacy@cohdl.ai">privacy@cohdl.ai</a>. See the <a href="/privacy/">Privacy Policy</a> for collection, retention, and other requests.</p>
 </article></main>
@@ -77,7 +88,7 @@
       <a href="/#waitlist">Join the waitlist</a>
       <a href="/privacy/">Privacy Policy</a>
       <a href="/cookies/">Cookie information</a>
-      <a href="/cookies/" data-privacy-open>Privacy notice</a>
+      <a href="#cookie-consent" data-cookie-settings hidden>Cookie settings</a>
       <a href="/">Home</a>
       <a href="/#demo">Try It</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
@@ -89,6 +100,15 @@
 </footer>
 
 <script src="/js/main.js"></script>
-<script src="/js/privacy.js"></script>
+<section id="cookie-consent" class="privacy-notice" role="dialog" aria-label="Cookie settings" aria-describedby="cookie-consent-message" hidden>
+  <div>
+    <p id="cookie-consent-message">We use Google Tag Manager to understand how these docs are used. Nothing is measured until you accept.</p>
+    <p><a href="/privacy/">Privacy</a></p>
+  </div>
+  <div class="cookie-consent-actions">
+    <button class="btn btn--primary" type="button" value="granted">Accept</button>
+    <button class="btn" type="button" value="denied">Reject</button>
+  </div>
+</section>
 </body>
 </html>

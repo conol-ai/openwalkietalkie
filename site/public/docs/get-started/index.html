@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="day">
+<head>
+<script>window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'default', {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+  wait_for_update: 500
+});</script>
+<script defer src="/js/cookie-consent.js"></script>
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Get started · OpenWalkieTalkie</title>
+<meta name="description" content="Install the app, connect the deck, connect one coding agent." />
+<link rel="canonical" href="https://openwalkietalkie.org/docs/get-started/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/get-started/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/get-started/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/get-started/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/get-started/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/get-started/" />
+
+<meta property="og:type" content="website" />
+<meta name="owt-api-version" content="0.11.0" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="Get started · OpenWalkieTalkie" />
+<meta property="og:description" content="Install the app, connect the deck, connect one coding agent." />
+<meta property="og:url" content="https://openwalkietalkie.org/docs/get-started/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie Blog" href="/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<link rel="stylesheet" href="/css/docs.css" />
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">Skip to content</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/" aria-label="OpenWalkieTalkie — home">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="Sections">
+      <a href="/#pile">The Pile</a>
+      <a href="/#features">Features</a>
+      <a href="/#demo">Try It</a>
+      <a href="/#faces">Faces</a>
+      <a href="/#blueprint">Blueprint</a>
+      <a href="/docs/" aria-current="true">Docs</a>
+      <a href="/blog/">Blog</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="Language: English">English</summary>
+        <ul>
+          <li><a href="/docs/get-started/" hreflang="en" lang="en" aria-current="true">English</a></li>
+          <li><a href="/zh-Hans/docs/get-started/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/docs/get-started/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/docs/get-started/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle day and night theme" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">DAY</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="Open menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main docs-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">GET STARTED · APP 0.17.0</p>
+  <h1>Get started</h1>
+  <p class="post-meta">macOS, Windows and Linux · about ten minutes</p>
+</header>
+<article class="post-body">
+
+<p>Install the app, connect the deck, connect one coding agent. Three steps, and the deck is a second screen for a session you already have open.</p>
+
+<h2>What you need</h2>
+<ul>
+<li>A deck with charge in it.</li>
+<li>A Mac on macOS 13 or later, a PC on Windows, or Linux (the supported setup is Omarchy).</li>
+<li>A USB-C <strong>data</strong> cable. A charge-only cable links nothing.</li>
+<li>One coding agent already installed and signed in: Claude Code, Codex, or Grok Bot.</li>
+</ul>
+
+<h2>1 · Install the app</h2>
+<h3>macOS</h3>
+<ol>
+<li>Download the disk image for your chip from the <a href="/#download">download section</a>, open it, and drag <strong>OpenWalkieTalkie</strong> into <strong>Applications</strong>.</li>
+<li>Launch it from Applications, not from the disk image. A copy run from the image is quarantined by macOS and cannot register the background service.</li>
+</ol>
+<h3>Windows</h3>
+<ol>
+<li>Download <code>OpenWalkieTalkie-0.17.0-windows-x86_64.zip</code> from the release page and unpack it to a folder you will keep.</li>
+<li>The build is unsigned: SmartScreen shows <em>Windows protected your PC</em>. Choose <strong>More info</strong>, then <strong>Run anyway</strong>.</li>
+</ol>
+<p>The <a href="/docs/windows/">Windows guide</a> covers the preview, the tray icon and firmware updates over USB-C.</p>
+<h3>Linux</h3>
+<p>The supported setup is Omarchy. Build the service and the app, install both, then load the two udev rules for the deck and the virtual keyboard. The <a href="/docs/omarchy/">Omarchy guide</a> has the commands, and it is the page to follow: this one only tells you where it fits.</p>
+
+<h2>2 · Connect the deck</h2>
+<ol>
+<li><strong>Cable first.</strong> Connect the USB-C data cable and allow the accessory if macOS asks. Hold <strong>PTT for two seconds</strong> to power it on.</li>
+<li><strong>Wireless.</strong> Pair <strong>OpenWalkieTalkie</strong> in Bluetooth, and allow Bluetooth for the companion under <em>Privacy &amp; Security → Bluetooth</em>.</li>
+<li><strong>Check it.</strong> Open <strong>Deck → Your deck → Link</strong>. A green dot with <em>Cable</em> or <em>Bluetooth</em> means the service can see it.</li>
+</ol>
+
+<h2>3 · Start the background service</h2>
+<p>Open <strong>Service</strong>. The first card says whether the background service runs; everything else on the deck depends on it.</p>
+<ul>
+<li><strong>macOS.</strong> If it is not running, press <strong>Start</strong>. If the row says it waits for approval, open Settings and allow it under <em>Login Items</em>: nothing starts until you do.</li>
+<li><strong>Windows.</strong> The service starts at sign-in through a Run key, which <strong>Start at login</strong> shows and switches.</li>
+<li><strong>Linux.</strong> <code>systemctl --user status deckd</code>. If the unit is not there, the Omarchy guide's installer has not run.</li>
+</ul>
+<p>Turn <strong>Start at login</strong> on before you close the window. A deck with no service is a deck that says offline.</p>
+
+<h2>4 · Connect one agent</h2>
+<p>One is enough to start. Each row on <strong>Integrations</strong> sets up one agent; the tutorials go step by step.</p>
+<ul>
+<li><strong>Claude Code</strong> — install the plugin, then launch a session with Channels. <a href="/docs/claude-code/">Claude Code tutorial</a></li>
+<li><strong>Codex</strong> — the CLI attaches on its own; Codex Desktop needs the companion launcher. <a href="/docs/codex/">Codex tutorial</a></li>
+<li><strong>Grok Bot</strong> — a routine webhook in, commands out. <a href="/docs/grok-bot/">Grok Bot tutorial</a></li>
+</ul>
+<p><em>Connected</em> means the integration's files are in place. A live session is what puts a row on the deck.</p>
+
+<h2>5 · Say something</h2>
+<ol>
+<li>On the deck, press <strong>CANCEL</strong> to reach <em>Agents</em>. <strong>LEFT / RIGHT</strong> changes project, the wheel moves the highlight, <strong>ENTER</strong> opens the session.</li>
+<li>Hold <strong>PTT</strong>, say “Summarize this project and tell me what to do next”, then release. The recording goes to the session open on your Mac.</li>
+<li>Read the reply on the deck. When the agent asks a question, <strong>ENTER</strong> opens the card, the wheel chooses, <strong>ENTER</strong> answers.</li>
+</ol>
+
+<h2>When it doesn’t work</h2>
+<dl>
+<dt>The service is not running</dt>
+<dd><strong>Service → Start</strong>. On macOS, allow it in <em>Login Items</em> when the row says it is waiting. If Start does nothing, the copy of the app is not the installed one.</dd>
+<dt>No sessions on the deck</dt>
+<dd>An integration must be set up <em>and</em> a session must be open. <em>Codex is not running</em> means no live local session yet.</dd>
+<dt>No voice input</dt>
+<dd>Check the selected session, the link, and the speech engine under <strong>Voice</strong>. Use <strong>Test Voice</strong>. There is no fallback to the Mac's microphone.</dd>
+<dt>The deck says offline</dt>
+<dd>Check the cable or the pairing, then <strong>Service → Restart</strong>. Demo data is not a live connection.</dd>
+<dt>The screen is locked</dt>
+<dd>Press a key or touch the screen, then turn the wheel counterclockwise four ticks. Those ticks unlock it and do not move the selection.</dd>
+<dt>The service is registered but will not start</dt>
+<dd>macOS found the background item but could not resolve <code>Contents/MacOS/deckd</code> to the app bundle, and launchd gives up with exit 78. Open the app once from Finder, or refresh the bundle index with <code>lsregister -f</code> on the installed copy, then press Start again. macOS retries by itself too, and a launch that succeeds later still leaves <code>last exit code = 78</code> behind: read <code>state</code> and <code>pid</code>, not that number.</dd>
+</dl>
+
+<h2>How this page was checked</h2>
+<p>The app's own wording and the screenshots come from 0.17.0 installed on a Mac. The screenshots are rendered by the app's built-in synthetic mode, which never touches the running service. No deck was attached while this page was written, so the linking steps were not run end to end; on Linux the service unit was confirmed installed and enabled, with both udev rules in place. The Windows steps follow the 0.17.0 package and the Windows guide.</p>
+
+<h2>Where next</h2>
+<p><a href="/manual/">The illustrated field manual</a> covers every control, face and macro. <a href="/docs/">Developer docs</a> covers the API. <a href="https://github.com/conol-ai/openwalkietalkie">The source</a> is where the bugs are.</p>
+
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · A COHDL project · MIT software · CERN-OHL-P hardware</span>
+    <nav aria-label="Footer">
+      <a href="/#waitlist">Join the waitlist</a>
+      <a href="/privacy/">Privacy Policy</a>
+      <a href="/cookies/">Cookie information</a>
+      <a href="#cookie-consent" data-cookie-settings hidden>Cookie settings</a>
+      <a href="/">Home</a>
+      <a href="/#demo">Try It</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Join the CoHDL and OpenWalkieTalkie community on Discord">Discord</a>
+      <a href="/blog/feed.xml">Feed</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<section id="cookie-consent" class="privacy-notice" role="dialog" aria-label="Cookie settings" aria-describedby="cookie-consent-message" hidden>
+  <div>
+    <p id="cookie-consent-message">We use Google Tag Manager to understand how these docs are used. Nothing is measured until you accept.</p>
+    <p><a href="/privacy/">Privacy</a></p>
+  </div>
+  <div class="cookie-consent-actions">
+    <button class="btn btn--primary" type="button" value="granted">Accept</button>
+    <button class="btn" type="button" value="denied">Reject</button>
+  </div>
+</section>
+</body>
+</html>

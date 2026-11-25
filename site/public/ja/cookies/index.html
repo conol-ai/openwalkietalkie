@@ -1,5 +1,16 @@
 <!DOCTYPE html>
 <html lang="ja" data-theme="day"><head>
+<script>window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'default', {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+  wait_for_update: 500
+});</script>
+<script defer src="/js/cookie-consent.js"></script>
+
 <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Cookie について · OpenWalkieTalkie</title><meta name="description" content="openwalkietalkie.org の Cookie、ローカルストレージ、プライバシーの選択について。" />
 <link rel="canonical" href="https://openwalkietalkie.org/ja/cookies/" />
@@ -58,16 +69,16 @@
 <header class="post-head"><p class="section-kicker">OPENWALKIETALKIE</p><h1>Cookie について</h1>
 <p class="post-meta">2026年10月16日更新</p></header>
 <article class="post-body">
-<p>このウェブサイトには現在、広告や分析のスクリプトはありません。任意のトラッキングを受け入れなくても、閲覧やウェイトリストへの登録ができます。</p>
+<p>Cookie の設定で同意すると、Google Tag Manager が読み込まれます。コンテナのリクエストは Google が処理します。有効なタグは、ページの閲覧、参照元、端末とブラウザーの情報、IP アドレスから推定したおおよその位置を収集したり、Cookie を設定したりすることがあります。詳しくは<a href="https://policies.google.com/privacy" rel="noopener">Google のプライバシーポリシー</a>をご覧ください。</p>
 <h2>ブラウザーが記憶するもの</h2>
 <ul><li><strong>昼／夜のテーマ：</strong>ローカルストレージの <code>owt-theme</code> が、選んだテーマを記憶します。消去するまでこのブラウザーに残ります。選択が保存されていない場合は、OS の設定に従います。</li>
-<li><strong>プライバシーに関するお知らせ：</strong>「了解」を選ぶと、ローカルストレージに <code>owt-privacy-notice</code> が保存され、お知らせは 180 日間表示されません。中身はお知らせのバージョンと有効期限で、識別子ではありません。確認してもトラッキングに同意したことにはなりません。</li></ul>
+<li><strong>Cookie の選択：</strong>Cookie の選択ダイアログで「同意する」または「拒否する」を選びます。選択はローカルストレージの <code>owt-cookie-consent-v1</code> に保存され、有効期限はありません。フッターの「Cookie の設定」から変更できます。</li></ul>
 <p>これらの設定はウェイトリストの API には送られません。ローカルストレージは情報をお使いの端末に保存する点で Cookie に似ていますが、リクエストに自動的に付くことはありません。</p>
 <h2>Cloudflare のセキュリティ Cookie</h2>
 <p>Cloudflare はウェブサイトをホストして保護しており、セキュリティ機能やチャレンジが使われたときに Cookie を設定することがあります。どの Cookie がどのくらいの期間残るかは、その機能によります。詳しくは <a href="https://developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/" rel="noopener">Cloudflare の Cookie の説明</a>をご覧ください。</p>
 <h2>ブラウザーのストレージを管理する</h2>
-<p>このサイトの Cookie とローカルストレージは、ブラウザーのサイトデータの設定から削除できます。ストレージを消去すると、テーマが元に戻り、プライバシーに関するお知らせが再び表示されます。セキュリティ Cookie をブロックすると、Cloudflare のセキュリティチャレンジが完了しないことがあります。</p>
-<p><a href="/ja/cookies/" data-privacy-open>プライバシーに関するお知らせをもう一度表示</a>。JavaScript が無効でも、このページでサイトが使うすべてのストレージを確認できます。</p>
+<p>このサイトの Cookie とローカルストレージは、ブラウザーのサイトデータの設定から削除できます。ストレージを消去すると、テーマがリセットされ、Cookie の選択ダイアログが再び表示されます。セキュリティ Cookie をブロックすると、Cloudflare のセキュリティチャレンジが完了しないことがあります。</p>
+<p><a href="/ja/cookies/" data-privacy-open>Cookie の選択ダイアログを開く</a>。JavaScript が無効でも、このページを読むことができます。</p>
 <h2>ウェイトリストのメールアドレス</h2>
 <p>メールアドレスは、ウェイトリストのフォームを送信したときにサーバーに安全に保存されます。ブラウザーのストレージを消去しても登録は削除されません。リストから外れるには <a href="mailto:privacy@cohdl.ai">privacy@cohdl.ai</a> にメールしてください。収集、保存期間、その他の依頼については<a href="/ja/privacy/">プライバシーポリシー</a>をご覧ください。</p>
 </article></main>
@@ -78,7 +89,7 @@
       <a href="/ja/#waitlist">ウェイトリストに登録</a>
       <a href="/ja/privacy/">プライバシーポリシー</a>
       <a href="/ja/cookies/">Cookie について</a>
-      <a href="/ja/cookies/" data-privacy-open>プライバシーに関するお知らせ</a>
+      <a href="#cookie-consent" data-cookie-settings hidden>Cookie の設定</a>
       <a href="/ja/">ホーム</a>
       <a href="/ja/#demo">試す</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
@@ -90,6 +101,15 @@
 </footer>
 
 <script src="/js/main.js"></script>
-<script src="/js/privacy.js"></script>
+<section id="cookie-consent" class="privacy-notice" role="dialog" aria-label="Cookie の設定" aria-describedby="cookie-consent-message" hidden>
+  <div>
+    <p id="cookie-consent-message">これらのドキュメントがどう使われているかを把握するために Google Tag Manager を使用します。同意するまで計測は行いません。</p>
+    <p><a href="/ja/privacy/">プライバシー</a></p>
+  </div>
+  <div class="cookie-consent-actions">
+    <button class="btn btn--primary" type="button" value="granted">同意する</button>
+    <button class="btn" type="button" value="denied">拒否する</button>
+  </div>
+</section>
 </body>
 </html>

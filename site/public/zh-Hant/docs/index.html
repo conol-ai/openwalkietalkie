@@ -1,6 +1,17 @@
 <!DOCTYPE html>
 <html lang="zh-Hant" data-theme="day">
 <head>
+<script>window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'default', {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+  wait_for_update: 500
+});</script>
+<script defer src="/js/cookie-consent.js"></script>
+
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>為 OpenWalkieTalkie 開發 · OpenWalkieTalkie</title>
@@ -58,6 +69,7 @@
       <a href="/zh-Hant/#demo">試用</a>
       <a href="/zh-Hant/#faces">頁面</a>
       <a href="/zh-Hant/#blueprint">設計藍圖</a>
+      <a href="/zh-Hant/docs/get-started/">入門指南</a>
       <a href="/zh-Hant/docs/" aria-current="true">說明文件</a>
       <a href="/zh-Hant/blog/">部落格</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
@@ -96,6 +108,26 @@
 <article class="post-body">
 
 <p>把你的助理對話放到裝置上。你的應用程式負責管理工作階段與模型連線；OpenWalkieTalkie 負責實體按鍵、語音輸入和小巧的螢幕。</p>
+<a class="post-card" href="/zh-Hant/docs/get-started/">
+  <h2 class="post-card__title">入門指南</h2>
+  <p class="post-card__excerpt">裝好應用程式、連上裝置、接通一個程式設計 agent。</p>
+  <span class="post-card__read">閱讀指南 →</span>
+</a>
+<a class="post-card" href="/zh-Hant/docs/claude-code/">
+  <h2 class="post-card__title">連接 Claude Code</h2>
+  <p class="post-card__excerpt">安裝外掛，帶 Channels 啟動工作階段。</p>
+  <span class="post-card__read">閱讀指南 →</span>
+</a>
+<a class="post-card" href="/zh-Hant/docs/codex/">
+  <h2 class="post-card__title">連接 Codex</h2>
+  <p class="post-card__excerpt">CLI 走共用 daemon，Desktop 走啟動器。</p>
+  <span class="post-card__read">閱讀指南 →</span>
+</a>
+<a class="post-card" href="/zh-Hant/docs/grok-bot/">
+  <h2 class="post-card__title">連接 Grok Bot</h2>
+  <p class="post-card__excerpt">建 routine、貼 webhook、讀懂狀態。</p>
+  <span class="post-card__read">閱讀指南 →</span>
+</a>
 <a class="post-card" href="/zh-Hant/docs/native-companions/">
   <p class="post-card__date">應用程式 + 服務 + 韌體 0.11.0+</p>
   <h2 class="post-card__title">原生配套程式 API</h2>
@@ -130,7 +162,7 @@
       <a href="/zh-Hant/#waitlist">加入候補名單</a>
       <a href="/zh-Hant/privacy/">隱私權政策</a>
       <a href="/zh-Hant/cookies/">Cookie 說明</a>
-      <a href="/zh-Hant/cookies/" data-privacy-open>隱私權聲明</a>
+      <a href="#cookie-consent" data-cookie-settings hidden>Cookie 設定</a>
       <a href="/zh-Hant/">首頁</a>
       <a href="/zh-Hant/#demo">試用</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
@@ -142,6 +174,15 @@
 </footer>
 
 <script src="/js/main.js"></script>
-<script src="/js/privacy.js"></script>
+<section id="cookie-consent" class="privacy-notice" role="dialog" aria-label="Cookie 設定" aria-describedby="cookie-consent-message" hidden>
+  <div>
+    <p id="cookie-consent-message">我們用 Google Tag Manager 了解這些文件的使用情況。在你接受之前，不會進行任何統計。</p>
+    <p><a href="/zh-Hant/privacy/">隱私</a></p>
+  </div>
+  <div class="cookie-consent-actions">
+    <button class="btn btn--primary" type="button" value="granted">接受</button>
+    <button class="btn" type="button" value="denied">拒絕</button>
+  </div>
+</section>
 </body>
 </html>

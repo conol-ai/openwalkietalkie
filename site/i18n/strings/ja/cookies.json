@@ -1,16 +1,16 @@
 {
   "cookies.head.title1": "Cookie について · OpenWalkieTalkie",
   "cookies.head.meta-content1": "openwalkietalkie.org の Cookie、ローカルストレージ、プライバシーの選択について。",
-  "cookies.content.p1": "このウェブサイトには現在、広告や分析のスクリプトはありません。任意のトラッキングを受け入れなくても、閲覧やウェイトリストへの登録ができます。",
+  "cookies.content.p1": "Cookie の設定で同意すると、Google Tag Manager が読み込まれます。コンテナのリクエストは Google が処理します。有効なタグは、ページの閲覧、参照元、端末とブラウザーの情報、IP アドレスから推定したおおよその位置を収集したり、Cookie を設定したりすることがあります。詳しくは<a href=\"https://policies.google.com/privacy\" rel=\"noopener\">Google のプライバシーポリシー</a>をご覧ください。",
   "cookies.content.h21": "ブラウザーが記憶するもの",
   "cookies.content.li1": "<strong>昼／夜のテーマ：</strong>ローカルストレージの <code>owt-theme</code> が、選んだテーマを記憶します。消去するまでこのブラウザーに残ります。選択が保存されていない場合は、OS の設定に従います。",
-  "cookies.content.li2": "<strong>プライバシーに関するお知らせ：</strong>「了解」を選ぶと、ローカルストレージに <code>owt-privacy-notice</code> が保存され、お知らせは 180 日間表示されません。中身はお知らせのバージョンと有効期限で、識別子ではありません。確認してもトラッキングに同意したことにはなりません。",
+  "cookies.content.li2": "<strong>Cookie の選択：</strong>Cookie の選択ダイアログで「同意する」または「拒否する」を選びます。選択はローカルストレージの <code>owt-cookie-consent-v1</code> に保存され、有効期限はありません。フッターの「Cookie の設定」から変更できます。",
   "cookies.content.p2": "これらの設定はウェイトリストの API には送られません。ローカルストレージは情報をお使いの端末に保存する点で Cookie に似ていますが、リクエストに自動的に付くことはありません。",
   "cookies.content.h22": "Cloudflare のセキュリティ Cookie",
   "cookies.content.p3": "Cloudflare はウェブサイトをホストして保護しており、セキュリティ機能やチャレンジが使われたときに Cookie を設定することがあります。どの Cookie がどのくらいの期間残るかは、その機能によります。詳しくは <a href=\"https://developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/\" rel=\"noopener\">Cloudflare の Cookie の説明</a>をご覧ください。",
   "cookies.content.h23": "ブラウザーのストレージを管理する",
-  "cookies.content.p4": "このサイトの Cookie とローカルストレージは、ブラウザーのサイトデータの設定から削除できます。ストレージを消去すると、テーマが元に戻り、プライバシーに関するお知らせが再び表示されます。セキュリティ Cookie をブロックすると、Cloudflare のセキュリティチャレンジが完了しないことがあります。",
-  "cookies.content.p5": "<a href=\"/cookies/\" data-privacy-open>プライバシーに関するお知らせをもう一度表示</a>。JavaScript が無効でも、このページでサイトが使うすべてのストレージを確認できます。",
+  "cookies.content.p4": "このサイトの Cookie とローカルストレージは、ブラウザーのサイトデータの設定から削除できます。ストレージを消去すると、テーマがリセットされ、Cookie の選択ダイアログが再び表示されます。セキュリティ Cookie をブロックすると、Cloudflare のセキュリティチャレンジが完了しないことがあります。",
+  "cookies.content.p5": "<a href=\"/cookies/\" data-privacy-open>Cookie の選択ダイアログを開く</a>。JavaScript が無効でも、このページを読むことができます。",
   "cookies.content.h24": "ウェイトリストのメールアドレス",
   "cookies.content.p6": "メールアドレスは、ウェイトリストのフォームを送信したときにサーバーに安全に保存されます。ブラウザーのストレージを消去しても登録は削除されません。リストから外れるには <a href=\"mailto:privacy@cohdl.ai\">privacy@cohdl.ai</a> にメールしてください。収集、保存期間、その他の依頼については<a href=\"/privacy/\">プライバシーポリシー</a>をご覧ください。"
 }

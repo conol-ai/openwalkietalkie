@@ -1,5 +1,16 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="day"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="en" data-theme="day"><head>
+<script>window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'default', {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+  wait_for_update: 500
+});</script>
+<script defer src="/js/cookie-consent.js"></script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Field Manual · OpenWalkieTalkie</title><meta name="description" content="Step-by-step OpenWalkieTalkie manual: pair the device, set up the Mac companion app, connect Codex or Claude Code, and use every control.">
 <link rel="canonical" href="https://openwalkietalkie.org/manual/">
 <link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/manual/" />
@@ -163,6 +174,16 @@
 <dl class="troubleshooting"><div><dt>Deck says “offline”</dt><dd>Open <b>Service → Check my setup</b> in OpenWalkieTalkie. Check the USB data cable or Bluetooth connection. Reconnect the deck; if needed, use Service → Restart in the Mac app. Demo data is not a live connection.</dd></div><div><dt>No agent sessions</dt><dd>Follow <a href="#codex">page 3</a> for Codex or <a href="#claude">page 4</a> for Claude Code. Installed confirms integration files; a session must also be open and connected. For Desktop, use the companion launcher.</dd></div><div><dt>No voice input</dt><dd>Check the selected session, host connection and speech engine. For BLE, allow Bluetooth access. There is no fallback to the Mac microphone; use Voice → Test Voice and check the selected engine and permissions. The BLE deck is not a macOS Sound input device.</dd></div><div><dt>A macro does nothing</dt><dd>Check that the key has a binding and the host has Accessibility permission. Select the intended desktop app, then try the shortcut again.</dd></div><div><dt>The screen is locked</dt><dd>Press any key, turn the wheel or touch the screen to wake it. Turn the wheel counterclockwise four ticks to unlock. Those ticks do not activate the underlying screen.</dd></div></dl>
 <div class="reference-bottom"><article><h3>PLAY A LITTLE</h3><p><b>Flappy Bird:</b> tap PTT to fly.<br><b>Snake:</b> turn the wheel left / right.<br><b>Raiden:</b> hold Left / Right to move; auto-fire.<br>ENTER pauses. Best scores last until restart.</p></article><article><h3>POWER &amp; UPDATES</h3><p>Hold PTT for 2 seconds to power on; hold CANCEL for 3 seconds to power off. Update firmware over USB from the Mac app’s Service page. From firmware 0.14.0, press ENTER on the deck to start the install.</p></article></div>
 <aside class="manual-note resources"><strong>THE NEXT STEP</strong><p><a href="/#download">Get the app</a> · <a href="/#demo">Try the web demo</a> · <a href="/docs/">Developer docs</a> · <a href="https://github.com/conol-ai/openwalkietalkie">Source &amp; support</a><br><small>Mac walkthrough for OpenWalkieTalkie 0.15.0, with English app screenshots. Captured with a USB-connected Rev B deck on firmware 0.13.0; the app is 0.15.0. Firmware is updated separately. Board, firmware and assistant versions can change the available controls.</small></p></aside>
-<footer class="sheet-footer"><span>OPENWALKIETALKIE.ORG / MANUAL</span><span>08 / 08</span></footer></section>
+<footer class="sheet-footer"><span>OPENWALKIETALKIE.ORG / MANUAL</span><span>08 / 08</span><a href="#cookie-consent" data-cookie-settings hidden>Cookie settings</a></footer></section>
 <p class="manual-end">OPEN HARDWARE. OPEN FIRMWARE. YOURS TO EXPLORE.</p></main>
-<script src="/js/main.js"></script><script src="/js/manual.js"></script></body></html>
+<script src="/js/main.js"></script><script src="/js/manual.js"></script><section id="cookie-consent" class="privacy-notice" role="dialog" aria-label="Cookie settings" aria-describedby="cookie-consent-message" hidden>
+  <div>
+    <p id="cookie-consent-message">We use Google Tag Manager to understand how these docs are used. Nothing is measured until you accept.</p>
+    <p><a href="/privacy/">Privacy</a></p>
+  </div>
+  <div class="cookie-consent-actions">
+    <button class="btn btn--primary" type="button" value="granted">Accept</button>
+    <button class="btn" type="button" value="denied">Reject</button>
+  </div>
+</section>
+</body></html>

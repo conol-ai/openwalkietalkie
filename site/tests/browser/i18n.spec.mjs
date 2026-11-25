@@ -54,12 +54,12 @@ test('mobile: the switcher sits in the menu and the page does not overflow', asy
   await expect(page.locator('.lang-switch').getByRole('link', { name: 'English' })).toBeVisible();
 });
 
-test('a translated page localises the privacy notice and the waitlist replies', async ({ page }) => {
+test('a translated page localises cookie choices and the waitlist replies', async ({ page }) => {
   await page.goto('/ja/#waitlist');
   const notice = page.locator('.privacy-notice');
   await expect(notice).toBeVisible();
   await expect(notice.locator('a').first()).toHaveAttribute('href', '/ja/privacy/');
-  await notice.locator('button').click();
+  await notice.getByRole('button', { name: '拒否する' }).click();
   await page.locator('#waitlist-form input[type="email"]').fill(`ja-${crypto.randomUUID()}@example.com`);
   await page.locator('#waitlist-consent').check();
   await page.locator('#waitlist-form button').click();

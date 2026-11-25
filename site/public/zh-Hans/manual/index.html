@@ -1,5 +1,16 @@
 <!DOCTYPE html>
-<html lang="zh-Hans" data-theme="day"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="zh-Hans" data-theme="day"><head>
+<script>window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'default', {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+  wait_for_update: 500
+});</script>
+<script defer src="/js/cookie-consent.js"></script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>使用手册 · OpenWalkieTalkie</title><meta name="description" content="OpenWalkieTalkie 分步使用手册：配对设备、设置 Mac 配套应用、连接 Codex 或 Claude Code，并学会使用每一个控件。">
 <link rel="canonical" href="https://openwalkietalkie.org/zh-Hans/manual/">
 <link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/manual/" />
@@ -164,6 +175,16 @@
 <dl class="troubleshooting"><div><dt>设备显示“离线”</dt><dd>在 OpenWalkieTalkie 中打开<b>服务 → 检查安装状态</b>。检查 USB 数据线或蓝牙连接。重新连接设备；如有需要，在 Mac 应用中使用“服务 → 重新启动”。演示数据不是实时连接。</dd></div><div><dt>没有助手会话</dt><dd>Codex 请按照<a href="#codex">第 3 页</a>，Claude Code 请按照<a href="#claude">第 4 页</a>。“已安装”只说明集成文件已就位；还必须有一个打开并已连接的会话。Desktop 请使用配套启动器。</dd></div><div><dt>没有语音输入</dt><dd>检查选中的会话、主机连接和语音识别引擎。使用 BLE 时，允许蓝牙访问。不会回退到 Mac 的麦克风；使用“语音 → 测试语音”，检查选中的引擎和权限。BLE 设备不是 macOS“声音”中的输入设备。</dd></div><div><dt>快捷键没有反应</dt><dd>检查按键是否有绑定，以及主机是否有辅助功能权限。选中目标桌面应用，然后再试一次快捷键。</dd></div><div><dt>屏幕已锁定</dt><dd>按任意键、转动滚轮或触摸屏幕即可唤醒。把滚轮逆时针转四格解锁。这几格转动不会操作下面的界面。</dd></div></dl>
 <div class="reference-bottom"><article><h3>玩一会儿</h3><p><b>像素小鸟：</b>点按 PTT 飞行。<br><b>贪吃蛇：</b>向左 / 向右转动滚轮。<br><b>雷电：</b>按住 Left / Right 移动；自动射击。<br>ENTER 暂停。最高分保留到重新启动为止。</p></article><article><h3>电源与更新</h3><p>按住 PTT 2 秒开机；按住 CANCEL 3 秒关机。在 Mac 应用的“服务”页面通过 USB 更新固件。从固件 0.14.0 起，需要在设备上按 ENTER 开始安装。</p></article></div>
 <aside class="manual-note resources"><strong>下一步</strong><p><a href="/zh-Hans/#download">获取应用</a> · <a href="/zh-Hans/#demo">试用网页演示</a> · <a href="/zh-Hans/docs/">开发者文档</a> · <a href="https://github.com/conol-ai/openwalkietalkie">源代码与支持</a><br><small>OpenWalkieTalkie 0.15.0 的 Mac 使用流程，附英文版应用截图。截图使用通过 USB 连接、固件为 0.13.0 的 Rev B 设备；应用为 0.15.0。固件单独更新。主板、固件和助手的版本不同，可用的控件也可能不同。</small></p></aside>
-<footer class="sheet-footer"><span>OPENWALKIETALKIE.ORG / 手册</span><span>08 / 08</span></footer></section>
+<footer class="sheet-footer"><span>OPENWALKIETALKIE.ORG / 手册</span><span>08 / 08</span><a href="#cookie-consent" data-cookie-settings hidden>Cookie 设置</a></footer></section>
 <p class="manual-end">开放硬件。开放固件。由你探索。</p></main>
-<script src="/js/main.js"></script><script src="/js/manual.js"></script></body></html>
+<script src="/js/main.js"></script><script src="/js/manual.js"></script><section id="cookie-consent" class="privacy-notice" role="dialog" aria-label="Cookie 设置" aria-describedby="cookie-consent-message" hidden>
+  <div>
+    <p id="cookie-consent-message">我们用 Google Tag Manager 了解这些文档的使用情况。在你接受之前，不会进行任何统计。</p>
+    <p><a href="/zh-Hans/privacy/">隐私</a></p>
+  </div>
+  <div class="cookie-consent-actions">
+    <button class="btn btn--primary" type="button" value="granted">接受</button>
+    <button class="btn" type="button" value="denied">拒绝</button>
+  </div>
+</section>
+</body></html>

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="day">
+<head>
+<script>window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'default', {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+  wait_for_update: 500
+});</script>
+<script defer src="/js/cookie-consent.js"></script>
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Connect Codex · OpenWalkieTalkie</title>
+<meta name="description" content="Connect Codex to the deck: the CLI through the shared daemon, Codex Desktop through the launcher, and the states each one shows." />
+<link rel="canonical" href="https://openwalkietalkie.org/docs/codex/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/codex/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/codex/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/codex/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/codex/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/codex/" />
+
+<meta property="og:type" content="website" />
+<meta name="owt-api-version" content="0.11.0" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="Connect Codex · OpenWalkieTalkie" />
+<meta property="og:description" content="Connect Codex to the deck: the CLI through the shared daemon, Codex Desktop through the launcher, and the states each one shows." />
+<meta property="og:url" content="https://openwalkietalkie.org/docs/codex/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie Blog" href="/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<link rel="stylesheet" href="/css/docs.css" />
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">Skip to content</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/" aria-label="OpenWalkieTalkie — home">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="Sections">
+      <a href="/#pile">The Pile</a>
+      <a href="/#features">Features</a>
+      <a href="/#demo">Try It</a>
+      <a href="/#faces">Faces</a>
+      <a href="/#blueprint">Blueprint</a>
+      <a href="/docs/" aria-current="true">Docs</a>
+      <a href="/blog/">Blog</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+      <details class="lang-switch">
+        <summary aria-label="Language: English">English</summary>
+        <ul>
+          <li><a href="/docs/codex/" hreflang="en" lang="en" aria-current="true">English</a></li>
+          <li><a href="/zh-Hans/docs/codex/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/docs/codex/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/docs/codex/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle day and night theme" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">DAY</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="Open menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main docs-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">TUTORIAL · CODEX · APP 0.17.0</p>
+  <h1>Connect Codex</h1>
+  <p class="post-meta">CLI, Codex Desktop and one local daemon · about ten minutes</p>
+</header>
+<article class="post-body">
+<p>There are two ways in, and they are not the same. The Codex CLI reaches the deck on its own. Codex Desktop needs a launcher that puts it on the same local daemon.</p>
+<h2>What gets connected</h2>
+<p>The app does not install Codex and does not proxy it. It talks to the local daemon Codex runs, so what the deck shows is the sessions that daemon has.</p>
+<ul>
+<li><strong>Codex CLI</strong> — the shared daemon. No files and no installer; the row is a switch.</li>
+<li><strong>Codex Desktop</strong> — a launcher in <code>~/Applications</code> that starts or reuses that daemon and points Desktop at its Unix socket. The launcher is macOS only.</li>
+<li><strong>Hooks fallback</strong> — only when the daemon path is not available: a <code>hooks.json</code> written into <code>$CODEX_HOME</code>.</li>
+</ul>
+<h2>1 · Codex CLI</h2>
+<ol>
+<li>Start a session the usual way, in the project you want: <code>codex</code>.</li>
+<li>The <strong>Codex CLI</strong> row turns on by itself once a session is running: you get a count and an entry on the deck. On Omarchy it reads Off after installation, because the installer sets <code>codex.daemon=false</code> and the Omarchy bridge registers those sessions itself.</li>
+</ol>
+<h2>2 · Codex Desktop</h2>
+<ol>
+<li>Press <strong>Set Up</strong> on the <strong>Codex Desktop</strong> row. It writes <strong>Codex with OpenWalkieTalkie.app</strong> into <code>~/Applications</code>.</li>
+<li>Quit Codex Desktop and ChatGPT completely. The launcher does not interrupt sessions that are already running.</li>
+<li>Finder → <strong>Go</strong> → <strong>Go to Folder…</strong> → <code>~/Applications</code> → open <strong>Codex with OpenWalkieTalkie.app</strong>.</li>
+</ol>
+<p>The launcher starts or reuses the local daemon and connects Desktop through its Unix socket. Open Desktop through that launcher every time: the normal app goes back to its own daemon, and the deck then has nothing to read.</p>
+<h2>3 · What you should see</h2>
+<ul>
+<li><strong>Codex CLI</strong> row: Connected while the daemon is reachable; CLI and Desktop threads share its count.</li>
+<li><strong>Codex Desktop</strong> row: <em>Installed</em> only says the launcher files are in place.</li>
+<li>On the deck: <strong>CANCEL</strong> → <em>Agents</em>, where Desktop threads sit next to CLI sessions.</li>
+</ul>
+<h2>When it doesn't work</h2>
+<dl>
+<dt>Codex is not running</dt>
+<dd>The row needs a live daemon. Open a local <code>codex</code> session, or start Desktop through the launcher.</dd>
+<dt>The launcher refuses to start</dt>
+<dd><em>Quit Codex Desktop / ChatGPT first, then open Codex with OpenWalkieTalkie again. Running sessions are not interrupted automatically.</em> Quit both, then open the launcher again.</dd>
+<dt>Installed, but nothing on the deck</dt>
+<dd><em>Installed</em> describes files. Desktop has to be started through the launcher for the deck to see it.</dd>
+<dt>The hooks fallback stops firing</dt>
+<dd>A hook's trust is positional and keyed on the real path of <code>hooks.json</code>. After the file or its path changes, Codex reports the hook as modified and it stops firing without notice: grant trust again through the app.</dd>
+</dl>
+<h2>How this page was checked</h2>
+<p>Labels and paths come from the app and from the background service's source in 0.17.0, including the launcher's own alert text. Neither path was walked end to end on this build: no CLI thread and no Desktop thread were put on a deck while this page was written.</p>
+<h2>Where next</h2>
+<p><a href="/docs/get-started/">Get started</a> covers the app and the deck. <a href="/docs/claude-code/">Claude Code</a> and <a href="/docs/grok-bot/">Grok Bot</a> are the other two integrations. <a href="/manual/">The field manual</a> covers every control.</p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · A COHDL project · MIT software · CERN-OHL-P hardware</span>
+    <nav aria-label="Footer">
+      <a href="/#waitlist">Join the waitlist</a>
+      <a href="/privacy/">Privacy Policy</a>
+      <a href="/cookies/">Cookie information</a>
+      <a href="#cookie-consent" data-cookie-settings hidden>Cookie settings</a>
+      <a href="/">Home</a>
+      <a href="/#demo">Try It</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Join the CoHDL and OpenWalkieTalkie community on Discord">Discord</a>
+      <a href="/blog/feed.xml">Feed</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<section id="cookie-consent" class="privacy-notice" role="dialog" aria-label="Cookie settings" aria-describedby="cookie-consent-message" hidden>
+  <div>
+    <p id="cookie-consent-message">We use Google Tag Manager to understand how these docs are used. Nothing is measured until you accept.</p>
+    <p><a href="/privacy/">Privacy</a></p>
+  </div>
+  <div class="cookie-consent-actions">
+    <button class="btn btn--primary" type="button" value="granted">Accept</button>
+    <button class="btn" type="button" value="denied">Reject</button>
+  </div>
+</section>
+</body>
+</html>

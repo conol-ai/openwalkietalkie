@@ -1994,3 +1994,22 @@ html[data-theme="night"] .colourway { background: #2b3568; }
 .colourway__img { display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; object-fit: cover; background: #f4f4f4; image-rendering: auto; }
 .colourway__cap { display: block; padding: 14px 4px 16px; }
 @media (max-width: 860px) { .colourways__grid { grid-template-columns: 1fr; } }
+
+.cookie-consent-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+@media screen {
+  html.cookie-banner-open { overflow: hidden; }
+  html.cookie-banner-open body {
+    /* End the page scrollport above the fixed dialog and reserve its height below the content. */
+    height: calc(100dvh - var(--cookie-banner-height) - 32px);
+    overflow-y: auto;
+    padding-bottom: var(--cookie-banner-height);
+  }
+  @media (max-width: 720px) {
+    html.cookie-banner-open body { height: calc(100dvh - var(--cookie-banner-height) - 24px); }
+  }
+}

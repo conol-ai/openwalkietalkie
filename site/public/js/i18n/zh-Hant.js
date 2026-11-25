@@ -80,7 +80,7 @@ window.OWT_STRINGS = {
  "Start game": "開始遊戲",
  "Privacy notice": "隱私權聲明",
  "Your privacy, in plain words": "用白話說明你的隱私",
- "We remember your day/night theme on this browser. This site has no advertising or analytics cookies. Cloudflare may use security cookies to protect it.": "我們會在這個瀏覽器記住你選擇的日間／夜間主題。本網站沒有廣告或分析 Cookie。Cloudflare 可能會使用安全性 Cookie 來保護網站。",
+ "We remember your day/night theme on this browser. Google Tag Manager loads after you accept in Cookie settings. Cloudflare may use security cookies to protect the site.": "我們會在這個瀏覽器記住你選擇的日間／夜間主題。你在 Cookie 設定中接受後，才會載入 Google Tag Manager。Cloudflare 可能會使用安全性 Cookie 來保護網站。",
  "Privacy Policy": "隱私權政策",
  "Cookie information": "Cookie 說明",
  "Got it": "我知道了"

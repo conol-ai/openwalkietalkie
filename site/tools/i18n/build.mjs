@@ -176,9 +176,59 @@ function values(lang, path, have, page) {
 
 // ---- outputs -----------------------------------------------------------------
 
+const CONSENT_DEFAULT = `window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'default', {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+  wait_for_update: 500
+});`;
+
+const consentCopy = {
+  en: ['We use Google Tag Manager to understand how these docs are used. Nothing is measured until you accept.', 'Accept', 'Reject', 'Privacy', 'Cookie settings'],
+  'zh-Hans': ['我们用 Google Tag Manager 了解这些文档的使用情况。在你接受之前，不会进行任何统计。', '接受', '拒绝', '隐私', 'Cookie 设置'],
+  'zh-Hant': ['我們用 Google Tag Manager 了解這些文件的使用情況。在你接受之前，不會進行任何統計。', '接受', '拒絕', '隱私', 'Cookie 設定'],
+  ja: ['これらのドキュメントがどう使われているかを把握するために Google Tag Manager を使用します。同意するまで計測は行いません。', '同意する', '拒否する', 'プライバシー', 'Cookie の設定'],
+};
+
+function addCookieConsent(html, lang) {
+  const [message, accept, reject, privacy, settings] = consentCopy[lang.code];
+  const link = `<a href="#cookie-consent" data-cookie-settings hidden>${settings}</a>`;
+  const banner = `<section id="cookie-consent" class="privacy-notice" role="dialog" aria-label="${settings}" aria-describedby="cookie-consent-message" hidden>
+  <div>
+    <p id="cookie-consent-message">${message}</p>
+    <p><a href="${lang.prefix}/privacy/">${privacy}</a></p>
+  </div>
+  <div class="cookie-consent-actions">
+    <button class="btn btn--primary" type="button" value="granted">${accept}</button>
+    <button class="btn" type="button" value="denied">${reject}</button>
+  </div>
+</section>`;
+
+  const footer = html.lastIndexOf('</footer>');
+  const footerNotice = /<footer\b[^>]*>[\s\S]*?<\/footer>/g;
+  const noticeLink = /<a\b[^>]*data-privacy-open[^>]*>[^<]*<\/a>/;
+  const hasNoticeLink = [...html.matchAll(footerNotice)].some(([markup]) => noticeLink.test(markup));
+  const settingsLink = hasNoticeLink
+    ? html.replace(footerNotice, markup => markup.replace(noticeLink, link))
+    : footer >= 0
+      ? html.slice(0, footer) + link + html.slice(footer)
+      : html.replace('</body>', `<footer hidden data-cookie-settings-footer>${link}</footer></body>`);
+
+  return settingsLink
+    .replace(/<head>/i, tag => `${tag}\n<script>${CONSENT_DEFAULT}</script>\n<script defer src="/js/cookie-consent.js"></script>\n`)
+    .replace(/<script src="\/js\/privacy\.js"><\/script>\s*/g, '')
+    .replace('</body>', `${banner}\n</body>`);
+}
+
 export function build() {
   const files = new Map();
-  const write = (out, text) => { if (files.has(out)) throw new Error(`${out} is written twice`); files.set(out, text); };
+  const write = (out, text, lang) => {
+    if (files.has(out)) throw new Error(`${out} is written twice`);
+    files.set(out, out.endsWith('.html') ? addCookieConsent(text, lang) : text);
+  };
   const all = posts();
   const pages = [...site.pages, ...all.map(p => ({ id: 'blog-post', out: p.out }))];
   const local = localized(pages);
@@ -190,7 +240,7 @@ export function build() {
     for (const lang of languages) {
       const extra = page.id === 'blog-index' ? { cards: cards(lang, all) } : {};
       const html = render(template, stringsFor(lang, page.id), `${lang.code}/${page.id}`, { ...values(lang, path, everyone, page), ...extra });
-      write(outOf(lang, page.out), relink(html, lang, local));
+      write(outOf(lang, page.out), relink(html, lang, local), lang);
     }
   }
   const shell = readFileSync(`${I18N}/templates/blog-post.html`, 'utf8');
@@ -206,7 +256,7 @@ export function build() {
         canonical: `${origin}${path}`, heading: f.heading, date: formatDate(lang, f.date), kind: f.kind, body: f.body,
         navDocs: f.navDocs === 'yes',
       });
-      write(outOf(lang, post.out), relink(html, lang, local));
+      write(outOf(lang, post.out), relink(html, lang, local), lang);
     }
   }
   for (const lang of languages) write(outOf(lang, 'blog/feed.xml'), feed(lang, all));

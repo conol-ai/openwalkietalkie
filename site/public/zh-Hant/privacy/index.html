@@ -1,5 +1,16 @@
 <!DOCTYPE html>
 <html lang="zh-Hant" data-theme="day"><head>
+<script>window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'default', {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+  wait_for_update: 500
+});</script>
+<script defer src="/js/cookie-consent.js"></script>
+
 <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>隱私權政策 · OpenWalkieTalkie</title><meta name="description" content="OpenWalkieTalkie 如何處理你的裝置候補名單登記與網站資料。" />
 <link rel="canonical" href="https://openwalkietalkie.org/zh-Hant/privacy/" />
@@ -62,10 +73,10 @@
 <h2>我們蒐集哪些資料</h2>
 <ul><li><strong>候補名單：</strong>你送出的電子郵件地址、登記日期，以及你同意接收裝置開賣消息時所顯示的聲明版本。</li>
 <li><strong>連線資訊：</strong>Cloudflare 會處理請求的中繼資料（包括你的 IP 位址），以提供並保護網站。我們的登記端點會使用你的 IP 進行短時間的頻率限制。我們不會將 IP、你的瀏覽器資訊或來源網址儲存在候補名單資料庫中。</li>
-<li><strong>瀏覽器偏好：</strong>你選擇的日間／夜間主題，以及你對隱私權聲明的確認，都只保存在你的瀏覽器中。請參閱 <a href="/zh-Hant/cookies/">Cookie 說明</a>。</li></ul>
+<li><strong>瀏覽器偏好：</strong>你選擇的日間／夜間主題和 Cookie 同意選擇都保存在你的瀏覽器中。請參閱 <a href="/zh-Hant/cookies/">Cookie 說明</a>。</li></ul>
 <h2>我們為何使用這些資料</h2>
 <p>在你同意的前提下，我們會用你的電子郵件通知你裝置何時開賣，並寄送相關的開賣消息。加入名單不代表訂購、預訂或付款，也不保證交貨日期。我們不會將你加入 Cohdl 軟體候補名單或無關的郵寄清單。</p>
-<p>連線中繼資料用於提供網站、防止垃圾訊息及診斷故障。我們的應用程式記錄不包含登記表單的內容。本網站沒有廣告或分析指令碼。</p>
+<p>連線中繼資料用於提供網站、防止垃圾訊息及診斷故障。我們的應用程式記錄不包含登記表單的內容。我們使用 Google Tag Manager 管理網站代碼。容器載入時，Google 會處理相關請求。視啟用的代碼而定，這些代碼可能蒐集網頁瀏覽紀錄、來源網址、裝置和瀏覽器資訊，以及根據 IP 位址推斷的概略位置。詳情請參閱<a href="https://policies.google.com/privacy" rel="noopener">Google 的隱私權政策</a>。</p>
 <h2>誰會處理這些資料</h2>
 <p>營運 OpenWalkieTalkie 的團隊可以存取這份名單，用來管理登記並寄送你要求的消息。Cloudflare 代管本網站，並將名單儲存在其 D1 資料庫中；處理可能在 Cloudflare 營運的國家進行。請參閱 <a href="https://www.cloudflare.com/privacypolicy/" rel="noopener">Cloudflare 的隱私權政策</a>。我們不會出售你的候補名單資料。</p>
 <p>前往 GitHub、Discord 及其他網站的連結，會帶你到各自訂有隱私權政策的服務。</p>
@@ -86,7 +97,7 @@
       <a href="/zh-Hant/#waitlist">加入候補名單</a>
       <a href="/zh-Hant/privacy/">隱私權政策</a>
       <a href="/zh-Hant/cookies/">Cookie 說明</a>
-      <a href="/zh-Hant/cookies/" data-privacy-open>隱私權聲明</a>
+      <a href="#cookie-consent" data-cookie-settings hidden>Cookie 設定</a>
       <a href="/zh-Hant/">首頁</a>
       <a href="/zh-Hant/#demo">試用</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
@@ -98,6 +109,15 @@
 </footer>
 
 <script src="/js/main.js"></script>
-<script src="/js/privacy.js"></script>
+<section id="cookie-consent" class="privacy-notice" role="dialog" aria-label="Cookie 設定" aria-describedby="cookie-consent-message" hidden>
+  <div>
+    <p id="cookie-consent-message">我們用 Google Tag Manager 了解這些文件的使用情況。在你接受之前，不會進行任何統計。</p>
+    <p><a href="/zh-Hant/privacy/">隱私</a></p>
+  </div>
+  <div class="cookie-consent-actions">
+    <button class="btn btn--primary" type="button" value="granted">接受</button>
+    <button class="btn" type="button" value="denied">拒絕</button>
+  </div>
+</section>
 </body>
 </html>

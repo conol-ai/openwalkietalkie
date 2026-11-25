@@ -149,7 +149,7 @@ const SENTINELS = {
   'docs/omarchy/index.html': ['Install the OpenWalkieTalkie service and the Omarchy bridge'],
   'docs/native-companions/index.html': ['Build a native companion for any agent.'],
   'privacy/index.html': ['Joining is not an order, reservation, payment'],
-  'cookies/index.html': ['You can browse and join the waitlist without accepting optional tracking.'],
+  'cookies/index.html': ['The site loads Google Tag Manager after you accept in Cookie settings.'],
   'waitlist/thanks/index.html': ['Thank you for joining the OpenWalkieTalkie hardware waitlist.'],
   '404.html': ['Nobody is on this frequency.'],
   'blog/index.html': ['Every entry as open as the board.', 'READ THE RELEASE'],
