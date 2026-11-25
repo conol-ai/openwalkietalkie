@@ -36,6 +36,7 @@
 <link rel="stylesheet" href="/css/blog.css" />
 <link rel="stylesheet" href="/css/docs.css" />
 <script src="/js/i18n/zh-Hant.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 <!-- No optional analytics or advertising scripts. -->
 </head>
@@ -53,7 +54,7 @@
     </a>
 
     <nav class="nav__links" aria-label="網站區塊">
-      <a href="/zh-Hant/#pile">The Pile</a>
+      <a href="/zh-Hant/#pile">The Pile（分頁堆）</a>
       <a href="/zh-Hant/#features">功能</a>
       <a href="/zh-Hant/#demo">試用</a>
       <a href="/zh-Hant/#faces">頁面</a>
@@ -61,15 +62,6 @@
       <a href="/zh-Hant/docs/" aria-current="true">說明文件</a>
       <a href="/zh-Hant/blog/">部落格</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="語言: 繁體中文">繁體中文</summary>
-        <ul>
-          <li><a href="/docs/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/docs/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
-          <li><a href="/zh-Hant/docs/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
-          <li><a href="/ja/docs/" hreflang="ja" lang="ja">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="切換日間與夜間主題" aria-pressed="false">
@@ -111,14 +103,14 @@
 <a class="post-card" href="/zh-Hant/docs/omarchy/">
   <p class="post-card__date">LINUX · OMARCHY · 0.13.0+</p>
   <h2 class="post-card__title">在 Omarchy 上使用 OpenWalkieTalkie</h2>
-  <p class="post-card__excerpt">建置並安裝服務與 Omarchy 橋接程式：裝置成為 Hyprland 的遙控器，你的 Claude Code、Codex 和 Kimi Code 工作階段會出現在列表中，語音指令直接送進它們的終端機。</p>
+  <p class="post-card__excerpt">建置並安裝服務與 Omarchy 橋接程式：裝置成為 Hyprland 的遙控器，你的 Claude Code、Codex 和 Kimi Code 工作階段會出現在清單中，辨識出的語音指令會輸入對應工作階段的終端機。</p>
   <span class="post-card__read">閱讀指南 →</span>
 </a>
 <h2>正在使用裝置？</h2><p><a href="/zh-Hant/manual/">閱讀圖解使用手冊</a>，了解設定、操作與疑難排解，也可以列印一份放在桌邊。</p>
 <h2>從可執行的範例開始</h2>
 <p><a href="/examples/native_companion.py" download>下載 Python 配套程式範例</a>。在 OpenWalkieTalkie 開啟時，用 Python 3.10+ 執行它。它使用預先寫好的回覆，不需要任何套件、模型 API 金鑰或 Conol 帳號。</p>
 <h2>查閱介面規格</h2>
-<p><a href="/docs/deckd-api.md">完整的 JSON-RPC API 參考資料（Markdown）</a>，由背景程式的請求結構描述與方法權限產生。<a href="https://github.com/conol-ai/openwalkietalkie">原始碼儲存庫</a>包含此範例與整合測試。</p>
+<p><a href="/zh-Hant/docs/deckd-api.md">完整的 JSON-RPC API 參考資料（Markdown）</a>，由背景程式的請求結構描述與方法權限產生。<a href="https://github.com/conol-ai/openwalkietalkie">原始碼儲存庫</a>包含此範例與整合測試。</p>
 
 </article>
 </main>
@@ -127,7 +119,7 @@
   <div class="inner">
     <span>OpenWalkieTalkie · COHDL 專案 · MIT 授權軟體 · CERN-OHL-P 授權硬體</span>
     <nav aria-label="頁尾">
-      <a href="/zh-Hant/#waitlist">加入候補名單</a>
+      <a href="/zh-Hant/#waitlist">加入等候名單</a>
       <a href="/zh-Hant/privacy/">隱私權政策</a>
       <a href="/zh-Hant/cookies/">Cookie 說明</a>
       <a href="/zh-Hant/cookies/" data-privacy-open>隱私權聲明</a>
@@ -143,5 +135,14 @@
 
 <script src="/js/main.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 語言: 繁體中文">Language</summary>
+        <ul>
+          <li><a href="/docs/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/docs/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/docs/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
+          <li><a href="/ja/docs/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

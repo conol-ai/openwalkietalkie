@@ -35,6 +35,7 @@
 <link rel="stylesheet" href="/css/blog.css" />
 <link rel="stylesheet" href="/css/docs.css" />
 <script src="/js/i18n/ja.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 <!-- No optional analytics or advertising scripts. -->
 </head>
@@ -60,15 +61,6 @@
       <a href="/ja/docs/" aria-current="true">ドキュメント</a>
       <a href="/ja/blog/">ブログ</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="言語: 日本語">日本語</summary>
-        <ul>
-          <li><a href="/docs/omarchy/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/docs/omarchy/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
-          <li><a href="/zh-Hant/docs/omarchy/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
-          <li><a href="/ja/docs/omarchy/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="昼と夜のテーマを切り替える" aria-pressed="false">
@@ -94,7 +86,7 @@
 </header>
 <article class="post-body">
 
-<p><a href="https://omarchy.org/">Omarchy</a> では、Mac なしでデバイスがデスクトップとコーディングエージェントを操作します。ノートパソコンでは小さなサービスが 2 つ動きます。Mac アプリが動かすのと同じサービスを Linux 向けにビルドした <code>deckd</code> と、それを Hyprland および Claude Code、Codex、Kimi Code のセッションにつなぐ <strong>Omarchy ブリッジ</strong>です。</p>
+<p><a href="https://omarchy.org/">Omarchy</a> では、Mac なしでデバイスがデスクトップとコーディングエージェントを操作します。ノートパソコンでは小さなサービスが 2 つ動きます。Macアプリが動かすのと同じサービスを Linux 向けにビルドした <code>deckd</code> と、それを Hyprland および Claude Code、Codex、Kimi Code のセッションにつなぐ <strong>Omarchy ブリッジ</strong>です。</p>
 <ul>
   <li><strong>Omarchy のページ：</strong>ワークスペースとウィンドウ。ホイールでウィンドウを、LEFT / RIGHT でワークスペースを切り替え、ENTER で全画面、SHIFT+CANCEL で scratchpad を切り替えます。</li>
   <li><strong>一覧に並ぶセッション</strong>は、実行中、完了、質問中のいずれかで表示されます。選ぶと、そのターミナルが前面に出ます。</li>
@@ -117,7 +109,7 @@ sh omarchy/install.sh target/x86_64-unknown-linux-gnu/release/deckd target/x86_6
 <p><code>install.sh</code> は <code>deckd</code> とアプリを <code>~/.local/bin</code> に置き、アプリを <strong>OpenWalkieTalkie</strong> として Omarchy のランチャーに追加し、ブリッジを <code>~/.local/share/openwalkietalkie/omarchy</code> にコピーして、両方を systemd のユーザーサービス <code>deckd</code> と <code>omarchy-deck</code> として起動します。ログインのたびに再び起動します。最後に root 権限が必要な手順を表示します。それが次のセクションです。</p>
 
 <h2>3. サービスがデバイスを開けるようにする</h2>
-<p>デバイスの HID デバイスは、udev ルールがあなたに渡すまで root のものです。<code>install.sh</code> が表示した 2 つのコマンドを実行します。</p>
+<p>HID デバイスは初期状態では root が所有しています。udev ルールで、ログイン中のユーザーにもアクセス権を付与します。<code>install.sh</code> が表示した 2 つのコマンドを実行します。</p>
 <pre><code>sudo install -m 644 omarchy/70-openwalkietalkie.rules /etc/udev/rules.d/
 sudo udevadm control --reload &amp;&amp; sudo udevadm trigger --subsystem-match=hidraw</code></pre>
 <p>このルールは、USB-C でも Bluetooth でも同じようにデバイスに一致します。</p>
@@ -158,7 +150,7 @@ systemctl --user restart omarchy-deck</code></pre>
 <p>これ以降、実行するどのプログラムも ydotool と同じように入力デバイスを作れるようになります。この手順を飛ばしても、マクロパッドのキーはフォーカス中のアプリには届きますが、Omarchy のショートカットは動きません。</p>
 
 <h2>8. 任意：Claude の使用量バー</h2>
-<p>使用量のページに Claude のレート制限の枠を表示できます。Claude Code のログインを使って 5 分ごとに読み取ります。</p>
+<p>使用量のページに Claude の利用枠を表示できます。Claude Code のログインを使って 5 分ごとに読み取ります。</p>
 <pre><code>deckd config set 'usage.providers=["codex","claude"]'</code></pre>
 
 <h2>セットアップを確認する</h2>
@@ -215,5 +207,14 @@ sudo rm -f /etc/udev/rules.d/70-openwalkietalkie.rules /etc/udev/rules.d/71-open
 
 <script src="/js/main.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 言語: 日本語">Language</summary>
+        <ul>
+          <li><a href="/docs/omarchy/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/docs/omarchy/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/docs/omarchy/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/docs/omarchy/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

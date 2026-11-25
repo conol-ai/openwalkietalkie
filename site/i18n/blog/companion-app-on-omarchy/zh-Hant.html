@@ -1,27 +1,27 @@
 ---
-title: OpenWalkieTalkie v0.15.0：配套應用程式登上 Omarchy · OpenWalkieTalkie
-description: 配套應用程式可以在 Omarchy 上執行，在 Omarchy 頁面上按住 PTT 可在游標處聽寫，滾輪依視窗列的順序移動，Linux 服務把所有內容放在同一個資料夾。
-heading: OpenWalkieTalkie v0.15.0：配套應用程式登上 Omarchy
+title: OpenWalkieTalkie v0.15.0：應用程式登上 Omarchy · OpenWalkieTalkie
+description: 應用程式可以在 Omarchy 上執行，在 Omarchy 頁面上按住 PTT 可在游標處聽寫，滾輪依視窗列的順序移動，Linux 服務把所有內容放在同一個資料夾。
+heading: OpenWalkieTalkie v0.15.0：應用程式登上 Omarchy
 kind: Omarchy 應用程式、聽寫與服務
 date: 2026-11-17
 published: 2026-11-17T12:58:57Z
 updated: 2026-11-17T12:58:57Z
-summary: 配套應用程式可以在 Omarchy 上執行，在 Omarchy 頁面上按住 PTT 可在游標處聽寫，滾輪依視窗列的順序移動，Linux 服務把所有內容放在同一個資料夾。
-excerpt: 配套應用程式可以在 Omarchy 上執行，在 Omarchy 頁面上按住 PTT 可在游標處聽寫，滾輪依視窗列的順序移動，Linux 服務把所有內容放在同一個資料夾。
+summary: 應用程式可以在 Omarchy 上執行，在 Omarchy 頁面上按住 PTT 可在游標處聽寫，滾輪依視窗列的順序移動，Linux 服務把所有內容放在同一個資料夾。
+excerpt: 應用程式可以在 Omarchy 上執行，在 Omarchy 頁面上按住 PTT 可在游標處聽寫，滾輪依視窗列的順序移動，Linux 服務把所有內容放在同一個資料夾。
 lastmod: 2026-11-17
 navDocs: yes
 ---
-  <p>0.15.0 版把配套應用程式帶到 Omarchy，並讓裝置在那裡成為聽寫用的麥克風。裝置韌體維持 0.14.0 不變。</p>
-  <h2>Omarchy 上的配套應用程式</h2>
+  <p>0.15.0 版把應用程式帶到 Omarchy，並讓裝置在那裡成為聽寫用的麥克風。裝置韌體維持 0.14.0 不變。</p>
+  <h2>Omarchy 上的應用程式</h2>
   <p>Mac 和 Windows 上的應用程式，現在也能在 Omarchy（Hyprland）上執行，在應用程式啟動器中名為 <strong>OpenWalkieTalkie</strong>，同樣有五個頁面：<strong>裝置</strong>、<strong>頁面與按鍵</strong>、<strong>整合</strong>、<strong>語音</strong>和<strong>服務</strong>。它會自己找到服務。<strong>服務</strong>透過服務的 systemd 使用者單元來啟動和停止服務，<strong>登入時開啟</strong>則是一個 XDG 自動啟動項目。沒有系統匣圖示，那是桌面狀態列的工作；也沒有應用程式內更新，因為應用程式是從原始碼建置的。</p>
   <p><strong>頁面與按鍵</strong>也能配合比應用程式設計寬度更窄的並排視窗：頁面清單會換到第二列，按鍵編輯區會移到按鍵方格下方。<a href="/docs/omarchy/">Omarchy 指南</a>說明了如何建置和安裝。</p>
   <h2>在 Omarchy 頁面上聽寫</h2>
-  <p>在 Omarchy 頁面上，PTT 的用法就像 Superwhisper 本身的按住說話。按住並說話，放開，你說的話就會輸入到目前取得鍵盤的視窗的游標處，不會按下 Enter。按住時按 CANCEL 會捨棄這段錄音。裝有 Superwhisper 時由它辨識，並使用它自己的模式、語言和詞彙；否則由本機的 Whisper 模型辨識。為此，橋接程式會在清單中加入一個 <strong>Dictate</strong> 項目，在「助理」頁面上選取它，也能用同樣的方式聽寫。</p>
+  <p>在 Omarchy 頁面上，PTT 的用法就像 Superwhisper 本身的按住說話。按住並說話，放開，你說的話就會出現在目前視窗的文字游標位置，不會按下 Enter。按住時按 CANCEL 會捨棄這段錄音。裝有 Superwhisper 時由它辨識，並使用它自己的模式、語言和詞彙；否則由本機的 Whisper 模型辨識。為此，橋接程式會在清單中加入一個 <strong>Dictate</strong> 項目，在「助理」頁面上選取它，也能用同樣的方式聽寫。</p>
   <h2>滾輪跟著列移動</h2>
   <p>在 Omarchy 頁面上，滾輪現在會依頁面列出的順序在視窗列之間移動，就像它在裝置其他清單中移動一樣，並在第一列和最後一列停住。以前它依照 Hyprland 本身的視窗順序，所以轉一下可能會跳過下一列。</p>
   <h2>Linux 上只用一個資料夾</h2>
   <p>Linux 服務現在把所有內容放在同一個資料夾 <code>~/.local/share/openwalkietalkie</code>，就像在 Mac 上由一個資料夾存放一樣。Omarchy 的安裝原本就在那裡執行，<code>deckd</code> 指令也不再需要 <code>DECKD_DATA_DIR=…</code> 前綴。如果你曾在 Linux 上依照舊的配置手動執行 <code>deckd</code>，請把它的檔案移到該資料夾，或設定 <code>DECKD_DATA_DIR</code>。</p>
   <h2>更新</h2>
   <p>在 Mac 上，選擇<strong>檢查更新…</strong>，或安裝已簽署並經過公證的 <strong>0.15.0</strong> 應用程式，支援 Apple Silicon 或 Intel（macOS 13 或更新版本）。在 Windows 上，請從發行頁面下載 ZIP 檔。在 Omarchy 上，拉取程式碼，建置服務和應用程式，再用兩者執行 <code>install.sh</code>，做法請見 <a href="/docs/omarchy/">Omarchy 指南</a>。這次發行不需要更新裝置韌體。</p>
-  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.15.0" rel="noopener">在 GitHub 上取得 OpenWalkieTalkie v0.15.0 與總和檢查碼 →</a></p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.15.0" rel="noopener">在 GitHub 上取得 OpenWalkieTalkie v0.15.0 與檢查碼 →</a></p>
   <p class="post-back"><a href="/blog/">← 返回部落格</a></p>

@@ -36,6 +36,7 @@
 <link rel="stylesheet" href="/css/blog.css" />
 <link rel="stylesheet" href="/css/docs.css" />
 <script src="/js/i18n/ja.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 <!-- No optional analytics or advertising scripts. -->
 </head>
@@ -61,15 +62,6 @@
       <a href="/ja/docs/" aria-current="true">ドキュメント</a>
       <a href="/ja/blog/">ブログ</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="言語: 日本語">日本語</summary>
-        <ul>
-          <li><a href="/docs/native-companions/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/docs/native-companions/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
-          <li><a href="/zh-Hant/docs/native-companions/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
-          <li><a href="/ja/docs/native-companions/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="昼と夜のテーマを切り替える" aria-pressed="false">
@@ -94,9 +86,9 @@
   <p class="post-meta">あらゆるエージェントのためのネイティブ連携</p>
 </header>
 <article class="post-body">
-<p>あらゆるエージェントのためのネイティブコンパニオンを作れます。会話とモデルへの接続はあなたのアプリが持ち、OpenWalkieTalkie はグループ化されたデバイスの一覧、音声入力、会話の表示、質問、セッションの設定を提供します。Conol もこの同じ公開インターフェースを使っています。</p>
+<p>あらゆるエージェントのためのネイティブコンパニオンを作れます。会話とモデルへの接続はあなたのアプリが持ち、OpenWalkieTalkie はデバイス上のセッション一覧とそのグループ表示、音声入力、会話の表示、質問、セッションの設定を提供します。Conol もこの同じ公開インターフェースを使っています。</p>
 <p><strong>OpenWalkieTalkie のアプリ、サービス、ファームウェアの 0.11.0 以降が必要です。</strong>JSON-RPC によるローカルのデスクトップ連携で、Conol には依存しません。既存の CLI フックも引き続き使えます。</p>
-<p><a href="/examples/native_companion.py">Python のサンプルをダウンロード</a> · <a href="/docs/deckd-api.md">API の完全なリファレンス（Markdown）</a> · <a href="/ja/docs/">ドキュメントのトップ</a></p>
+<p><a href="/examples/native_companion.py">Python のサンプルをダウンロード</a> · <a href="/ja/docs/deckd-api.md">API の完全なリファレンス（Markdown）</a> · <a href="/ja/docs/">ドキュメントのトップ</a></p>
 <nav class="toc" aria-label="このページの内容"><p class="toc-title">このページの内容</p><ul><li><a href="#try-the-example">サンプルを試す</a></li><li><a href="#connect-and-discover">接続と検出</a></li><li><a href="#register-sessions-and-group-them">セッションを登録してグループにまとめる</a></li><li><a href="#start-and-activate-a-new-chat">新しいチャットを始めてアクティブにする</a></li><li><a href="#keep-both-transcripts-current">両方の会話履歴を最新に保つ</a></li><li><a href="#transcribe-with-your-own-speech-model">独自の音声モデルで文字起こしする</a></li><li><a href="#handle-complex-questions-on-the-deck">複雑な質問をデバイスで扱う</a></li><li><a href="#display-and-change-model-thinking-effort">モデルと思考の深さを表示・変更する</a></li><li><a href="#feed-the-omarchy-face">Omarchy のページにデータを送る</a></li><li><a href="#integration-checklist">連携のチェックリスト</a></li></ul></nav>
 <h2 id="try-the-example">サンプルを試す</h2>
 <p>OpenWalkieTalkie を起動してデバイスを接続し、サンプルをダウンロードして、次を実行します。</p>
@@ -120,7 +112,7 @@
 }}
 </code></pre>
 <p>ソケットはローカルの OS ユーザーを認証します。この連携では <code>agent</code> と <code>observe</code> だけを要求してください。自分が所有するイベントには会話の処理に必要な内容が含まれますが、これらのスコープでほかのアプリの非公開の会話履歴を読むことはできません。リモートの API キーをデーモンに送る必要はありません。ソケットは信頼できるデスクトップのプロセス内に置き、生の RPC ブリッジをウェブのコンテンツに公開しないでください。</p>
-<p>ソケットがないのはサービスが利用できないということです。未接続と表示し、間隔を空けながら再試行してください。2 つの新しいメソッドのどちらかが <code>-32601</code> を返したら、デーモンがネイティブコンパニオンに対応していません。連携できたと黙って表示するのではなく、更新を勧めてください。メソッド、スコープ、リクエストのスキーマは <a href="/docs/deckd-api.md">API リファレンス</a>にあります。</p>
+<p>ソケットがないのはサービスが利用できないということです。未接続と表示し、間隔を空けながら再試行してください。2 つの新しいメソッドのどちらかが <code>-32601</code> を返したら、デーモンがネイティブコンパニオンに対応していません。連携できたと黙って表示するのではなく、更新を勧めてください。メソッド、スコープ、リクエストのスキーマは <a href="/ja/docs/deckd-api.md">API リファレンス</a>にあります。</p>
 <p><strong>接続アプリの入り口はソケットだけです。</strong><code>127.0.0.1</code> にあるサービスの HTTP と WebSocket の入り口と、それを開くベアラートークンは、既定でオフです。古い OpenWalkieTalkie のインストールが残した Claude Code の HTTP フックがまだ必要とする間だけ、サービスはこの入り口を開いておきます。<code>config.toml</code> の明示的な <code>[api] tcp</code> 設定は常に優先されます。入り口とトークンは次のリリースで削除する予定です。これらを前提に作らないでください。</p>
 <h2 id="register-sessions-and-group-them">セッションを登録してグループにまとめる</h2>
 <p>会話ごとにエージェントを 1 つ登録し、必要ならランチャーも 1 つ登録します。アプリ／アカウント／会話ごとに、安定した名前空間付きの <code>key</code> を使ってください。所有する接続上では、同じ key の登録はべき等です。</p>
@@ -137,9 +129,9 @@
   }
 }}
 </code></pre>
-<p><code>app_id</code> は安定したアプリの識別子です（ASCII の英字、数字、ドット、ハイフン、アンダースコアで 1〜64 文字）。<code>group_id</code> はアプリ内のアカウントまたはワークスペースを表します（1〜128 UTF-8 バイト）。<code>group_label</code> はその表示上の見出しです（1〜24 UTF-8 バイト）。ラベルと ID は空にできず、制御文字も使えません。これらは公開の表示用フィールドです。認証情報や非公開のアカウント名ではなく、意味を持たないアカウント ID を使ってください。デバイスで別のページに分けたいグループには、「Example · Work」のように別のラベルを付けます。ファームウェアは表示ラベルでグループ化し、デスクトップ側のグループ化とあふれた分の繰り上げはアプリ／アカウントの ID を使います。</p>
+<p><code>app_id</code> は安定したアプリの識別子です（ASCII の英字、数字、ドット、ハイフン、アンダースコアで 1〜64 文字）。<code>group_id</code> はアプリ内のアカウントまたはワークスペースを表します（1〜128 UTF-8 バイト）。<code>group_label</code> はその表示上の見出しです（1〜24 UTF-8 バイト）。ラベルと ID は空にできず、制御文字も使えません。これらは公開の表示用フィールドです。認証情報や非公開のアカウント名ではなく、意味を持たないアカウント ID を使ってください。デバイスで別のページに分けたいグループには、「Example · Work」のように別のラベルを付けます。ファームウェアは表示ラベルでグループ化し、デスクトップ側のグループ化と空きスロットへの繰り上げはアプリ／アカウントの ID を使います。</p>
 <p><code>role</code> は <code>session</code> か <code>launcher</code> です。<code>profile: null</code> でネイティブの表示を取り除きます。API では <code>kind</code> は引き続きプロバイダーの種別を表します。独自のエージェントには <code>other</code> を使ってください。既存のプロバイダーの種別でもコンパニオンのプロファイルを使えます。Conol の任意のロボットの絵柄はその kind から決まります。ほかのアプリが連携するのに、その絵柄も新しいファームウェアの列挙値も必要ありません。</p>
-<p>ネイティブのフォーカスは、ターミナルへの入力ではなくイベントであなたのアプリに届きます。共有の物理スロットは 8 つです。返された <code>slot</code> を確認してください（<code>null</code> はあふれを意味します）。あふれたコンパニオンにフォーカスすると、まず通常どおりスロットを割り当てます。すべて埋まっている場合は、同じ所有接続・同じアプリ・同じグループの、固定されていないセッションと入れ替えることがあります。この代替動作ではランチャー、ほかのアカウント、ほかのアプリは残ります。候補がすべて保護されている場合、スロットは保証されません。際限のない履歴を登録しないでください。役に立つ範囲だけを公開し、全体の一覧は自分のアプリで保持します。</p>
+<p>ネイティブのフォーカスは、ターミナルへの入力ではなくイベントであなたのアプリに届きます。共有の物理スロットは 8 つです。返された <code>slot</code> を確認してください（<code>null</code> はスロット未割り当てを意味します）。空きスロットがなく表示されていないコンパニオンにフォーカスすると、まず通常どおりスロットを割り当てます。すべて埋まっている場合は、同じ所有接続・同じアプリ・同じグループの、固定されていないセッションと入れ替えることがあります。この代替動作ではランチャー、ほかのアカウント、ほかのアプリは残ります。候補がすべて保護されている場合、スロットは保証されません。際限のない履歴を登録しないでください。役に立つ範囲だけを公開し、全体の一覧は自分のアプリで保持します。</p>
 <p>所有するエージェントの ID を付けた <code>agent.heartbeat</code> を 10 秒ごとに送り、30 秒のリースを保ちます。サインアウトや終了のときは <code>agent.release</code> を使います。ソケットが切れたら、接続し直して再び登録します。登録が所有権の競合 <code>-32004</code> を返した場合、<code>agent.claim {&quot;key&quot;:&quot;…&quot;}</code> で、所有者のいない登録や期限切れの登録を取り戻せます。動作中の接続を奪うことはできません。再接続後は、プロファイル、設定、会話履歴、現在の質問を公開し直してください。リースもデーモンも、チャットを永続的に保存するデータベースではありません。</p>
 <h2 id="start-and-activate-a-new-chat">新しいチャットを始めてアクティブにする</h2>
 <p><strong>+ New chat</strong> という名前のランチャーを、<code>role: &quot;launcher&quot;</code> と、その会話と同じグループで登録します。指示の受け取り方は <code>push</code> でなければなりません。ロールは表示とスロットの保護を決めるもので、バックエンドのセッションを代わりに作るものではありません。</p>
@@ -256,7 +248,7 @@
 <li><code>windows</code>：最大 6 行。デバイスが並べる順番です。<code>title</code> はデバイス上で 48 UTF-8 バイトに切り詰められ、末尾に「…」が付きます。<code>tone</code> は <code>blue</code>、<code>amber</code>、<code>green</code>、<code>red</code>、<code>gray</code> のいずれかで、指定がなければ灰色です。</li>
 <li><code>sel</code>：ハイライトする行。0 から始まり、行数未満。行がなければ 0。</li>
 </ul>
-<p>範囲外の値は <code>-32009</code> で拒否され、<code>data.field</code> がそのフィールドを示します。フィールドの欠落や型の誤りは <code>-32602</code> になります。サービスは最後に送られたページを保持し、Omarchy のページが表示されているときに、デバイスが接続し直したあとも含めて表示します。サービス自身の再起動後は保持しないため、接続するたびにページを送り直してください。このページはデバイスのページ一覧に入っていなければなりません。ユーザーがデバイス自身のページ管理から追加するか、<code>device</code> スコープを持つクライアントが <code>omarchy</code> の項目を含むページ一覧全体を <code>device.faces.set</code> で送ります。サービスが受け付けるのは、デバイス自身が受け付ける一覧だけです。<code>agents</code> が最初、<code>settings</code> が最後で、どちらも途中には置けません。ページは最大 8 個で、それぞれ 1〜8 の固有の id を持ち、<code>macropad</code> は最大 3 個、<code>timer</code> は 1 個まで、すべてのページに名前が必要です。それ以外は <code>-32009</code> で拒否され、<code>data.why</code> が違反した規則を示し、何も送られません。Mac アプリの「ページとキー」ページでは追加できません。</p>
+<p>範囲外の値は <code>-32009</code> で拒否され、<code>data.field</code> がそのフィールドを示します。フィールドの欠落や型の誤りは <code>-32602</code> になります。サービスは最後に送られたページを保持し、Omarchy のページが表示されているときに、デバイスが接続し直したあとも含めて表示します。サービス自身の再起動後は保持しないため、接続するたびにページを送り直してください。このページはデバイスのページ一覧に入っていなければなりません。ユーザーがデバイス自身のページ管理から追加するか、<code>device</code> スコープを持つクライアントが <code>omarchy</code> の項目を含むページ一覧全体を <code>device.faces.set</code> で送ります。サービスが受け付けるのは、デバイス自身が受け付ける一覧だけです。<code>agents</code> が最初、<code>settings</code> が最後で、どちらも途中には置けません。ページは最大 8 個で、それぞれ 1〜8 の固有の id を持ち、<code>macropad</code> は最大 3 個、<code>timer</code> は 1 個まで、すべてのページに名前が必要です。それ以外は <code>-32009</code> で拒否され、<code>data.why</code> が違反した規則を示し、何も送られません。Macアプリの「ページとキー」ページでは追加できません。</p>
 <p>ページをタップすると <code>device.ws</code> が届きます。<code>go</code>（チップのワークスペース番号）か、<code>win</code>（最後に送ったウィンドウのうち 0 から数えた行）のどちらかを持ちます。</p>
 <pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{
   &quot;type&quot;:&quot;device.ws&quot;,&quot;rev&quot;:130,&quot;data&quot;:{&quot;win&quot;:1}
@@ -281,7 +273,7 @@
 }}
 </code></pre>
 <p><code>link</code> は <code>connected</code>、<code>degraded</code>、<code>offline</code> のいずれか、<code>session</code> は <code>absent</code>、<code>linked</code>、<code>await_hello</code>、<code>syncing</code>、<code>live</code>、<code>degraded</code> のいずれかです。<code>host_online</code> は、デバイスがこのパソコンを接続中とみなしている間 true です。デバイスのファームウェアのバージョン <code>fw</code> と <code>boot</code> は、不明な間は <code>null</code> です。サービスが終了するときに送るイベントには <code>link</code>、<code>session</code>、<code>host_online</code> だけが含まれます。このイベントでデバイスがあるかどうかを表示してください。接続したときにページを送り直す必要はありません。</p>
-<p><strong>デバイスがないとサービスは休止します。</strong>10 分間デバイスが接続されないと、エージェントのセッションからの収集をやめます。Claude Code と Codex のポーリング、会話履歴の監視、使用量の読み取りを止め、デバイスが接続した瞬間に再開します。このことは <code>service.dormancy</code> で知らせ、<code>&quot;*&quot;</code> にも含まれます。同じオブジェクトが <code>snapshot.service.dormancy</code> にもあり、<code>service.info</code> は <code>collecting</code> と <code>dormant_since</code> を持ちます。</p>
+<p><strong>デバイスが未接続の間は、サービスがセッション情報の収集を休止します。</strong>10 分間デバイスが接続されないと、エージェントのセッションからの収集をやめます。Claude Code と Codex のポーリング、会話履歴の監視、使用量の読み取りを止め、デバイスが接続した瞬間に再開します。このことは <code>service.dormancy</code> で知らせ、<code>&quot;*&quot;</code> にも含まれます。同じオブジェクトが <code>snapshot.service.dormancy</code> にもあり、<code>service.info</code> は <code>collecting</code> と <code>dormant_since</code> を持ちます。</p>
 <pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;method&quot;:&quot;event&quot;,&quot;params&quot;:{
   &quot;type&quot;:&quot;service.dormancy&quot;,&quot;rev&quot;:140,
   &quot;data&quot;:{&quot;window_s&quot;:600,&quot;collecting&quot;:false,&quot;dormant_since&quot;:&quot;2026-11-11T01:51:00.000Z&quot;}
@@ -289,7 +281,7 @@
 </code></pre>
 <p><code>dormant_since</code> は、収集中と、デバイスが一度も接続されていないときは <code>null</code> です。待つべきデバイスなしで起動したサービスは、オブジェクト全体に <code>null</code> を送ります。休止中も、あなたの接続、エージェント、呼び出すすべてのメソッドはこれまでどおり動きます。アプリが自分でセッションから収集している場合は、同じようにしてください。Omarchy ブリッジは、<code>device.link</code> がデバイスなしと伝えてから 10 分たつと、ページへのデータ送信とセッションの確認をやめ、接続すると再開します。</p>
 <h2 id="integration-checklist">連携のチェックリスト</h2>
-<p>公開する前に次をテストしてください。両方の画面での最初のチャットと続きのメッセージ、バックエンドが拒否し <code>agent.order.result</code> で報告した指示、コンパニオンによる文字起こしとそのローカルの代替（提供する場合）、ほかのアプリがあるときのあふれ、サインアウトと再接続、ストリーミング中のメッセージの置き換え、古い質問への押下、複数選択のページ送り、キャンセルと送信、バックエンドでの送信の失敗、読み取り専用の設定、思考の深さのカタログが異なるモデルへの切り替え、期限切れの設定の確認。</p>
+<p>公開する前に次をテストしてください。両方の画面での最初のチャットと続きのメッセージ、バックエンドが拒否し <code>agent.order.result</code> で報告した指示、コンパニオンによる文字起こしとそのローカルの代替（提供する場合）、ほかのアプリがスロットを使用しているときの上限超過、サインアウトと再接続、ストリーミング中のメッセージの置き換え、古い質問への押下、複数選択のページ送り、キャンセルと送信、バックエンドでの送信の失敗、読み取り専用の設定、思考の深さのカタログが異なるモデルへの切り替え、期限切れの設定の確認。</p>
 <p>実行できるサンプルは、<code>tools/tests/test_native_companion.py</code> で偽のバックエンドを使ってもテストしています。公開のリクエストスキーマとメソッドの権限は <code>deckd api-doc</code> から生成しています。独自のエージェントがファームウェアのフォークや Conol のアカウントを必要としないよう、これらのインターフェースはプロバイダー固有のフックと分けておいてください。</p>
 
 </article>
@@ -315,5 +307,14 @@
 
 <script src="/js/main.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 言語: 日本語">Language</summary>
+        <ul>
+          <li><a href="/docs/native-companions/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/docs/native-companions/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/docs/native-companions/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/docs/native-companions/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

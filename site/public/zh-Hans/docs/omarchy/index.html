@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>在 Omarchy 上使用 OpenWalkieTalkie · OpenWalkieTalkie</title>
-<meta name="description" content="在 Omarchy（Hyprland）笔记本上安装 OpenWalkieTalkie 服务和 Omarchy 桥接：设备成为桌面的遥控器，显示你的 Claude Code、Codex 和 Kimi Code 会话，并接收语音指令。" />
+<meta name="description" content="在 Omarchy（Hyprland）笔记本上安装 OpenWalkieTalkie 服务和桥接程序，用对讲机遥控桌面、查看 Claude Code、Codex 和 Kimi Code 会话，并发送语音指令。" />
 <link rel="canonical" href="https://openwalkietalkie.org/zh-Hans/docs/omarchy/" />
 <link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/omarchy/" />
 <link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/omarchy/" />
@@ -15,7 +15,7 @@
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="OpenWalkieTalkie" />
 <meta property="og:title" content="在 Omarchy 上使用 OpenWalkieTalkie · OpenWalkieTalkie" />
-<meta property="og:description" content="在 Omarchy 笔记本上安装 OpenWalkieTalkie 服务和 Omarchy 桥接。" />
+<meta property="og:description" content="在一台 Omarchy 笔记本电脑上安装 OpenWalkieTalkie 服务和 Omarchy 桥接器。" />
 <meta property="og:url" content="https://openwalkietalkie.org/zh-Hans/docs/omarchy/" />
 <meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
 <meta name="twitter:card" content="summary_large_image" />
@@ -35,12 +35,13 @@
 <link rel="stylesheet" href="/css/blog.css" />
 <link rel="stylesheet" href="/css/docs.css" />
 <script src="/js/i18n/zh-Hans.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 <!-- No optional analytics or advertising scripts. -->
 </head>
 <body>
 
-<a class="skip-link" href="#content">跳至正文</a>
+<a class="skip-link" href="#content">跳转到正文</a>
 
 <div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
 
@@ -51,27 +52,18 @@
       <span class="brand__text">OPEN WALKIE TALKIE</span>
     </a>
 
-    <nav class="nav__links" aria-label="栏目">
-      <a href="/zh-Hans/#pile">The Pile</a>
+    <nav class="nav__links" aria-label="页面章节">
+      <a href="/zh-Hans/#pile">窗口太多了</a>
       <a href="/zh-Hans/#features">功能</a>
-      <a href="/zh-Hans/#demo">试用</a>
-      <a href="/zh-Hans/#faces">页面</a>
-      <a href="/zh-Hans/#blueprint">设计图纸</a>
+      <a href="/zh-Hans/#demo">试试看</a>
+      <a href="/zh-Hans/#faces">功能页面</a>
+      <a href="/zh-Hans/#blueprint">设计蓝图</a>
       <a href="/zh-Hans/docs/" aria-current="true">文档</a>
       <a href="/zh-Hans/blog/">博客</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="语言: 简体中文">简体中文</summary>
-        <ul>
-          <li><a href="/docs/omarchy/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/docs/omarchy/" hreflang="zh-Hans" lang="zh-Hans" aria-current="true">简体中文</a></li>
-          <li><a href="/zh-Hant/docs/omarchy/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
-          <li><a href="/ja/docs/omarchy/" hreflang="ja" lang="ja">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
-    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换日间和夜间主题" aria-pressed="false">
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换日间与夜间主题" aria-pressed="false">
       <span class="theme-toggle__track" aria-hidden="true">
         <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
         <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
@@ -88,97 +80,97 @@
 
 <main class="blog-main docs-main" id="content">
 <header class="post-head">
-  <p class="section-kicker">LINUX · OMARCHY · 从源代码构建 · 0.13.0+</p>
+  <p class="section-kicker">LINUX · OMARCHY · 从源码构建 · 0.13.0+</p>
   <h1>在 Omarchy 上使用 OpenWalkieTalkie</h1>
-  <p class="post-meta">把设备变成 Omarchy（Hyprland）笔记本的遥控器</p>
+  <p class="post-meta">用对讲机遥控 Omarchy（Hyprland）笔记本</p>
 </header>
 <article class="post-body">
 
-<p>在 <a href="https://omarchy.org/">Omarchy</a> 上，设备直接操控你的桌面和编程助手，不需要 Mac。笔记本上运行两个小服务：<code>deckd</code>，即 Mac 应用所运行的同一个服务的 Linux 版本；以及 <strong>Omarchy 桥接</strong>，它把服务连接到 Hyprland 以及你的 Claude Code、Codex 和 Kimi Code 会话。</p>
+<p>在 <a href="https://omarchy.org/">Omarchy</a> 上，可以直接用对讲机遥控桌面、操作编程助手，无需 Mac。笔记本运行两个服务：<code>deckd</code> 是 Mac 应用所用服务的 Linux 版本；<strong>Omarchy 桥接程序</strong> 则负责连接 Hyprland 和 Claude Code、Codex、Kimi Code 会话。</p>
 <ul>
   <li><strong>Omarchy 页面：</strong>你的工作区和窗口。滚轮切换窗口，LEFT / RIGHT 切换工作区，ENTER 切换全屏，SHIFT+CANCEL 切换 scratchpad。</li>
   <li><strong>列表中的会话</strong>，显示为运行中、已完成或正在提问。选中一个会把它的终端切到最前。</li>
   <li><strong>语音指令：</strong>在一个会话上按住 PTT 说话。说的话会输入到它的终端里，这一轮结束时回复会显示并朗读出来。</li>
-  <li><strong>“快捷键”、“系统”和“用量”页面</strong>，数据来自这台笔记本。</li>
+  <li><strong>宏键盘、系统和用量界面</strong>，显示的数据来自这台笔记本。</li>
   <li><strong>配套应用</strong>，和 Mac 上是同一个窗口，在 Omarchy 的应用启动器中。</li>
 </ul>
-<p>Linux 版还没有下载包：你需要从源代码构建 <code>deckd</code> 和应用，第一次大约需要十分钟。下面的每条命令都在 Omarchy 笔记本的终端中运行。</p>
+<p>目前还没有可直接下载的 Linux 安装包，需要从源码构建 <code>deckd</code> 和应用，首次大约需要十分钟。下面的所有命令都在 Omarchy 笔记本电脑的终端中运行。</p>
 
 <h2>1. 安装工具</h2>
 <pre><code>sudo pacman -S --needed base-devel git rustup cmake clang espeak-ng wtype
 rustup default stable</code></pre>
-<p><code>cmake</code> 和 <code>clang</code> 用于构建本地语音识别器，<code>espeak-ng</code> 在设备上朗读回复，<code>wtype</code> 把指令输入到终端。构建所需的其他库（udev、ALSA、D-Bus）Omarchy 已自带。</p>
+<p><code>cmake</code> 和 <code>clang</code> 用来构建本地语音识别器，<code>espeak-ng</code> 将回复合成为语音并在对讲机上播放，<code>wtype</code> 负责把指令输入终端。构建需要的其他库（udev、ALSA、D-Bus）已随 Omarchy 提供。</p>
 
-<h2>2. 构建并安装</h2>
+<h2>2. 编译并安装</h2>
 <pre><code>git clone https://github.com/conol-ai/openwalkietalkie.git
 cd openwalkietalkie/host
 cargo build --release --target x86_64-unknown-linux-gnu -p deckd -p openwalkietalkie-app
 sh omarchy/install.sh target/x86_64-unknown-linux-gnu/release/deckd target/x86_64-unknown-linux-gnu/release/openwalkietalkie-app</code></pre>
-<p><code>install.sh</code> 会把 <code>deckd</code> 和应用放到 <code>~/.local/bin</code>，把应用以 <strong>OpenWalkieTalkie</strong> 的名称加入 Omarchy 的启动器，把桥接复制到 <code>~/.local/share/openwalkietalkie/omarchy</code>，并把两者作为 systemd 用户服务 <code>deckd</code> 和 <code>omarchy-deck</code> 启动。每次登录时它们都会再次启动。最后它会打印需要 root 权限的步骤，也就是下一节。</p>
+<p><code>install.sh</code> 将 <code>deckd</code> 和应用程序放入 <code>~/.local/bin</code>，将其添加到 Omarchy 的启动器中作为 <strong>OpenWalkieTalkie</strong>，将桥接组件复制到 <code>~/.local/share/openwalkietalkie/omarchy</code>，并以 systemd 用户服务形式启动 <code>deckd</code> 和 <code>omarchy-deck</code>。每次登录都会自动重新启动。最后会打印出需要 root 权限的操作步骤，这些内容在下一节中说明。</p>
 
-<h2>3. 让服务能打开设备</h2>
-<p>设备的 HID 设备节点属于 root，直到一条 udev 规则把它交给你。运行 <code>install.sh</code> 打印出的两条命令：</p>
+<h2>3. 让服务有权访问对讲机</h2>
+<p>对讲机的 HID 设备默认属于 root，直到 udev 规则将其交给你。运行 <code>install.sh</code> 打印出的两条命令：</p>
 <pre><code>sudo install -m 644 omarchy/70-openwalkietalkie.rules /etc/udev/rules.d/
 sudo udevadm control --reload &amp;&amp; sudo udevadm trigger --subsystem-match=hidraw</code></pre>
-<p>这条规则对通过 USB-C 和蓝牙连接的设备都适用。</p>
+<p>该规则会匹配对讲机，无论是通过 USB-C 还是通过蓝牙连接。</p>
 
-<h2>4. 连接设备</h2>
+<h2>4. 连接对讲机</h2>
 <ul>
   <li><strong>USB-C：</strong>插上即可，不需要其他操作。</li>
   <li><strong>蓝牙：</strong>在 Omarchy 的蓝牙菜单中（或用 <code>bluetoothctl</code>）配对 <strong>OpenWalkieTalkie</strong>。设备同一时间只保留一个配对：如果它曾与 Mac 配对，请先在 Mac 上移除。</li>
 </ul>
-<p>服务会在几秒内自动连接。检查一下：</p>
+<p>服务会在几秒内自动连接设备。运行下面的命令检查：</p>
 <pre><code>deckd status</code></pre>
-<p><code>link:</code> 一行应显示 <code>Connected, session Live</code>。</p>
+<p><code>link:</code> 行应显示为 <code>Connected, session Live</code>。</p>
 
-<h2>5. 把会话放到设备上</h2>
-<p>为你使用的助手安装钩子。每次安装都会先备份助手的设置文件，并在其中追加内容，而不是替换它：</p>
+<h2>5. 将你的会话放入对讲机</h2>
+<p>安装你所使用的 AI 助手的钩子。每个安装操作会先备份该助手的设置文件，然后追加内容而不是覆盖原有内容：</p>
 <pre><code>python3 omarchy/omarchy_hook.py install claude
 python3 omarchy/omarchy_hook.py install codex
 python3 omarchy/omarchy_hook.py install kimi</code></pre>
-<p>已经打开的会话不会加载新的钩子：重新启动它们，它们就会出现在“助手”页面上。</p>
+<p>已经打开的会话不会加载新钩子。重新启动这些会话，它们才会出现在助手列表中。</p>
 
 <h2>6. 语音</h2>
-<p>在选中的会话上按住 PTT，说话，然后松开。文字会输入到该会话的终端中，并接着按下 Enter。</p>
+<p>在选定的会话上按住 PTT，说话，然后松开。文字将被输入到该会话终端中，并自动加上回车。</p>
 <ul>
-  <li><strong>如果使用 Superwhisper</strong>（Omarchy 的口述工具，如果你在用），不需要任何设置。它按自己的模式、语言和词汇识别每次按键，在 Cloud 模式下不到一秒。用 <code>superwhisper status</code> 确认它已就绪。</li>
+  <li><strong>如果使用 Superwhisper</strong>，无需额外设置。它按你选好的模式、语言和词汇识别每次按住 PTT 时说的话。实测 Cloud 模式耗时不到一秒。运行 <code>superwhisper status</code> 可检查它是否就绪。</li>
   <li><strong>如果不使用</strong>，下载一次本地 Whisper 模型（约 465 MB）：
 <pre><code>printf '[voice.stt]\nengine = "whisper"\nmodel = "small"\nlanguage = "auto"\n' &gt;&gt; ~/.local/share/openwalkietalkie/config.toml
 deckd stt install --model small</code></pre>
-  Whisper 在笔记本的 CPU 上运行，所以每次按键需要几秒或更久，取决于处理器。</li>
+  Whisper 使用笔记本的 CPU 识别语音，每段录音可能需要几秒或更长时间，取决于处理器性能。</li>
 </ul>
-<p>语音只能送达在终端窗口中运行的会话。托管在其他应用内的会话没有可输入的终端，设备会显示该指令未送达。</p>
+<p>语音指令会传递给运行在终端窗口中的会话。如果会话运行在其他应用程序内部，没有终端可输入，对讲机将显示该指令为未送达。</p>
 
-<h2>7. 可选：“快捷键”页面的快捷方式</h2>
-<p>带有按键组合的“快捷键”按键会在笔记本上输入它。要让按键既能触发聚焦应用的快捷键，也能触发 Omarchy 自己的快捷键（Super+…），桥接需要充当键盘，这需要 <code>/dev/uinput</code>：</p>
+<h2>7. 可选：设置宏键盘快捷键</h2>
+<p>宏键盘上的按键会向电脑发送绑定的快捷键。如果还要触发 Omarchy 本身的 Super 组合键，而不仅是当前应用的快捷键，桥接程序就需要模拟键盘，访问 <code>/dev/uinput</code>：</p>
 <pre><code>sudo install -m 644 omarchy/71-openwalkietalkie-uinput.rules /etc/udev/rules.d/
 echo uinput | sudo tee /etc/modules-load.d/openwalkietalkie-uinput.conf
 sudo udevadm control --reload &amp;&amp; sudo modprobe uinput
 systemctl --user restart omarchy-deck</code></pre>
-<p>之后，你运行的任何程序都可以创建输入设备，和 ydotool 一样。不做这一步，“快捷键”按键仍能送达聚焦的应用，但无法触发 Omarchy 的快捷键。</p>
+<p>完成后，你运行的任何程序都能创建输入设备，就像 ydotool 一样。不执行这一步，宏键盘仍可向当前应用发送按键，但无法触发 Omarchy 的系统快捷键。</p>
 
-<h2>8. 可选：Claude 用量条</h2>
-<p>“用量”页面可以显示你的 Claude 速率限制窗口，每五分钟用你的 Claude Code 登录读取一次：</p>
+<h2>8. 可选：显示 Claude 用量进度条</h2>
+<p>“用量”页面可以显示 Claude 在各个限额周期内的用量。启用后，服务会使用现有的 Claude Code 登录信息，每五分钟读取一次：</p>
 <pre><code>deckd config set 'usage.providers=["codex","claude"]'</code></pre>
 
-<h2>检查安装</h2>
+<h2>检查设置</h2>
 <pre><code>deckd care checks
 python3 omarchy/omarchy_hook.py status
 journalctl --user -u deckd -u omarchy-deck -f</code></pre>
-<p>也可以从应用启动器打开 <strong>OpenWalkieTalkie</strong>：它的“设备”页面显示连接状态，“服务”页面可以启动和停止服务（<code>deckd</code> systemd 单元），并设置登录时打开应用。服务的所有文件都在 <code>~/.local/share/openwalkietalkie</code>。</p>
+<p>也可以从应用启动器打开<strong>OpenWalkieTalkie</strong>。“设备”页面显示连接状态；在“服务”页面可以启动或停止后台服务（<code>deckd</code> systemd 用户单元），也可以设置登录时打开应用。服务的所有文件都保存在 <code>~/.local/share/openwalkietalkie</code> 中。</p>
 
 <h2>更新</h2>
 <pre><code>cd openwalkietalkie/host
 git pull
 cargo build --release --target x86_64-unknown-linux-gnu -p deckd -p openwalkietalkie-app
 sh omarchy/install.sh target/x86_64-unknown-linux-gnu/release/deckd target/x86_64-unknown-linux-gnu/release/openwalkietalkie-app</code></pre>
-<p>再次运行 <code>install.sh</code> 会用新代码重启两个服务；退出并重新打开应用即可运行新版本。要更新设备的固件，用 USB-C 连接设备，运行 <code>deckd firmware check</code>，然后运行 <code>deckd firmware install</code>，或者使用应用的“服务”页面。设备会在安装前要求你按 ENTER。这和 Mac 使用的是同一条 USB 路径，但还没有在 Omarchy 上试过。</p>
+<p>再次运行 <code>install.sh</code>，会用新代码重启两个服务；退出并重新打开软件，才能使用软件的新版本。更新对讲机固件时，通过 USB-C 连接，先运行 <code>deckd firmware check</code>，再运行 <code>deckd firmware install</code>，也可以在软件的 Service 页面操作。安装前，对讲机会要求你按 ENTER 确认。这与 Mac 使用相同的 USB 更新流程，但尚未在 Omarchy 上实测。</p>
 
-<h2>Omarchy 上暂时没有的功能</h2>
+<h2>Omarchy 上尚未支持的功能</h2>
 <ul>
-  <li>在设备上回应权限请求：它们仍留在终端里。</li>
-  <li>Codex 的用量条，以及 Omarchy 会话在阅读视图中的历史和工具行。</li>
-  <li>托盘图标和应用自动更新：应用是从源代码构建的，请按上面的方法更新。</li>
+  <li>在对讲机上处理授权请求：目前仍需回到终端回答。</li>
+  <li>Codex 用量进度条，以及 Omarchy 会话的历史消息和工具执行记录。</li>
+  <li>托盘图标和自动应用更新：该应用是基于源码构建的，因此更新方式同上。</li>
 </ul>
 
 <h2>卸载</h2>
@@ -188,32 +180,41 @@ rm -f ~/.config/systemd/user/deckd.service ~/.config/systemd/user/omarchy-deck.s
 rm -f ~/.local/share/applications/openwalkietalkie.desktop ~/.local/share/icons/hicolor/512x512/apps/openwalkietalkie.png ~/.config/autostart/openwalkietalkie.desktop
 rm -rf ~/.local/share/openwalkietalkie
 sudo rm -f /etc/udev/rules.d/70-openwalkietalkie.rules /etc/udev/rules.d/71-openwalkietalkie-uinput.rules /etc/modules-load.d/openwalkietalkie-uinput.conf</code></pre>
-<p>卸载钩子只会移除它在各个助手设置中添加的内容。</p>
+<p>钩子卸载仅移除其添加到每个助手设置中的内容。</p>
 
-<p>遇到问题？请<a href="https://github.com/conol-ai/openwalkietalkie/issues">提交 Issue</a>，附上 <code>deckd care checks</code> 的输出和 <code>journalctl --user -u deckd -u omarchy-deck</code> 的最后几行。完整的参考是 <a href="https://github.com/conol-ai/openwalkietalkie/blob/main/host/omarchy/README.md">Omarchy 桥接的 README</a>。</p>
+<p>如果功能无法使用，请到 <a href="https://github.com/conol-ai/openwalkietalkie/issues">GitHub 提交问题</a>，并附上 <code>deckd care checks</code> 的输出以及 <code>journalctl --user -u deckd -u omarchy-deck</code> 的最后几行。完整参考文档见 <a href="https://github.com/conol-ai/openwalkietalkie/blob/main/host/omarchy/README.md">Omarchy 桥接器的 README</a>。</p>
 
 </article>
 </main>
 
 <footer class="footer--mini">
   <div class="inner">
-    <span>OpenWalkieTalkie · COHDL 项目 · MIT 许可的软件 · CERN-OHL-P 许可的硬件</span>
+    <span>OpenWalkieTalkie · 一个 COHDL 项目 · MIT 软件 · CERN-OHL-P 硬件</span>
     <nav aria-label="页脚">
-      <a href="/zh-Hans/#waitlist">加入候补名单</a>
+      <a href="/zh-Hans/#waitlist">加入等候名单</a>
       <a href="/zh-Hans/privacy/">隐私政策</a>
       <a href="/zh-Hans/cookies/">Cookie 说明</a>
-      <a href="/zh-Hans/cookies/" data-privacy-open>隐私声明</a>
+      <a href="/zh-Hans/cookies/" data-privacy-open>隐私说明</a>
       <a href="/zh-Hans/">首页</a>
-      <a href="/zh-Hans/#demo">试用</a>
+      <a href="/zh-Hans/#demo">试试看</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
       <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
-      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="在 Discord 上加入 CoHDL 和 OpenWalkieTalkie 社区">Discord</a>
-      <a href="/zh-Hans/blog/feed.xml">订阅源</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="加入 CoHDL 和 OpenWalkieTalkie 的 Discord 社区">Discord</a>
+      <a href="/zh-Hans/blog/feed.xml">订阅更新</a>
     </nav>
   </div>
 </footer>
 
 <script src="/js/main.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 语言: 简体中文">Language</summary>
+        <ul>
+          <li><a href="/docs/omarchy/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/docs/omarchy/" hreflang="zh-Hans" lang="zh-Hans" aria-current="true">简体中文</a></li>
+          <li><a href="/zh-Hant/docs/omarchy/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/docs/omarchy/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

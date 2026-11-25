@@ -1,7 +1,7 @@
 ---
-title: OpenWalkieTalkie v0.16.0：ウィンドウがわかる口述 · OpenWalkieTalkie
+title: OpenWalkieTalkie v0.16.0：入力先のウィンドウに合わせた口述 · OpenWalkieTalkie
 description: 試験的な機能で、既定ではオフ：カーソル位置への口述を、フォーカス中のウィンドウに合わせて書き直せます。使うのはアプリ名とタイトルのテキストだけで、新しい「モデルへの接続」ページで選んだモデルを通します。
-heading: OpenWalkieTalkie v0.16.0：ウィンドウがわかる口述
+heading: OpenWalkieTalkie v0.16.0：入力先のウィンドウに合わせた口述
 kind: 試験的な口述とモデルへの接続
 date: 2026-11-22
 published: 2026-11-22T09:04:46Z
@@ -22,7 +22,7 @@ navDocs: yes
   <h2>モデルへの接続</h2>
   <p>モデルは、<strong>音声</strong>の下の新しいページ<strong>モデルへの接続</strong>から選びます。プロバイダーの一覧が 1 つあり、プロバイダーごとにキーが 1 つです。キーは OS のキーの保管場所に保存し、<code>config.toml</code> には書きません。ページでは、キーは最後の 4 文字だけを表示します。プロバイダーが使うプロトコルは 2 つのうちどちらかです。OpenAI 互換の chat completions（OpenAI、OpenRouter、Ollama、または指定したアドレスの互換サーバー）か、Anthropic の Messages API です。ElevenLabs はクラウドの音声専用として載っています。Omarchy では、独自のローカルモデルが自動的に見つかります。</p>
   <h2>試験的である理由</h2>
-  <p>まだ確かめられていないことが 3 つあります。このリリースまで、macOS と Windows の部分は一度もビルドされていませんでした。0.16.0 では CI が両方のシステムでビルドしてテストしましたが、実際のウィンドウを読んだのは Hyprland のウィンドウ読み取りだけです。自分のパソコンで動くモデルはまだ使っておらず、その代役しか使っていません。Anthropic の API も代役に対して試しただけで、本物のサービスでは試していません。デバイスでの実際の口述が、このコードで最初から最後まで正しく書き直されることはまだ確認できていません。また macOS と Windows にはまだ <strong>Dictate</strong> 項目がないため、そこではこの機能に書き直すものがありません。</p>
+  <p>まだ確かめられていないことが 3 つあります。このリリースまで、macOS と Windows の部分は一度もビルドされていませんでした。0.16.0 では CI が両方のシステムでビルドしてテストしましたが、実際のウィンドウを読んだのは Hyprland のウィンドウ読み取りだけです。自分のパソコンで動くモデルはまだ使っておらず、テスト用の代替実装でしか試していません。Anthropic の API も模擬サービスで試しただけで、本物のサービスでは試していません。デバイスでの実際の口述が、このコードで最初から最後まで正しく書き直されることはまだ確認できていません。また macOS と Windows にはまだ <strong>Dictate</strong> 項目がないため、そこではこの機能に書き直すものがありません。</p>
   <h2>更新</h2>
   <p>Mac では<strong>アップデートを確認…</strong>を選ぶか、署名・公証済みの <strong>0.16.0</strong> のアプリ（Apple シリコン用または Intel 用、macOS 13 以降）をインストールします。Windows では、リリースから ZIP をダウンロードします。Omarchy では、<a href="/docs/omarchy/">Omarchy のガイド</a>のとおりに、最新のコードを取得してサービスとアプリをビルドし、両方で <code>install.sh</code> を実行します。このリリースではデバイスのファームウェアの更新は不要です。</p>
   <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.16.0" rel="noopener">GitHub で OpenWalkieTalkie v0.16.0 とチェックサムを入手 →</a></p>

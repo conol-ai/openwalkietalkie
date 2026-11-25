@@ -34,6 +34,7 @@
 <link rel="stylesheet" href="/css/style.css" />
 <link rel="stylesheet" href="/css/blog.css" />
 <script src="/js/i18n/ja.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 <!-- No optional analytics or advertising scripts. -->
 </head>
@@ -58,15 +59,6 @@
       <a href="/ja/#blueprint">設計図</a>
       <a href="/ja/blog/" aria-current="true">ブログ</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="言語: 日本語">日本語</summary>
-        <ul>
-          <li><a href="/blog/introducing-openwalkietalkie/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/blog/introducing-openwalkietalkie/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
-          <li><a href="/zh-Hant/blog/introducing-openwalkietalkie/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
-          <li><a href="/ja/blog/introducing-openwalkietalkie/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="昼と夜のテーマを切り替える" aria-pressed="false">
@@ -91,16 +83,16 @@
   <p class="post-meta"><span>2026年10月13日</span><span>最初の正式リリース</span></p>
 </header>
 <article class="post-body">
-  <p>OpenWalkieTalkie は、コーディングエージェントを小さなハンディ画面に載せます。どのセッションがあなたを待っているかを確認し、押して話すのキーを押しながら話して返信し、ホイールとキーで質問に答えられます。</p>
+  <p>OpenWalkieTalkie は、コーディングエージェントを小さなハンディ画面に載せます。どのセッションがあなたを待っているかを確認し、PTT キーを押しながら話して返信し、ホイールとキーで質問に答えられます。</p>
   <h2>持ち歩ける会話</h2>
   <p>480 × 480 のタッチ画面に、エージェントのセッションとその会話が表示されます。メッセージは画面の空きスペースを使って表示され、ツールの動作は展開するまでコンパクトにまとまり、コードはシンタックスハイライトされます。末尾を表示しているあいだは、新しいメッセージに合わせて表示が進みます。</p>
-  <p>押して話すのキーを離すと、音声認識が終わるまで文字起こしが画面に残ります。完成した文字起こしは、選択中のエージェントに送られます。「使用量」には、使用中の Claude または Codex のアカウントとその上限が表示されます。</p>
-  <h2>Mac アプリとデバイスの更新</h2>
-  <p>0.1.0 には、署名と公証を済ませた Apple Silicon と Intel 用の Mac アプリが含まれます。macOS 13 以降が必要です。アプリは自動でアップデートでき、USB でファームウェアを更新するときは書き込み前に接続中の基板を確認します。</p>
+  <p>PTT キーを離すと、音声認識が終わるまで文字起こしが画面に残ります。完成した文字起こしは、選択中のエージェントに送られます。「使用量」には、使用中の Claude または Codex のアカウントとその上限が表示されます。</p>
+  <h2>Macアプリとデバイスの更新</h2>
+  <p>0.1.0 には、署名と公証を済ませた Apple Silicon と Intel 用の Macアプリが含まれます。macOS 13 以降が必要です。アプリは自動でアップデートでき、USB でファームウェアを更新するときは書き込み前に接続中の基板を確認します。</p>
   <p>Rev A と Rev B のファームウェア、チェックサム、ビルドの証明はリリースに添付されています。最初の書き込みには対応するブートローダーが必要です。以降の更新はアプリから行えます。</p>
-  <p><a href="/ja/#download">Mac アプリをダウンロード</a>するか、<a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.1.0">リリースノートとファームウェアの手順の全文</a>をお読みください。</p>
+  <p><a href="/ja/#download">Macアプリをダウンロード</a>するか、<a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.1.0">リリースノートとファームウェアの手順の全文</a>をお読みください。</p>
   <h2>基板からオープン</h2>
-  <p>リポジトリには、ファームウェア、Mac アプリとホストサービス、編集可能な CoHDL 回路図、KiCad の基板レイアウト、本体ケースの CAD が含まれます。ソフトウェアは MIT ライセンス、ハードウェアの設計は CERN-OHL-P 2.0 です。サードパーティのコンポーネントはそれぞれのライセンスに従います。</p>
+  <p>リポジトリには、ファームウェア、Macアプリとホストサービス、編集可能な CoHDL 回路図、KiCad の基板レイアウト、本体ケースの CAD が含まれます。ソフトウェアは MIT ライセンス、ハードウェアの設計は CERN-OHL-P 2.0 です。サードパーティのコンポーネントはそれぞれのライセンスに従います。</p>
   <p><a href="https://github.com/conol-ai/openwalkietalkie">ソースを見る</a>か、<a href="/ja/#demo">ブラウザーでインタラクティブなデバイスを試して</a>ください。</p>
 </article>
 </main>
@@ -125,5 +117,14 @@
 
 <script src="/js/main.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 言語: 日本語">Language</summary>
+        <ul>
+          <li><a href="/blog/introducing-openwalkietalkie/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/introducing-openwalkietalkie/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/introducing-openwalkietalkie/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/blog/introducing-openwalkietalkie/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

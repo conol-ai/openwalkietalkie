@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OpenWalkieTalkie v0.6.0：设备上的小游戏 · OpenWalkieTalkie</title>
-<meta name="description" content="三款全屏游戏、实体按键操作，以及原创 8-bit 音乐和音效，并且可以关闭。" />
+<title>OpenWalkieTalkie v0.6.0：对讲机里的小游戏 · OpenWalkieTalkie</title>
+<meta name="description" content="三款全屏小游戏，使用实体按键操作。原创 8 位音乐和音效可随时关闭。" />
 <link rel="canonical" href="https://openwalkietalkie.org/zh-Hans/blog/arcade-on-the-deck/" />
 <link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/arcade-on-the-deck/" />
 <link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/arcade-on-the-deck/" />
@@ -14,8 +14,8 @@
 
 <meta property="og:type" content="article" />
 <meta property="og:site_name" content="OpenWalkieTalkie" />
-<meta property="og:title" content="OpenWalkieTalkie v0.6.0：设备上的小游戏 · OpenWalkieTalkie" />
-<meta property="og:description" content="三款全屏游戏、实体按键操作，以及原创 8-bit 音乐和音效，并且可以关闭。" />
+<meta property="og:title" content="OpenWalkieTalkie v0.6.0：对讲机里的小游戏 · OpenWalkieTalkie" />
+<meta property="og:description" content="三款全屏小游戏，使用实体按键操作。原创 8 位音乐和音效可随时关闭。" />
 <meta property="og:url" content="https://openwalkietalkie.org/zh-Hans/blog/arcade-on-the-deck/" />
 <meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
 <meta name="twitter:card" content="summary_large_image" />
@@ -34,12 +34,13 @@
 <link rel="stylesheet" href="/css/style.css" />
 <link rel="stylesheet" href="/css/blog.css" />
 <script src="/js/i18n/zh-Hans.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 <!-- No optional analytics or advertising scripts. -->
 </head>
 <body>
 
-<a class="skip-link" href="#content">跳至正文</a>
+<a class="skip-link" href="#content">跳转到正文</a>
 
 <div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
 
@@ -50,26 +51,17 @@
       <span class="brand__text">OPEN WALKIE TALKIE</span>
     </a>
 
-    <nav class="nav__links" aria-label="栏目">
-      <a href="/zh-Hans/#pile">The Pile</a>
+    <nav class="nav__links" aria-label="页面章节">
+      <a href="/zh-Hans/#pile">窗口太多了</a>
       <a href="/zh-Hans/#features">功能</a>
-      <a href="/zh-Hans/#demo">试用</a>
-      <a href="/zh-Hans/#faces">页面</a>
-      <a href="/zh-Hans/#blueprint">设计图纸</a>
+      <a href="/zh-Hans/#demo">试试看</a>
+      <a href="/zh-Hans/#faces">功能页面</a>
+      <a href="/zh-Hans/#blueprint">设计蓝图</a>
       <a href="/zh-Hans/blog/" aria-current="true">博客</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="语言: 简体中文">简体中文</summary>
-        <ul>
-          <li><a href="/blog/arcade-on-the-deck/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/blog/arcade-on-the-deck/" hreflang="zh-Hans" lang="zh-Hans" aria-current="true">简体中文</a></li>
-          <li><a href="/zh-Hant/blog/arcade-on-the-deck/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
-          <li><a href="/ja/blog/arcade-on-the-deck/" hreflang="ja" lang="ja">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
-    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换日间和夜间主题" aria-pressed="false">
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换日间与夜间主题" aria-pressed="false">
       <span class="theme-toggle__track" aria-hidden="true">
         <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
         <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
@@ -86,54 +78,63 @@
 
 <main class="blog-main" id="content">
 <header class="post-head">
-  <p class="section-kicker">博客 · 更新说明</p>
-  <h1>OpenWalkieTalkie v0.6.0：设备上的小游戏</h1>
+  <p class="section-kicker">博客 · 发布说明</p>
+  <h1>OpenWalkieTalkie v0.6.0：对讲机里的小游戏</h1>
   <p class="post-meta"><span>2026年10月19日</span><span>应用和固件更新</span></p>
 </header>
 <article class="post-body">
-  <p>设备有一个滚轮、几颗实体按键和一块 480×480 的屏幕。在 0.6.0 中，这些操作部件有了新用途：新的“游戏”页面上的三款离线小游戏。</p>
-  <h2>三款游戏，熟悉的操作</h2>
+  <p>对讲机上的滚轮、实体按键和 480×480 屏幕，现在有了新玩法。0.6.0 新增 Arcade 界面，内置三款离线小游戏。</p>
+  <h2>三个游戏，熟悉的操作</h2>
   <ul>
     <li><strong>像素小鸟：</strong>按 PTT 拍动翅膀，穿过管道。在“游戏”页面上，PTT 归游戏使用，不会打开麦克风。</li>
     <li><strong>贪吃蛇：</strong>用滚轮转向，或使用左右键。顺时针向右转，逆时针向左转。网格一直延伸到屏幕边缘，圆角周围设有墙壁，让食物始终可见。</li>
     <li><strong>雷电（Raiden）：</strong>用左右键移动，飞机会自动射击。躲开下降的敌机和它们的子弹。你有三条命。</li>
   </ul>
-  <figure class="post-figure" style="max-width:480px;margin:2.2em auto"><img src="/assets/screens/arcade-060.png" alt="“游戏”菜单，列出像素小鸟、贪吃蛇、雷电，声音设为“关闭”" width="480" height="480" loading="lazy" /><figcaption>新的“游戏”页面。声音默认关闭。</figcaption></figure>
-  <h2>整块屏幕都是游戏区域</h2>
-  <p>游戏会占满屏幕，顶部叠加一个紧凑的分数显示。放大的像素画拿在手里也清晰可辨。开始或暂停时会显示操作说明：Enter 用于开始、暂停、继续或重试；Cancel 返回游戏列表。切换到其他页面时游戏会暂停。</p>
-  <figure class="post-figure" style="max-width:480px;margin:2.2em auto"><img src="/assets/screens/arcade-raiden-060.png" alt="雷电占满整个屏幕，红色敌机朝下对着蓝色的玩家飞机" width="480" height="480" loading="lazy" /><figcaption>雷电使用整个屏幕。敌机朝向玩家。</figcaption></figure>
-  <h2>原创 8-bit 声音，想听时再开</h2>
-  <p>每款游戏都有自己的合成音乐循环，并为操作、得分、被击中和游戏结束配有简短音效。不需要下载任何音频。打开 <strong>游戏 → 声音</strong>，可以选择 <strong>关闭</strong>、<strong>仅音效</strong> 或 <strong>音乐和音效</strong>。默认为关闭，音量跟随“扬声器”设置。</p>
-  <p>游戏声音会让位于电脑的语音播放和录音。连接了对应版本的 Mac 服务时，你的声音偏好会被保存并恢复。离线时的更改只在本次启动内有效；重新启动后会恢复为关闭。最高分也会在设备重启时清零。</p>
-  <h2>把“游戏”加到你的设备上</h2>
-  <p>把 Mac 应用和设备固件都更新到 0.6.0。现有的页面排列会保留。要添加“游戏”，请 <strong>快速按两次 Shift → + → 游戏 → Enter</strong>，然后再快速按两次 Shift 退出页面管理。新的默认排列已经包含它，位于“设置”之前。</p>
-  <p>使用 <strong>检查更新</strong>，或<a href="/zh-Hans/#download">下载已签名并经过公证的 Mac 应用</a>，支持 Apple Silicon 和 Intel。需要 macOS 13 或更高版本。通过 USB-C 连接一台设备，然后打开 <strong>服务 → 更新 → 检查固件更新</strong>。</p>
-  <p>已使用 0.4.0/0.5.0 分区布局和恢复协议 2 的设备，会收到普通的应用程序更新。<strong>较旧的引导程序需要进行引导式迁移。请保持 USB-C 供电，并让 Mac 保持唤醒：替换引导程序时断电，可能导致设备无法启动、无法通过 USB 恢复，只能进行硬件维修。</strong>继续之前，请阅读应用显示的警告。</p>
-  <h2>我们测试了什么</h2>
-  <p>游戏模拟、声音合成、通信协议、已保存的设置和保留帧渲染都有软件测试覆盖。开发期间刷写并测试了 Rev A 的开发版本，包括全屏游玩和修正后的敌机朝向。Rev B 上的游戏玩法以及音乐和音效的实际听感仍需在实机上测试。这项工作期间没有在设备上播放过音频。</p>
-  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.6.0">0.6.0 版本</a>包含两个 Mac 安装包、Rev A/B 的固件和迁移文件、出厂固件、校验和、构建证明以及中文升级指南。<strong>出厂固件会覆盖整块芯片，包括设置和配对数据；已在使用的设备请用图形界面的更新程序。</strong></p>
+  <figure class="post-figure" style="max-width:480px;margin:2.2em auto"><img src="/assets/screens/arcade-060.png" alt="“游戏”菜单列出像素小鸟、贪吃蛇和雷电，声音已关闭" width="480" height="480" loading="lazy" /><figcaption>新的 Arcade 界面。声音默认关闭。</figcaption></figure>
+  <h2>整个屏幕都是游戏区域</h2>
+  <p>游戏充满整个屏幕，顶部叠加一个简洁的分数。放大后的像素艺术在手持状态下仍清晰可读。开始或暂停时会显示说明：Enter 用于开始、暂停、恢复或重新开始；Cancel 会返回游戏列表。切换到其他界面会暂停游戏。</p>
+  <figure class="post-figure" style="max-width:480px;margin:2.2em auto"><img src="/assets/screens/arcade-raiden-060.png" alt="全屏显示雷电，红色敌机俯冲向蓝色玩家飞机" width="480" height="480" loading="lazy" /><figcaption>Raiden 使用全屏显示。敌机机头朝向玩家。</figcaption></figure>
+  <h2>原创 8 位音乐与音效，想听再开</h2>
+  <p>每款游戏都有独立的合成音乐循环，搭配动作、得分、击中和游戏结束的短音效。无需下载音频。打开 <strong>Arcade → Sound</strong> 以选择 <strong>Off</strong>、<strong>SFX only</strong> 或 <strong>Music + SFX</strong>。默认为关闭状态，音量跟随扬声器设置。</p>
+  <p>电脑端播放语音或录音时，游戏声音会让路。连接配套版本的 Mac 服务后，声音偏好会被保存，并在下次恢复。离线修改只在本次开机期间有效，重启后默认关闭声音；最高分也会在重启后清零。</p>
+  <h2>将 Arcade 添加到你的对讲机中</h2>
+  <p>请同时更新 Mac 应用和设备固件至 0.6.0。现有功能页面布局将被保留。要添加 Arcade，执行 <strong>双击 Shift → + → Arcade → Enter</strong>，然后双击 Shift 退出管理器。在新的默认布局中，Arcade 已排在 Settings 前面。</p>
+  <p>点击 <strong>Check for Updates</strong>，或<a href="/zh-Hans/#download">下载已签名并通过公证的 Mac 软件</a>，按机型选择 Apple Silicon 或 Intel 版。需要 macOS 13 及以上。通过 USB-C 连接一台对讲机，打开 <strong>Service → Updates → Check firmware</strong>。</p>
+  <p>0.4.0/0.5.0 分区布局和恢复协议 2 的设备接收常规应用更新。<strong>较旧的引导程序需要引导式迁移。保持 USB-C 电源连接且 Mac 保持唤醒状态：在更换引导程序时断电可能导致无法启动，以及无法通过 USB 恢复，进而需要硬件维修。</strong> 在操作前请阅读应用的警告信息。</p>
+  <h2>我们测试的内容</h2>
+  <p>游戏逻辑、声音合成、通信协议、设置保存和保留帧渲染均有软件测试覆盖。开发期间已在 Rev A 上刷写并测试开发版，包括全屏游戏和修正后的敌机朝向。Rev B 的游戏运行情况，以及音乐和音效的实际听感，仍需实机测试。本次工作没有播放设备音频。</p>
+  <p>本次 <a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.6.0">0.6.0 版本发布</a> 包含 Mac 版本的安装包、Rev A/B 固件和迁移文件、出厂镜像、校验和、构建认证信息，以及中文升级指南。<strong>出厂镜像会覆盖整个芯片，包括设置和配对数据；对于已有设备，建议使用图形界面更新工具进行更新。</strong></p>
 </article>
 </main>
 
 <footer class="footer--mini">
   <div class="inner">
-    <span>OpenWalkieTalkie · COHDL 项目 · MIT 许可的软件 · CERN-OHL-P 许可的硬件</span>
+    <span>OpenWalkieTalkie · 一个 COHDL 项目 · MIT 软件 · CERN-OHL-P 硬件</span>
     <nav aria-label="页脚">
-      <a href="/zh-Hans/#waitlist">加入候补名单</a>
+      <a href="/zh-Hans/#waitlist">加入等候名单</a>
       <a href="/zh-Hans/privacy/">隐私政策</a>
       <a href="/zh-Hans/cookies/">Cookie 说明</a>
-      <a href="/zh-Hans/cookies/" data-privacy-open>隐私声明</a>
+      <a href="/zh-Hans/cookies/" data-privacy-open>隐私说明</a>
       <a href="/zh-Hans/">首页</a>
-      <a href="/zh-Hans/#demo">试用</a>
+      <a href="/zh-Hans/#demo">试试看</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
       <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
-      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="在 Discord 上加入 CoHDL 和 OpenWalkieTalkie 社区">Discord</a>
-      <a href="/zh-Hans/blog/feed.xml">订阅源</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="加入 CoHDL 和 OpenWalkieTalkie 的 Discord 社区">Discord</a>
+      <a href="/zh-Hans/blog/feed.xml">订阅更新</a>
     </nav>
   </div>
 </footer>
 
 <script src="/js/main.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 语言: 简体中文">Language</summary>
+        <ul>
+          <li><a href="/blog/arcade-on-the-deck/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/arcade-on-the-deck/" hreflang="zh-Hans" lang="zh-Hans" aria-current="true">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/arcade-on-the-deck/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/blog/arcade-on-the-deck/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

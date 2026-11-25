@@ -34,6 +34,7 @@
 <link rel="stylesheet" href="/css/style.css" />
 <link rel="stylesheet" href="/css/blog.css" />
 <script src="/js/i18n/zh-Hant.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 <!-- No optional analytics or advertising scripts. -->
 </head>
@@ -51,22 +52,13 @@
     </a>
 
     <nav class="nav__links" aria-label="網站區塊">
-      <a href="/zh-Hant/#pile">The Pile</a>
+      <a href="/zh-Hant/#pile">The Pile（分頁堆）</a>
       <a href="/zh-Hant/#features">功能</a>
       <a href="/zh-Hant/#demo">試用</a>
       <a href="/zh-Hant/#faces">頁面</a>
       <a href="/zh-Hant/#blueprint">設計藍圖</a>
       <a href="/zh-Hant/blog/" aria-current="true">部落格</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="語言: 繁體中文">繁體中文</summary>
-        <ul>
-          <li><a href="/blog/usb-audio-and-reset-reminders/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/blog/usb-audio-and-reset-reminders/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
-          <li><a href="/zh-Hant/blog/usb-audio-and-reset-reminders/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
-          <li><a href="/ja/blog/usb-audio-and-reset-reminders/" hreflang="ja" lang="ja">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="切換日間與夜間主題" aria-pressed="false">
@@ -103,14 +95,14 @@
   <h2>在到期前用掉重設</h2>
   <p>當未使用的手動重設額度將在 <strong>72 小時</strong>內到期時，Mac 上的「用量」頁和裝置上的「用量」頁面會在每週用量條下方顯示一則琥珀色的小提示。例如：<strong>「2 次重設將在 1 天 6 小時後到期。」</strong></p>
   <figure class="post-figure" style="max-width:480px;margin-left:auto;margin-right:auto"><img src="/assets/screens/usage-reset-expiring-090.png" alt="裝置的「用量」畫面，Claude 每週用量條下方顯示琥珀色提醒：2 次重設將在 1 天 6 小時後到期" width="480" height="480" loading="lazy" /><figcaption>實際裝置介面上的重設到期提醒，以示意用的展示資料算繪。</figcaption></figure>
-  <p>這和每週額度更新前的一般倒數是兩回事。提示會採用最近的額度到期時間，只計算在這個期限到期的額度。額度用掉或到期後提示就會消失；切換帳號時會清除前一個帳號的額度；中斷連線時提示會隱藏。如果服務商沒有提供這項資料，就不會出現提醒。裝置不會替你兌換重設。</p>
+  <p>這和每週額度更新前的一般倒數是兩回事。提示會採用最近的額度到期時間，只計算在這個期限到期的額度。額度用掉或到期後提示就會消失；切換帳號時會清除畫面上先前帳號的額度資料；中斷連線時提示會隱藏。如果服務商沒有提供這項資料，就不會出現提醒。裝置不會替你兌換重設。</p>
   <h2>兩邊都要更新</h2>
   <p>安裝已簽署並經過公證的 Mac 應用程式（Apple Silicon 或 Intel），或選擇<strong>檢查更新</strong>。需要 macOS 13 或更新版本。接著透過 USB-C 連接裝置，使用<strong>服務 → 更新 → 檢查韌體更新</strong>。應用程式、服務和韌體都應顯示 0.9.0。</p>
   <p>在使用復原協定 2 的裝置上，一般更新會保留設定和藍牙配對。較舊的復原版本使用現有的引導式移轉。各主機板的原廠 ZIP 仍會提供，用於生產；其中整顆晶片的映像檔會覆寫設定和配對，所以現有裝置請使用應用程式的更新功能。</p>
   <h2>部落格是版本發行的一部分</h2>
   <p>發行驗證程式現在要求先備妥一篇部落格文章、它的訂閱來源項目、部落格索引連結、網站地圖項目，以及最新的 Mac 下載檔，才能發行版本。先前缺少的 <a href="/zh-Hant/blog/speaker-eq-and-less-hiss/">0.7.0</a> 和 <a href="/zh-Hant/blog/screen-lock-and-wheel-navigation/">0.8.0</a> 文章現在也已補上。</p>
   <p>開發版韌體和語音比較都在 Rev A 上透過 USB 檢查過；重新啟動更新後的服務後，也確認了常駐程式的一般播放為 48 kHz。自動檢查涵蓋取樣率協商、連線切換、音訊編碼與濾波、重設到期與帳號切換，以及算繪。這次沒有在 Rev B 上實機測試音訊。</p>
-  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.9.0" rel="noopener">在 GitHub 上取得 OpenWalkieTalkie v0.9.0、韌體、原廠韌體與檢查碼 →</a></p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.9.0" rel="noopener">在 GitHub 上取得 OpenWalkieTalkie v0.9.0、韌體、原廠映像檔與檢查碼 →</a></p>
   <p class="post-back"><a href="/zh-Hant/blog/">← 返回部落格</a></p>
 </article>
 </main>
@@ -119,7 +111,7 @@
   <div class="inner">
     <span>OpenWalkieTalkie · COHDL 專案 · MIT 授權軟體 · CERN-OHL-P 授權硬體</span>
     <nav aria-label="頁尾">
-      <a href="/zh-Hant/#waitlist">加入候補名單</a>
+      <a href="/zh-Hant/#waitlist">加入等候名單</a>
       <a href="/zh-Hant/privacy/">隱私權政策</a>
       <a href="/zh-Hant/cookies/">Cookie 說明</a>
       <a href="/zh-Hant/cookies/" data-privacy-open>隱私權聲明</a>
@@ -135,5 +127,14 @@
 
 <script src="/js/main.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 語言: 繁體中文">Language</summary>
+        <ul>
+          <li><a href="/blog/usb-audio-and-reset-reminders/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/usb-audio-and-reset-reminders/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/usb-audio-and-reset-reminders/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
+          <li><a href="/ja/blog/usb-audio-and-reset-reminders/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

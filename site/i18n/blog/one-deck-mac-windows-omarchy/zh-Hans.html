@@ -1,37 +1,37 @@
 ---
-title: OpenWalkieTalkie v0.14.0：一台设备，支持 Mac、Windows 和 Omarchy · OpenWalkieTalkie
-description: Mac 应用成为设备的配套应用，服务也能在 Windows 和 Omarchy 上运行，Grok Bot 与 Claude Code、Codex 一起出现在设备上，固件安装由设备自己确认。
-heading: OpenWalkieTalkie v0.14.0：一台设备，支持 Mac、Windows 和 Omarchy
-kind: Mac 和 Windows 应用、Omarchy、服务和固件
+title: OpenWalkieTalkie v0.14.0：一台对讲机，连接 Mac、Windows 和 Omarchy · OpenWalkieTalkie
+description: Mac 软件成为对讲机的配套管理工具，服务也能在 Windows 和 Omarchy 上运行；Grok Bot 与 Claude Code、Codex 一起接入对讲机，固件安装由设备端确认。
+heading: OpenWalkieTalkie v0.14.0：一台对讲机，连接 Mac、Windows 和 Omarchy
+kind: Mac 和 Windows 应用程序、Omarchy、服务和固件
 date: 2026-11-16
 published: 2026-11-16T05:04:33Z
 updated: 2026-11-16T05:04:33Z
-summary: Mac 应用成为设备的配套应用，服务也能在 Windows 和 Omarchy 上运行，Grok Bot 与 Claude Code、Codex 一起出现在设备上，固件安装由设备自己确认。
-excerpt: Mac 应用成为设备的配套应用，服务也能在 Windows 和 Omarchy 上运行，Grok Bot 与 Claude Code、Codex 一起出现在设备上，固件安装由设备自己确认。
+summary: Mac 应用成为设备的配套应用，服务也能在 Windows 和 Omarchy 上运行，Grok Bot 与 Claude Code、Codex 一起出现在设备上，安装固件前，需要用户在对讲机上确认。
+excerpt: Mac 软件成为对讲机的配套管理工具，服务也能在 Windows 和 Omarchy 上运行；Grok Bot 与 Claude Code、Codex 一起接入对讲机，固件安装由设备端确认。
 lastmod: 2026-11-16
 navDocs: yes
 ---
-  <p>0.14.0 版是迄今为止最大的一次发布。Mac 应用成为设备的配套应用，服务也能在 Windows 和 Omarchy 上运行，Grok Bot 与 Claude Code、Codex 一起出现在设备上，固件安装由设备自己确认。</p>
-  <h2>设备的配套应用</h2>
-  <p>会话在设备上阅读和回答，会话内容不会进入应用的窗口。窗口负责照看设备和它周围的服务，共有五个页面：<strong>设备</strong>、<strong>页面与按键</strong>、<strong>集成</strong>、<strong>语音</strong>和<strong>服务</strong>。“集成”显示每个来源是否有数据进来，每个来源都有<strong>发送测试提问</strong>，以及<strong>设置</strong>或<strong>修复</strong>。“服务”提供<strong>检查安装状态</strong>、<strong>导出支持文件</strong>、各项更新和所有已安装的内容，并带有<strong>卸载</strong>。首次运行时，在你选择<strong>添加这些项目</strong>之前，什么都不会安装。</p>
-  <p>助手列表、卡片上的回答、指令输入框和“用量”页面已从窗口中移除，因为设备上都有。在会话卡片上按 ENTER，会把该会话所在的应用切到前台，不需要“自动化”权限。设置按设备分别保存，服务会自己检查更新，设备断开连接 10 分钟后服务停止收集数据。</p>
-  <h2>Grok Bot 与 Claude Code、Codex 一起加入</h2>
-  <p>Grok Bot 是 xAI 的团队协作应用，也是最新的集成。每个机器人在设备自己的<strong>Grok Bot</strong>页面上占一行，带有 Grok 标志。在某个机器人上按下按键，会发送到该机器人中某个例行任务的 Webhook。机器人在你的电脑上运行 <code>deckd grokbot say</code> 来回复：回复的简短版本显示在设备上并被朗读，完整回复留在机器人的聊天中。机器人也可以在设备上向你提问，并收到你的选择。</p>
-  <p>在 Mac 上添加机器人：打开<strong>集成 → Grok Bot → 机器人…</strong>，输入它的名称，然后选择<strong>复制提示词</strong>。在 Grok Bot 的聊天中把提示词发给该机器人，机器人会自己创建例行任务。把例行任务的<strong>POST 到</strong>网址和<strong>密钥</strong>复制回对话框，然后在 Grok Bot 的<strong>设置 → 电脑</strong>中允许机器人运行命令。机器人运行的命令可以向设备报告，但不能回答其他会话的卡片，也不能更改设置。</p>
+  <p>0.14.0 是迄今为止内容最多的一次更新。Mac 软件专注于管理对讲机和配套服务，服务也能在 Windows 和 Omarchy 上运行。除了 Claude Code 和 Codex，对讲机现在还能连接 Grok Bot；安装固件前，也需要在设备上亲自确认。</p>
+  <h2>专门管理对讲机的配套软件</h2>
+  <p>在对讲机上阅读和回复会话，软件窗口不接收会话正文。电脑端专门管理设备和服务，分为五页：<strong>Deck</strong>、<strong>Faces &amp; Keys</strong>、<strong>Integrations</strong>、<strong>Voice</strong>、<strong>Service</strong>。Integrations 显示各来源是否有数据接入，每项都提供 <strong>Send a Test Question</strong>，以及 <strong>Set Up</strong> 或 <strong>Repair</strong>。Service 包含 <strong>Check my setup</strong>、<strong>Export Support File</strong>、更新功能和已安装组件列表，并提供 <strong>Uninstall</strong>。首次运行时，只有选择 <strong>Add These</strong> 才会安装组件。</p>
+  <p>助手列表、卡片答复、指令输入框和 Usage 页面已从电脑端窗口移除，这些操作由对讲机承担。在会话卡片上按 ENTER，会将对应会话所属的应用切到前台，无需自动化权限。每台对讲机分别保存设置；服务会自行检查更新，并在设备断开十分钟后停止采集。</p>
+  <h2>Grok Bot 加入 Claude Code 和 Codex</h2>
+  <p>xAI 的队友应用 Grok Bot 是这次新增的集成。每个机器人在对讲机专属的 <strong>Grok Bot</strong> 页面中占一行，并显示 Grok 标志。向某个机器人按键说话，会将请求发送到它的一条自动化流程的 webhook。机器人在你的电脑上运行 <code>deckd grokbot say</code> 来回复：简短答复会显示在对讲机上并朗读，完整回答保留在机器人聊天中。机器人也能在对讲机上提问，再接收你的选择。</p>
+  <p>在 Mac 上添加机器人：打开 <strong>集成 → Grok Bot → 机器人…</strong>，输入机器人名称并选择 <strong>复制提示</strong>。将提示发送至 Grok Bot 的聊天中，机器人将创建自己的流程。复制该流程的 <strong>POST to</strong> URL 和 <strong>密钥</strong>，并将其粘贴回对话框，然后允许机器人在 Grok Bot 的 <strong>设置 → 电脑</strong> 中运行命令。机器人运行的命令可向对讲机报告，但无法响应其他会话的卡片或更改设置。</p>
   <h2>Windows 预览版</h2>
-  <p>服务和配套应用现在可以在 Windows 10 和 11（x64）上运行：“系统”页面、Claude Code、Claude Channels、Codex、“快捷键”页面、语音、Grok Bot、托盘图标、登录时启动和应用内更新。每个版本现在都包含一个未签名的 Windows ZIP 包。由于未签名，SmartScreen 会要求你选择<strong>更多信息 → 仍要运行</strong>，智能应用控制则会阻止它。<a href="/docs/windows/">Windows 安装指南</a>会一步步说明。</p>
+  <p>配套软件和服务现已支持 Windows 10、11（x64），包括 System 界面、Claude Code、Claude Channels、Codex、宏键盘、语音、Grok Bot、托盘图标、登录时启动和应用内更新。每次发布都会提供未签名的 Windows ZIP。由于未签名，SmartScreen 会显示 <strong>More info → Run anyway</strong> 提示，而 Smart App Control 会阻止运行。具体说明见 <a href="/docs/windows/">Windows 安装指南</a>。</p>
   <h2>Omarchy</h2>
-  <p>在 Omarchy（Hyprland）电脑上，Linux 服务和 Omarchy 桥接程序会把这台电脑上的 Claude Code、Codex 和 Kimi Code 会话放到设备上。Omarchy 页面可以切换窗口和工作区，语音指令会输入到该会话的终端中。装有 Superwhisper 时，由它识别你每次按键说的话；“快捷键”页面通过 uinput 输入，所以 Omarchy 的 Super 组合键可以使用。<a href="/docs/omarchy/">Omarchy 指南</a>介绍了构建和安装。</p>
-  <h2>设备自己确认更新</h2>
-  <p>从固件 0.14.0 起，只有在设备上按下 ENTER，固件更新才会开始。CANCEL、超时、语音和 API 都不会安装任何东西。从 0.13 到 0.14 的更新仍在应用中确认，处于恢复模式的设备会立即安装。</p>
-  <p>提问通知现在会接住下一次 ENTER，所以下一次按键打开提问，再下一次回答它。跳到新提问时，也不会打断正在运行的计时器、正在响的闹铃和游戏。</p>
-  <h2>需要了解的变化</h2>
+  <p>在 Omarchy（Hyprland）电脑上，Linux 服务和 Omarchy 桥接程序会把 Claude Code、Codex 和 Kimi Code 会话带到对讲机上。Omarchy 界面可切换窗口和工作区，语音指令会输入到对应会话的终端。已安装 Superwhisper 时，用它识别 PTT 录音；宏键盘通过 uinput 发送按键，因此也能使用 Omarchy 的 Super 组合键。构建和安装步骤见 <a href="/docs/omarchy/">Omarchy 指南</a>。</p>
+  <h2>在对讲机上确认固件更新</h2>
+  <p>从 0.14.0 固件开始，只有在对讲机上按 ENTER 确认，才会开始安装新固件。按 CANCEL、等待超时、使用语音或调用 API，都不会批准安装。从 0.13 升到 0.14 仍在软件中确认；已处于恢复模式的对讲机会直接开始安装。</p>
+  <p>问题提示现在会占用下一次 ENTER 按键：按一次打开问题，选好答案后再按一次即可提交。跳转到新问题时，也会保留正在运行的计时器、响铃的警报以及独立运行的游戏。</p>
+  <h2>关于新功能的说明</h2>
   <ul>
     <li>祖先进程限制现在也能识别原生安装的 Claude Code。在 Claude Code 或 Codex 中运行的管理类 <code>deckd</code> 命令会被拒绝；请在你自己的终端中运行。</li>
-    <li>本地 TCP 入口默认关闭，并将在下一个版本中移除。</li>
-    <li>设备“用量”页面上的 Claude 用量现在需要手动开启；设备的麦克风无法使用时，服务也不再改用 Mac 的麦克风录音。</li>
+    <li>本地 TCP 接口默认关闭，并将在下一个版本移除。</li>
+    <li>Usage（用量统计）中的 Claude 用量需要手动开启。对讲机麦克风无法使用时，服务也不再改用 Mac 麦克风录音。</li>
   </ul>
-  <h2>更新</h2>
-  <p>在 Mac 上，选择<strong>检查更新…</strong>，或安装已签名并经过公证的 <strong>0.14.0</strong> 应用，支持 Apple Silicon 和 Intel（macOS 13 或更高版本）。然后用 USB 连接设备，打开<strong>服务 → 更新</strong>，选择设备旁的<strong>检查更新</strong>，再选择<strong>查看…</strong>和<strong>安装</strong>。常规更新会保留设置和蓝牙配对。在 Windows 上，从发布页面下载 ZIP 包，并按照 Windows 指南操作。</p>
-  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.14.0" rel="noopener">在 GitHub 上获取 OpenWalkieTalkie v0.14.0 及校验和 →</a></p>
+  <h2>Update</h2>
+  <p>在 Mac 上选择<strong>检查更新…</strong>，或安装已签名并通过公证的 <strong>0.14.0</strong> 版应用，支持 Apple Silicon 和 Intel，需要 macOS 13 或更高版本。用 USB 连接对讲机，打开<strong>服务 → 更新</strong>，点击设备旁的<strong>检查</strong>，再依次点击<strong>查看…</strong>和<strong>安装</strong>。常规更新会保留设置和蓝牙配对。Windows 用户可从发布页下载 ZIP，并按 Windows 指南安装。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.14.0" rel="noopener"> 在 GitHub 下载 OpenWalkieTalkie v0.14.0 和校验和文件 →</a></p>
   <p class="post-back"><a href="/blog/">← 返回博客</a></p>

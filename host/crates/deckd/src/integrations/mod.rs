@@ -717,6 +717,31 @@ impl Receipts {
 /// argument parsing and a usage string; a second is already generous.
 const HOOK_CHECK_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// Linux can briefly refuse to execute a newly written helper while a
+/// concurrent fork still holds its inherited writable descriptor. CLOEXEC
+/// closes that descriptor at exec, not at fork (rust-lang/rust#114554).
+/// Retry only that spawn error, for at most one second; never turn a failed
+/// probe into success or retry a child that has already started.
+fn spawn_hook_check(command: &mut std::process::Command) -> std::io::Result<std::process::Child> {
+    #[cfg(target_os = "linux")]
+    {
+        let deadline = std::time::Instant::now() + Duration::from_secs(1);
+        loop {
+            match command.spawn() {
+                Err(error)
+                    if error.raw_os_error() == Some(libc::ETXTBSY)
+                        && std::time::Instant::now() < deadline =>
+                {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                result => return result,
+            }
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    command.spawn()
+}
+
 /// Does this binary carry the `hook` subcommand the files it writes invoke?
 ///
 /// Every hook this installer writes runs `deckd hook <claude|codex|
@@ -741,14 +766,15 @@ pub fn hook_subcommand_check(exe: &Path) -> Result<(), String> {
             exe.display()
         )
     };
-    let mut child = std::process::Command::new(exe)
-        .arg("hook")
-        .arg("--help")
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .map_err(|e| refusal(format!("it could not be run: {e}")))?;
+    let mut child = spawn_hook_check(
+        std::process::Command::new(exe)
+            .arg("hook")
+            .arg("--help")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null()),
+    )
+    .map_err(|e| refusal(format!("it could not be run: {e}")))?;
     // `wait()` has no timeout, so wait on a thread and kill what outlives it:
     // a hung binary must not hang `integrations install`.
     let (tx, rx) = std::sync::mpsc::channel();

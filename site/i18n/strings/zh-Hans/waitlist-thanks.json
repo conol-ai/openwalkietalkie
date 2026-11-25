@@ -1,10 +1,10 @@
 {
-  "waitlist-thanks.head.title1": "你已加入候补名单 · OpenWalkieTalkie",
-  "waitlist-thanks.head.meta-content1": "感谢你加入 OpenWalkieTalkie 硬件候补名单。",
-  "waitlist-thanks.content.h11": "你已加入候补名单",
-  "waitlist-thanks.content.p1": "硬件开售动态",
-  "waitlist-thanks.content.p2": "OpenWalkieTalkie 开售时，我们会发邮件通知你。如果你之前已经加入，你仍在同一份名单上。",
-  "waitlist-thanks.content.p3": "无需付款，也无需任何承诺。价格和发货日期确定后会公布。",
-  "waitlist-thanks.content.p4": "返回 OpenWalkieTalkie",
-  "waitlist-thanks.content.p5": "你可以随时发邮件至 <a href=\"mailto:privacy@cohdl.ai\">privacy@cohdl.ai</a> 退出名单。请阅读我们的<a href=\"/privacy/\">隐私政策</a>。"
+  "waitlist-thanks.head.title1": "已加入等候名单 · OpenWalkieTalkie",
+  "waitlist-thanks.head.meta-content1": "感谢加入 OpenWalkieTalkie 设备等候名单。",
+  "waitlist-thanks.content.h11": "你已加入等候名单",
+  "waitlist-thanks.content.p1": "等待设备开售的消息",
+  "waitlist-thanks.content.p2": "OpenWalkieTalkie 开售时，我们会发邮件告诉你。如果你之前已经加入，仍会保留在同一份名单中，不会重复登记。",
+  "waitlist-thanks.content.p3": "不用付款，也不代表必须购买。价格和发货时间确定后会公布。",
+  "waitlist-thanks.content.p4": "返回 OpenWalkieTalkie 首页",
+  "waitlist-thanks.content.p5": "你可以随时发邮件到 <a href=\"mailto:privacy@cohdl.ai\">privacy@cohdl.ai</a> 退出名单。查看我们的<a href=\"/privacy/\">隐私政策</a>。"
 }

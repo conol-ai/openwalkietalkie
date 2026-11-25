@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OpenWalkieTalkie v0.10.0：在设备上查看电脑资源 · OpenWalkieTalkie</title>
-<meta name="description" content="一个实时显示 Mac 的 CPU、内存、GPU 和存储空间的页面，更高效的像素小鸟渲染，以及更长的原创游戏音乐。" />
+<title>OpenWalkieTalkie v0.10.0：对讲机上的计算机资源 · OpenWalkieTalkie</title>
+<meta name="description" content="Mac 的实时 CPU、内存、GPU 和存储状态页面，更高效的 Flappy Bird 渲染，以及更长的原创小游戏音乐。" />
 <link rel="canonical" href="https://openwalkietalkie.org/zh-Hans/blog/computer-resources-on-the-deck/" />
 <link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/computer-resources-on-the-deck/" />
 <link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/computer-resources-on-the-deck/" />
@@ -14,8 +14,8 @@
 
 <meta property="og:type" content="article" />
 <meta property="og:site_name" content="OpenWalkieTalkie" />
-<meta property="og:title" content="OpenWalkieTalkie v0.10.0：在设备上查看电脑资源 · OpenWalkieTalkie" />
-<meta property="og:description" content="一个实时显示 Mac 的 CPU、内存、GPU 和存储空间的页面，更高效的像素小鸟渲染，以及更长的原创游戏音乐。" />
+<meta property="og:title" content="OpenWalkieTalkie v0.10.0：对讲机上的计算机资源 · OpenWalkieTalkie" />
+<meta property="og:description" content="Mac 的实时 CPU、内存、GPU 和存储状态页面，更高效的 Flappy Bird 渲染，以及更长的原创小游戏音乐。" />
 <meta property="og:url" content="https://openwalkietalkie.org/zh-Hans/blog/computer-resources-on-the-deck/" />
 <meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
 <meta name="twitter:card" content="summary_large_image" />
@@ -34,12 +34,13 @@
 <link rel="stylesheet" href="/css/style.css" />
 <link rel="stylesheet" href="/css/blog.css" />
 <script src="/js/i18n/zh-Hans.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 <!-- No optional analytics or advertising scripts. -->
 </head>
 <body>
 
-<a class="skip-link" href="#content">跳至正文</a>
+<a class="skip-link" href="#content">跳转到正文</a>
 
 <div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
 
@@ -50,26 +51,17 @@
       <span class="brand__text">OPEN WALKIE TALKIE</span>
     </a>
 
-    <nav class="nav__links" aria-label="栏目">
-      <a href="/zh-Hans/#pile">The Pile</a>
+    <nav class="nav__links" aria-label="页面章节">
+      <a href="/zh-Hans/#pile">窗口太多了</a>
       <a href="/zh-Hans/#features">功能</a>
-      <a href="/zh-Hans/#demo">试用</a>
-      <a href="/zh-Hans/#faces">页面</a>
-      <a href="/zh-Hans/#blueprint">设计图纸</a>
+      <a href="/zh-Hans/#demo">试试看</a>
+      <a href="/zh-Hans/#faces">功能页面</a>
+      <a href="/zh-Hans/#blueprint">设计蓝图</a>
       <a href="/zh-Hans/blog/" aria-current="true">博客</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="语言: 简体中文">简体中文</summary>
-        <ul>
-          <li><a href="/blog/computer-resources-on-the-deck/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/blog/computer-resources-on-the-deck/" hreflang="zh-Hans" lang="zh-Hans" aria-current="true">简体中文</a></li>
-          <li><a href="/zh-Hant/blog/computer-resources-on-the-deck/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
-          <li><a href="/ja/blog/computer-resources-on-the-deck/" hreflang="ja" lang="ja">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
-    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换日间和夜间主题" aria-pressed="false">
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换日间与夜间主题" aria-pressed="false">
       <span class="theme-toggle__track" aria-hidden="true">
         <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
         <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
@@ -86,53 +78,62 @@
 
 <main class="blog-main" id="content">
 <header class="post-head">
-  <p class="section-kicker">博客 · 更新说明</p>
-  <h1>OpenWalkieTalkie v0.10.0：在设备上查看电脑资源</h1>
+  <p class="section-kicker">博客 · 发布说明</p>
+  <h1>OpenWalkieTalkie v0.10.0：对讲机上的计算机资源</h1>
   <p class="post-meta"><span>2026年10月26日</span><span>应用和固件更新</span></p>
 </header>
 <article class="post-body">
-  <p>0.10.0 版在订阅“用量”旁边，又给设备加了一个有用的页面：<strong>系统</strong>，实时显示正在干活的那台电脑。不用再开一个窗口挡住编辑器，就能查看 CPU 负载、内存、GPU 负载和剩余存储空间。</p>
-  <figure class="post-figure" style="max-width:480px;margin-left:auto;margin-right:auto"><img src="/assets/screens/system-status-0100.png" alt="设备上的“系统状态”，显示 CPU、内存、GPU 和剩余存储空间的仪表" width="480" height="480" loading="lazy" /><figcaption>真实的固件界面，用示意性的演示数据渲染。</figcaption></figure>
-  <h2>四项读数，每两秒一次</h2>
-  <p>Mac 上的服务会采样 CPU 总使用率、已用和总内存、图形处理器使用率，以及可写启动卷的剩余和总空间。CPU 按所有核心归一化。内存包括应用内存、联动内存和压缩内存。对于有多个图形加速器的 Mac，GPU 仪表显示最忙的那一个。</p>
-  <p>存储百分比表示<strong>剩余空间</strong>。空间不足时颜色会变化。缺少的计数显示<strong>不可用</strong>，超过十秒的读数会变灰并显示<strong>已过期</strong>，主机断开时显示<strong>离线</strong>。第一个 CPU 百分比需要两次采样。</p>
-  <p>读数每两秒送达一次，但没有变化的仪表不会重绘。这是只在设备上的页面；订阅额度仍在“用量”中，Mac 应用也没有新增页面。</p>
-  <h2>在哪里找到它</h2>
-  <p>在全新的布局中，“系统”排在“用量”后面。更新时会保留你已保存的布局，所以请通过<strong>连按两次 Shift → + → 系统 → Enter</strong>添加它。固件和 Mac 上的服务都需要更新。如果旧的服务还在运行，请选择<strong>服务 → 重新启动</strong>。</p>
-  <h2>像素小鸟的显示工作更少</h2>
-  <p>像素小鸟现在只刷新小鸟、管道和分数所在的区域，而不是在每个模拟步骤都让整个屏幕失效。显示路径会正确地打包局部矩形，包括旋转安装的 Rev A 和 Rev B 屏幕，帧计时器也会把已经花在渲染上的时间算进去。</p>
-  <p>一个包含多根管道和回收管道的 360 帧渲染测试中，传输的像素<strong>平均减少 51.5%</strong>。这是传输面积的测量，不是设备上的帧率承诺。局部帧在分数变化、暂停和游戏结束时都与完整重绘做了比对。TE 同步仍然关闭，所以这并不保证动画不撕裂。</p>
-  <h2>有发展空间的音乐</h2>
-  <p>三首原创合成曲现在各有 <strong>48 小节</strong>：像素小鸟 96 秒，贪吃蛇 115.2 秒，雷电 76.8 秒。前奏引出主题、应答旋律、较安静的段落和再现，低音型、打击乐和脉冲音色也在变化。</p>
-  <p>暂停或重玩同一个游戏，会保留音乐的进度。换游戏则从那个游戏的主题开始。声音仍由你通过<strong>游戏 → 声音 → Enter</strong>控制：关闭、仅音效，或音乐和音效。</p>
+  <p>0.10.0 在订阅用量统计之外新增了 <strong>System（系统）</strong>界面，实时显示正在工作的电脑状态。查看 CPU 负载、内存、GPU 负载和剩余存储空间，不必再打开一个窗口遮住编辑器。</p>
+  <figure class="post-figure" style="max-width:480px;margin-left:auto;margin-right:auto"><img src="/assets/screens/system-status-0100.png" alt="对讲机上的系统状态页面，包含 CPU、内存、GPU 和可用存储的仪表" width="480" height="480" loading="lazy" /><figcaption>实际固件界面，使用示例数据进行渲染。</figcaption></figure>
+  <h2>四项指标，每两秒更新一次</h2>
+  <p>Mac 服务会采集 CPU 总使用率、已用及总内存、GPU 使用率，以及可写启动卷的剩余和总空间。CPU 数据按全部核心归一化；内存包括应用内存、联动内存（必须驻留在 RAM 中）和压缩内存。Mac 有多个图形加速器时，GPU 指标显示负载最高的那个。</p>
+  <p>存储百分比表示<strong>剩余空间</strong>，空间不足时会改变颜色。无法获取的指标显示 <strong>Not available</strong>；超过十秒未更新的读数会变灰，并标为 <strong>STALE</strong>；与电脑断开连接时显示 <strong>OFFLINE</strong>。CPU 使用率需要采样两次才能算出首个结果。</p>
+  <p>数据每两秒更新一次，数值没有变化的区域不会重绘。System 只出现在对讲机上，Mac 软件没有新增页面；订阅额度仍在 Usage（用量统计）中查看。</p>
+  <h2>如何找到它</h2>
+  <p>在全新的默认布局中，System 排在 Usage 后面。更新会保留已有布局；要添加它，按<strong>双击 Shift → + → System → Enter</strong>操作。固件和 Mac 服务都需要更新。如果旧服务仍在运行，点击 <strong>Service → Restart</strong>。</p>
+  <h2>像素小鸟减少了屏幕重绘</h2>
+  <p>像素小鸟现在只刷新小鸟、管道和分数所在的区域，不再每推进一步游戏逻辑就让整屏重新绘制。显示管线已能正确打包局部矩形区域，兼容旋转安装的 Rev A 和 Rev B 屏幕；帧计时也会扣除已经花在渲染上的时间。</p>
+  <p>在包含多个管道及管道复用的 360 帧渲染测试中，<strong>平均传输的像素量减少了 51.5%</strong>。这个数字衡量的是传输区域大小，并不代表设备上的帧率提升。测试会在得分变化、暂停和游戏结束等状态下，将局部重绘与完整重绘进行比较。TE 同步仍未启用，因此不保证动画完全没有画面撕裂。</p>
+  <h2>更长的音乐，有了完整的起承转合</h2>
+  <p>三款游戏的原创合成音乐现在每首都有 <strong>48 小节</strong>：像素小鸟 96 秒、贪吃蛇 115.2 秒、雷电 76.8 秒。前奏之后是主题、与主题呼应的旋律和较安静的段落，最后回到主题；低音、打击乐和脉冲音色也随之变化。</p>
+  <p>暂停或重玩同一款游戏时，会保留音乐的播放进度；换一个游戏，才从新游戏的主题音乐开始。通过 <strong>Arcade → Sound → Enter</strong> 选择 Off（关闭）、SFX only（仅音效）或 Music + SFX（音乐和音效）。</p>
   <h2>更新到 0.10.0</h2>
-  <p>安装已签名并经过公证的 Mac 应用（Apple Silicon 或 Intel），或选择<strong>检查更新</strong>。需要 macOS 13 或更高版本。通过 USB-C 连接设备，然后选择<strong>服务 → 更新 → 检查固件更新</strong>。应用、服务和固件都会显示 0.10.0。</p>
-  <p>普通的应用程序更新会保留设置和蓝牙配对。旧的引导程序沿用现有的引导式迁移。单独的出厂 ZIP 用于生产，会覆盖设置和配对。</p>
-  <p>0.10.0 固件已在 Rev A 上通过 USB 烧录、校验并重启，Mac 上的采样器返回了全部四项指标。自动检查覆盖了消息校验、兼容性、时效、渲染、模拟计时和音乐连续性。这项功能没有在 Rev B 硬件上重新测试，也没有重新测试实际断电后的恢复。</p>
-  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.10.0" rel="noopener">在 GitHub 获取 OpenWalkieTalkie v0.10.0、固件、出厂镜像和校验和 →</a></p>
+  <p>安装已签名并通过公证的 Mac 软件，按机型选择 Apple Silicon 或 Intel 版；也可以选择 <strong>Check for Updates（检查更新）</strong>。需要 macOS 13 及以上。通过 USB-C 连接对讲机，再打开 <strong>Service → Updates → Check firmware</strong>。软件、服务和固件的版本应都显示为 0.10.0。</p>
+  <p>正常应用更新保留设置和蓝牙配对。较旧的引导程序使用现有的引导迁移流程。单独的工厂 ZIP 文件用于制造用途，会覆盖现有设置和配对。</p>
+  <p>已在 Rev A 上通过 USB 刷入并验证 0.10.0 固件，随后重启了设备，Mac 采样器返回了全部四项指标。自动化检查涵盖消息验证、兼容性、数据时效性、渲染、模拟时序和音乐连续性。Rev B 硬件和物理断电恢复未在此功能中重新测试。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.10.0" rel="noopener"> 获取 OpenWalkieTalkie v0.10.0、固件、工厂镜像和校验和 GitHub → </a></p>
   <p class="post-back"><a href="/zh-Hans/blog/">← 返回博客</a></p>
 </article>
 </main>
 
 <footer class="footer--mini">
   <div class="inner">
-    <span>OpenWalkieTalkie · COHDL 项目 · MIT 许可的软件 · CERN-OHL-P 许可的硬件</span>
+    <span>OpenWalkieTalkie · 一个 COHDL 项目 · MIT 软件 · CERN-OHL-P 硬件</span>
     <nav aria-label="页脚">
-      <a href="/zh-Hans/#waitlist">加入候补名单</a>
+      <a href="/zh-Hans/#waitlist">加入等候名单</a>
       <a href="/zh-Hans/privacy/">隐私政策</a>
       <a href="/zh-Hans/cookies/">Cookie 说明</a>
-      <a href="/zh-Hans/cookies/" data-privacy-open>隐私声明</a>
+      <a href="/zh-Hans/cookies/" data-privacy-open>隐私说明</a>
       <a href="/zh-Hans/">首页</a>
-      <a href="/zh-Hans/#demo">试用</a>
+      <a href="/zh-Hans/#demo">试试看</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
       <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
-      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="在 Discord 上加入 CoHDL 和 OpenWalkieTalkie 社区">Discord</a>
-      <a href="/zh-Hans/blog/feed.xml">订阅源</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="加入 CoHDL 和 OpenWalkieTalkie 的 Discord 社区">Discord</a>
+      <a href="/zh-Hans/blog/feed.xml">订阅更新</a>
     </nav>
   </div>
 </footer>
 
 <script src="/js/main.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 语言: 简体中文">Language</summary>
+        <ul>
+          <li><a href="/blog/computer-resources-on-the-deck/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/computer-resources-on-the-deck/" hreflang="zh-Hans" lang="zh-Hans" aria-current="true">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/computer-resources-on-the-deck/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/blog/computer-resources-on-the-deck/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

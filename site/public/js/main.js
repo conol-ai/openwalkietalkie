@@ -12,7 +12,21 @@
   var clamp = function (v, a, b) { return v < a ? a : v > b ? b : v; };
   // Copy in other languages comes from js/i18n/<lang>.js, built from i18n/strings/.
   var STRINGS = window.OWT_STRINGS || {};
-  var t = function (s) { var out = Object.prototype.hasOwnProperty.call(STRINGS, s) ? STRINGS[s] : s; for (var i = 1; i < arguments.length; i++) out = out.split('{' + (i - 1) + '}').join(arguments[i]); return out; };
+  var t = function (s) { var out = Object.prototype.hasOwnProperty.call(STRINGS, s) ? STRINGS[s] : window.OWTI18n ? window.OWTI18n.t(s) : s; for (var i = 1; i < arguments.length; i++) out = out.split('{' + (i - 1) + '}').join(arguments[i]); return out; };
+
+  // Keep the current section when following the same page in another language.
+  document.addEventListener('click', function (event) {
+    // Some templates render the edge switcher after this script.
+    var link = event.target.closest && event.target.closest('.lang-switch a');
+    if (link) link.hash = window.location.hash;
+  });
+  document.addEventListener('keydown', function (event) {
+    if (event.key !== 'Escape') return;
+    $$('.lang-switch[open]').forEach(function (menu) {
+      menu.open = false;
+      $('summary', menu).focus();
+    });
+  });
 
   /* ------------------------------------------------------------
      1. THEME (day / night) — persisted, crossfaded via CSS
@@ -262,7 +276,7 @@
     var text = $('#featPttText');
     var readout = $('#featPttReadout');
     var wave = $('#featPttWave');
-    var LINE = 'Refactor the auth module, then run the test suite.';
+    var LINE = t('Refactor the auth module, then run the test suite.');
     var held = false, t0 = 0, typing = null, closeTimer = null;
 
     if (wave) for (var i = 0; i < 22; i++) {
@@ -351,6 +365,7 @@
 
     /* ---- host log ---- */
     function log(dir, text, cls) {
+      text = t(text);
       if (!logEl) return;
       var li = document.createElement('li');
       li.className = (dir === 'in' ? 'in' : 'out') + (cls ? ' ' + cls : '');
@@ -359,7 +374,7 @@
       li.appendChild(b); li.appendChild(s);
       logEl.appendChild(li);
       while (logEl.children.length > 9) logEl.removeChild(logEl.firstChild);
-      if (lastEv) lastEv.textContent = (dir === 'in' ? 'HOST → DECK · ' : 'DECK → HOST · ') + text;
+      if (lastEv) lastEv.textContent = t(dir === 'in' ? 'HOST → DECK' : 'DECK → HOST') + ' · ' + text;
     }
 
     /* ---- render: roster ---- */
@@ -371,7 +386,7 @@
         var li = document.createElement('li');
         li.className = 'agent' + (i === hl ? ' is-hl' : '') + (i === chan ? ' is-chan' : '');
         li.innerHTML = '<span class="agent__dot dot--' + a.state + '"></span><span><span class="agent__name">' +
-          a.kind + ' · ' + a.name + '</span><br><span class="agent__sub">' + a.sub + '</span></span>';
+          a.kind + ' · ' + a.name + '</span><br><span class="agent__sub">' + t(a.sub) + '</span></span>';
         li.addEventListener('click', function () {
           if (hl === i) { openChannel(); } else { hl = i; chan = i; renderRoster(); log('out', 'channel ' + (i + 1) + ' · ' + a.kind + ' · ' + a.name); audio.blip(560, 0.04); }
         });
@@ -387,12 +402,12 @@
       var a = agents[chan];
       if (chanWho) chanWho.textContent = a.kind + ' · ' + a.name;
       if (chanState) chanState.textContent = STATE_NAME[a.state] + (a.age ? ' · ' + a.age + 'm' : '');
-      if (chanReply) chanReply.textContent = a.q ? a.q.text : a.ready ? a.ready.text : a.sub;
+      if (chanReply) chanReply.textContent = t(a.q ? a.q.text : a.ready ? a.ready.text : a.sub);
       if (chanPending) {
         chanPending.innerHTML = '';
         if (a.q && a.q.choices.length === 2) {
           a.q.choices.forEach(function (c, i) {
-            var d = document.createElement('div'); d.className = 'choice'; d.innerHTML = '<i>' + (i + 1) + '</i>' + c;
+            var d = document.createElement('div'); d.className = 'choice'; d.innerHTML = '<i>' + (i + 1) + '</i>' + t(c);
             chanPending.appendChild(d);
           });
         } else if (a.q) {
@@ -409,11 +424,11 @@
       if (!cardChoices) return;
       cardChoices.innerHTML = '';
       var items = a.q ? a.q.choices : a.ready ? a.ready.steps : [];
-      if (cardQ) cardQ.textContent = a.q ? a.q.text : a.ready ? a.ready.text : '';
+      if (cardQ) cardQ.textContent = t(a.q ? a.q.text : a.ready ? a.ready.text : '');
       items.forEach(function (c, i) {
         var d = document.createElement('div');
         d.className = 'choice' + (i === choice ? ' is-hl' : '') + (a.q && a.q.rec === i && !sent ? ' is-rec' : '') + (sent && i === choice ? ' is-sent' : '');
-        d.innerHTML = '<i>' + (i + 1) + '</i>' + c;
+        d.innerHTML = '<i>' + (i + 1) + '</i>' + t(c);
         d.addEventListener('click', function () { choice = i; renderCard(); confirmCard(); });
         cardChoices.appendChild(d);
       });
@@ -436,7 +451,7 @@
         var d = document.createElement('button'); d.type = 'button';
         d.className = 'mkey' + (!m ? ' mkey--empty' : '');
         var small = document.createElement('small'); small.textContent = m ? m[1] : '';
-        var label = document.createElement('span'); label.textContent = m ? m[0] : t('+ assign');
+        var label = document.createElement('span'); label.textContent = m ? t(m[0]) : t('+ assign');
         d.append(small, label);
         d.addEventListener('click', function () { if (!m || editingMacros || shiftHeld) openEditor(i); else pressMacro(i, 'touch'); });
         mgrid.appendChild(d); mkeys.push(d);
@@ -445,7 +460,7 @@
     function openEditor(i) {
       editingSlot = i;
       $('#macroEditorTitle').textContent = t('EDIT KEY {0}', i + 1);
-      $('#macroLabel').value = MACROS[i] ? MACROS[i][0] : '';
+      $('#macroLabel').value = MACROS[i] ? t(MACROS[i][0]) : '';
       $('#macroShortcut').value = MACROS[i] ? MACROS[i][1] : '';
       editor.hidden = false; $('#macroLabel').focus();
     }
@@ -466,7 +481,7 @@
       if (!el) return;
       if (!m) { openEditor(i); return; }
       el.classList.add('is-down'); later(function () { el.classList.remove('is-down'); }, 160);
-      log('out', 'Preview · ' + m[0] + ' → ' + m[1] + ' (' + how + ')');
+      log('out', t('Preview · {0} → {1} ({2})', t(m[0]), m[1], t(how)));
       audio.blip(600 + i * 40, 0.05);
     }
     renderMacros();
@@ -500,7 +515,7 @@
       if (!chipsEl) return;
       chipsEl.replaceChildren();
       WS.forEach(function (w, i) {
-        var button = document.createElement('button'); button.type = 'button'; button.className = 'chip' + (i === wsHl ? ' is-on' : ''); button.textContent = 'ws ' + w;
+        var button = document.createElement('button'); button.type = 'button'; button.className = 'chip' + (i === wsHl ? ' is-on' : ''); button.textContent = t('ws ' + w);
         button.setAttribute('aria-pressed', String(i === wsHl));
         button.addEventListener('click', function () { wsHl = i; renderWs(); log('out', 'Workspace ' + w + ' selected'); audio.blip(540, 0.04); });
         chipsEl.appendChild(button);
@@ -508,8 +523,8 @@
       var rows = $('#wsWindows'); rows.replaceChildren();
       WINDOWS[wsHl].forEach(function (name) {
         var li = document.createElement('li'), button = document.createElement('button');
-        button.type = 'button'; button.className = 'window-button'; button.textContent = name;
-        button.addEventListener('click', function () { $$('.window-button', rows).forEach(function (b) { b.classList.remove('is-focused'); }); button.classList.add('is-focused'); $('#wsStatus').textContent = t('Focused · {0}', name); log('out', 'Window focus · ' + name); });
+        button.type = 'button'; button.className = 'window-button'; button.textContent = t(name);
+        button.addEventListener('click', function () { $$('.window-button', rows).forEach(function (b) { b.classList.remove('is-focused'); }); button.classList.add('is-focused'); $('#wsStatus').textContent = t('Focused · {0}', t(name)); log('out', 'Window focus · ' + name); });
         li.appendChild(button); rows.appendChild(li);
       });
       $('#wsStatus').textContent = t('Workspace {0} · {1} windows', WS[wsHl], WINDOWS[wsHl].length);
@@ -556,7 +571,7 @@
       $('#demoEyebrow').textContent = '0' + (face + 1) + ' / ' + t(name);
       $('#demoTitle').textContent = GUIDES[face][0]; $('#demoDescription').textContent = GUIDES[face][1]; $('#demoTip').textContent = GUIDES[face][2];
       if (title) title.textContent = name === 'AGENTS' && view !== 'roster' ? (agents[chan].kind + ' · ' + agents[chan].name).toUpperCase() : t(name);
-      if (tag) { tag.textContent = TAGS[name]; tag.classList.toggle('is-demo', name === 'SYSTEM' || name === 'USAGE'); }
+      if (tag) { tag.textContent = t(TAGS[name]); tag.classList.toggle('is-demo', name === 'SYSTEM' || name === 'USAGE'); }
       if (hint) hint.innerHTML = name === 'AGENTS' ? HINTS[view] : HINTS[name];
       $$('[data-view]', deckEl).forEach(function (v) { v.hidden = v.getAttribute('data-view') !== view; });
       renderRoster();
@@ -617,11 +632,11 @@
       sent = true; renderCard();
       if (!a.q && !a.ready) { sent = false; return; }
       var label = a.q ? a.q.choices[choice] : a.ready.steps[choice];
-      log('out', 'answer { agent: ' + (chan + 1) + ', choice: ' + (choice + 1) + ' } "' + label + '"');
+      log('out', 'answer { agent: ' + (chan + 1) + ', choice: ' + (choice + 1) + ' } "' + t(label) + '"');
       audio.blip(880, 0.08);
       later(function () {
         log('in', 'card cleared · ' + a.kind + ' · ' + a.name + ' is working', 'host');
-        a.state = 'w'; a.q = null; a.ready = null; a.age = 0; a.sub = 'Running "' + label.toLowerCase() + '" · 0s';
+        a.state = 'w'; a.q = null; a.ready = null; a.age = 0; a.sub = t('Running "{0}" · 0s', t(label));
         if (face === 0 && chan === agents.indexOf(a)) view = 'channel'; sent = false; paint();
         audio.blip(520, 0.05);
       }, 900);
@@ -665,7 +680,7 @@
       if (pttTyping) pttTyping.stop();
       if (pttWho) pttWho.textContent = a.kind + ' · ' + a.name;
       if (pttEl) pttEl.classList.add('is-on');
-      if (pttText) pttTyping = typer(pttText, LINES[lineIdx]);
+      if (pttText) pttTyping = typer(pttText, t(LINES[lineIdx]));
       log('out', 'ptt down · LISTENING · ' + a.kind + ' · ' + a.name);
       audio.blip(520, 0.05);
     }
@@ -851,7 +866,7 @@
     button.addEventListener('click', function () {
       if (!VIDEO_ID) {
         var label = $('.tv__play-label', button);
-        if (label) label.innerHTML = '<span class="blink" aria-hidden="true">▮</span> NO TAPE YET';
+        if (label) label.innerHTML = '<span class="blink" aria-hidden="true">▮</span> ' + t('NO TAPE YET');
         window.OWT_blip && window.OWT_blip(220, 0.08, 'sawtooth');
         return;
       }

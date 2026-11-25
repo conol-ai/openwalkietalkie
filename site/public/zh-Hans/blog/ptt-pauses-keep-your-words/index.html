@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OpenWalkieTalkie v0.11.1：停顿时保留你说过的话 · OpenWalkieTalkie</title>
-<meta name="description" content="按住 PTT 时可以停顿后继续说。使用 Apple 本地运行的语音识别时，之前说的句子现在会保留在预览和最终转写中。" />
+<title>OpenWalkieTalkie v0.11.1：说话停顿，也不丢前文 · OpenWalkieTalkie</title>
+<meta name="description" content="按住 PTT，说到一半可以停下来想想再继续。使用 Apple 本地识别时，之前说过的话现在会保留在预览和最终转写结果中。" />
 <link rel="canonical" href="https://openwalkietalkie.org/zh-Hans/blog/ptt-pauses-keep-your-words/" />
 <link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/ptt-pauses-keep-your-words/" />
 <link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/ptt-pauses-keep-your-words/" />
@@ -14,8 +14,8 @@
 
 <meta property="og:type" content="article" />
 <meta property="og:site_name" content="OpenWalkieTalkie" />
-<meta property="og:title" content="OpenWalkieTalkie v0.11.1：停顿时保留你说过的话 · OpenWalkieTalkie" />
-<meta property="og:description" content="按住 PTT 时可以停顿后继续说。使用 Apple 本地运行的语音识别时，之前说的句子现在会保留在预览和最终转写中。" />
+<meta property="og:title" content="OpenWalkieTalkie v0.11.1：说话停顿，也不丢前文 · OpenWalkieTalkie" />
+<meta property="og:description" content="按住 PTT，说到一半可以停下来想想再继续。使用 Apple 本地识别时，之前说过的话现在会保留在预览和最终转写结果中。" />
 <meta property="og:url" content="https://openwalkietalkie.org/zh-Hans/blog/ptt-pauses-keep-your-words/" />
 <meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
 <meta name="twitter:card" content="summary_large_image" />
@@ -34,12 +34,13 @@
 <link rel="stylesheet" href="/css/style.css" />
 <link rel="stylesheet" href="/css/blog.css" />
 <script src="/js/i18n/zh-Hans.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 <!-- No optional analytics or advertising scripts. -->
 </head>
 <body>
 
-<a class="skip-link" href="#content">跳至正文</a>
+<a class="skip-link" href="#content">跳转到正文</a>
 
 <div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
 
@@ -50,27 +51,18 @@
       <span class="brand__text">OPEN WALKIE TALKIE</span>
     </a>
 
-    <nav class="nav__links" aria-label="栏目">
-      <a href="/zh-Hans/#pile">The Pile</a>
+    <nav class="nav__links" aria-label="页面章节">
+      <a href="/zh-Hans/#pile">窗口太多了</a>
       <a href="/zh-Hans/#features">功能</a>
-      <a href="/zh-Hans/#demo">试用</a>
-      <a href="/zh-Hans/#faces">页面</a>
-      <a href="/zh-Hans/#blueprint">设计图纸</a>
+      <a href="/zh-Hans/#demo">试试看</a>
+      <a href="/zh-Hans/#faces">功能页面</a>
+      <a href="/zh-Hans/#blueprint">设计蓝图</a>
       <a href="/zh-Hans/docs/">文档</a>
       <a href="/zh-Hans/blog/" aria-current="true">博客</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="语言: 简体中文">简体中文</summary>
-        <ul>
-          <li><a href="/blog/ptt-pauses-keep-your-words/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/blog/ptt-pauses-keep-your-words/" hreflang="zh-Hans" lang="zh-Hans" aria-current="true">简体中文</a></li>
-          <li><a href="/zh-Hant/blog/ptt-pauses-keep-your-words/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
-          <li><a href="/ja/blog/ptt-pauses-keep-your-words/" hreflang="ja" lang="ja">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
-    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换日间和夜间主题" aria-pressed="false">
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换日间与夜间主题" aria-pressed="false">
       <span class="theme-toggle__track" aria-hidden="true">
         <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
         <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
@@ -87,44 +79,53 @@
 
 <main class="blog-main" id="content">
 <header class="post-head">
-  <p class="section-kicker">博客 · 更新说明</p>
-  <h1>OpenWalkieTalkie v0.11.1：停顿时保留你说过的话</h1>
+  <p class="section-kicker">博客 · 发布说明</p>
+  <h1>OpenWalkieTalkie v0.11.1：说话停顿，也不丢前文</h1>
   <p class="post-meta"><span>2026年10月28日</span><span>Mac 应用和服务补丁</span></p>
 </header>
 <article class="post-body">
-  <p>你应该可以在句子之间想一想，而不丢掉已经说过的话。0.11.1 版修复了一个听写问题：按住 PTT 时停顿一下，消息里可能只剩下最后一句。</p>
-  <h2>按住一次，句句都在</h2>
-  <p>使用 Apple 本地运行的语音识别时，停顿可能让一句话结束，而录音仍在继续。下一个识别结果可能只包含新的这一句。服务以前把这个结果当成了整段转写的替换。</p>
-  <p>现在，在按住 PTT 的整个过程中，服务会保留已经完成的句子。实时预览包含之前的句子，松开按键时发送完整的转写。修正仍会替换正在识别的词，有意重复的句子也会保留。</p>
-  <h2>用真实的停顿测试</h2>
-  <p>我们用三句合成的英语、每句之间停顿三秒，重现了丢字问题。修复后，用 Apple 本地运行的识别器跑同样的场景，预览和最终结果都保留了全部三句。回归测试还覆盖了修正的词、重复的句子、累积的结果和空的最终结果。</p>
+  <p>你可以在句子之间思考，而不会丢失之前所说的内容。版本 0.11.1 修复了一个语音识别 bug，即在按住 PTT 停顿时，可能会只保留最后一句话。</p>
+  <h2>一次按住，保留说过的每一句</h2>
+  <p>借助 Apple 的设备端识别，停顿可以完成一句话，同时录音仍在继续。下一次识别结果可能只包含新句子。服务之前会将该结果视为整个转录的替换。</p>
+  <p>服务现在会保留整个 PTT 按住期间完成的句子。实时预览中包含之前的句子，松开按钮后会发送完整转录。更正仍会替换正在识别的单词，且故意重复的短语会被保留。</p>
+  <h2>已用真实停顿进行测试</h2>
+  <p>我们用三个合成的英文句子，中间间隔三秒停顿，重现了该问题。通过 Apple 设备端识别器运行相同场景并应用修复后，三个句子均在预览和最终结果中得以保留。回归测试也覆盖了更正的单词、重复短语、累积结果以及空最终结果的情况。</p>
   <h2>更新 Mac 应用</h2>
-  <p>选择<strong>检查更新</strong>，或安装已签名并经过公证的 0.11.1 版 Mac 应用（Apple Silicon 或 Intel）。如果服务仍显示旧版本，请选择<strong>服务 → 重新启动</strong>。需要 macOS 13 或更高版本。</p>
-  <p>这个修复在 Mac 上的服务中。固件仍为 <strong>0.11.0</strong>；这个补丁不需要更新固件或引导程序。你的设置和蓝牙配对都会保留。</p>
-  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.11.1" rel="noopener">在 GitHub 上获取 OpenWalkieTalkie v0.11.1 及校验和 →</a></p>
+  <p>选择 <strong> Check for Updates </strong>，或安装已签名、已公证的 0.11.1 Mac 应用程序，适用于 Apple Silicon 或 Intel。如果服务仍显示旧版本，请选择 <strong> Service → Restart </strong>。需要 macOS 13 或更高版本。</p>
+  <p>此修复方案包含在 Mac 服务中。固件仍为 <strong> 0.11.0 </strong>；此补丁无需固件或引导程序更新。你的设置和蓝牙配对将被保留。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.11.1" rel="noopener"> 在 GitHub 下载 OpenWalkieTalkie v0.11.1 和校验和文件 → </a></p>
   <p class="post-back"><a href="/zh-Hans/blog/">← 返回博客</a></p>
 </article>
 </main>
 
 <footer class="footer--mini">
   <div class="inner">
-    <span>OpenWalkieTalkie · COHDL 项目 · MIT 许可的软件 · CERN-OHL-P 许可的硬件</span>
+    <span>OpenWalkieTalkie · 一个 COHDL 项目 · MIT 软件 · CERN-OHL-P 硬件</span>
     <nav aria-label="页脚">
-      <a href="/zh-Hans/#waitlist">加入候补名单</a>
+      <a href="/zh-Hans/#waitlist">加入等候名单</a>
       <a href="/zh-Hans/privacy/">隐私政策</a>
       <a href="/zh-Hans/cookies/">Cookie 说明</a>
-      <a href="/zh-Hans/cookies/" data-privacy-open>隐私声明</a>
+      <a href="/zh-Hans/cookies/" data-privacy-open>隐私说明</a>
       <a href="/zh-Hans/">首页</a>
-      <a href="/zh-Hans/#demo">试用</a>
+      <a href="/zh-Hans/#demo">试试看</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
       <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
-      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="在 Discord 上加入 CoHDL 和 OpenWalkieTalkie 社区">Discord</a>
-      <a href="/zh-Hans/blog/feed.xml">订阅源</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="加入 CoHDL 和 OpenWalkieTalkie 的 Discord 社区">Discord</a>
+      <a href="/zh-Hans/blog/feed.xml">订阅更新</a>
     </nav>
   </div>
 </footer>
 
 <script src="/js/main.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 语言: 简体中文">Language</summary>
+        <ul>
+          <li><a href="/blog/ptt-pauses-keep-your-words/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/ptt-pauses-keep-your-words/" hreflang="zh-Hans" lang="zh-Hans" aria-current="true">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/ptt-pauses-keep-your-words/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/blog/ptt-pauses-keep-your-words/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

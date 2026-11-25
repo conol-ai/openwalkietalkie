@@ -87,15 +87,6 @@
       <a href="/docs/">Docs</a>
       <a href="/blog/">Blog</a>
       <a href="#blueprint">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="Language: English">English</summary>
-        <ul>
-          <li><a href="/" hreflang="en" lang="en" aria-current="true">English</a></li>
-          <li><a href="/zh-Hans/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
-          <li><a href="/zh-Hant/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
-          <li><a href="/ja/" hreflang="ja" lang="ja">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle day and night theme" aria-pressed="false">
@@ -414,7 +405,7 @@
 
       <!-- ---- the host console: what deckd sees ---- -->
       <div class="demo-companion">
-        <div class="demo-guide"><p class="demo-guide__eyebrow" id="demoEyebrow">01 / AGENTS</p><h3 id="demoTitle">A direct line to your agents.</h3><p id="demoDescription">Pick a session, open its question card, or hold PTT to send a sample voice prompt.</p><p class="demo-guide__tip" id="demoTip">Try: ENTER twice to answer the first question.</p></div>
+        <div class="demo-guide"><p class="demo-guide__eyebrow" id="demoEyebrow">01 / AGENTS</p><h3 id="demoTitle">A direct line to your agents.</h3><p id="demoDescription">Pick a session, open its question card, or hold PTT to send a sample voice prompt.</p><p class="demo-guide__tip" id="demoTip">Try: ENTER twice to open the first question.</p></div>
       <div class="monitor">
         <div class="monitor__bezel">
           <div class="monitor__screen" id="hostScreen">
@@ -454,7 +445,7 @@
       <div class="badge reveal"><span class="badge__mark badge__mark--claude-code" aria-hidden="true"></span><b>Claude Code</b><i>a plugin with hooks</i></div>
       <div class="badge reveal"><span class="badge__mark badge__mark--codex" aria-hidden="true"></span><b>Codex CLI</b><i>through its app server</i></div>
       <div class="badge reveal"><span class="badge__mark badge__mark--api" aria-hidden="true"></span><b>Your script</b><i>JSON-RPC on a local socket</i></div>
-      <div class="badge badge--wild reveal"><span class="badge__mark badge__mark--any" aria-hidden="true"></span><b>+ any agent</b><i>a curl one-liner can be one</i></div>
+      <div class="badge badge--wild reveal"><span class="badge__mark badge__mark--any" aria-hidden="true"></span><b>+ any agent</b><i>Connect a script through the local API</i></div>
     </div>
 
     <p class="row-label reveal">AND THE REST OF YOUR DESK</p>
@@ -728,5 +719,14 @@
 <script src="/js/main.js"></script>
 <script src="/js/waitlist.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — Language: English">Language</summary>
+        <ul>
+          <li><a href="/" hreflang="en" lang="en" aria-current="true">English</a></li>
+          <li><a href="/zh-Hans/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

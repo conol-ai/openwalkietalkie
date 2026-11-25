@@ -35,6 +35,7 @@
 <link rel="stylesheet" href="/css/blog.css" />
 <link rel="stylesheet" href="/css/docs.css" />
 <script src="/js/i18n/zh-Hant.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 <!-- No optional analytics or advertising scripts. -->
 </head>
@@ -52,7 +53,7 @@
     </a>
 
     <nav class="nav__links" aria-label="網站區塊">
-      <a href="/zh-Hant/#pile">The Pile</a>
+      <a href="/zh-Hant/#pile">The Pile（分頁堆）</a>
       <a href="/zh-Hant/#features">功能</a>
       <a href="/zh-Hant/#demo">試用</a>
       <a href="/zh-Hant/#faces">頁面</a>
@@ -60,15 +61,6 @@
       <a href="/zh-Hant/docs/" aria-current="true">說明文件</a>
       <a href="/zh-Hant/blog/">部落格</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="語言: 繁體中文">繁體中文</summary>
-        <ul>
-          <li><a href="/docs/windows/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/docs/windows/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
-          <li><a href="/zh-Hant/docs/windows/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
-          <li><a href="/ja/docs/windows/" hreflang="ja" lang="ja">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="切換日間與夜間主題" aria-pressed="false">
@@ -97,7 +89,7 @@
 <p>Windows 預覽版執行的服務與應用程式和 Mac 版相同：裝置透過 USB-C 或藍牙連線，顯示你的 Claude Code 與 Codex 工作階段，回應它們的核准請求，接收按住說話的口述並朗讀回覆，應用程式也能更新裝置的韌體。它之所以是預覽版，是因為有幾項 Mac 功能在 Windows 上還沒有（見下文），而且它<strong>沒有程式碼簽章</strong>，所以 Windows 會在第一次執行前發出警告。</p>
 
 <h2>下載</h2>
-<p><a href="https://github.com/conol-ai/openwalkietalkie/releases/download/v0.17.0/OpenWalkieTalkie-0.17.0-windows-x86_64.zip">下載 Windows x64 預覽版 ZIP</a>。這個獨立的 Windows 預覽版包含語音、Claude Code、Codex CLI 與 Grok Bot。它的<a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.17.0">版本說明</a>列出原始碼版本與 <a href="https://github.com/conol-ai/openwalkietalkie/releases/download/v0.17.0/OpenWalkieTalkie-0.17.0-windows-x86_64.zip.sha256">SHA-256 總和檢查碼</a>。從 0.14.0 起，每個正式版本也都包含名為 <code>OpenWalkieTalkie-&lt;version&gt;-windows-x86_64.zip</code> 的 Windows 組建。要驗證下載的檔案，請在「下載」資料夾中開啟 PowerShell 執行：</p>
+<p><a href="https://github.com/conol-ai/openwalkietalkie/releases/download/v0.17.0/OpenWalkieTalkie-0.17.0-windows-x86_64.zip">下載 Windows x64 預覽版 ZIP</a>。這個獨立的 Windows 預覽版包含語音、Claude Code、Codex CLI 與 Grok Bot。它的<a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.17.0">版本說明</a>列出原始碼版本與 <a href="https://github.com/conol-ai/openwalkietalkie/releases/download/v0.17.0/OpenWalkieTalkie-0.17.0-windows-x86_64.zip.sha256">SHA-256 檢查碼</a>。從 0.14.0 起，每個正式版本也都包含名為 <code>OpenWalkieTalkie-&lt;version&gt;-windows-x86_64.zip</code> 的 Windows 組建。要驗證下載的檔案，請在「下載」資料夾中開啟 PowerShell 執行：</p>
 <pre><code>Get-FileHash .\OpenWalkieTalkie-*-windows-x86_64.zip -Algorithm SHA256</code></pre>
 
 <h2>安裝</h2>
@@ -112,7 +104,7 @@
 <p>裝置上的按住說話由這台電腦上的 <strong>Whisper</strong> 辨識：請在應用程式的<strong>語音</strong>頁面下載它的模型（Windows 沒有內建的辨識器，所以在模型下載完成前，按下說話鍵時會提示這一點）。回覆預設由 Windows 內建的語音朗讀，你也可以選擇 <strong>Kokoro</strong>（以相同方式下載），或使用你自己的 OpenAI 或 ElevenLabs 金鑰的雲端語音。裝置的麥克風與揚聲器透過連接線與藍牙都能使用。</p>
 
 <h3>如果 Windows 沒有提供「仍要執行」</h3>
-<p>在部分新安裝的 Windows 11 上，<strong>智慧型應用程式控制</strong>會封鎖未簽署的程式，且無法略過。你可以在<em>Windows 安全性 → 應用程式與瀏覽器控制 → 智慧型應用程式控制</em>中查看它的設定。它開啟時預覽版無法執行；而在許多 Windows 版本上，一旦關閉就無法再開啟，除非重新安裝 Windows，所以請自行判斷是否值得。防毒軟體也可能暫時攔下新的未簽署下載；上面的總和檢查碼可以確認這就是版本發布的檔案。</p>
+<p>在部分新安裝的 Windows 11 上，<strong>智慧型應用程式控制</strong>會封鎖未簽署的程式，且無法略過。你可以在<em>Windows 安全性 → 應用程式與瀏覽器控制 → 智慧型應用程式控制</em>中查看它的設定。它開啟時預覽版無法執行；而在許多 Windows 版本上，一旦關閉就無法再開啟，除非重新安裝 Windows，所以請自行判斷是否值得。防毒軟體也可能暫時攔下新的未簽署下載；上面的檢查碼可以確認這就是版本發布的檔案。</p>
 
 <h2>更新裝置的韌體</h2>
 <p>用 USB-C 連接一台裝置，開啟<strong>服務</strong>，在<strong>裝置韌體</strong>上按一下<strong>檢查</strong>，再按<strong>檢視…</strong>與<strong>安裝</strong>，和在 Mac 上完全相同。在裝置恢復之前請不要拔掉連接線。在 Windows 上，傳輸使用裝置的 HID 連線，而不是較快的 USB 介面（Windows 沒有它的驅動程式），所以需要幾分鐘（在 Rev A 上安裝 0.13.0 約五分鐘）。如果你在虛擬機器中執行 Windows，請確認裝置重新啟動後再次直通給虛擬機器：更新期間它會重新連線兩次。</p>
@@ -120,7 +112,7 @@
 <h2>連接 Grok Bot</h2>
 <p><strong>Grok Bot：</strong>開啟<strong>整合 → 機器人</strong>，新增機器人的例行工作 Webhook。「複製提示詞」會給機器人一組 PowerShell 指令，用來把回覆和提問傳回這台電腦；請在 Grok Bot 的 Computer 設定中允許這些指令。服務會把例行工作的金鑰保存在 Windows 認證管理員中。使用獨立資料目錄的服務則改用 <code>grokbot-keys.toml</code>。</p>
 <h2>更新應用程式</h2>
-<p>開啟<strong>服務</strong>，按一下應用程式旁的<strong>檢查</strong>，或在圖示選單中選擇<strong>檢查更新…</strong>。最新版本有較新的版本時，按一下<strong>更新</strong>：應用程式會下載該版本的 zip，用版本發布的總和檢查碼核對，把新的 <code>OpenWalkieTalkie.exe</code> 與 <code>deckd.exe</code> 放進你的 <code>bin</code> 資料夾，然後重新啟動。你的設定保存在 <code>%LOCALAPPDATA%\OpenWalkieTalkie</code>。若要手動更新，請從<a href="https://github.com/conol-ai/openwalkietalkie/releases/latest">最新版本</a>下載 zip，從圖示選單結束應用程式，再用新資料夾取代舊版本的資料夾。</p>
+<p>開啟<strong>服務</strong>，按一下應用程式旁的<strong>檢查</strong>，或在圖示選單中選擇<strong>檢查更新…</strong>。有較新版本可用時，按一下<strong>更新</strong>：應用程式會下載該版本的 zip，用版本發布的檢查碼核對，把新的 <code>OpenWalkieTalkie.exe</code> 與 <code>deckd.exe</code> 放進你的 <code>bin</code> 資料夾，然後重新啟動。你的設定保存在 <code>%LOCALAPPDATA%\OpenWalkieTalkie</code>。若要手動更新，請從<a href="https://github.com/conol-ai/openwalkietalkie/releases/latest">最新版本</a>下載 zip，從圖示選單結束應用程式，再用新資料夾取代舊版本的資料夾。</p>
 
 <h2>與 Mac 版的差異</h2>
 <ul>
@@ -141,7 +133,7 @@
   <div class="inner">
     <span>OpenWalkieTalkie · COHDL 專案 · MIT 授權軟體 · CERN-OHL-P 授權硬體</span>
     <nav aria-label="頁尾">
-      <a href="/zh-Hant/#waitlist">加入候補名單</a>
+      <a href="/zh-Hant/#waitlist">加入等候名單</a>
       <a href="/zh-Hant/privacy/">隱私權政策</a>
       <a href="/zh-Hant/cookies/">Cookie 說明</a>
       <a href="/zh-Hant/cookies/" data-privacy-open>隱私權聲明</a>
@@ -157,5 +149,14 @@
 
 <script src="/js/main.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 語言: 繁體中文">Language</summary>
+        <ul>
+          <li><a href="/docs/windows/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/docs/windows/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/docs/windows/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
+          <li><a href="/ja/docs/windows/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

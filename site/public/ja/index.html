@@ -23,7 +23,7 @@
 <meta property="og:image:alt" content="画面が点いた OpenWalkieTalkie の試作機が机の上に立ち、横に Open Walkie Talkie、AI エージェントのためのオープンソースのハンディ無線機という文字。" />
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="OpenWalkieTalkie — AI エージェントのためのオープンソースのハンディ無線機。" />
-<meta name="twitter:description" content="どのエージェントがあなたを待っているかを示すデバイス。PTT を押して話しかけるだけ。ハードウェア、ファームウェア、ホスト側すべてオープン。" />
+<meta name="twitter:description" content="どのエージェントがあなたを待っているかを示すデバイス。PTT を押したまま話しかけます。ハードウェア、ファームウェア、ホスト側すべてオープン。" />
 <meta name="twitter:image" content="https://openwalkietalkie.org/assets/og.jpg" />
 
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
@@ -41,6 +41,7 @@
 <link rel="stylesheet" href="/css/style.css" />
 <!-- Sets data-theme from localStorage/OS before first paint to avoid a theme flash -->
 <script src="/js/i18n/ja.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 
 <script type="application/ld+json">
@@ -88,15 +89,6 @@
       <a href="/ja/docs/">ドキュメント</a>
       <a href="/ja/blog/">ブログ</a>
       <a href="#blueprint">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="言語: 日本語">日本語</summary>
-        <ul>
-          <li><a href="/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
-          <li><a href="/zh-Hant/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
-          <li><a href="/ja/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="昼と夜のテーマを切り替える" aria-pressed="false">
@@ -140,7 +132,7 @@
         <span class="hero__title-line">WALKIE</span>
         <span class="hero__title-line hero__title-line--accent">TALKIE</span>
       </h1>
-      <p class="press-start"><span class="blink">▮</span> PRESS START</p>
+      <p class="press-start"><span class="blink">▮</span> スタート</p>
       <p class="hero__tagline">AI エージェントのためのオープンソースのハンディ無線機。</p>
       <p class="hero__sub">タッチスクリーン、スクロールホイール、押して話すキーを備えた手のひらサイズのデバイス。どのエージェントがあなたを待っているかを示し、声はそのエージェントに届きます。</p>
       <div class="hero__cta">
@@ -161,7 +153,7 @@
     <div class="hero__art" id="heroArt">
       <div class="hero__art-frame hero-product">
         <img class="swap-img swap-img--day" src="/assets/hero-radio-v93b-day-screen.png" alt="エージェントの一覧を表示した、白とオレンジの V9.3B OpenWalkieTalkie のピクセルイラスト" width="1254" height="1254" fetchpriority="high" />
-        <img class="swap-img swap-img--night" src="/assets/hero-radio-v93b-night-screen.png" alt="押して話すの聞き取り画面を表示した、黒とミントの V9.3B OpenWalkieTalkie のピクセルイラスト" width="1254" height="1254" />
+        <img class="swap-img swap-img--night" src="/assets/hero-radio-v93b-night-screen.png" alt="PTT の「聞き取り中」画面を表示した、黒とミントの V9.3B OpenWalkieTalkie のピクセルイラスト" width="1254" height="1254" />
       </div>
     </div>
   </div>
@@ -176,14 +168,14 @@
 <div class="ticker" aria-hidden="true">
   <div class="ticker__track">
     <div class="ticker__group">
-      <span>ハードウェアはオープン</span><b>✦</b><span>ファームウェアはオープン</span><b>✦</b><span>ホストはオープン</span><b>✦</b><span>押す · 話す · 離す</span><b>✦</b><span>誰が待っているか、ひと目で</span><b>✦</b><span>誰でも再現できる設計図</span><b>✦</b>
+      <span>ハードウェアはオープン</span><b>✦</b><span>ファームウェアはオープン</span><b>✦</b><span>ホストはオープン</span><b>✦</b><span>押したまま · 話す · 離す</span><b>✦</b><span>誰が待っているか、ひと目で</span><b>✦</b><span>誰でも自分で作れる設計図</span><b>✦</b>
     </div>
     <div class="ticker__group">
-      <span>ハードウェアはオープン</span><b>✦</b><span>ファームウェアはオープン</span><b>✦</b><span>ホストはオープン</span><b>✦</b><span>押す · 話す · 離す</span><b>✦</b><span>誰が待っているか、ひと目で</span><b>✦</b><span>誰でも再現できる設計図</span><b>✦</b>
+      <span>ハードウェアはオープン</span><b>✦</b><span>ファームウェアはオープン</span><b>✦</b><span>ホストはオープン</span><b>✦</b><span>押したまま · 話す · 離す</span><b>✦</b><span>誰が待っているか、ひと目で</span><b>✦</b><span>誰でも自分で作れる設計図</span><b>✦</b>
     </div>
   </div>
 </div>
-<p class="sr-only">ハードウェアはオープン。ファームウェアはオープン。ホストはオープン。押して、話して、離す。誰が待っているか、ひと目で。誰でも再現できる設計図。</p>
+<p class="sr-only">ハードウェアはオープン。ファームウェアはオープン。ホストはオープン。押したまま話して、離す。誰が待っているか、ひと目で。誰でも自分で作れる設計図。</p>
 
 <!-- ============ 3. THE TAB PILE ============ -->
 <section class="section paradox" id="pile">
@@ -214,17 +206,17 @@
       </div>
 
       <article class="card card--ours reveal reveal--right">
-        <div class="card__tag card__tag--good">これから</div>
+        <div class="card__tag card__tag--good">このデバイスなら</div>
         <h3 class="card__title">Open Walkie Talkie</h3>
         <p class="card__price card__price--good">デバイス 1 台</p>
         <ul class="speclist">
-          <li class="yes">1 つの画面に、すべてのエージェント。誰が先にあなたを必要としているか</li>
+          <li class="yes">すべてのエージェントが 1 画面に。誰が先に返事を待っているかがわかります。</li>
           <li class="yes">質問はカードになる。1 回押せば答えられる。</li>
-          <li class="yes">PTT を押して話す。返信を聞く。</li>
+          <li class="yes">PTT を押したまま話し、返信を聞く。</li>
           <li class="yes">Bluetooth で部屋を歩き、USB-C で机に戻る</li>
           <li class="yes">ハードウェアもファームウェアもホストもオープン。あなたのものです。</li>
         </ul>
-        <p class="card__foot">誰でも再現できる設計図。</p>
+        <p class="card__foot">誰でも自分で作れる設計図。</p>
       </article>
     </div>
   </div>
@@ -242,15 +234,15 @@
     <!-- featured: the PTT key you can actually hold -->
     <article class="feat feat--ptt reveal">
       <div class="ptt-stage">
-        <button class="pttbtn" id="featPtt" type="button" aria-label="押して話すのデモ — ボタンかスペースキーを押している間に話します">PTT</button>
-        <p class="ptt-stage__hint" aria-hidden="true">▼ 押してみて ▼</p>
+        <button class="pttbtn" id="featPtt" type="button" aria-label="PTT のデモ — ボタンかスペースキーを押している間に話します">PTT</button>
+        <p class="ptt-stage__hint" aria-hidden="true">▼ 押したまま話す ▼</p>
       </div>
 
       <div class="ptt-copy">
         <div class="feat__icon icon-voice" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
         <h3 class="feat__title">押して話す</h3>
-        <p class="feat__body">作業用のページでキーを押すと、画面が「聞き取り中」の表示に変わります。離すと、認識が終わるまで文字起こしが表示されたままになります。デバイスのマイクの音声は Mac に送られ、言葉は次のプロンプトとして選択中のエージェントに届き、返信はデバイスのスピーカーで読み上げることもできます。</p>
-        <p class="ptt-readout" id="featPttReadout" role="status">待機中。キーを押すと始まります。</p>
+        <p class="feat__body">作業用のページでキーを押し続けると、画面が「聞き取り中」の表示に変わります。離すと、認識が終わるまで文字起こしが表示されたままになります。デバイスのマイクの音声は Mac に送られ、言葉は次のプロンプトとして選択中のエージェントに届き、返信はデバイスのスピーカーで読み上げることもできます。</p>
+        <p class="ptt-readout" id="featPttReadout" role="status">待機中。キーを押したまま話してください。</p>
       </div>
 
       <div class="ptt-out" id="featPttOut" aria-hidden="true">
@@ -276,13 +268,13 @@
         <div class="feat__icon icon-card" aria-hidden="true"><i class="frame"></i><i class="tick"></i></div>
         <h3 class="feat__title">カード</h3>
         <p class="feat__body">権限の確認や選択式の質問はカードになります。選択肢までスクロールして ENTER を押すか、タップするか、声で答えます。Claude Code や Codex の権限のカードを承認できるのは人だけです。</p>
-        <p class="feat__meta">1 回押すだけ · 文脈はすべて</p>
+        <p class="feat__meta">1 回で回答 · 判断に必要な情報を 1 枚に</p>
       </article>
 
       <article class="feat reveal" tabindex="0">
         <div class="feat__icon icon-wheel" aria-hidden="true"><i class="drum"></i></div>
         <h3 class="feat__title">ホイール</h3>
-        <p class="feat__body">1 段で 1 行。SHIFT を押すと、同じホイールでページを切り替えます。エージェント、Omarchy、マクロパッド、使用量、システム、ゲーム。SHIFT を 2 回押すと並べ替えられます。</p>
+        <p class="feat__body">1 段で 1 行。SHIFT を押しながら同じホイールを回すと、ページが切り替わります。エージェント、Omarchy、マクロパッド、使用量、システム、ゲーム。SHIFT を 2 回押すと並べ替えられます。</p>
         <p class="feat__meta">SCROLL · SHIFT+SCROLL</p>
       </article>
 
@@ -290,13 +282,13 @@
         <div class="feat__icon icon-pad" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
         <h3 class="feat__title">マクロパッドのページ</h3>
         <p class="feat__body">タッチスクリーン上の 9 つのキーに、それぞれラベルとキー操作。ホストがその組み合わせをデスクトップに送ります。キーはデバイスの上で編集でき、ラベルは PTT で口述できます。</p>
-        <p class="feat__meta">⌘⇧4 · タップか割り当て</p>
+        <p class="feat__meta">⌘⇧4 · タップまたは本体キーに割り当て</p>
       </article>
 
       <article class="feat reveal" tabindex="0">
         <div class="feat__icon icon-usage" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
         <h3 class="feat__title">使用量のページ</h3>
-        <p class="feat__body">Claude と Codex のレート制限の枠を、使っているアカウントとリセットまでのカウントダウン付きのバーで表示します。ホストが読み取りに使うのは、すでにあるログインだけです。</p>
+        <p class="feat__body">Claude と Codex の利用枠を、集計期間ごとのバーで表示します。使用中のアカウントと、各枠がリセットされるまでの時間も確認できます。ホストは既存のログイン情報を使って取得します。</p>
         <p class="feat__meta">セッション · 週 · リセット</p>
       </article>
 
@@ -393,7 +385,7 @@
               <div class="screen__hint" id="screenHint" aria-hidden="true"></div>
             </div>
 
-            <div class="wheel" id="wheel" role="slider" tabindex="0" aria-label="スクロールホイール — ドラッグ、スクロール、矢印キーで操作。Shift を押すとページを切り替え" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">
+            <div class="wheel" id="wheel" role="slider" tabindex="0" aria-label="スクロールホイール — ドラッグ、スクロール、矢印キーで操作。Shift を押しながら操作するとページを切り替え" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">
               <span class="wheel__drum" id="wheelDrum" aria-hidden="true"></span>
               <span class="wheel__lbl" aria-hidden="true">SCROLL</span>
             </div>
@@ -407,7 +399,7 @@
             <button class="dkey" data-key="right" type="button" aria-label="右前面のキー"><span class="dkey__cap">›</span></button>
           </div>
           <div class="deck__keys" style="grid-template-columns: 1fr 5fr;">
-            <button class="dkey" data-key="shift" type="button" aria-label="Shift — クリックで押したままに" aria-pressed="false"><span class="dkey__cap">SHIFT</span></button>
+            <button class="dkey" data-key="shift" type="button" aria-label="Shift — クリックすると押下状態に固定" aria-pressed="false"><span class="dkey__cap">SHIFT</span></button>
             <p class="deck__hint" style="align-self:center;margin:0">タッチスクリーン · スクロールホイール · PTT · ENTER · ESC · SHIFT · 前面のキー 2 つ</p>
           </div>
         </div>
@@ -415,7 +407,7 @@
 
       <!-- ---- the host console: what deckd sees ---- -->
       <div class="demo-companion">
-        <div class="demo-guide"><p class="demo-guide__eyebrow" id="demoEyebrow">01 / エージェント</p><h3 id="demoTitle">エージェントへの直通回線。</h3><p id="demoDescription">セッションを選び、質問カードを開くか、PTT を押してサンプルの音声プロンプトを送ります。</p><p class="demo-guide__tip" id="demoTip">試す：ENTER を 2 回押して最初の質問に答えます。</p></div>
+        <div class="demo-guide"><p class="demo-guide__eyebrow" id="demoEyebrow">01 / エージェント</p><h3 id="demoTitle">エージェントへの直通回線。</h3><p id="demoDescription">セッションを選び、質問カードを開くか、PTT を押したまま話してサンプルの音声プロンプトを送ります。</p><p class="demo-guide__tip" id="demoTip">試す：ENTER を 2 回押すと最初の質問が開きます。</p></div>
       <div class="monitor">
         <div class="monitor__bezel">
           <div class="monitor__screen" id="hostScreen">
@@ -455,7 +447,7 @@
       <div class="badge reveal"><span class="badge__mark badge__mark--claude-code" aria-hidden="true"></span><b>Claude Code</b><i>フック付きのプラグイン</i></div>
       <div class="badge reveal"><span class="badge__mark badge__mark--codex" aria-hidden="true"></span><b>Codex CLI</b><i>アプリサーバー経由</i></div>
       <div class="badge reveal"><span class="badge__mark badge__mark--api" aria-hidden="true"></span><b>あなたのスクリプト</b><i>ローカルソケット上の JSON-RPC</i></div>
-      <div class="badge badge--wild reveal"><span class="badge__mark badge__mark--any" aria-hidden="true"></span><b>+ どんなエージェントでも</b><i>curl の 1 行でもかまわない</i></div>
+      <div class="badge badge--wild reveal"><span class="badge__mark badge__mark--any" aria-hidden="true"></span><b>+ どんなエージェントでも</b><i>ローカル API でスクリプトを接続</i></div>
     </div>
 
     <p class="row-label reveal">机の上のほかのものも</p>
@@ -463,7 +455,7 @@
       <div class="badge badge--alt reveal"><span class="badge__mark badge__mark--omarchy" aria-hidden="true"></span><b>Omarchy</b><i>Hyprland のリモコンのページ</i></div>
       <div class="badge badge--alt reveal"><span class="badge__mark badge__mark--keys" aria-hidden="true"></span><b>キー入力</b><i>macOS でのマクロパッドの組み合わせ</i></div>
       <div class="badge badge--alt reveal"><span class="badge__mark badge__mark--voice" aria-hidden="true"></span><b>返信の読み上げ</b><i>Apple の音声か、自分の API キー</i></div>
-      <div class="badge badge--alt badge--wild reveal"><span class="badge__mark badge__mark--whisper" aria-hidden="true"></span><b>オンデバイスの音声認識</b><i>Apple の認識、Whisper も選べる</i></div>
+      <div class="badge badge--alt badge--wild reveal"><span class="badge__mark badge__mark--whisper" aria-hidden="true"></span><b>Mac 上での音声認識</b><i>Apple の音声認識、または Whisper</i></div>
     </div>
 
     <p class="works__punch reveal">音声認識は Mac 上で動きます。文字起こしは選んだエージェントに送られます。</p>
@@ -475,7 +467,7 @@
   <div class="wrap">
     <header class="section-head reveal"><p class="section-kicker">第 5 章 · 画面の図鑑</p><h2 class="section-title">ページ</h2><p class="section-lede">小さな画面に、机ひとつ分の可能性。<br>実際のファームウェアの画面を、ページごとに見てください。</p></header>
     <div class="face-atlas reveal">
-      <div class="face-atlas__index" role="tablist" aria-label="ファームウェアの画面" aria-orientation="vertical"><button class="face-atlas__tab" type="button" role="tab" id="atlasTab0" aria-controls="atlasPanel0" aria-selected="true" tabindex="0"><span>01</span><b>エージェント · ホーム</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab1" aria-controls="atlasPanel1" aria-selected="false" tabindex="-1"><span>02</span><b>質問カード</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab2" aria-controls="atlasPanel2" aria-selected="false" tabindex="-1"><span>03</span><b>聞き取り中</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab3" aria-controls="atlasPanel3" aria-selected="false" tabindex="-1"><span>04</span><b>マクロパッド</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab4" aria-controls="atlasPanel4" aria-selected="false" tabindex="-1"><span>05</span><b>使用量</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab5" aria-controls="atlasPanel5" aria-selected="false" tabindex="-1"><span>06</span><b>OMARCHY</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab6" aria-controls="atlasPanel6" aria-selected="false" tabindex="-1"><span>07</span><b>ページ管理</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab7" aria-controls="atlasPanel7" aria-selected="false" tabindex="-1"><span>08</span><b>ゲーム · スネーク</b><span aria-hidden="true">↗</span></button></div><div class="face-atlas__stage"><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel0" aria-labelledby="atlasTab0" tabindex="0" ><div class="face-atlas__image"><img src="/assets/screens/roster.png" alt="エージェントの一覧：色付きの状態の点を持つ 4 つのエージェント。先頭のエージェントが質問しています" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">01 / 08</span><h3>エージェント · ホーム</h3><p>誰が最初にあなたを必要としているか。質問は上に並び、左のバーが選択中のチャンネルを示します。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel1" aria-labelledby="atlasTab1" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/card-question.png" alt="3 つの選択肢があり、1 つ目がおすすめの質問カード" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">02 / 08</span><h3>質問カード</h3><p>スクロール、ENTER、またはタップ。ホストが確認する間カードはロックされ、そのあと画面はチャンネルに戻ります。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel2" aria-labelledby="atlasTab2" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/ptt-roster.png" alt="波形と、入力されていく文字起こしを表示した「聞き取り中」の画面" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">03 / 08</span><h3>聞き取り中</h3><p>作業用のページで PTT を押し、離して送信します。最後の返信が下に残るので、何に答えているかがわかります。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel3" aria-labelledby="atlasTab3" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/macropad.png" alt="マクロパッドのページ：ラベルとキー操作の記号が付いた 3×3 のキー" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">04 / 08</span><h3>マクロパッド</h3><p>9 つのタッチキーに、それぞれラベルと組み合わせ。SHIFT+CANCEL でデバイス上のキーエディターが開きます。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel4" aria-labelledby="atlasTab4" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/usage.png" alt="使用量のページ：割合とリセットまでのカウントダウンが付いたプロバイダーごとのバー" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">05 / 08</span><h3>使用量</h3><p>レート制限の枠ごとに 1 本のバーと、リセットまでのカウントダウン。ENTER で両方のプロバイダーを一度に問い合わせます。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel5" aria-labelledby="atlasTab5" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/omarchy.png" alt="Omarchy のページ：ワークスペースのチップとウィンドウの一覧" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">06 / 08</span><h3>OMARCHY</h3><p>Hyprland のデスクトップのリモコン。ホストが送ってくるワークスペースとウィンドウです。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel6" aria-labelledby="atlasTab6" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/manager.png" alt="ページ管理：タイルとして並んだページ。並べ替えができます" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">07 / 08</span><h3>ページ管理</h3><p>SHIFT を 2 回押します。ページの並べ替え、追加、削除ができ、最大 8 ページです。エージェントと設定は固定です。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel7" aria-labelledby="atlasTab7" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/arcade-snake-1920.png" alt="デバイスで動くスネーク：フィールド上の緑のヘビとエサ" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">08 / 08</span><h3>ゲーム · スネーク</h3><p>内蔵のちょっとした休憩。スネーク、フラッピーバード、雷電がデバイス上で動きます。PTT がゲームのボタンになります。</p></figcaption></figure></div></div><div class="face-atlas__specs"><span><b>480 × 480</b> AMOLED</span><span><b>タッチ + ホイール</b> 手のために</span><span><b>本物のファームウェア</b> をピクセル単位で</span></div>
+      <div class="face-atlas__index" role="tablist" aria-label="ファームウェアの画面" aria-orientation="vertical"><button class="face-atlas__tab" type="button" role="tab" id="atlasTab0" aria-controls="atlasPanel0" aria-selected="true" tabindex="0"><span>01</span><b>エージェント · ホーム</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab1" aria-controls="atlasPanel1" aria-selected="false" tabindex="-1"><span>02</span><b>質問カード</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab2" aria-controls="atlasPanel2" aria-selected="false" tabindex="-1"><span>03</span><b>聞き取り中</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab3" aria-controls="atlasPanel3" aria-selected="false" tabindex="-1"><span>04</span><b>マクロパッド</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab4" aria-controls="atlasPanel4" aria-selected="false" tabindex="-1"><span>05</span><b>使用量</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab5" aria-controls="atlasPanel5" aria-selected="false" tabindex="-1"><span>06</span><b>OMARCHY</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab6" aria-controls="atlasPanel6" aria-selected="false" tabindex="-1"><span>07</span><b>ページ管理</b><span aria-hidden="true">↗</span></button><button class="face-atlas__tab" type="button" role="tab" id="atlasTab7" aria-controls="atlasPanel7" aria-selected="false" tabindex="-1"><span>08</span><b>ゲーム · スネーク</b><span aria-hidden="true">↗</span></button></div><div class="face-atlas__stage"><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel0" aria-labelledby="atlasTab0" tabindex="0" ><div class="face-atlas__image"><img src="/assets/screens/roster.png" alt="エージェントの一覧：4 つのエージェントの状態を色付きの点で表示。先頭のエージェントが質問しています" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">01 / 08</span><h3>エージェント · ホーム</h3><p>誰が最初にあなたを必要としているか。質問は上に並び、左のバーが選択中のチャンネルを示します。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel1" aria-labelledby="atlasTab1" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/card-question.png" alt="3 つの選択肢があり、1 つ目がおすすめの質問カード" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">02 / 08</span><h3>質問カード</h3><p>スクロール、ENTER、またはタップ。ホストが確認する間カードはロックされ、そのあと画面はチャンネルに戻ります。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel2" aria-labelledby="atlasTab2" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/ptt-roster.png" alt="波形と、入力されていく文字起こしを表示した「聞き取り中」の画面" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">03 / 08</span><h3>聞き取り中</h3><p>作業用のページで PTT を押したまま話し、離すと送信されます。最後の返信が下に残るので、何に答えているかがわかります。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel3" aria-labelledby="atlasTab3" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/macropad.png" alt="マクロパッドのページ：ラベルとキー操作の記号が付いた 3×3 のキー" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">04 / 08</span><h3>マクロパッド</h3><p>9 つのタッチキーに、それぞれラベルと組み合わせ。SHIFT+CANCEL でデバイス上のキーエディターが開きます。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel4" aria-labelledby="atlasTab4" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/usage.png" alt="使用量のページ：割合とリセットまでのカウントダウンが付いたプロバイダーごとのバー" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">05 / 08</span><h3>使用量</h3><p>利用枠を集計期間ごとのバーで示し、各枠がリセットされるまでの時間も表示します。ENTER で両方のプロバイダーに一度に問い合わせます。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel5" aria-labelledby="atlasTab5" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/omarchy.png" alt="Omarchy のページ：ワークスペースのチップとウィンドウの一覧" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">06 / 08</span><h3>OMARCHY</h3><p>Hyprland のデスクトップのリモコン。ホストが送ってくるワークスペースとウィンドウです。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel6" aria-labelledby="atlasTab6" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/manager.png" alt="ページ管理：タイルとして並んだページ。並べ替えができます" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">07 / 08</span><h3>ページ管理</h3><p>SHIFT を 2 回押します。ページの並べ替え、追加、削除ができ、最大 8 ページです。エージェントと設定は固定です。</p></figcaption></figure><figure class="face-atlas__panel" role="tabpanel" id="atlasPanel7" aria-labelledby="atlasTab7" tabindex="0" hidden><div class="face-atlas__image"><img src="/assets/screens/arcade-snake-1920.png" alt="デバイスで動くスネーク：フィールド上の緑のヘビとエサ" width="480" height="480" loading="lazy" /></div><figcaption><span class="face-atlas__number">08 / 08</span><h3>ゲーム · スネーク</h3><p>内蔵のちょっとした休憩。スネーク、フラッピーバード、雷電がデバイス上で動きます。PTT がゲームのボタンになります。</p></figcaption></figure></div></div><div class="face-atlas__specs"><span><b>480 × 480</b> AMOLED</span><span><b>タッチ + ホイール</b>で手元から操作</span><span><b>本物のファームウェア</b> をピクセル単位で</span></div>
   </div>
 </section>
 
@@ -490,14 +482,14 @@
 
     <div class="inv reveal">
       <div class="inv__bar">
-        <span class="inv__bar-title">一覧 · openwalkietalkie</span>
+        <span class="inv__bar-title">リポジトリの構成 · openwalkietalkie</span>
         <span class="inv__bar-meta">MIT + CERN-OHL-P</span>
       </div>
       <ul class="tree">
         <li class="tree__row tree__row--root">
           <span class="tree__glyph glyph-folder" aria-hidden="true"></span>
           <span class="tree__name">openwalkietalkie/</span>
-          <span class="tree__desc">基板、ファームウェア、Mac アプリがまとめて入っています。クローンしてすぐ始められます。</span>
+          <span class="tree__desc">基板、ファームウェア、Macアプリがまとめて入っています。クローンしてすぐ始められます。</span>
         </li>
         <li class="tree__row">
           <span class="tree__branch" aria-hidden="true">├─</span>
@@ -527,13 +519,13 @@
           <span class="tree__branch" aria-hidden="true">├─</span>
           <span class="tree__glyph glyph-folder" aria-hidden="true"></span>
           <span class="tree__name">host/</span>
-          <span class="tree__desc">deckd と Mac アプリ、Rust + gpui：接続、Claude Code と Codex のアダプター、音声、オープンな API。</span>
+          <span class="tree__desc">deckd と Macアプリ、Rust + gpui：接続、Claude Code と Codex のアダプター、音声、オープンな API。</span>
         </li>
         <li class="tree__row">
           <span class="tree__branch" aria-hidden="true">└─</span>
           <span class="tree__glyph glyph-file" aria-hidden="true"></span>
           <span class="tree__name">docs/deck-protocol.md</span>
-          <span class="tree__desc">チャンネル 5 の通信の取り決め。これを読めば、あなたのスクリプトもデバイス上のエージェントになります。</span>
+          <span class="tree__desc">チャンネル 5 の通信仕様。これに沿ってスクリプトを実装すれば、デバイスのエージェント一覧に表示できます。</span>
         </li>
       </ul>
       <div class="inv__foot">
@@ -544,7 +536,7 @@
           <a class="btn btn--ghost btn--big" href="#download">▼ Mac 版をダウンロード</a>
           <a class="btn btn--ghost btn--big" href="https://discord.gg/x7DXPvK66" target="_blank" rel="noopener" aria-label="Discord に参加 — CoHDL と OpenWalkieTalkie のコミュニティ">Discord に参加</a>
         </div>
-        <p class="inv__note">Mac アプリには deckd、アプリの自動更新、Rev A と Rev B のファームウェア更新が含まれます。ソースには、最初の USB-C または UART での書き込みに使うツールも含まれます。</p>
+        <p class="inv__note">Macアプリには deckd、アプリの自動更新、Rev A と Rev B のファームウェア更新が含まれます。ソースには、最初の USB-C または UART での書き込みに使うツールも含まれます。</p>
       </div>
     </div>
   </div>
@@ -576,7 +568,7 @@
           </figure>
           <figure class="shot">
             <div class="shot__win"><img class="shot__img" src="/assets/photos/faces.webp" alt="基板とオレンジのスクロールホイールの横に置いた白とオレンジのデバイス。画面にページの選択：エージェント、Omarchy、使用量、設定" width="750" height="1000" loading="lazy" /></div>
-            <figcaption class="shot__cap"><span class="shot__cap-title">すべてのページ</span><span class="shot__cap-body">SHIFT を押すと、ホイールでページを切り替えます。エージェント、Omarchy、使用量、設定。</span></figcaption>
+            <figcaption class="shot__cap"><span class="shot__cap-title">すべてのページ</span><span class="shot__cap-body">SHIFT を押しながらホイールを回すと、ページが切り替わります。エージェント、Omarchy、使用量、設定。</span></figcaption>
           </figure>
           <figure class="shot">
             <div class="shot__win"><img class="shot__img" src="/assets/photos/pair-top.webp" alt="白いテーブルに置いた 2 台を上から。黒と緑、白とオレンジが並び、周りにキーキャップと基板" width="750" height="1000" loading="lazy" /></div>
@@ -655,7 +647,7 @@
           <span>デバイスの販売開始をメールで知らせてください。<a href="/ja/privacy/">プライバシーポリシー</a>を読みました。</span>
         </label>
         <button class="btn btn--primary btn--big" type="submit">ウェイトリストに登録</button>
-        <p class="waitlist__note" id="waitlist-note">送るのはデバイスの販売開始のお知らせだけです。<a href="mailto:privacy@cohdl.ai">privacy@cohdl.ai</a> にメールすれば、いつでもリストから外れられます。</p>
+        <p class="waitlist__note" id="waitlist-note">送るのはデバイスの販売開始と入手状況に関するお知らせだけです。<a href="mailto:privacy@cohdl.ai">privacy@cohdl.ai</a> にメールすれば、いつでもリストから外れられます。</p>
         <p class="waitlist__status" id="waitlist-status" role="status" aria-live="polite" aria-atomic="true"></p>
       </form>
     </div>
@@ -678,7 +670,7 @@
             <a class="btn btn--ghost btn--big" href="https://github.com/conol-ai/openwalkietalkie/releases/download/v0.17.0/OpenWalkieTalkie-0.17.0-windows-x86_64.zip">↓ Windows · x64 プレビュー版</a>
           <a class="btn btn--ghost btn--big" href="/ja/docs/omarchy/">Omarchy · Linux</a>
         </div>
-        <p>ディスクイメージを開き、OpenWalkieTalkie をアプリケーションにドラッグして、アプリのセットアップに従います。M シリーズの Mac は Apple シリコンを、Intel の Mac は Intel を選んでください。</p>
+        <p>ディスクイメージを開き、OpenWalkieTalkie を「アプリケーション」フォルダにドラッグして、アプリのセットアップに従います。M シリーズの Mac は Apple シリコンを、Intel の Mac は Intel を選んでください。</p>
           <p>Windows 10 または 11（x64）では、署名なしのプレビュー版が音声、Claude Code、Codex CLI、Grok Bot に対応しています。セットアップと SmartScreen については <a href="/ja/docs/windows/">Windows のインストールガイド</a>を読み、<a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/windows-preview-20261116">プレビュー版のリリースノートとチェックサムを確認</a>してください。</p>
         <p>Omarchy（Hyprland）のノートパソコンでは、サービスと Omarchy ブリッジをソースからビルドします。デスクトップのリモコン、エージェントのセッション、音声の指示については <a href="/ja/docs/omarchy/">Omarchy のガイドに従ってください</a>。</p>
         <p class="inv__note">アプリには、自動更新と、基板に合わせた Rev A・Rev B の USB でのファームウェア更新が含まれます。最初の書き込みには対応するブートローダーが必要です。<a href="https://github.com/conol-ai/openwalkietalkie/releases/latest">リリースノート、ファームウェア、チェックサム →</a></p>
@@ -730,5 +722,14 @@
 <script src="/js/main.js"></script>
 <script src="/js/waitlist.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 言語: 日本語">Language</summary>
+        <ul>
+          <li><a href="/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

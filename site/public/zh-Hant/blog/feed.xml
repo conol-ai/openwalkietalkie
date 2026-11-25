@@ -16,7 +16,7 @@
     <summary>在 Windows 預覽版上，按下 PTT 說話得不到任何文字。原因是 whisper.cpp 編譯時沒有開啟最佳化，而 Windows 用的是 Mac 的解碼設定。兩者都已修正：在測試電腦上，從放開到出字 1.1 秒。</summary>
   </entry>
   <entry>
-    <title>OpenWalkieTalkie v0.16.0：懂得視窗的口述</title>
+    <title>OpenWalkieTalkie v0.16.0：依目前視窗改寫口述內容</title>
     <id>https://openwalkietalkie.org/zh-Hant/blog/dictation-that-knows-the-window/</id>
     <link href="https://openwalkietalkie.org/zh-Hant/blog/dictation-that-knows-the-window/" />
     <published>2026-11-22T09:04:46Z</published>
@@ -24,12 +24,12 @@
     <summary>實驗性功能，預設關閉：在游標處口述的內容，可以依聚焦的視窗改寫。只根據視窗的應用程式名稱與標題（純文字），並透過你在新的「模型接入」頁面中選擇的模型完成。</summary>
   </entry>
   <entry>
-    <title>OpenWalkieTalkie v0.15.0：配套應用程式登上 Omarchy</title>
+    <title>OpenWalkieTalkie v0.15.0：應用程式登上 Omarchy</title>
     <id>https://openwalkietalkie.org/zh-Hant/blog/companion-app-on-omarchy/</id>
     <link href="https://openwalkietalkie.org/zh-Hant/blog/companion-app-on-omarchy/" />
     <published>2026-11-17T12:58:57Z</published>
     <updated>2026-11-17T12:58:57Z</updated>
-    <summary>配套應用程式可以在 Omarchy 上執行，在 Omarchy 頁面上按住 PTT 可在游標處聽寫，滾輪依視窗列的順序移動，Linux 服務把所有內容放在同一個資料夾。</summary>
+    <summary>應用程式可以在 Omarchy 上執行，在 Omarchy 頁面上按住 PTT 可在游標處聽寫，滾輪依視窗列的順序移動，Linux 服務把所有內容放在同一個資料夾。</summary>
   </entry>
   <entry>
     <title>OpenWalkieTalkie v0.14.0：一台裝置，支援 Mac、Windows 與 Omarchy</title>
@@ -37,7 +37,7 @@
     <link href="https://openwalkietalkie.org/zh-Hant/blog/one-deck-mac-windows-omarchy/" />
     <published>2026-11-16T05:04:33Z</published>
     <updated>2026-11-16T05:04:33Z</updated>
-    <summary>Mac 應用程式成為裝置的配套應用程式，服務也能在 Windows 和 Omarchy 上執行，Grok Bot 與 Claude Code、Codex 一起出現在裝置上，韌體安裝由裝置自己確認。</summary>
+    <summary>Mac 應用程式成為裝置的應用程式，服務也能在 Windows 和 Omarchy 上執行，Grok Bot 與 Claude Code、Codex 一起出現在裝置上，韌體安裝由裝置自己確認。</summary>
   </entry>
   <entry>
     <title>OpenWalkieTalkie v0.13.0：四種語言，一個設定</title>

@@ -34,6 +34,7 @@
 <link rel="stylesheet" href="/css/style.css" />
 <link rel="stylesheet" href="/css/blog.css" />
 <script src="/js/i18n/ja.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 <!-- No optional analytics or advertising scripts. -->
 </head>
@@ -58,15 +59,6 @@
       <a href="/ja/#blueprint">設計図</a>
       <a href="/ja/blog/" aria-current="true">ブログ</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="言語: 日本語">日本語</summary>
-        <ul>
-          <li><a href="/blog/desktop-connection-and-factory-images/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/blog/desktop-connection-and-factory-images/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
-          <li><a href="/zh-Hant/blog/desktop-connection-and-factory-images/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
-          <li><a href="/ja/blog/desktop-connection-and-factory-images/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="昼と夜のテーマを切り替える" aria-pressed="false">
@@ -109,7 +101,7 @@
   <p>ランチャーと通信の回帰テストは通っています。開発用の Mac での実地テストでは、Desktop が共有サービスに接続し、<code>DESKTOP-LINK-OK</code> の返信が OpenWalkieTalkie の画面に表示されました。接続した Rev A への USB での配信は正常でした。最後の実機の画面での確認は記録していません。</p>
   <p>どちらの基板のバリエーションもソフトウェアのチェックを通っています。同じフラッシュ対応を持つ前の 0.4.1 の開発版ファームウェアで、既存の Rev A の古いブートローダーからの移行が完了しました。そのテストでは CI でビルドした 0.5.0 のファイルは書き込んでいません。出荷用の Rev B、代替チップを載せた基板、空の基板への工場での書き込みは、まだハードウェアでの検証が必要です。デバイスの音声のテストは行っていません。</p>
   <h2>v0.5.0 を入手する</h2>
-  <p><strong>アップデートを確認</strong>を使うか、Apple シリコン用または Intel 用の<a href="/ja/#download">署名・公証済みの Mac アプリをダウンロード</a>してください。macOS 13 以降が必要です。</p>
+  <p><strong>アップデートを確認</strong>を使うか、Apple シリコン用または Intel 用の<a href="/ja/#download">署名・公証済みの Macアプリをダウンロード</a>してください。macOS 13 以降が必要です。</p>
   <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.5.0">GitHub のリリース</a>には、ファームウェア、工場用イメージ、チェックサム、ビルドの証明、中国語のアップグレードガイドが含まれます。このガイドは各 DMG にも入っています。</p>
 </article>
 </main>
@@ -134,5 +126,14 @@
 
 <script src="/js/main.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 言語: 日本語">Language</summary>
+        <ul>
+          <li><a href="/blog/desktop-connection-and-factory-images/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/desktop-connection-and-factory-images/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/desktop-connection-and-factory-images/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/blog/desktop-connection-and-factory-images/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

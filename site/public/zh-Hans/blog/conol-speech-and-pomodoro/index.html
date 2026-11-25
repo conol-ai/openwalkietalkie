@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OpenWalkieTalkie v0.12.0：Conol 听得懂你，还有番茄钟 · OpenWalkieTalkie</title>
-<meta name="description" content="Conol 用自己的语音模型转写你对它的聊天说的话，设备显示实时的录音时间线，新的“计时器”页面提供秒表、倒计时和番茄钟。" />
+<title>OpenWalkieTalkie v0.12.0：Conol 语音接入与番茄钟 · OpenWalkieTalkie</title>
+<meta name="description" content="Conol 会使用其内置的语音模型转录你所说的话，用于聊天内容；对讲机界面会实时显示录音时间线，同时新增一个计时功能页面，提供秒表、倒计时和番茄工作法功能。" />
 <link rel="canonical" href="https://openwalkietalkie.org/zh-Hans/blog/conol-speech-and-pomodoro/" />
 <link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/conol-speech-and-pomodoro/" />
 <link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/conol-speech-and-pomodoro/" />
@@ -14,8 +14,8 @@
 
 <meta property="og:type" content="article" />
 <meta property="og:site_name" content="OpenWalkieTalkie" />
-<meta property="og:title" content="OpenWalkieTalkie v0.12.0：Conol 听得懂你，还有番茄钟 · OpenWalkieTalkie" />
-<meta property="og:description" content="Conol 用自己的语音模型转写你对它的聊天说的话，设备显示实时的录音时间线，新的“计时器”页面提供秒表、倒计时和番茄钟。" />
+<meta property="og:title" content="OpenWalkieTalkie v0.12.0：Conol 语音接入与番茄钟 · OpenWalkieTalkie" />
+<meta property="og:description" content="Conol 会使用其内置的语音模型转录你所说的话，用于聊天内容；对讲机界面会实时显示录音时间线，同时新增一个计时功能页面，提供秒表、倒计时和番茄工作法功能。" />
 <meta property="og:url" content="https://openwalkietalkie.org/zh-Hans/blog/conol-speech-and-pomodoro/" />
 <meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
 <meta name="twitter:card" content="summary_large_image" />
@@ -34,12 +34,13 @@
 <link rel="stylesheet" href="/css/style.css" />
 <link rel="stylesheet" href="/css/blog.css" />
 <script src="/js/i18n/zh-Hans.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 <!-- No optional analytics or advertising scripts. -->
 </head>
 <body>
 
-<a class="skip-link" href="#content">跳至正文</a>
+<a class="skip-link" href="#content">跳转到正文</a>
 
 <div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
 
@@ -50,27 +51,18 @@
       <span class="brand__text">OPEN WALKIE TALKIE</span>
     </a>
 
-    <nav class="nav__links" aria-label="栏目">
-      <a href="/zh-Hans/#pile">The Pile</a>
+    <nav class="nav__links" aria-label="页面章节">
+      <a href="/zh-Hans/#pile">窗口太多了</a>
       <a href="/zh-Hans/#features">功能</a>
-      <a href="/zh-Hans/#demo">试用</a>
-      <a href="/zh-Hans/#faces">页面</a>
-      <a href="/zh-Hans/#blueprint">设计图纸</a>
+      <a href="/zh-Hans/#demo">试试看</a>
+      <a href="/zh-Hans/#faces">功能页面</a>
+      <a href="/zh-Hans/#blueprint">设计蓝图</a>
       <a href="/zh-Hans/docs/">文档</a>
       <a href="/zh-Hans/blog/" aria-current="true">博客</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="语言: 简体中文">简体中文</summary>
-        <ul>
-          <li><a href="/blog/conol-speech-and-pomodoro/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/blog/conol-speech-and-pomodoro/" hreflang="zh-Hans" lang="zh-Hans" aria-current="true">简体中文</a></li>
-          <li><a href="/zh-Hant/blog/conol-speech-and-pomodoro/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
-          <li><a href="/ja/blog/conol-speech-and-pomodoro/" hreflang="ja" lang="ja">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
-    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换日间和夜间主题" aria-pressed="false">
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换日间与夜间主题" aria-pressed="false">
       <span class="theme-toggle__track" aria-hidden="true">
         <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
         <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
@@ -87,49 +79,58 @@
 
 <main class="blog-main" id="content">
 <header class="post-head">
-  <p class="section-kicker">博客 · 更新说明</p>
-  <h1>OpenWalkieTalkie v0.12.0：Conol 听得懂你，还有番茄钟</h1>
-  <p class="post-meta"><span>2026年11月5日</span><span>Mac 应用、服务和固件</span></p>
+  <p class="section-kicker">博客 · 发布说明</p>
+  <h1>OpenWalkieTalkie v0.12.0：Conol 语音接入与番茄钟</h1>
+  <p class="post-meta"><span>2026年11月5日</span><span>Mac 应用程序、服务和固件</span></p>
 </header>
 <article class="post-body">
-  <p>当你在设备上对 Conol 聊天说话时，得到的文字应该和你直接在 Conol 里输入时它听到的一样。0.12.0 版把这些按键录音交给 Conol 自己的语音模型，在你说话时显示录音时间线，同步显示 Conol 正在做的事，并新增带番茄钟的“计时器”页面。</p>
-  <h2>Conol 转写自己的聊天</h2>
-  <p>在 Conol 聊天或 <strong>+ New chat</strong> 上按住 PTT，Mac 上的服务会录下这次按键，并交给 Conol 桌面应用。Conol 用其输入框麦克风背后的云端语音模型进行转写，松开后设备显示的、最终发送的都是这段文字，包括对 Conol 提问的口述回答。</p>
-  <p>按住期间，Mac 自己的识别器也在运行。如果 Conol 无法响应、出错或超过 20 秒仍未返回，就使用 Mac 的转写，所以按下的内容不会丢失。其他助手和设备上的语音命名仍留在你的 Mac 上。只有发给 Conol 聊天的录音会离开 Mac，而且只发送到你已登录的 Conol 应用；设置 <code>[voice.stt] companion = false</code> 可让所有录音都留在本地。这需要更新后的 Conol 桌面版和网页版；如果 Conol 应用是旧版本，一切照旧。</p>
-  <h2>说话时的时间线</h2>
-  <p>Mac 实时识别出的文字并不是 Conol 将听到的内容，所以对于这类按键，设备不再显示它们。设备会显示<strong>正在录音</strong>、一个大号的已用时间和一条时间线：红色播放头从左向右移动，后面填入由设备自己的麦克风测得的你的声音波形。按得久了会滚动。松开后，设备显示<strong>正在转写</strong>，然后显示 Conol 的转写。</p>
-  <h2>看到 Conol 在做什么</h2>
-  <p>正在运行的 Conol 聊天现在会在设备上显示当前的公开步骤，例如“Running a command”加上简短预览，在列表和对话中都会显示。它会原地更新，步骤结束时清除。完整的工具输入和结果仍留在 Conol 中。</p>
-  <h2>计时器和番茄钟</h2>
-  <p>在页面管理的 <strong>+</strong> 模板库中添加<strong>计时器</strong>，即可使用带计圈的秒表、带预设的倒计时，以及番茄钟：专注 25 分钟、休息 5 分钟，每四段专注后休息 15 分钟。每个阶段都会等你按<strong>下一步 / Enter</strong>。计时器在设备本身上运行，切到其他页面或屏幕休眠时也继续计时，结束时会唤醒屏幕并弹出提示。</p>
-  <h2>面向配套应用开发者</h2>
-  <p>任何有自己识别器的原生配套应用都可以注册 <code>caps.transcribe: "push"</code>，接收 <code>agent.transcribe</code> 请求，用 <code>agent.transcribe.audio</code> 分页读取 16 kHz WAV，并用 <code>agent.transcribe.result</code> 回答。活动行使用 <code>agent.reply</code> 上的 <code>message.summary</code>。<a href="/zh-Hans/docs/native-companions/">原生配套应用指南</a>和 <a href="/docs/deckd-api.md">API 参考</a>介绍了这两项。</p>
-  <h2>更新</h2>
-  <p>选择<strong>检查更新</strong>，或安装已签名并经过公证的 0.12.0 版 Mac 应用（Apple Silicon 或 Intel）。需要 macOS 13 或更高版本。录音时间线和“计时器”页面需要固件 <strong>0.12.0</strong>：通过 USB 连接设备后，打开<strong>服务 → 更新 → 检查固件更新</strong>。设置和蓝牙配对都会保留。</p>
-  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.12.0" rel="noopener">在 GitHub 上获取 OpenWalkieTalkie v0.12.0 及校验和 →</a></p>
+  <p>通过对讲机向 Conol 说话，应该像直接在 Conol 里输入文字一样，把意思准确传过去。0.12.0 将这类录音交给 Conol 自己的语音模型识别；说话时显示录音时间线，工作时同步 Conol 的当前步骤，同时新增带番茄钟的 Timer 界面。</p>
+  <h2>发给 Conol 的语音，由 Conol 来识别</h2>
+  <p>选中 Conol 对话或 <strong>+ New chat</strong> 后按住 PTT，Mac 服务会录下这段语音并交给 Conol 桌面应用。Conol 使用与输入框麦克风相同的云端语音模型转写。松手后，对讲机显示和最终发送的都是这份识别结果；用语音回答 Conol 的问题时也是如此。</p>
+  <p>按住 PTT 时，Mac 本地识别器也会继续工作。如果 Conol 无法响应、识别失败或超过 20 秒仍未返回，就改用 Mac 的转写结果，避免丢掉这次语音。发给其他助手的录音，以及给对讲机起名字时的录音，仍在 Mac 上处理。只有发给 Conol 对话的录音会交给你已登录的 Conol 应用处理；设置 <code>[voice.stt] companion = false</code> 可让所有录音都留在本地识别。此功能需要更新后的 Conol 桌面版和网页端配合；旧版 Conol 的行为保持不变。</p>
+  <h2>对话时的实时时间线</h2>
+  <p>Mac 的实时识别文字不一定等于最终发给 Conol 的内容，因此这类录音不再显示本地实时文字。屏幕改为显示 <strong>RECORDING</strong>、醒目的录音时长和时间线：红色进度指示从左向右移动，对讲机麦克风采集的波形随之填入；录音较长时，时间线会滚动。松手后先显示 <strong>TRANSCRIBING</strong>，再显示 Conol 返回的转写结果。</p>
+  <h2>查看 Conol 当前的操作状态</h2>
+  <p>当前运行的 Conol 聊天现在在对讲机上显示其当前的公开步骤，例如 "执行命令" 并附带简要预览，既在助手列表中也出现在对话界面中。显示内容会原地更新，步骤结束后自动清除。完整的工具输入和结果仍保留在 Conol 中。</p>
+  <h2>计时器和番茄工作法</h2>
+  <p>在页面管理器的 <strong>+</strong> 添加菜单里选择 <strong>Timer</strong>，即可使用带分段计时的秒表、带预设的倒计时和番茄钟。番茄钟每轮专注 25 分钟、休息 5 分钟，完成四轮专注后休息 15 分钟；每个阶段结束后，都等待你按 <strong>Next / Enter</strong> 再继续。计时在对讲机本地运行，切到其他页面或屏幕休眠都不会中断；结束时会唤醒屏幕并弹出通知。</p>
+  <h2>给原生应用接入开发者</h2>
+  <p>拥有自己语音识别器的原生接入应用，可以注册 <code>caps.transcribe: "push"</code>，接收 <code>agent.transcribe</code> 转写请求，通过 <code>agent.transcribe.audio</code> 分页读取 16 kHz WAV 音频，再用 <code>agent.transcribe.result</code> 返回结果。活动状态行使用 <code>agent.reply</code> 中的 <code>message.summary</code> 字段。两种接口都在<a href="/zh-Hans/docs/native-companions/">原生应用接入指南</a>和 <a href="/zh-Hans/docs/deckd-api.md">API 参考文档</a>中说明。</p>
+  <h2>Update</h2>
+  <p>选择 <strong>Check for Updates</strong>，或安装已签名并通过公证的 0.12.0 版 Mac 应用，支持 Apple Silicon 和 Intel，需要 macOS 13 或更高版本。录音时间线和 Timer 页面需要 <strong>0.12.0</strong> 固件。用 USB 连接对讲机，打开 <strong>Service → Updates → Check firmware</strong> 更新。设置和蓝牙配对会保留。</p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.12.0" rel="noopener">在 GitHub 下载 OpenWalkieTalkie v0.12.0 和校验和文件 →</a></p>
   <p class="post-back"><a href="/zh-Hans/blog/">← 返回博客</a></p>
 </article>
 </main>
 
 <footer class="footer--mini">
   <div class="inner">
-    <span>OpenWalkieTalkie · COHDL 项目 · MIT 许可的软件 · CERN-OHL-P 许可的硬件</span>
+    <span>OpenWalkieTalkie · 一个 COHDL 项目 · MIT 软件 · CERN-OHL-P 硬件</span>
     <nav aria-label="页脚">
-      <a href="/zh-Hans/#waitlist">加入候补名单</a>
+      <a href="/zh-Hans/#waitlist">加入等候名单</a>
       <a href="/zh-Hans/privacy/">隐私政策</a>
       <a href="/zh-Hans/cookies/">Cookie 说明</a>
-      <a href="/zh-Hans/cookies/" data-privacy-open>隐私声明</a>
+      <a href="/zh-Hans/cookies/" data-privacy-open>隐私说明</a>
       <a href="/zh-Hans/">首页</a>
-      <a href="/zh-Hans/#demo">试用</a>
+      <a href="/zh-Hans/#demo">试试看</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
       <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
-      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="在 Discord 上加入 CoHDL 和 OpenWalkieTalkie 社区">Discord</a>
-      <a href="/zh-Hans/blog/feed.xml">订阅源</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="加入 CoHDL 和 OpenWalkieTalkie 的 Discord 社区">Discord</a>
+      <a href="/zh-Hans/blog/feed.xml">订阅更新</a>
     </nav>
   </div>
 </footer>
 
 <script src="/js/main.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 语言: 简体中文">Language</summary>
+        <ul>
+          <li><a href="/blog/conol-speech-and-pomodoro/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/conol-speech-and-pomodoro/" hreflang="zh-Hans" lang="zh-Hans" aria-current="true">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/conol-speech-and-pomodoro/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/blog/conol-speech-and-pomodoro/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

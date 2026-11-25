@@ -36,6 +36,7 @@
 <link rel="stylesheet" href="/css/blog.css" />
 <link rel="stylesheet" href="/css/docs.css" />
 <script src="/js/i18n/zh-Hant.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 <!-- No optional analytics or advertising scripts. -->
 </head>
@@ -53,7 +54,7 @@
     </a>
 
     <nav class="nav__links" aria-label="網站區塊">
-      <a href="/zh-Hant/#pile">The Pile</a>
+      <a href="/zh-Hant/#pile">The Pile（分頁堆）</a>
       <a href="/zh-Hant/#features">功能</a>
       <a href="/zh-Hant/#demo">試用</a>
       <a href="/zh-Hant/#faces">頁面</a>
@@ -61,15 +62,6 @@
       <a href="/zh-Hant/docs/" aria-current="true">說明文件</a>
       <a href="/zh-Hant/blog/">部落格</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="語言: 繁體中文">繁體中文</summary>
-        <ul>
-          <li><a href="/docs/native-companions/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/docs/native-companions/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
-          <li><a href="/zh-Hant/docs/native-companions/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
-          <li><a href="/ja/docs/native-companions/" hreflang="ja" lang="ja">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
     <button class="theme-toggle" id="themeToggle" type="button" aria-label="切換日間與夜間主題" aria-pressed="false">
@@ -96,7 +88,7 @@
 <article class="post-body">
 <p>為任何助理打造原生配套程式。你的應用程式掌管自己的對話與模型連線；OpenWalkieTalkie 提供分組的裝置清單、語音輸入、對話顯示、提問與工作階段設定。Conol 使用的也是同一個公開介面。</p>
 <p><strong>需要 0.11.0 或更新版本的 OpenWalkieTalkie 應用程式、服務與韌體。</strong>這是透過 JSON-RPC 的本機桌面整合，不依賴 Conol。現有的 CLI 掛鉤仍然支援。</p>
-<p><a href="/examples/native_companion.py">下載 Python 範例</a> · <a href="/docs/deckd-api.md">完整 API 參考資料（Markdown）</a> · <a href="/zh-Hant/docs/">說明文件首頁</a></p>
+<p><a href="/examples/native_companion.py">下載 Python 範例</a> · <a href="/zh-Hant/docs/deckd-api.md">完整 API 參考資料（Markdown）</a> · <a href="/zh-Hant/docs/">說明文件首頁</a></p>
 <nav class="toc" aria-label="本頁內容"><p class="toc-title">本頁內容</p><ul><li><a href="#try-the-example">試用範例</a></li><li><a href="#connect-and-discover">連線與探索</a></li><li><a href="#register-sessions-and-group-them">註冊工作階段並分組</a></li><li><a href="#start-and-activate-a-new-chat">開始並啟用新的聊天</a></li><li><a href="#keep-both-transcripts-current">讓兩邊的對話記錄保持最新</a></li><li><a href="#transcribe-with-your-own-speech-model">用你自己的語音模型轉寫</a></li><li><a href="#handle-complex-questions-on-the-deck">在裝置上處理複雜提問</a></li><li><a href="#display-and-change-model-thinking-effort">顯示並變更模型 / 思考強度</a></li><li><a href="#feed-the-omarchy-face">為 Omarchy 頁面提供資料</a></li><li><a href="#integration-checklist">整合檢查清單</a></li></ul></nav>
 <h2 id="try-the-example">試用範例</h2>
 <p>啟動 OpenWalkieTalkie，連接裝置，下載範例，然後執行：</p>
@@ -107,7 +99,7 @@
 <h2 id="connect-and-discover">連線與探索</h2>
 <p>從你的桌面程序連線到同一使用者的 Unix 網域通訊端。每一行傳送一個 UTF-8 JSON-RPC 2.0 物件，每個請求使用不同的 <code>id</code>。依 <code>id</code> 對應回覆；通知可能夾在回覆之間抵達。後端處理進行中時，請持續傳送心跳。</p>
 <ul>
-<li>自訂位置：設定了該變數時為 <code>$DECKD_DATA_DIR/deckd.sock</code>。</li>
+<li>自訂路徑：如果已設定環境變數 DECKD_DATA_DIR，通訊端位於 <code>$DECKD_DATA_DIR/deckd.sock</code>。</li>
 <li>macOS：<code>~/Library/Application Support/OpenWalkieTalkie/deckd.sock</code>。</li>
 <li>Linux：<code>${XDG_DATA_HOME:-~/.local/share}/openwalkietalkie/deckd.sock</code>，也就是 Omarchy 安裝用來執行服務的資料夾。Linux 是服務、Omarchy 橋接與配套應用程式都支援的平台（見 <a href="/zh-Hant/docs/omarchy/">Omarchy 指南</a>）。</li>
 </ul>
@@ -120,10 +112,10 @@
 }}
 </code></pre>
 <p>通訊端會驗證本機作業系統使用者。這個整合只請求 <code>agent</code> 與 <code>observe</code>。你擁有的事件包含處理你的對話所需的內容；這些權限範圍不會讓你取得其他應用程式的私人對話記錄。不需要傳送任何遠端 API 金鑰給常駐程式。請把通訊端留在受信任的桌面程序中，不要把原始的 RPC 橋接暴露給網頁內容。</p>
-<p>通訊端不存在代表服務無法使用：請顯示未連線狀態，並以退避方式重試。如果兩個新方法中任一個回傳 <code>-32601</code>，表示常駐程式不支援原生配套程式；請提示更新，而不是悄悄回報整合已連線。各個方法、權限範圍與請求結構描述都在 <a href="/docs/deckd-api.md">API 參考資料</a>中。</p>
+<p>通訊端不存在代表服務無法使用：請顯示未連線狀態，並以退避方式重試。如果兩個新方法中任一個回傳 <code>-32601</code>，表示常駐程式不支援原生配套程式；請提示更新，而不是悄悄回報整合已連線。各個方法、權限範圍與請求結構描述都在 <a href="/zh-Hant/docs/deckd-api.md">API 參考資料</a>中。</p>
 <p><strong>通訊端是已連線應用程式唯一的入口。</strong>服務在 <code>127.0.0.1</code> 上的 HTTP 與 WebSocket 入口，以及開啟它的持有人權杖，預設都是關閉的。只有在舊版 OpenWalkieTalkie 安裝留下的 Claude Code HTTP 掛鉤仍需要時，服務才會讓這個入口保持開啟；<code>config.toml</code> 中明確的 <code>[api] tcp</code> 設定一律優先。下一個版本預計移除這個入口與它的權杖。請不要以它們為基礎開發。</p>
 <h2 id="register-sessions-and-group-them">註冊工作階段並分組</h2>
-<p>每個對話註冊一個助理，另外可選擇註冊一個啟動器。為每個應用程式/帳號/對話保留穩定且具命名空間的 <code>key</code>。在所屬的連線上，同一個 key 的註冊是等冪的。</p>
+<p>每個對話註冊一個助理，另外可選擇註冊一個啟動器。為每個應用程式/帳號/對話保留穩定且具命名空間的 <code>key</code>。在同一條連線上重複註冊相同的 key，結果相同。</p>
 <pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:2,&quot;method&quot;:&quot;agent.register&quot;,&quot;params&quot;:{
   &quot;kind&quot;:&quot;other&quot;,&quot;name&quot;:&quot;Plan the release&quot;,&quot;key&quot;:&quot;example:personal:chat-42&quot;,
   &quot;caps&quot;:{&quot;answer&quot;:&quot;push&quot;,&quot;order&quot;:&quot;push&quot;,&quot;focus&quot;:true},&quot;lease_ttl_s&quot;:30
@@ -139,7 +131,7 @@
 </code></pre>
 <p><code>app_id</code> 是穩定的應用程式識別碼（1–64 個 ASCII 字母、數字、句點、連字號或底線）。<code>group_id</code> 識別應用程式中的一個帳號或工作區（1–128 個 UTF-8 位元組）。<code>group_label</code> 是它顯示的標題（1–24 個 UTF-8 位元組）。標籤與 ID 不能為空，也不能包含控制字元。這些是公開的顯示欄位：請使用不透明的帳號 ID，而不是憑證或私人帳號名稱。若分組應該在裝置上分成不同頁，請使用不同的標籤，例如「Example · Work」：韌體依顯示的標籤分組；桌面端的分組與溢出提升則使用應用程式/帳號 ID。</p>
 <p><code>role</code> 是 <code>session</code> 或 <code>launcher</code>。<code>profile: null</code> 會移除原生的呈現方式。在 API 中，<code>kind</code> 仍代表服務供應商身分；自訂助理請用 <code>other</code>。現有的服務供應商類型也接受配套程式設定檔。Conol 選用的機器人圖像來自它的 kind；其他應用程式整合時既不需要這個圖像，也不需要新的韌體列舉值。</p>
-<p>原生焦點透過事件傳給你的應用程式，而不是對終端機注入輸入。共有八個共用的實體槽位。請檢查回傳的 <code>slot</code>（<code>null</code> 代表溢出）。聚焦一個溢出的配套程式時，會先以一般方式分配槽位；若所有槽位都在使用中，它可以取代同一所屬連線、同一應用程式與同一分組中一個未釘選的工作階段。這個備援會保留啟動器、其他帳號與其他應用程式。所有候選都受保護時，它不保證能取得槽位。不要註冊沒有上限的歷史：發布一個有用的使用中視窗，完整清單保存在你自己的應用程式裡。</p>
+<p>原生焦點透過事件傳給你的應用程式，而不是對終端機注入輸入。共有八個共用的實體槽位。請檢查回傳的 <code>slot</code>（<code>null</code> 代表溢出）。聚焦一個溢出的配套程式時，會先以一般方式分配槽位；若所有槽位都在使用中，它可以取代同一所屬連線、同一應用程式與同一分組中一個未釘選的工作階段。這個備援會保留啟動器、其他帳號與其他應用程式。所有候選都受保護時，它不保證能取得槽位。不要把所有歷史工作階段都註冊進來：只發布近期仍在使用的工作階段，完整清單保存在你自己的應用程式裡。</p>
 <p>每 10 秒傳送一次帶有你所擁有助理 ID 的 <code>agent.heartbeat</code>，以維持 30 秒的租約。登出或關閉時，使用 <code>agent.release</code>。通訊端中斷後，重新連線並再次註冊。如果註冊回傳擁有權衝突 <code>-32004</code>，<code>agent.claim {&quot;key&quot;:&quot;…&quot;}</code> 可以收回孤立或已過期的註冊；它無法接管仍在使用中的連線。重新連線後，請重新發布設定檔、設定、對話記錄與目前的提問。租約和常駐程式都不是你的永久聊天資料庫。</p>
 <h2 id="start-and-activate-a-new-chat">開始並啟用新的聊天</h2>
 <p>註冊一個名為 <strong>+ New chat</strong> 的啟動器，使用 <code>role: &quot;launcher&quot;</code>，並與它的對話使用同一個分組。它的指令能力必須是 <code>push</code>。角色控制呈現方式與槽位保護；它不會替你建立後端工作階段。</p>
@@ -156,7 +148,7 @@
 <li>在你的應用程式中選取新對話，然後呼叫 <code>agent.focus {&quot;agent&quot;:&quot;ag_new&quot;}</code>。常駐程式會在聚焦前送出槽位取代的更新，韌體會在放開 PTT 後開啟該對話。已經開啟的提問卡片維持不動。</li>
 </ol>
 <p>處理帶有 <code>data.source: &quot;device&quot;</code> 的 <code>focus.changed</code> 時，請在你的應用程式中選取對應的對話，或為啟動器開啟空白的輸入框。不要再回應另一個聚焦請求，以免形成回饋迴圈。未知助理 ID 的事件必須忽略。</p>
-<p>絕對不要盲目重試結果不明的後端建立。請使用後端的等冪金鑰，或先核對永久保存的結果。通訊端重新連線不能證明先前的建立失敗了。範例中的本機記憶體建立只是示意；正式的後端必須提供這項保證。</p>
+<p>絕對不要盲目重試結果不明的後端建立。請使用後端的防止重複建立的識別碼（idempotency key），或先核對永久保存的結果。通訊端重新連線不能證明先前的建立失敗了。範例中的本機記憶體建立只是示意；正式的後端必須提供這項保證。</p>
 <h2 id="keep-both-transcripts-current">讓兩邊的對話記錄保持最新</h2>
 <p>對於已有的工作階段，<code>agent.order</code> 代表傳送一則後續訊息給該對話。請在後端使用穩定的用戶端訊息 ID，更新應用程式中可見的對話記錄，並恢復它的回應串流。只同步到裝置，會讓你的桌面介面過時。</p>
 <p>每個為你的助理口述或輸入的指令，都在 <code>data.order</code> 中帶有一個指令 ID；在你的完成卡片上選擇的步驟（<code>ctx: &quot;step&quot;</code>）則不帶 ID，也不需要回報。如果訊息無法送達你的對話，請回報，裝置就會顯示該指令未送達：</p>
@@ -171,7 +163,7 @@
   &quot;message&quot;:{&quot;id&quot;:&quot;message-42&quot;,&quot;role&quot;:&quot;assistant&quot;,&quot;streaming&quot;:true}
 }}
 </code></pre>
-<p>串流時，用同一個訊息 ID 傳送即可取代文字；最後以 <code>streaming: false</code> 結束。使用者訊息也以 <code>role: &quot;user&quot;</code> 傳送。常駐程式為每個助理最多保留 64 則訊息與 512 KiB；請發布有上限的近期視窗。不要把私人的推理過程、憑證與內部工具引數放進同步的對話記錄。朗讀需透過 <code>speak</code> 主動開啟。</p>
+<p>串流時，用同一個訊息 ID 傳送即可取代文字；最後以 <code>streaming: false</code> 結束。使用者訊息也以 <code>role: &quot;user&quot;</code> 傳送。常駐程式為每個助理最多保留 64 則訊息與 512 KiB；請發布數量有限的近期訊息。不要把私人的推理過程、憑證與內部工具引數放進同步的對話記錄。朗讀需透過 <code>speak</code> 主動開啟。</p>
 <p>用 <code>agent.update</code> 設定對話名稱、短標題與 <code>state</code>（<code>working</code>、<code>question</code>、<code>ready</code>、<code>error</code> 或 <code>idle</code>）。保持後端的實際狀態，如實顯示傳送失敗，不要宣稱訊息已被接受。回應結束時，先發布它的最終訊息（<code>streaming: false</code>），再設定 <code>state: ready</code>：狀態變為 ready 時，裝置會朗讀已有的回覆，但絕不會朗讀對話上一次變為 <code>working</code> 之前發布的回覆。</p>
 <p>原生配套程式也可以透過 <code>agent.reply</code> 發布公開的工具活動：使用 <code>message.role: "tool"</code>、明確的 <code>activity</code>（<code>running</code>、<code>completed</code>、<code>failed</code> 或 <code>stopped</code>），以及 <code>summary: {"label":"Running a command","detail":"cargo test"}</code>。這個選用的摘要需要結構描述中含有 <code>ActivitySummary</code> 的新版常駐程式；0.11.0 韌體可以顯示產生的列。請使用穩定的呼叫 ID，只在執行期間設定 <code>streaming</code>，並在上一個呼叫消失時將它結束或停止。只傳送可見的標籤與預覽，完整的工具輸入/結果留在所屬的應用程式中，並保持 <code>speak: false</code>。摘要內容和對話文字一樣，依內容權限範圍進行遮蔽。</p>
 <h2 id="transcribe-with-your-own-speech-model">用你自己的語音模型轉寫</h2>
@@ -182,7 +174,7 @@
     &quot;rate&quot;:16000,&quot;ms&quot;:4200,&quot;bytes&quot;:134444,&quot;page&quot;:98304,&quot;locale&quot;:&quot;en-US&quot;}
 }}
 </code></pre>
-<p>錄音為 16 kHz、16 位元單聲道 WAV，最長約一分鐘。用 <code>agent.transcribe.audio {&quot;transcription&quot;:&quot;tr_7&quot;,&quot;offset&quot;:0}</code> 分頁取得，它會回傳 <code>{offset,total,data}</code>，其中 <code>data</code> 為 base64。依解碼後的長度推進 <code>offset</code>，直到等於 <code>total</code>。接著以 <code>agent.transcribe.result {&quot;transcription&quot;:&quot;tr_7&quot;,&quot;text&quot;:&quot;…&quot;}</code> 回覆且只回覆一次；若無法轉寫，則以 <code>&quot;error&quot;:&quot;…&quot;</code> 回覆。出錯時請立即回覆，不要保持沉默，裝置才不必等到時限用完。只有所屬的連線可以讀取或回覆這個請求。請求只會傳給該連線，絕不會出現在事件匯流排上。點名裝置本身的按鍵，以及短於 0.3 秒的按鍵，永遠不會被提供。只有 <code>[voice.stt] companion</code> 開啟時（預設開啟），音訊才會離開常駐程式，使用者可以關閉它。</p>
+<p>錄音為 16 kHz、16 位元單聲道 WAV，最長約一分鐘。用 <code>agent.transcribe.audio {&quot;transcription&quot;:&quot;tr_7&quot;,&quot;offset&quot;:0}</code> 分頁取得，它會回傳 <code>{offset,total,data}</code>，其中 <code>data</code> 為 base64。依解碼後的長度推進 <code>offset</code>，直到等於 <code>total</code>。接著以 <code>agent.transcribe.result {&quot;transcription&quot;:&quot;tr_7&quot;,&quot;text&quot;:&quot;…&quot;}</code> 回覆且只回覆一次；若無法轉寫，則以 <code>&quot;error&quot;:&quot;…&quot;</code> 回覆。出錯時請立即回覆，不要保持沉默，裝置才不必等到時限用完。只有所屬的連線可以讀取或回覆這個請求。請求只會傳給該連線，絕不會出現在事件匯流排上。用來替裝置本身命名的錄音，以及按住不到 0.3 秒的錄音，都不會提供給應用程式。只有 <code>[voice.stt] companion</code> 開啟時（預設開啟），音訊才會離開常駐程式，使用者可以關閉它。</p>
 <h2 id="handle-complex-questions-on-the-deck">在裝置上處理複雜提問</h2>
 <p>公開的提問基本元件是 <code>agent.card.set</code>。一張卡片最多有四個選項，並可選擇允許自由文字。請在你的應用程式中建立多步驟表單；每顯示一個步驟都使用新的卡片 ID。</p>
 <pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:5,&quot;method&quot;:&quot;agent.card.set&quot;,&quot;params&quot;:{
@@ -231,7 +223,7 @@
 <p>在後端套用所請求的設定，然後呼叫 <code>agent.session.set</code>，帶上<strong>實際得到的控制項</strong>與 <code>request_rev: 19</code>。請使用 <code>data.request_rev</code>，而不是外層事件的 <code>rev</code>。裝置會讓現有的選擇保持待定，直到收到確認。失敗時，以一則簡短說明的 <code>note</code> 確認未改變的實際設定。</p>
 <p>一般的重新整理不帶 <code>request_rev</code>，也不會了結待定的請求。不相符、重複或過期的確認會被拒絕。待定的變更在 45 秒後逾時。在非同步處理中保持請求與助理的對應，若回應遺失，請與後端核對。常駐程式驗證傳輸與擁有權；授權並套用模型變更仍是你的應用程式的責任。</p>
 <h2 id="feed-the-omarchy-face">為 Omarchy 頁面提供資料</h2>
-<p>裝置的 Omarchy 頁面是一個視窗切換器：一列最多九個工作區標籤，以及最多六列視窗。其中沒有任何東西是 Omarchy 專屬的。任何應用程式都可以用 <code>device.ws.set</code> 填入內容，並透過三個事件回應使用者在那裡的操作。Omarchy 橋接（原始碼存放庫中的 <code>host/omarchy/</code>）是參考用戶端，CI 會在每個提取要求上執行它的測試。</p>
+<p>裝置的 Omarchy 頁面是一個視窗切換器：一列最多九個工作區標籤，以及最多六列視窗。其中沒有任何東西是 Omarchy 專屬的。任何應用程式都可以用 <code>device.ws.set</code> 填入內容，並透過三個事件回應使用者在那裡的操作。Omarchy 橋接（原始碼儲存庫中的 <code>host/omarchy/</code>）是參考用戶端，CI 會在每次有人提出 pull request 時執行這些測試。</p>
 <p><strong>頁面資料是公開介面，從現在起只增不減。</strong><code>device.ws.set</code> 以及 <code>device.ws</code>、<code>device.key</code> 與 <code>device.link</code> 事件可能會新增欄位；現有欄位都不會被重新命名、改變型別或移除。請忽略你不認得的欄位。</p>
 <p>請求 <code>device.ws.set</code> 所需的 <code>device</code> 權限範圍，並寫明這三個事件的名稱。<code>device.key</code> 是高頻率事件，<code>&quot;*&quot;</code> 不會比對到它，所以必須寫明。</p>
 <pre><code class="language-json">{&quot;jsonrpc&quot;:&quot;2.0&quot;,&quot;id&quot;:1,&quot;method&quot;:&quot;session.hello&quot;,&quot;params&quot;:{
@@ -299,7 +291,7 @@
   <div class="inner">
     <span>OpenWalkieTalkie · COHDL 專案 · MIT 授權軟體 · CERN-OHL-P 授權硬體</span>
     <nav aria-label="頁尾">
-      <a href="/zh-Hant/#waitlist">加入候補名單</a>
+      <a href="/zh-Hant/#waitlist">加入等候名單</a>
       <a href="/zh-Hant/privacy/">隱私權政策</a>
       <a href="/zh-Hant/cookies/">Cookie 說明</a>
       <a href="/zh-Hant/cookies/" data-privacy-open>隱私權聲明</a>
@@ -315,5 +307,14 @@
 
 <script src="/js/main.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 語言: 繁體中文">Language</summary>
+        <ul>
+          <li><a href="/docs/native-companions/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/docs/native-companions/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/docs/native-companions/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
+          <li><a href="/ja/docs/native-companions/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

@@ -29,7 +29,7 @@ test('a missing page under a language prefix gets that language’s 404 page', a
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 });
 
-test('the header switcher lands on the same page in the chosen language', async ({ page }) => {
+test('the edge switcher lands on the same page in the chosen language', async ({ page }) => {
   await page.goto('/blog/radio-branding/');
   await page.getByRole('button', { name: 'Got it' }).click();
   for (const [code, label] of LANGS) {
@@ -43,13 +43,13 @@ test('the header switcher lands on the same page in the chosen language', async 
   await expect(page).toHaveURL(/\/blog\/radio-branding\/$/);
 });
 
-test('mobile: the switcher sits in the menu and the page does not overflow', async ({ page }) => {
+test('mobile: the switcher stays available without opening the menu and the page does not overflow', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   for (const path of ['/', '/ja/', '/zh-Hant/manual/']) {
     await page.goto(path);
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), path).toBe(true);
   }
-  await page.locator('#navBurger').click();
+  await expect(page.locator('.lang-switch summary')).toBeVisible();
   await page.locator('.lang-switch summary').click();
   await expect(page.locator('.lang-switch').getByRole('link', { name: 'English' })).toBeVisible();
 });

@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   var STRINGS = window.OWT_STRINGS || {};
-  var t = function (s, a) { var out = Object.prototype.hasOwnProperty.call(STRINGS, s) ? STRINGS[s] : s; return out.split('{0}').join(a); };
+  var t = function (s, a) { var out = Object.prototype.hasOwnProperty.call(STRINGS, s) ? STRINGS[s] : window.OWTI18n ? window.OWTI18n.t(s) : s; return out.split('{0}').join(a); };
   window.OWTArcade = function (options) {
     var $ = function (id) { return document.getElementById(id); };
     var canvas = $('arcadeCanvas'), ctx = canvas.getContext('2d');
@@ -19,7 +19,7 @@
     }
     function stopLoop() { cancelAnimationFrame(frame); frame = null; previous = 0; }
     function updateStatus() {
-      status.textContent = names[game] + ' · ' + t('{0} pts', score) + ' · ' + t(phase === 'over' ? 'GAME OVER' : phase === 'paused' ? 'PAUSED' : phase === 'ready' ? 'READY' : 'PLAYING');
+      status.textContent = t(names[game]) + ' · ' + t('{0} pts', score) + ' · ' + t(phase === 'over' ? 'GAME OVER' : phase === 'paused' ? 'PAUSED' : phase === 'ready' ? 'READY' : 'PLAYING');
       $('arcadeStart').textContent = t(phase === 'playing' ? 'Pause' : phase === 'paused' ? 'Resume' : phase === 'over' ? 'Play again' : 'Start game');
     }
     function newFood() {
@@ -110,8 +110,8 @@
       }
       if (phase !== 'playing') {
         ctx.fillStyle = '#000a'; ctx.fillRect(0, 85, 320, 70); ctx.fillStyle = '#f1e8c9'; ctx.font = '18px monospace'; ctx.textAlign = 'center';
-        ctx.fillText(phase === 'ready' ? 'PRESS START' : phase === 'paused' ? 'PAUSED' : 'GAME OVER', 160, 115);
-        ctx.font = '12px monospace'; ctx.fillText(phase === 'over' ? 'Score ' + score + ' · try again' : 'PTT / ENTER / screen to play', 160, 138);
+        ctx.fillText(t(phase === 'ready' ? 'PRESS START' : phase === 'paused' ? 'PAUSED' : 'GAME OVER'), 160, 115);
+        ctx.font = '12px monospace'; ctx.fillText(t(phase === 'over' ? 'Score ' + score + ' · try again' : 'PTT / ENTER / screen to play'), 160, 138);
       }
     }
     function action(key) {

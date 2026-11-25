@@ -1,33 +1,33 @@
 ---
-title: OpenWalkieTalkie v0.5.0：Desktop 已连接，出厂准备就绪 · OpenWalkieTalkie
-description: Codex Desktop 连接修复、可靠的简短回复、替代闪存芯片支持，以及用于工厂烧录的出厂固件。
-heading: OpenWalkieTalkie v0.5.0：Desktop 已连接，出厂准备就绪
+title: OpenWalkieTalkie v0.5.0：修复 Desktop 连接，提供出厂镜像 · OpenWalkieTalkie
+description: 修复 Codex Desktop 连接和短任务回复丢失的问题，新增两种兼容闪存芯片，并提供出厂烧录镜像。
+heading: OpenWalkieTalkie v0.5.0：修复 Desktop 连接，提供出厂镜像
 kind: 应用和固件更新
 date: 2026-10-19
 published: 2026-10-19T05:00:00Z
 updated: 2026-10-19T05:00:00Z
-summary: Codex Desktop 连接修复、可靠的简短回复、替代闪存芯片支持，以及用于工厂烧录的出厂固件。
-excerpt: Codex Desktop 连接修复、可靠的简短回复、替代闪存芯片支持，以及用于工厂烧录的出厂固件。
+summary: 修复 Codex Desktop 连接和短任务回复丢失的问题，新增两种兼容闪存芯片，并提供出厂烧录镜像。
+excerpt: 修复 Codex Desktop 连接和短任务回复丢失的问题，新增两种兼容闪存芯片，并提供出厂烧录镜像。
 lastmod: 2026-10-19
 navDocs: no
 ---
-  <p>OpenWalkieTalkie 0.5.0 修复了 Codex Desktop 与设备之间的连接。它还在固件中加入了对两款替代闪存芯片的支持，并打包了用于工厂烧录的整片出厂固件。</p>
-  <h2>Desktop 的任务能到达共享服务了</h2>
-  <p>之前的启动器能成功打开 Desktop，但它的对话对 OpenWalkieTalkie 不可见。Desktop 的默认插件设置让它隐式的共享服务模式退回到私有服务器。更新后的启动器会明确选择共享的本地连接。</p>
-  <p>名为 ChatGPT.app 或 Codex.app 的兼容安装都能被识别。启动器会复用现有的 Codex 服务，不会干扰正在运行的 Desktop 任务。另一项修复让那些在 OpenWalkieTalkie 订阅其对话之前就已完成的简短任务，也能正常送回回复。</p>
+  <p>OpenWalkieTalkie 0.5.0 修复了 Codex Desktop 与对讲机之间的连接，还增加了对两种替代闪存芯片的固件支持，并提供用于工厂烧录的整片镜像。</p>
+  <h2>桌面任务已传递至共享服务</h2>
+  <p>旧启动器虽然能打开 Codex Desktop，却可能让 OpenWalkieTalkie 看不到其中的对话。原因是 Desktop 的默认插件设置，让隐式共享服务模式回退到了独立的私有服务。更新后的启动器会明确选择共享的本地连接。</p>
+  <p>兼容的已安装应用，无论名为 ChatGPT.app 还是 Codex.app，都能被识别。启动器会复用现有的 Codex 服务，不影响 Desktop 中正在进行的任务。此外，还修复了短任务的回复丢失问题：即使任务在 OpenWalkieTalkie 订阅对话前就已完成，也能收到回复。</p>
   <h2>更新后修复集成</h2>
-  <p>安装 0.5.0 版应用，并确认它的服务也显示 0.5.0。打开 <strong>集成 → Codex Desktop</strong>，安装或修复这项集成。等 Desktop 的任务空闲时，退出 Codex Desktop / ChatGPT，然后打开 <code>~/Applications/Codex with OpenWalkieTalkie.app</code>。</p>
-  <p>这是一个用来启动你已安装的 Desktop 应用的小启动器。以后也请用它来启动：直接打开原来的应用不会启用共享连接。不受支持的 Desktop 版本会报错，而不是悄悄打开一个未连接的会话。</p>
-  <h2>更多闪存选择和出厂固件</h2>
-  <p>除了原有的 Winbond W25Q128JVSIQ（C97521），固件现在也接受 Puya PY25Q128HA-SUH-IR（C5354566）和 GigaDevice GD25Q128ESIGR（C2928891）。设置、配对和引导程序的写入程序在允许写入之前，会先确认读到的是稳定且受支持的芯片 ID。贴装了替代芯片的主板仍需实机验证。</p>
-  <p>这个版本附带一个出厂 ZIP，其中 Rev A 和 Rev B 各有一个独立的 16 MiB 镜像。每个镜像都由与发布版本完全相同的应用程序和恢复二进制文件、一份全新的分区表以及空的设备存储区组成。随附中文说明、各组件的哈希值和一个独立的校验工具。</p>
-  <p><strong>出厂固件会覆盖闪存中的全部内容，包括设置和配对数据。</strong>它用于空白主板的初次烧录。已在使用的设备应使用应用中常规的 USB 更新程序。</p>
-  <h2>更新已有的设备</h2>
-  <p>通过 USB-C 连接一台设备，然后打开 <strong>服务 → 更新 → 检查固件更新</strong>。分区布局和恢复协议与 0.4.0 相同，因此已使用恢复协议 2 的设备会收到普通的应用程序更新。</p>
-  <p><strong>仍在使用旧引导程序的设备需要进行引导式迁移。请保持供电，并让 Mac 保持唤醒：替换引导程序时断电，可能导致设备无法启动、无法通过 USB 恢复，只能进行硬件维修。</strong>应用会在迁移前显示这条警告。不要把 bootstrap 或 recovery 文件当作应用程序固件手动安装。</p>
-  <h2>我们验证了什么</h2>
-  <p>启动器和传输的回归测试均已通过。在开发用 Mac 上的实际测试中，Desktop 连接到了共享服务，它的 <code>DESKTOP-LINK-OK</code> 回复出现在 OpenWalkieTalkie 的图形界面中。通过 USB 向已连接的 Rev A 发送正常；最后在实机屏幕上的检查没有记录下来。</p>
-  <p>两种主板版本都通过了软件检查。之前带有相同闪存支持的 0.4.1 开发版固件，在现有的 Rev A 上完成了从旧引导程序的迁移。该测试中没有刷写 CI 构建的 0.5.0 文件。已出货的 Rev B、使用替代芯片的主板以及空白主板的工厂烧录，仍需硬件验证。没有进行设备音频测试。</p>
+  <p>安装 0.5.0 版本应用并确认其服务也报告 0.5.0 版本。打开 <strong>Integrations → Codex Desktop</strong> 并安装或修复该集成。当你的桌面任务空闲时，退出 Codex 桌面版 / ChatGPT，然后打开 <code>~/Applications/Codex with OpenWalkieTalkie.app</code>。</p>
+  <p>这是一个用于启动已安装桌面版应用的启动器。今后也请使用它来启动：直接打开原始应用不会启用共享连接。不支持的桌面版构建会报错，而不是静默地打开一个未连接到配套服务的会话。</p>
+  <h2>更多闪存选项和出厂镜像</h2>
+  <p>固件现在支持 Puya PY25Q128HA-SUH-IR (C5354566) 和 GigaDevice GD25Q128ESIGR (C2928891)，以及原有的 Winbond W25Q128JVSIQ (C97521)。其设置、配对和引导程序写入功能会在启用写入前验证稳定的芯片 ID。使用替代型号的板子仍需进行物理验证。</p>
+  <p>发布包包含出厂 ZIP 包，其中分别提供 Rev A 和 Rev B 的 16 MiB 整片镜像。每份镜像都将正式发布的应用固件、恢复固件、新闪存分区表和空白设备存储区组合在一起，并附带中文说明、各组成文件的哈希值和独立校验工具。</p>
+  <p><strong>出厂镜像将覆盖所有闪存内容，包括设置和配对数据。</strong> 它们仅用于新板子的初始化配置。已有设备应使用应用的正常 USB 更新工具。</p>
+  <h2>更新现有对讲机</h2>
+  <p>连接一台对讲机到 USB-C，然后打开 <strong>Service → Updates → Check firmware</strong>。分区布局和恢复协议与 0.4.0 版本保持一致，因此已处于恢复协议 2 的设备将接收正常的应用更新。</p>
+  <p><strong>仍使用旧引导程序的设备需要按向导迁移。请保持供电，并让 Mac 保持唤醒：替换引导程序时断电可能导致无法启动、无法通过 USB 恢复，甚至需要硬件维修。</strong>软件会在迁移前显示这条警告。不要把 bootstrap 或 recovery 文件当作应用固件手动安装。</p>
+  <h2>已验证的内容</h2>
+  <p>启动器和传输回归测试通过。在开发用 Mac 上进行的现场测试中，桌面端连接到共享服务，其 <code>DESKTOP-LINK-OK</code> 响应出现在 OpenWalkieTalkie 图形用户界面中。连接的 Rev A 设备通过 USB 传输数据正常；最终的物理屏幕检查未被记录。</p>
+  <p>两种板型都通过了软件检查。之前支持相同闪存的 0.4.1 开发固件，已在现有 Rev A 上完成旧引导程序迁移；那次测试没有刷入 CI 构建的 0.5.0 文件。出货版 Rev B、使用替代闪存芯片的电路板，以及空白板的出厂烧录，仍需硬件验证。本次没有进行设备音频测试。</p>
   <h2>获取 v0.5.0</h2>
-  <p>使用 <strong>检查更新</strong>，或<a href="/#download">下载已签名并经过公证的 Mac 应用</a>，支持 Apple Silicon 和 Intel。需要 macOS 13 或更高版本。</p>
-  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.5.0">GitHub 发布版本</a>包含固件、出厂固件、校验和、构建证明以及中文升级指南。每个 DMG 中也附有这份指南。</p>
+  <p>使用 <strong> Check for Updates </strong> 或 <a href="/#download">从官网下载已签名并通过公证的 Mac 应用程序</a>，适用于 Apple Silicon 或 Intel。需要 macOS 13 或更高版本。</p>
+  <p>本次 <a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.5.0"> GitHub 版本发布</a> 包含固件、出厂镜像、校验和、构建认证信息以及一份中文升级指南。该指南也包含在每个 DMG 文件中。</p>

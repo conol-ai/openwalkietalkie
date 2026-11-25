@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>OpenWalkieTalkie v0.3.0 · OpenWalkieTalkie</title>
-<meta name="description" content="在 Mac 和设备上查看聊天图片，图片预览更稳定，还能在手持设备上回答 Codex 的提问。" />
+<meta name="description" content="在 Mac 和对讲机上查看聊天图片，保持图片预览稳定，并直接在手持设备上回答 Codex 的问题。" />
 <link rel="canonical" href="https://openwalkietalkie.org/zh-Hans/blog/images-and-questions/" />
 <link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/blog/images-and-questions/" />
 <link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/blog/images-and-questions/" />
@@ -15,7 +15,7 @@
 <meta property="og:type" content="article" />
 <meta property="og:site_name" content="OpenWalkieTalkie" />
 <meta property="og:title" content="OpenWalkieTalkie v0.3.0 · OpenWalkieTalkie" />
-<meta property="og:description" content="在 Mac 和设备上查看聊天图片，图片预览更稳定，还能在手持设备上回答 Codex 的提问。" />
+<meta property="og:description" content="在 Mac 和对讲机上查看聊天图片，保持图片预览稳定，并直接在手持设备上回答 Codex 的问题。" />
 <meta property="og:url" content="https://openwalkietalkie.org/zh-Hans/blog/images-and-questions/" />
 <meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
 <meta name="twitter:card" content="summary_large_image" />
@@ -34,12 +34,13 @@
 <link rel="stylesheet" href="/css/style.css" />
 <link rel="stylesheet" href="/css/blog.css" />
 <script src="/js/i18n/zh-Hans.js"></script>
+<script src="/js/demo-i18n.js"></script>
 <script src="/js/theme-init.js"></script>
 <!-- No optional analytics or advertising scripts. -->
 </head>
 <body>
 
-<a class="skip-link" href="#content">跳至正文</a>
+<a class="skip-link" href="#content">跳转到正文</a>
 
 <div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
 
@@ -50,26 +51,17 @@
       <span class="brand__text">OPEN WALKIE TALKIE</span>
     </a>
 
-    <nav class="nav__links" aria-label="栏目">
-      <a href="/zh-Hans/#pile">The Pile</a>
+    <nav class="nav__links" aria-label="页面章节">
+      <a href="/zh-Hans/#pile">窗口太多了</a>
       <a href="/zh-Hans/#features">功能</a>
-      <a href="/zh-Hans/#demo">试用</a>
-      <a href="/zh-Hans/#faces">页面</a>
-      <a href="/zh-Hans/#blueprint">设计图纸</a>
+      <a href="/zh-Hans/#demo">试试看</a>
+      <a href="/zh-Hans/#faces">功能页面</a>
+      <a href="/zh-Hans/#blueprint">设计蓝图</a>
       <a href="/zh-Hans/blog/" aria-current="true">博客</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
-      <details class="lang-switch">
-        <summary aria-label="语言: 简体中文">简体中文</summary>
-        <ul>
-          <li><a href="/blog/images-and-questions/" hreflang="en" lang="en">English</a></li>
-          <li><a href="/zh-Hans/blog/images-and-questions/" hreflang="zh-Hans" lang="zh-Hans" aria-current="true">简体中文</a></li>
-          <li><a href="/zh-Hant/blog/images-and-questions/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
-          <li><a href="/ja/blog/images-and-questions/" hreflang="ja" lang="ja">日本語</a></li>
-        </ul>
-      </details>
     </nav>
 
-    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换日间和夜间主题" aria-pressed="false">
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切换日间与夜间主题" aria-pressed="false">
       <span class="theme-toggle__track" aria-hidden="true">
         <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
         <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
@@ -86,45 +78,54 @@
 
 <main class="blog-main" id="content">
 <header class="post-head">
-  <p class="section-kicker">博客 · 更新说明</p>
-  <h1>OpenWalkieTalkie v0.3.0：图片和待回答的提问</h1>
+  <p class="section-kicker">博客 · 发布说明</p>
+  <h1>OpenWalkieTalkie v0.3.0：聊天图片与待回答问题</h1>
   <p class="post-meta"><span>2026年10月15日</span><span>应用和固件更新</span></p>
 </header>
 <article class="post-body">
-  <p>0.3.0 版把图片带进了你的对话，也把更多 Codex 待回答的提问放到了设备上。看看你的助手在给你展示什么，然后不用回到键盘就能回答它的提问。</p>
-  <h2>聊天中的图片</h2>
-  <p>Mac 应用会显示图片附件，以及工具或助手返回的图片。在设备上，轻点图片条目即可打开预览。主机发送心跳、新的聊天消息到达时，预览都会保持打开。</p>
-  <h2>设备上的待回答提问</h2>
-  <p>Codex 的异步澄清提问现在会和权限请求一起显示。提问每次排队显示一个，回合结束后仍然可以回答。选择一个选项，或者说出你的回复。在 Codex 中回答后，设备上对应的提问会被清除；重新连接后，未回答的提问会恢复。</p>
-  <p>如果回复发送失败，提问会重新出现，让你再试一次。权限请求优先显示，之后未回答的提问会再次出现。</p>
-  <h2>连接和硬件更新</h2>
-  <p>Mac 应用现在可以接收更大的初始聊天快照，而不会断开连接。Rev B 的生产文件中，R37 改用 3.6 kΩ，为 500 mAh 电池提供约 247 mA 的充电电流，并更新了中文装配 BOM。这项电阻变更适用于新组装或经过实际改装的主板。</p>
+  <p>v0.3.0 现已支持聊天中的图像内容，并将更多 Codex 的待处理问题展示在对讲机上。你可以查看助手当前展示的内容，然后无需返回键盘即可直接回答其问题。</p>
+  <h2>聊天中的图像</h2>
+  <p>Mac 应用程序显示图像附件以及工具或助手返回的图像。在对讲机上，点击图像条目可打开预览。当主机持续发送心跳或新聊天消息到达时，预览将保持打开状态。</p>
+  <h2>对讲机上的待处理问题</h2>
+  <p>Codex 的异步澄清问题现在会与权限请求并列显示。问题按顺序排队，且在一轮操作结束后仍保持可访问。你可以选择一个选项或说出你的回复。在 Codex 中回答将清除对应的设备问题，重新连接后会恢复未回答的问题。</p>
+  <p>如果答案发送失败，问题会重新出现，方便你再次尝试。授权提示优先显示，处理完后再返回未回答的问题。</p>
+  <h2>连接与硬件更新</h2>
+  <p>Mac 应用程序现在可接受更大的初始聊天快照，而不会中断连接。Rev B 的制造文件使用 3.6 kΩ 的 R37 电阻，可提供约 247 mA 的充电电流，用于给 500 mAh 电池充电，且更新了中文版装配 BOM。该电阻变更适用于新组装或物理修改过的板子。</p>
   <h2>获取 v0.3.0</h2>
-  <p>在 Mac 应用中使用<strong>检查更新</strong>，或<a href="/zh-Hans/#download">下载经过签名和公证的安装包</a>，支持 Apple Silicon 或 Intel。需要 macOS 13 或更高版本。</p>
-  <p>通过 USB 连接设备，然后打开<strong>服务 → 更新</strong>，安装对应的 Rev A 或 Rev B 固件。</p>
-  <p>查看<a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.3.0">更新说明、固件下载和校验和</a>。</p>
+  <p>在 Mac 应用中选择 <strong>Check for Updates</strong>，或<a href="/zh-Hans/#download">下载已签名并通过公证的安装包</a>。按机型选择 Apple Silicon 或 Intel 版，需要 macOS 13 或更高版本。</p>
+  <p>通过 USB 连接对讲机，打开 <strong> Service → Updates</strong> 以安装匹配的 Rev A 或 Rev B 固件。</p>
+  <p>查看 <a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.3.0">发布说明、固件下载和校验和</a></p>
 </article>
 </main>
 
 <footer class="footer--mini">
   <div class="inner">
-    <span>OpenWalkieTalkie · COHDL 项目 · MIT 许可的软件 · CERN-OHL-P 许可的硬件</span>
+    <span>OpenWalkieTalkie · 一个 COHDL 项目 · MIT 软件 · CERN-OHL-P 硬件</span>
     <nav aria-label="页脚">
-      <a href="/zh-Hans/#waitlist">加入候补名单</a>
+      <a href="/zh-Hans/#waitlist">加入等候名单</a>
       <a href="/zh-Hans/privacy/">隐私政策</a>
       <a href="/zh-Hans/cookies/">Cookie 说明</a>
-      <a href="/zh-Hans/cookies/" data-privacy-open>隐私声明</a>
+      <a href="/zh-Hans/cookies/" data-privacy-open>隐私说明</a>
       <a href="/zh-Hans/">首页</a>
-      <a href="/zh-Hans/#demo">试用</a>
+      <a href="/zh-Hans/#demo">试试看</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
       <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
-      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="在 Discord 上加入 CoHDL 和 OpenWalkieTalkie 社区">Discord</a>
-      <a href="/zh-Hans/blog/feed.xml">订阅源</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="加入 CoHDL 和 OpenWalkieTalkie 的 Discord 社区">Discord</a>
+      <a href="/zh-Hans/blog/feed.xml">订阅更新</a>
     </nav>
   </div>
 </footer>
 
 <script src="/js/main.js"></script>
 <script src="/js/privacy.js"></script>
+      <details class="lang-switch">
+        <summary aria-label="Language — 语言: 简体中文">Language</summary>
+        <ul>
+          <li><a href="/blog/images-and-questions/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/blog/images-and-questions/" hreflang="zh-Hans" lang="zh-Hans" aria-current="true">简体中文</a></li>
+          <li><a href="/zh-Hant/blog/images-and-questions/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/blog/images-and-questions/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
 </body>
 </html>

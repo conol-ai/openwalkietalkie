@@ -1,10 +1,10 @@
 {
   "blog-index.head.title1": "博客 · OpenWalkieTalkie",
-  "blog-index.head.meta-content1": "OpenWalkieTalkie 的开发日志和文章 — 为你的 AI 助手打造的开源手持对讲机。",
+  "blog-index.head.meta-content1": "OpenWalkieTalkie 的开发日志与版本介绍——为 AI 助手打造的开源手持对讲机。",
   "blog-index.content.p1": "开发日志",
   "blog-index.content.h11": "博客",
-  "blog-index.content.p2": "开发日志和文章。每一篇都和电路板一样开放。",
-  "blog-index.content.p40": "订阅 <a href=\"/blog/feed.xml\">Atom 订阅源</a>，获取今后的版本发布和开发日志。",
-  "blog-index.card.read": "阅读更新说明 →",
-  "blog-index.feed.subtitle": "为你的 AI 助手打造的开源手持对讲机：开发日志和文章。"
+  "blog-index.content.p2": "开发过程和版本记录，像硬件设计一样公开。",
+  "blog-index.content.p40": "通过订阅 <a href=\"/blog/feed.xml\">Atom 频道</a> 获取未来版本和构建日志。",
+  "blog-index.card.read": "阅读发布详情 →",
+  "blog-index.feed.subtitle": "OpenWalkieTalkie 的开发记录与产品更新：和 AI 助手对话的开源手持对讲机。"
 }

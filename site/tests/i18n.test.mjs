@@ -90,7 +90,9 @@ test('every page offers English / 简体中文 / 繁體中文 / 日本語, each 
     const box = [...walk(root)].find(n => n.type === 'element' && /\blang-(switch|links)\b/.test(attr(n, 'class') ?? ''));
     assert.ok(box, `${f} has a language switcher`);
     if (attr(box, 'class') === 'lang-switch') {
-      assert.ok([...walk(box.parent)].length && box.parent.name === 'nav', `${f}: the switcher is in the header links`);
+      assert.equal(box.parent.name, 'body', `${f}: the edge switcher stays outside the collapsible navigation`);
+      const summary = [...walk(box)].find(n => n.name === 'summary');
+      assert.equal(text(read(f), summary), 'Language', `${f}: the control is recognizable in every language`);
     }
     const links = [...walk(box)].filter(n => n.type === 'element' && n.name === 'a');
     const src = read(f);
@@ -105,6 +107,26 @@ test('every page offers English / 简体中文 / 繁體中文 / 日本語, each 
       assert.equal(href, expected, `${f}: ${LANGS[i].code} lands on the same page`);
     }
   }
+});
+
+test('each translated API reference keeps the current methods and code examples', () => {
+  const en = read('docs/deckd-api.md');
+  const methods = s => [...s.matchAll(/^\| `([^`]+)` \| `/gm)].map(m => m[1]);
+  const code = s => [...s.matchAll(/```[^\n]*\n([\s\S]*?)```/g)].map(m => m[1]);
+  for (const locale of ['zh-Hans', 'zh-Hant', 'ja']) {
+    const translated = read(`${locale}/docs/deckd-api.md`);
+    assert.deepEqual(methods(translated), methods(en), locale);
+    assert.deepEqual(code(translated), code(en), locale);
+    assert.ok(read(`${locale}/docs/native-companions/index.html`).includes(`/${locale}/docs/deckd-api.md`));
+  }
+});
+
+test('the Chinese manual diagram translates instructions and keeps the physical key names', () => {
+  const source = read('zh-Hans/manual/index.html');
+  assert.ok(source.includes('转动：浏览列表和选项。'));
+  assert.ok(source.includes('按住 SHIFT 再转：切换界面。'));
+  for (const label of ['PTT', 'ENTER', 'SHIFT', 'CANCEL / ESC']) assert.ok(source.includes(label));
+  assert.ok(!source.includes('Turn to browse rows and choices.'));
 });
 
 test('every link and asset resolves, and translated pages keep readers in their language', () => {
@@ -180,7 +202,7 @@ test('translated scripts, privacy notice and the Worker cover every English stri
   const en = JSON.parse(readFileSync(new URL('../i18n/strings/en/js.json', import.meta.url), 'utf8'));
   for (const l of OTHERS) {
     const js = read(`js/i18n/${l.code}.js`);
-    const strings = JSON.parse(/window\.OWT_STRINGS = (\{[\s\S]*\});/.exec(js)[1]);
+    const strings = JSON.parse(/window\.OWT_STRINGS = (\{[\s\S]*?\});/.exec(js)[1]);
     assert.deepEqual(Object.keys(strings).sort(), Object.values(en).sort(), `${l.code}: every script string`);
     for (const [from, to] of Object.entries(strings)) if (/[a-z]{3,} [a-z]{3,} [a-z]{3,}/.test(from)) assert.notEqual(to, from, `${l.code}: "${from}" is translated`);
     for (const f of all.filter(f => langOf(f) === l)) {

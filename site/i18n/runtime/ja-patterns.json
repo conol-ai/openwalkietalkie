@@ -1,0 +1,186 @@
+[
+  [
+    "^Released after ([\\d.]+) s\\. The transcript goes to the active agent as its next prompt\\.$",
+    "$1 秒で離しました。文字起こしは次のプロンプトとして、選択中のエージェントに届きます。"
+  ],
+  [
+    "^Answer · (\\d+) choices$",
+    "回答 · 選択肢 $1 個"
+  ],
+  [
+    "^EDIT KEY (\\d+)$",
+    "キー $1 を編集"
+  ],
+  [
+    "^Workspace (\\d+) · (\\d+) windows$",
+    "ワークスペース $1 · ウィンドウ $2 個"
+  ],
+  [
+    "^Score (\\d+) · try again$",
+    "スコア $1 · もう一度"
+  ],
+  [
+    "^(\\d+) (?:pts|points)$",
+    "$1 点"
+  ],
+  [
+    "^best (\\d+)$",
+    "ハイスコア $1"
+  ],
+  [
+    "^SOUND: (ON|OFF)$",
+    "サウンド：$1"
+  ],
+  [
+    "^Focused · (.+)$",
+    "フォーカス中 · $1"
+  ],
+  [
+    "^resets in (\\d+) h$",
+    "$1 時間後にリセット"
+  ],
+  [
+    "^resets in (\\d+) days$",
+    "$1 日後にリセット"
+  ],
+  [
+    "^(.+) is working$",
+    "$1 は実行中"
+  ],
+  [
+    "^prompt delivered · (.+)$",
+    "プロンプトが届きました · $1"
+  ],
+  [
+    "^HOST → DECK$",
+    "パソコン → デバイス"
+  ],
+  [
+    "^DECK → HOST$",
+    "デバイス → パソコン"
+  ],
+  [
+    "^(\\d+) agents$",
+    "エージェント $1 件"
+  ],
+  [
+    "^usage$",
+    "使用量"
+  ],
+  [
+    "^macros$",
+    "マクロキー"
+  ],
+  [
+    "^macropad$",
+    "マクロパッド"
+  ],
+  [
+    "^system$",
+    "システム"
+  ],
+  [
+    "^arcade$",
+    "ゲーム"
+  ],
+  [
+    "^(.+) asks a question$",
+    "$1 から質問"
+  ],
+  [
+    "^channel (\\d+)$",
+    "チャンネル $1"
+  ],
+  [
+    "^face (\\d+)$",
+    "ページ $1"
+  ],
+  [
+    "^Key (\\d+) saved$",
+    "キー $1 を保存しました"
+  ],
+  [
+    "^Key (\\d+) cleared$",
+    "キー $1 を解除しました"
+  ],
+  [
+    "^Workspace (\\d+) selected$",
+    "ワークスペース $1 を選択"
+  ],
+  [
+    "^ws (\\d+)$",
+    "ワークスペース $1"
+  ],
+  [
+    "^ws go (\\d+)$",
+    "ワークスペース $1 に移動"
+  ],
+  [
+    "^enter · nothing pending for (.+)$",
+    "ENTER · $1 に保留中の項目はありません"
+  ],
+  [
+    "^Preview$",
+    "プレビュー"
+  ],
+  [
+    "^LISTENING$",
+    "聞き取り中"
+  ],
+  [
+    "^ptt down$",
+    "PTT 押下"
+  ],
+  [
+    "^ptt up$",
+    "PTT を離しました"
+  ],
+  [
+    "^prompt delivered$",
+    "プロンプトが届きました"
+  ],
+  [
+    "^Window focus$",
+    "ウィンドウを前面に表示"
+  ],
+  [
+    "^card cleared$",
+    "カードを消去"
+  ],
+  [
+    "^nothing on this face$",
+    "このページではこのキーに機能が割り当てられていません"
+  ],
+  [
+    "^0(\\d) / (.+)$",
+    "0$1 / $2"
+  ],
+  [
+    "^(\\d+)m$",
+    "$1 分"
+  ],
+  [
+    "^([\\d.]+) s$",
+    "$1 秒"
+  ],
+  [
+    "^\"(Refactor the auth module, then run the test suite\\.|Go ahead on staging, and tell me when the migrations finish\\.|Summarise what changed and open the pull request\\.)\"$",
+    "「$1」"
+  ],
+  [
+    "^key left$",
+    "LEFT を押す"
+  ],
+  [
+    "^key right$",
+    "RIGHT を押す"
+  ],
+  [
+    "^key left shift$",
+    "SHIFT + LEFT を押す"
+  ],
+  [
+    "^key right shift$",
+    "SHIFT + RIGHT を押す"
+  ]
+]

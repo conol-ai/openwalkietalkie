@@ -1,7 +1,7 @@
 ---
-title: OpenWalkieTalkie v0.16.0：懂得視窗的口述 · OpenWalkieTalkie
+title: OpenWalkieTalkie v0.16.0：依目前視窗改寫口述內容 · OpenWalkieTalkie
 description: 實驗性功能，預設關閉：在游標處口述的內容，可以依聚焦的視窗改寫。只根據視窗的應用程式名稱與標題（純文字），並透過你在新的「模型接入」頁面中選擇的模型完成。
-heading: OpenWalkieTalkie v0.16.0：懂得視窗的口述
+heading: OpenWalkieTalkie v0.16.0：依目前視窗改寫口述內容
 kind: 實驗性口述功能與模型接入
 date: 2026-11-22
 published: 2026-11-22T09:04:46Z
@@ -16,7 +16,7 @@ navDocs: yes
   <p>說出來的話會變成一般文字。在終端機上按住 PTT 說「system CTL status」，輸入的就是「System CTL status」這幾個字，而不是 <code>systemctl status</code>。你真正想要的，取決於這些字要去哪裡，而口述並不知道。</p>
   <h2>它做什麼</h2>
   <p>開啟這項功能後，在游標處的口述（Omarchy 上的 <strong>Dictate</strong> 項目）會在輸入之前先被改寫。<strong>視窗辨識模型</strong>會讀取聚焦視窗的應用程式名稱與標題，只有這兩項純文字，沒有別的：絕不截圖，也絕不讀取視窗內容。它判斷那是什麼樣的地方：shell、助理、編輯器、聊天，或一般文字。接著<strong>改寫模型</strong>會為那裡改寫你的話。沒有視窗辨識模型時，由內建規則依應用程式名稱判斷。</p>
-  <p>你口述的話會送給改寫模型的服務商，應用程式名稱與標題則送給視窗辨識模型的服務商。服務的記錄只會記下每次口述的結果、長度與耗時，絕不記錄內容。請在配套應用程式的<strong>語音 › 按視窗改寫聽寫</strong>中開啟這項功能，並選擇兩個模型。</p>
+  <p>你口述的話會送給改寫模型的服務商，應用程式名稱與標題則送給視窗辨識模型的服務商。服務日誌只會記下每次口述的結果、長度與耗時，絕不記錄內容。請在應用程式的<strong>語音 › 按視窗改寫聽寫</strong>中開啟這項功能，並選擇兩個模型。</p>
   <h2>三秒，否則照原話輸入</h2>
   <p>使用雲端模型的口述，兩次呼叫加起來只有 3 秒。如果模型比這更慢、發生錯誤，或回答的內容看起來不像改寫，就會照你說的原話輸入。在這台電腦或你自己網路上的模型會得到較長的時間，預設 15 秒，最多 60 秒，選擇器會把它標示為<strong>本機 · 較慢</strong>。已知沒有在執行的本機模型不會被等待。</p>
   <h2>模型接入</h2>
@@ -25,5 +25,5 @@ navDocs: yes
   <p>有三件事還沒有得到證實。在這個版本之前，macOS 與 Windows 的部分從未建置過；0.16.0 的 CI 在這兩個系統上建置並測試了它們，但只有 Hyprland 的視窗讀取器讀過真實的視窗。還沒有用過在你自己電腦上執行的模型，只用過模擬的替身。Anthropic 的 API 也只對替身試過，從未對真正的服務試過。還沒有證實裝置上真實的口述能用這套程式碼從頭到尾正確改寫，而且 macOS 與 Windows 還沒有 <strong>Dictate</strong> 項目，所以在那裡這項功能沒有東西可以改寫。</p>
   <h2>更新</h2>
   <p>在 Mac 上，選擇<strong>檢查更新…</strong>，或安裝已簽署並經過公證的 <strong>0.16.0</strong> 應用程式（Apple Silicon 或 Intel，macOS 13 或更新版本）。在 Windows 上，從版本頁面下載 ZIP。在 Omarchy 上，拉取程式碼，建置服務與應用程式，再用這兩者執行 <code>install.sh</code>，詳見 <a href="/docs/omarchy/">Omarchy 指南</a>。這個版本不需要更新裝置韌體。</p>
-  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.16.0" rel="noopener">在 GitHub 取得 OpenWalkieTalkie v0.16.0 與總和檢查碼 →</a></p>
+  <p><a href="https://github.com/conol-ai/openwalkietalkie/releases/tag/v0.16.0" rel="noopener">在 GitHub 取得 OpenWalkieTalkie v0.16.0 與檢查碼 →</a></p>
   <p class="post-back"><a href="/blog/">← 返回部落格</a></p>
