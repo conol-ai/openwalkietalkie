@@ -15,7 +15,7 @@ use crate::inbox::Inbox;
 use deck_model::Agent;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -192,6 +192,18 @@ impl Hub {
     pub fn ready_count(&self) -> usize {
         let entries = self.entries.lock().expect("channel hub");
         entries.values().filter(|e| e.ready && !e.sender.is_closed()).count()
+    }
+
+    /// A display-only snapshot of ready session IDs and their CLI PIDs.
+    pub(crate) fn ready_session_pids(&self) -> BTreeMap<String, BTreeSet<u32>> {
+        let entries = self.entries.lock().expect("channel hub");
+        let mut sessions = BTreeMap::<String, BTreeSet<u32>>::new();
+        for (id, entry) in entries.iter() {
+            if entry.ready && !entry.sender.is_closed() {
+                sessions.entry(id.session.clone()).or_default().insert(id.pid);
+            }
+        }
+        sessions
     }
 
     pub fn status(&self) -> Value {
