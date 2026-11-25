@@ -1,16 +1,16 @@
 {
   "cookies.head.title1": "Cookie information · OpenWalkieTalkie",
   "cookies.head.meta-content1": "Cookies, local storage, and privacy choices on openwalkietalkie.org.",
-  "cookies.content.p1": "The website currently includes no advertising or analytics scripts. You can browse and join the waitlist without accepting optional tracking.",
+  "cookies.content.p1": "The site loads Google Tag Manager after you accept in Cookie settings. Google processes the container request. Enabled tags can collect page views, referrers, device and browser information, and approximate location inferred from IP addresses, and may set cookies. See <a href=\"https://policies.google.com/privacy\" rel=\"noopener\">Google’s Privacy Policy</a> for details.",
   "cookies.content.h21": "What your browser remembers",
   "cookies.content.li1": "<strong>Day/night theme:</strong> <code>owt-theme</code> in local storage remembers the theme you select. It stays on this browser until you clear it. If no choice is saved, we use your operating system's preference.",
-  "cookies.content.li2": "<strong>Privacy notice:</strong> selecting “Got it” saves <code>owt-privacy-notice</code> in local storage so the notice stays dismissed for 180 days. It contains a notice version and expiry time, not an identifier. Acknowledging it does not consent to tracking.",
+  "cookies.content.li2": "<strong>Cookie choice:</strong> Select “Accept” or “Reject” in the cookie choice dialog. Your choice is saved in localStorage under <code>owt-cookie-consent-v1</code> with no time-based expiry. You can change it from “Cookie settings” in the footer.",
   "cookies.content.p2": "These preferences are not sent to the waitlist API. Local storage is similar to cookies in that it saves information on your device, but it is not automatically attached to requests.",
   "cookies.content.h22": "Cloudflare security cookies",
   "cookies.content.p3": "Cloudflare hosts and protects the website and may set cookies when security features or challenges are used. Which cookies appear and how long they last depend on those features. Read <a href=\"https://developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/\" rel=\"noopener\">Cloudflare's cookie descriptions</a> for details.",
   "cookies.content.h23": "Manage browser storage",
-  "cookies.content.p4": "You can remove this site's cookies and local storage using your browser's site-data settings. Clearing storage resets the theme and shows the privacy notice again. Blocking security cookies may prevent a Cloudflare security challenge from completing.",
-  "cookies.content.p5": "<a href=\"/cookies/\" data-privacy-open>Show the privacy notice again</a>. If JavaScript is disabled, this page still explains all the storage used by the site.",
+  "cookies.content.p4": "You can remove this site's cookies and local storage using your browser's site-data settings. Clearing storage resets the theme and shows the cookie choice dialog again. Blocking security cookies may prevent a Cloudflare security challenge from completing.",
+  "cookies.content.p5": "<a href=\"/cookies/\" data-privacy-open>Open the cookie choice dialog</a>. You can read this page with JavaScript disabled.",
   "cookies.content.h24": "Your waitlist email",
   "cookies.content.p6": "Your email is stored securely on the server when you submit the waitlist form. Clearing browser storage does not remove a signup. To leave the list, email <a href=\"mailto:privacy@cohdl.ai\">privacy@cohdl.ai</a>. See the <a href=\"/privacy/\">Privacy Policy</a> for collection, retention, and other requests."
 }

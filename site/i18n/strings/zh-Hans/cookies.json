@@ -1,16 +1,16 @@
 {
   "cookies.head.title1": "Cookie 说明 · OpenWalkieTalkie",
   "cookies.head.meta-content1": "openwalkietalkie.org 的 Cookie、本地存储和隐私选项说明。",
-  "cookies.content.p1": "本网站目前不包含广告或分析脚本。你无需接受可选跟踪，即可浏览网站或加入等候名单。",
+  "cookies.content.p1": "你在 Cookie 设置中接受后，网站才会加载 Google Tag Manager。Google 会处理容器请求。启用的标签可能收集页面浏览记录、来源网址、设备和浏览器信息，以及根据 IP 地址推断的大致位置，也可能设置 Cookie。详情请参阅<a href=\"https://policies.google.com/privacy\" rel=\"noopener\">Google 的隐私权政策</a>。",
   "cookies.content.h21": "浏览器会记住什么",
   "cookies.content.li1": "<strong>日间/夜间主题：</strong>本地存储中的 <code>owt-theme</code> 会记住你选择的主题。它会一直保留在此浏览器中，直到你清除它。如果没有保存选择，我们会使用你操作系统的偏好。",
-  "cookies.content.li2": "<strong>隐私声明：</strong>选择“知道了”会在本地存储中保存 <code>owt-privacy-notice</code>，使声明在 180 天内保持关闭。它包含声明版本和过期时间，不含标识符。确认声明并不表示同意跟踪。",
+  "cookies.content.li2": "<strong>Cookie 选择：</strong>在 Cookie 选择对话框中选择“接受”或“拒绝”。你的选择以 <code>owt-cookie-consent-v1</code> 为键保存在 localStorage 中，不会随时间自动过期。你可以通过页脚的“Cookie 设置”更改选择。",
   "cookies.content.p2": "这些偏好不会发送给等候名单 API。本地存储和 Cookie 一样，会在你的设备上保存信息，但不会自动附加到网络请求中。",
   "cookies.content.h22": "Cloudflare 安全 Cookie",
   "cookies.content.p3": "Cloudflare 为网站提供托管和安全防护，启用安全功能或验证时，可能会设置 Cookie。具体 Cookie 及保留时间取决于所使用的功能。详情请参阅 <a href=\"https://developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/\" rel=\"noopener\">Cloudflare 的 Cookie 说明</a>。",
   "cookies.content.h23": "管理浏览器存储",
-  "cookies.content.p4": "你可以在浏览器的网站数据设置中，删除本站的 Cookie 和本地存储。清除后，主题会重置，隐私提示也会再次出现。阻止安全 Cookie 可能导致 Cloudflare 安全验证无法完成。",
-  "cookies.content.p5": "<a href=\"/cookies/\" data-privacy-open>重新显示隐私提示</a>。即使禁用 JavaScript，本页仍会说明网站使用的全部存储方式。",
+  "cookies.content.p4": "你可以在浏览器的网站数据设置中删除本网站的 Cookie 和本地存储。清除存储会重置主题，并再次显示 Cookie 选择对话框。阻止安全 Cookie 可能导致 Cloudflare 安全质询无法完成。",
+  "cookies.content.p5": "<a href=\"/cookies/\" data-privacy-open>打开 Cookie 选择对话框</a>。即使停用 JavaScript，你也可以阅读此页面。",
   "cookies.content.h24": "你在等候名单中留下的邮箱",
   "cookies.content.p6": "提交等候名单表单后，你的邮箱会安全地保存在服务器上。清除浏览器存储不会取消登记。想退出名单，请发邮件到 <a href=\"mailto:privacy@cohdl.ai\">privacy@cohdl.ai</a>。有关信息收集、保存期限和其他请求，请查看<a href=\"/privacy/\">隐私政策</a>。"
 }

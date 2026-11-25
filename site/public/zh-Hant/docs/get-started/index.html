@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="day">
+<head>
+<script>window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'default', {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+  wait_for_update: 500
+});</script>
+<script defer src="/js/cookie-consent.js"></script>
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>入門指南 · OpenWalkieTalkie</title>
+<meta name="description" content="安裝應用程式、連接裝置、接通一個程式設計 agent。" />
+<link rel="canonical" href="https://openwalkietalkie.org/zh-Hant/docs/get-started/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/get-started/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/get-started/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/get-started/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/get-started/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/get-started/" />
+
+<meta property="og:type" content="website" />
+<meta name="owt-api-version" content="0.11.0" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="入門指南 · OpenWalkieTalkie" />
+<meta property="og:description" content="安裝應用程式、連接裝置、接通一個程式設計 agent。" />
+<meta property="og:url" content="https://openwalkietalkie.org/zh-Hant/docs/get-started/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie 部落格" href="/zh-Hant/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<link rel="stylesheet" href="/css/docs.css" />
+<script src="/js/i18n/zh-Hant.js"></script>
+<script src="/js/demo-i18n.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">跳至主要內容</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/zh-Hant/" aria-label="OpenWalkieTalkie — 首頁">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="網站區塊">
+      <a href="/zh-Hant/#pile">The Pile（分頁堆）</a>
+      <a href="/zh-Hant/#features">功能</a>
+      <a href="/zh-Hant/#demo">試用</a>
+      <a href="/zh-Hant/#faces">頁面</a>
+      <a href="/zh-Hant/#blueprint">設計藍圖</a>
+      <a href="/zh-Hant/docs/" aria-current="true">說明文件</a>
+      <a href="/zh-Hant/blog/">部落格</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="切換日間與夜間主題" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">日間</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="開啟選單" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main docs-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">入門指南 · 應用程式 0.17.0</p>
+  <h1>入門指南</h1>
+  <p class="post-meta">macOS、Windows 與 Linux · 約十分鐘</p>
+</header>
+<article class="post-body">
+
+<p>裝好應用程式、連上裝置、接通一個程式設計 agent。三步之後，裝置就是你已開啟工作階段的第二塊螢幕。</p>
+
+<h2>你需要準備</h2>
+<ul>
+<li>一台有電的裝置。</li>
+<li>一台 macOS 13 或更新版本的 Mac、一台 Windows 電腦，或 Linux（受支援的配置是 Omarchy）。</li>
+<li>一條 USB-C <strong>資料</strong>線。只供電的線連不上任何東西。</li>
+<li>一個已安裝並登入的程式設計 agent：Claude Code、Codex 或 Grok Bot。</li>
+</ul>
+
+<h2>1 · 安裝應用程式</h2>
+<h3>macOS</h3>
+<ol>
+<li>從<a href="/zh-Hant/#download">下載區</a>依你的晶片下載磁碟映像檔，開啟後把 <strong>OpenWalkieTalkie</strong> 拖進 <strong>應用程式</strong>。</li>
+<li>從「應用程式」啟動，不要從磁碟映像檔啟動。從映像檔執行的副本會被 macOS 隔離，無法註冊背景服務。</li>
+</ol>
+<h3>Windows</h3>
+<ol>
+<li>從發佈頁下載 <code>OpenWalkieTalkie-0.17.0-windows-x86_64.zip</code>，解壓縮到一個你會長期保留的資料夾。</li>
+<li>這個建置沒有簽章：SmartScreen 會顯示 <em>Windows 已保護您的電腦</em>。選<strong>更多資訊</strong>，再選<strong>仍要執行</strong>。</li>
+</ol>
+<p><a href="/zh-Hant/docs/windows/">Windows 指南</a>說明預覽版、系統匣圖示，以及透過 USB-C 更新韌體。</p>
+<h3>Linux</h3>
+<p>受支援的配置是 Omarchy。編譯並安裝服務與應用程式，再載入裝置與虛擬鍵盤的兩條 udev 規則。<a href="/zh-Hant/docs/omarchy/">Omarchy 指南</a>裡有指令，照那一頁做：本頁只說它排在流程的哪一步。</p>
+
+<h2>2 · 連接裝置</h2>
+<ol>
+<li><strong>先接線。</strong>接上 USB-C 資料線，macOS 詢問時允許該配件。按住 <strong>PTT 兩秒</strong>開機。</li>
+<li><strong>無線連線。</strong>在藍牙裡配對 <strong>OpenWalkieTalkie</strong>，並在<em>隱私權與安全性 → 藍牙</em>裡允許這個隨附應用程式。</li>
+<li><strong>確認連線。</strong>開啟 <strong>裝置 → 你的裝置 → 連線</strong>。出現帶 <em>連接線</em> 或 <em>藍牙</em> 的綠點，代表服務看得到它。</li>
+</ol>
+
+<h2>3 · 啟動背景服務</h2>
+<p>開啟 <strong>服務</strong>。第一張卡片說明背景服務是否正在執行；裝置上其餘的一切都依賴它。</p>
+<ul>
+<li><strong>macOS。</strong>沒在執行就按 <strong>啟動</strong>。如果那一列說在等待核准，就開啟「系統設定」，在<em>登入項目</em>裡允許它：不核准它不會啟動。</li>
+<li><strong>Windows。</strong>服務透過 Run 機碼在登入時啟動，<strong>登入時啟動</strong> 這一列會顯示並控制它。</li>
+<li><strong>Linux。</strong><code>systemctl --user status deckd</code>。如果沒有這個 unit，代表 Omarchy 指南裡的安裝指令碼還沒跑過。</li>
+</ul>
+<p>關視窗之前把 <strong>登入時啟動</strong> 開啟。沒有服務的裝置，只會顯示離線。</p>
+
+<h2>4 · 接通一個 agent</h2>
+<p>先接一個就夠。<strong>整合</strong> 頁每一列對應一個 agent，具體步驟見各篇教學。</p>
+<ul>
+<li><strong>Claude Code</strong> —— 安裝外掛，再帶 Channels 啟動工作階段。<a href="/zh-Hant/docs/claude-code/">Claude Code 教學</a></li>
+<li><strong>Codex</strong> —— CLI 自己會接上；Codex Desktop 需要隨附的啟動器。<a href="/zh-Hant/docs/codex/">Codex 教學</a></li>
+<li><strong>Grok Bot</strong> —— 一個 routine 的 webhook 進來，指令出去。<a href="/zh-Hant/docs/grok-bot/">Grok Bot 教學</a></li>
+</ul>
+<p><em>已連接</em> 指整合的檔案已經就位。真正讓一列出現在裝置上的，是活著的工作階段。</p>
+
+<h2>5 · 說一句話</h2>
+<ol>
+<li>在裝置上按 <strong>CANCEL</strong> 進入 <em>Agents</em>。<strong>LEFT / RIGHT</strong> 換專案，滾輪移動醒目提示，<strong>ENTER</strong> 開啟工作階段。</li>
+<li>按住 <strong>PTT</strong>，說「總結一下這個專案，告訴我下一步要做什麼」，然後放開。錄音會送到你 Mac 上開啟的那個工作階段。</li>
+<li>在裝置上讀回覆。agent 提問時，按 <strong>ENTER</strong> 開啟卡片，滾輪選擇，<strong>ENTER</strong> 作答。</li>
+</ol>
+
+<h2>出問題的時候</h2>
+<dl>
+<dt>服務沒在執行</dt>
+<dd><strong>服務 → 啟動</strong>。macOS 上如果那一列說在等待，就到<em>登入項目</em>裡允許。按了「啟動」沒有反應，代表用的不是安裝好的那份副本。</dd>
+<dt>裝置上沒有工作階段</dt>
+<dd>整合要設定好，<em>並且</em>要有一個開啟的工作階段。<em>Codex 未執行</em> 表示還沒有活著的本地工作階段。</dd>
+<dt>語音輸入沒反應</dt>
+<dd>先看選取的工作階段、連線狀態，以及 <strong>語音</strong> 裡選的語音引擎。用 <strong>測試語音</strong>。它不會退回使用 Mac 的麥克風。</dd>
+<dt>裝置顯示離線</dt>
+<dd>檢查連接線或配對，然後 <strong>服務 → 重新啟動</strong>。示範資料不是真實連線。</dd>
+<dt>螢幕鎖住了</dt>
+<dd>按任意鍵或觸碰螢幕，然後把滾輪逆時針轉四格。這四格只解鎖，不會移動選取項目。</dd>
+<dt>服務已註冊，但起不來</dt>
+<dd>macOS 找到了背景項目，卻沒把 <code>Contents/MacOS/deckd</code> 解析到應用程式包裡，launchd 以結束碼 78 放棄。先用 Finder 開啟一次應用程式，或對已安裝的副本跑一次 <code>lsregister -f</code> 刷新 bundle 索引，再按「啟動」。系統自己也會重試；之後啟動成功，<code>last exit code = 78</code> 仍會留著：看 <code>state</code> 和 <code>pid</code>，別看這個數字。</dd>
+</dl>
+
+<h2>這一頁是怎麼核對的</h2>
+<p>本頁引用的介面文字與截圖都取自安裝在 Mac 上的 0.17.0。截圖由應用程式內建的合成渲染模式產生，不會碰觸正在執行的服務。撰寫本頁時沒有接上實機，因此連接裝置的相關步驟並未端到端執行；Linux 方面確認了服務單元已安裝並啟用、兩條 udev 規則已就位。Windows 的步驟依 0.17.0 安裝包與 Windows 指南整理。</p>
+
+<h2>接下來看什麼</h2>
+<p><a href="/zh-Hant/manual/">圖解現場手冊</a>說明每一個控制項、頁面與巨集。<a href="/zh-Hant/docs/">開發者文件</a>說明 API。<a href="https://github.com/conol-ai/openwalkietalkie">原始碼</a> 是 bug 待的地方。</p>
+
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL 專案 · MIT 授權軟體 · CERN-OHL-P 授權硬體</span>
+    <nav aria-label="頁尾">
+      <a href="/zh-Hant/#waitlist">加入等候名單</a>
+      <a href="/zh-Hant/privacy/">隱私權政策</a>
+      <a href="/zh-Hant/cookies/">Cookie 說明</a>
+      <a href="#cookie-consent" data-cookie-settings hidden>Cookie 設定</a>
+      <a href="/zh-Hant/">首頁</a>
+      <a href="/zh-Hant/#demo">試用</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="在 Discord 加入 CoHDL 與 OpenWalkieTalkie 社群">Discord</a>
+      <a href="/zh-Hant/blog/feed.xml">訂閱來源</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<details class="lang-switch">
+        <summary aria-label="Language — 語言: 繁體中文">Language</summary>
+        <ul>
+          <li><a href="/docs/get-started/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/docs/get-started/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/docs/get-started/" hreflang="zh-Hant" lang="zh-Hant" aria-current="true">繁體中文</a></li>
+          <li><a href="/ja/docs/get-started/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
+<section id="cookie-consent" class="privacy-notice" role="dialog" aria-label="Cookie 設定" aria-describedby="cookie-consent-message" hidden>
+  <div>
+    <p id="cookie-consent-message">我們用 Google Tag Manager 了解這些文件的使用情況。在你接受之前，不會進行任何統計。</p>
+    <p><a href="/zh-Hant/privacy/">隱私</a></p>
+  </div>
+  <div class="cookie-consent-actions">
+    <button class="btn btn--primary" type="button" value="granted">接受</button>
+    <button class="btn" type="button" value="denied">拒絕</button>
+  </div>
+</section>
+</body>
+</html>

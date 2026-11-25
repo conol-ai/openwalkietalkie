@@ -1,6 +1,17 @@
 <!DOCTYPE html>
 <html lang="ja" data-theme="day">
 <head>
+<script>window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'default', {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+  wait_for_update: 500
+});</script>
+<script defer src="/js/cookie-consent.js"></script>
+
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>OpenWalkieTalkie v0.6.0：デバイスでゲーム · OpenWalkieTalkie</title>
@@ -114,7 +125,7 @@
       <a href="/ja/#waitlist">ウェイトリストに登録</a>
       <a href="/ja/privacy/">プライバシーポリシー</a>
       <a href="/ja/cookies/">Cookie について</a>
-      <a href="/ja/cookies/" data-privacy-open>プライバシーに関するお知らせ</a>
+      <a href="#cookie-consent" data-cookie-settings hidden>Cookie の設定</a>
       <a href="/ja/">ホーム</a>
       <a href="/ja/#demo">試す</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
@@ -126,8 +137,7 @@
 </footer>
 
 <script src="/js/main.js"></script>
-<script src="/js/privacy.js"></script>
-      <details class="lang-switch">
+<details class="lang-switch">
         <summary aria-label="Language — 言語: 日本語">Language</summary>
         <ul>
           <li><a href="/blog/arcade-on-the-deck/" hreflang="en" lang="en">English</a></li>
@@ -136,5 +146,15 @@
           <li><a href="/ja/blog/arcade-on-the-deck/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
         </ul>
       </details>
+<section id="cookie-consent" class="privacy-notice" role="dialog" aria-label="Cookie の設定" aria-describedby="cookie-consent-message" hidden>
+  <div>
+    <p id="cookie-consent-message">これらのドキュメントがどう使われているかを把握するために Google Tag Manager を使用します。同意するまで計測は行いません。</p>
+    <p><a href="/ja/privacy/">プライバシー</a></p>
+  </div>
+  <div class="cookie-consent-actions">
+    <button class="btn btn--primary" type="button" value="granted">同意する</button>
+    <button class="btn" type="button" value="denied">拒否する</button>
+  </div>
+</section>
 </body>
 </html>

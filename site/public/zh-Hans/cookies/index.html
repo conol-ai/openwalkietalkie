@@ -1,5 +1,16 @@
 <!DOCTYPE html>
 <html lang="zh-Hans" data-theme="day"><head>
+<script>window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'default', {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+  wait_for_update: 500
+});</script>
+<script defer src="/js/cookie-consent.js"></script>
+
 <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Cookie 说明 · OpenWalkieTalkie</title><meta name="description" content="openwalkietalkie.org 的 Cookie、本地存储和隐私选项说明。" />
 <link rel="canonical" href="https://openwalkietalkie.org/zh-Hans/cookies/" />
@@ -50,16 +61,16 @@
 <header class="post-head"><p class="section-kicker">OPENWALKIETALKIE</p><h1>Cookie 说明</h1>
 <p class="post-meta">更新于 2026 年 10 月 16 日</p></header>
 <article class="post-body">
-<p>本网站目前不包含广告或分析脚本。你无需接受可选跟踪，即可浏览网站或加入等候名单。</p>
+<p>你在 Cookie 设置中接受后，网站才会加载 Google Tag Manager。Google 会处理容器请求。启用的标签可能收集页面浏览记录、来源网址、设备和浏览器信息，以及根据 IP 地址推断的大致位置，也可能设置 Cookie。详情请参阅<a href="https://policies.google.com/privacy" rel="noopener">Google 的隐私权政策</a>。</p>
 <h2>浏览器会记住什么</h2>
 <ul><li><strong>日间/夜间主题：</strong>本地存储中的 <code>owt-theme</code> 会记住你选择的主题。它会一直保留在此浏览器中，直到你清除它。如果没有保存选择，我们会使用你操作系统的偏好。</li>
-<li><strong>隐私声明：</strong>选择“知道了”会在本地存储中保存 <code>owt-privacy-notice</code>，使声明在 180 天内保持关闭。它包含声明版本和过期时间，不含标识符。确认声明并不表示同意跟踪。</li></ul>
+<li><strong>Cookie 选择：</strong>在 Cookie 选择对话框中选择“接受”或“拒绝”。你的选择以 <code>owt-cookie-consent-v1</code> 为键保存在 localStorage 中，不会随时间自动过期。你可以通过页脚的“Cookie 设置”更改选择。</li></ul>
 <p>这些偏好不会发送给等候名单 API。本地存储和 Cookie 一样，会在你的设备上保存信息，但不会自动附加到网络请求中。</p>
 <h2>Cloudflare 安全 Cookie</h2>
 <p>Cloudflare 为网站提供托管和安全防护，启用安全功能或验证时，可能会设置 Cookie。具体 Cookie 及保留时间取决于所使用的功能。详情请参阅 <a href="https://developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies/" rel="noopener">Cloudflare 的 Cookie 说明</a>。</p>
 <h2>管理浏览器存储</h2>
-<p>你可以在浏览器的网站数据设置中，删除本站的 Cookie 和本地存储。清除后，主题会重置，隐私提示也会再次出现。阻止安全 Cookie 可能导致 Cloudflare 安全验证无法完成。</p>
-<p><a href="/zh-Hans/cookies/" data-privacy-open>重新显示隐私提示</a>。即使禁用 JavaScript，本页仍会说明网站使用的全部存储方式。</p>
+<p>你可以在浏览器的网站数据设置中删除本网站的 Cookie 和本地存储。清除存储会重置主题，并再次显示 Cookie 选择对话框。阻止安全 Cookie 可能导致 Cloudflare 安全质询无法完成。</p>
+<p><a href="/zh-Hans/cookies/" data-privacy-open>打开 Cookie 选择对话框</a>。即使停用 JavaScript，你也可以阅读此页面。</p>
 <h2>你在等候名单中留下的邮箱</h2>
 <p>提交等候名单表单后，你的邮箱会安全地保存在服务器上。清除浏览器存储不会取消登记。想退出名单，请发邮件到 <a href="mailto:privacy@cohdl.ai">privacy@cohdl.ai</a>。有关信息收集、保存期限和其他请求，请查看<a href="/zh-Hans/privacy/">隐私政策</a>。</p>
 </article></main>
@@ -70,7 +81,7 @@
       <a href="/zh-Hans/#waitlist">加入等候名单</a>
       <a href="/zh-Hans/privacy/">隐私政策</a>
       <a href="/zh-Hans/cookies/">Cookie 说明</a>
-      <a href="/zh-Hans/cookies/" data-privacy-open>隐私说明</a>
+      <a href="#cookie-consent" data-cookie-settings hidden>Cookie 设置</a>
       <a href="/zh-Hans/">首页</a>
       <a href="/zh-Hans/#demo">试试看</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
@@ -82,8 +93,7 @@
 </footer>
 
 <script src="/js/main.js"></script>
-<script src="/js/privacy.js"></script>
-      <details class="lang-switch">
+<details class="lang-switch">
         <summary aria-label="Language — 语言: 简体中文">Language</summary>
         <ul>
           <li><a href="/cookies/" hreflang="en" lang="en">English</a></li>
@@ -92,5 +102,15 @@
           <li><a href="/ja/cookies/" hreflang="ja" lang="ja">日本語</a></li>
         </ul>
       </details>
+<section id="cookie-consent" class="privacy-notice" role="dialog" aria-label="Cookie 设置" aria-describedby="cookie-consent-message" hidden>
+  <div>
+    <p id="cookie-consent-message">我们用 Google Tag Manager 了解这些文档的使用情况。在你接受之前，不会进行任何统计。</p>
+    <p><a href="/zh-Hans/privacy/">隐私</a></p>
+  </div>
+  <div class="cookie-consent-actions">
+    <button class="btn btn--primary" type="button" value="granted">接受</button>
+    <button class="btn" type="button" value="denied">拒绝</button>
+  </div>
+</section>
 </body>
 </html>

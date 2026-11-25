@@ -15,5 +15,13 @@
   "docs.content.h22": "動くサンプルから始める",
   "docs.content.p9": "<a href=\"/examples/native_companion.py\" download>Python のコンパニオンのサンプルをダウンロード</a>。OpenWalkieTalkie を開いた状態で Python 3.10 以降で実行します。返信はあらかじめ用意したもので、パッケージ、モデルの API キー、Conol のアカウントは不要です。",
   "docs.content.h23": "仕様を調べる",
-  "docs.content.p10": "<a href=\"/docs/deckd-api.md\">JSON-RPC API の完全なリファレンス（Markdown）</a>。デーモンのリクエストスキーマとメソッドの権限から生成しています。<a href=\"https://github.com/conol-ai/openwalkietalkie\">ソースリポジトリ</a>にはサンプルと連携テストも含まれます。"
+  "docs.content.p10": "<a href=\"/docs/deckd-api.md\">JSON-RPC API の完全なリファレンス（Markdown）</a>。デーモンのリクエストスキーマとメソッドの権限から生成しています。<a href=\"https://github.com/conol-ai/openwalkietalkie\">ソースリポジトリ</a>にはサンプルと連携テストも含まれます。",
+  "docs.guides.get-started.title": "はじめかた",
+  "docs.guides.get-started.blurb": "アプリを入れて、デバイスをつないで、コーディングエージェントを 1 つ接続します。",
+  "docs.guides.claude-code.title": "Claude Code を接続する",
+  "docs.guides.claude-code.blurb": "プラグインを入れて、Channels 付きでセッションを起動します。",
+  "docs.guides.codex.title": "Codex を接続する",
+  "docs.guides.codex.blurb": "CLI は共有デーモン、Desktop はランチャー経由です。",
+  "docs.guides.grok-bot.title": "Grok Bot を接続する",
+  "docs.guides.grok-bot.blurb": "ルーティンを作り、Webhook を貼り、状態を読みます。"
 }
