@@ -1139,6 +1139,56 @@ fn status_writes_nothing_for_any_target() {
     assert_eq!(snapshot_tree(dir.path()), before, "status wrote something");
 }
 
+/// Reproduce Linux's ETXTBSY with a real writable descriptor. A transient
+/// writer must not make a valid helper look like a build without `hook`.
+#[cfg(target_os = "linux")]
+#[test]
+fn hook_check_waits_for_a_transient_executable_writer() {
+    let dir = TestDir::new("x-hook-transient-writer");
+    let env = test_env(&dir);
+    let writer = std::fs::OpenOptions::new()
+        .write(true)
+        .open(&env.exe)
+        .unwrap();
+    let error = std::process::Command::new(&env.exe)
+        .arg("hook")
+        .arg("--help")
+        .spawn()
+        .unwrap_err();
+    assert_eq!(error.raw_os_error(), Some(libc::ETXTBSY));
+
+    let release = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        drop(writer);
+    });
+    let result = integrations::hook_subcommand_check(&env.exe);
+    release.join().unwrap();
+    result.expect("the probe must run after the writer closes");
+}
+
+/// A helper that stays busy still refuses installation without writing any
+/// hook files. The retry is bounded, not a bypass of the executable guard.
+#[cfg(target_os = "linux")]
+#[test]
+fn hook_check_refuses_a_persistent_executable_writer() {
+    let dir = TestDir::new("x-hook-persistent-writer");
+    let env = test_env(&dir);
+    let writer = std::fs::OpenOptions::new()
+        .write(true)
+        .open(&env.exe)
+        .unwrap();
+    let before = snapshot_tree(dir.path());
+    let error = integrations::run(&env, Target::Claude, INSTALL).unwrap_err();
+    assert!(error.contains("Text file busy"), "{error}");
+    assert_eq!(
+        snapshot_tree(dir.path()),
+        before,
+        "a refused install wrote files"
+    );
+    drop(writer);
+    integrations::hook_subcommand_check(&env.exe).expect("the helper is valid once closed");
+}
+
 /// The cross-branch landing hazard. Every hook this installer writes runs
 /// `deckd hook <claude|codex|claude-statusline>`, which is B11 and owned by
 /// another builder. A build without it does not fail quietly: clap exits **2**
