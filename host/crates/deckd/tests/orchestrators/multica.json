@@ -1,51 +1,88 @@
 {
+  "total": 8,
+  "limit": 100,
+  "offset": 0,
+  "has_more": false,
   "issues": [
     {
-      "key": "MUL-12",
+      "id": "0b6f3a52-6c1e-4a8e-9a51-1d2c3b4a5e61",
+      "identifier": "MUL-12",
       "title": "Refactor the billing API",
       "status": "in_progress",
-      "assignee": { "type": "agent", "name": "claude-backend" },
-      "labels": ["backend"],
-      "run": { "id": "run_8f2c", "status": "running", "stage": "writing tests" }
+      "priority": "high",
+      "assignee_type": "agent",
+      "assignee_id": "5fb87ac7-23b5-4a7a-81fa-ed295a54545d",
+      "properties": {}
     },
     {
-      "key": "MUL-14",
+      "id": "1c7a4b63-7d2f-4b9f-8b62-2e3d4c5b6f72",
+      "identifier": "MUL-14",
       "title": "Docs for the v2 webhooks",
-      "status": "review",
-      "assignee": { "type": "agent", "name": "codex-docs" },
-      "labels": [],
-      "run": { "id": "run_8f11", "status": "completed", "stage": "opened a pull request" }
+      "status": "in_review",
+      "priority": "medium",
+      "assignee_type": "agent",
+      "assignee_id": "5fb87ac7-23b5-4a7a-81fa-ed295a54545d",
+      "properties": { "8d1e2f30-0000-4000-8000-000000000001": "member:5fb87ac7-23b5-4a7a-81fa-ed295a54545d" }
     },
     {
-      "key": "MUL-15",
+      "id": "2d8b5c74-8e3a-4cab-9c73-3f4e5d6c7a83",
+      "identifier": "MUL-15",
       "title": "Rotate GITHUB_TOKEN=ghp_0123456789abcdefABCDEF in ~/infra/ci.env",
-      "status": "todo",
-      "assignee": { "type": "agent", "name": "claude-ops" },
-      "labels": [{ "name": "blocked" }],
-      "run": { "id": "run_8e90", "status": "failed", "stage": "cargo test && git push" }
+      "status": "blocked",
+      "priority": "urgent",
+      "assignee_type": "agent",
+      "assignee_id": "5fb87ac7-23b5-4a7a-81fa-ed295a54545d",
+      "properties": {}
     },
     {
-      "key": "MUL-9",
+      "id": "3e9c6d85-9f4b-4dbc-8d84-4a5f6e7d8b94",
+      "identifier": "MUL-9",
       "title": "Release notes for 1.4",
       "status": "done",
-      "assignee": { "type": "agent", "name": "claude-writer" },
-      "labels": ["docs"],
-      "run": null
+      "priority": "low",
+      "assignee_type": "member",
+      "assignee_id": "6ac98bd8-34c6-4b8b-92a0-fe3a6b65656e",
+      "properties": {}
     },
     {
-      "key": "MUL-16",
+      "id": "4fad7e96-a05c-4ecd-9e95-5b6a7f8e9ca5",
+      "identifier": "MUL-16",
       "title": "rm -rf /tmp/multica-cache",
       "status": "in_progress",
-      "assignee": { "type": "agent", "name": "codex-ops" },
-      "labels": [],
-      "run": { "id": "run_8f40", "status": "running", "stage": "npm run build -- --prod" }
+      "priority": "none",
+      "assignee_type": "agent",
+      "assignee_id": "5fb87ac7-23b5-4a7a-81fa-ed295a54545d",
+      "properties": {}
     },
     {
-      "key": "MUL-17",
-      "title": "Spike: vector search",
+      "id": "5abe8fa7-b16d-4fde-8fa6-6c7b8a9fadb6",
+      "identifier": "MUL-17",
+      "title": "Triage the flaky login test",
+      "status": "todo",
+      "priority": "medium",
+      "assignee_type": null,
+      "assignee_id": null,
+      "properties": {}
+    },
+    {
+      "id": "6bcf9ab8-c27e-4aef-9ab7-7d8c9bab0ec7",
+      "identifier": "MUL-18",
+      "title": "Old pricing page",
+      "status": "cancelled",
+      "priority": "low",
+      "assignee_type": null,
+      "assignee_id": null,
+      "properties": {}
+    },
+    {
+      "id": "7cd0abc9-d38f-4bf0-8bc8-8e9dacbc1fd8",
+      "identifier": "MUL-19",
+      "title": "Ideas for Q1",
       "status": "backlog",
-      "assignee": null,
-      "labels": []
+      "priority": "none",
+      "assignee_type": null,
+      "assignee_id": null,
+      "properties": {}
     }
   ]
 }

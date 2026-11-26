@@ -165,13 +165,33 @@ to anything.
 
 ### multica (branch `feat/orchestrator-multica`)
 
-- `multica issue list --output json`, `multica run list --output json`.
-- The unit is the **issue**: a task in `review` is `Blocked(Approval)`, a task
-  whose agent is running is `Working`, `blocked` label is `Blocked(Failed)`.
-- Send: `multica issue comment --issue <KEY> --body <text>` (a review comment is
-  the natural utterance) — confirm against `multica --help` before shipping.
-- Its CLI has stable exit codes (3 auth, 4 not-found, 5 validation): map them to
-  the order result's `reason`, do not retry.
+**Doc-derived, not verified against a running instance.** Rewritten
+2026-11-26 from the product's own CLI spec,
+[`CLI_AND_DAEMON.md`](https://github.com/multica-ai/multica/blob/main/CLI_AND_DAEMON.md)
+at `0c5ee1f07d87`, read in the sections the adapter touches (install, auth,
+workspaces, issues through execution history, output formats, errors). Every
+encoded name is quoted in `multica.rs`'s header. Listing needs `multica login`
+(cloud or self-hosted): the doc's 401 message "tells you to run `multica login`".
+
+- List: `multica issue list --limit 100 --output json` → `{total, limit,
+  offset, has_more, issues[]}`. Issue keys read: `identifier`, `id`, `title`,
+  `status`. Not read: `assignee_type`/`assignee_id` (who, not which issue),
+  `properties` (definition ids → option ids), `priority`.
+- Statuses (built-in): `backlog|todo|in_progress|in_review|done|blocked|cancelled`,
+  plus per-workspace custom ones. `in_review` → `Blocked(Approval)`,
+  `in_progress` → `Working`, `done` → `Done`, everything else → `Idle`.
+  `blocked` is `Idle`: the doc never says it means failed.
+- Send: `multica issue comment add <issue-id> --content <text>`, addressed to
+  `identifier` (the doc: "copy that key into follow-up commands"), else `id`.
+- Exit codes (doc table): 2 network, 3 auth, 4 not found, 5 validation → the
+  order result's reason word, no retry.
+
+**The first version was wrong in six places:** a bare-array/`issues` envelope
+with no paging, `key` instead of `identifier`, `review` instead of `in_review`,
+`labels` and `run.status`/`run.stage` on the list (the doc names none of them),
+`multica run list` (there is none; runs are `multica issue runs <issue-id>`),
+and `issue comment --issue … --body …` instead of `issue comment add <issue-id>
+--content …`.
 
 ### t3 (branch `feat/orchestrator-t3`)
 
@@ -237,8 +257,8 @@ conflict. Three things had to be settled centrally, in `mod.rs` and `cli.rs`:
 | t3 | A child's approval surfaces on the parent, but the reply carries the parent's thread id. Whether t3 forwards it is unverified. | open |
 | cindy | The card cannot answer Cindy's native permission prompts (the API does not forward them): they are `Blocked(Failed)` with the raw reason word, never a fake question. | by design |
 | cindy | `Config` has no `[orchestrators.cindy]`, so the token and discovery file come from `DECKD_CINDY_TOKEN`, `DECKD_CINDY_DISCOVERY`, `DECKD_CINDY_PROFILE`. | works, names are ours |
-| multica | Exit codes 3/4/5 are mapped to `auth`/`not_found`/`validation` by reading them back out of `run()`'s error text. | works, `run()` returning a structured code would be cleaner |
-| multica | A run with status `failed` on an otherwise normal issue is `Idle`; only a `blocked`/`failed` label makes it `Blocked(Failed)`. | judgement call, revisit on real output |
+| multica | Exit codes 2/3/4/5 are mapped to `network`/`auth`/`not_found`/`validation` by reading them back out of `run()`'s error text. | works, `run()` returning a structured code would be cleaner |
+| multica | The `blocked` status is `Idle`, not `Blocked(Failed)`: the doc names it but never says it means failed, and the list has no labels or runs to say more. | open: needs a product decision or a real capture |
 | orca | No MCP server (upstream #13079), so the adapter is CLI + `--json`; the banner before the JSON is already handled by `json_payload`. | works |
 
 ### State of verification
@@ -247,7 +267,7 @@ conflict. Three things had to be settled centrally, in `mod.rs` and `cli.rs`:
 | --- | --- | --- |
 | herdr | 10 + captured fixture | **yes, herdr 0.9.5**: argv, envelope, fields and statuses against a live isolated server; `agent prompt` syntax from `--help` only (nothing sent) |
 | orca | 9 | no |
-| multica | 10 | no |
+| multica | 10, doc-derived fixture | no — rewritten from `CLI_AND_DAEMON.md` 2026-11-26; needs a logged-in account to verify |
 | t3 | 13 | no |
 | cindy | 17, incl. one round trip against a local fake server | no |
 

@@ -1,24 +1,42 @@
 //! `multica` on the deck (`docs/orchestrator-adapters.md`, "multica").
 //!
-//! What the adapter relies on, and nothing else (documented, not verified
-//! against a real installation):
+//! **Doc-derived, not verified against a running instance.** Source:
+//! <https://github.com/multica-ai/multica/blob/main/CLI_AND_DAEMON.md>, read
+//! 2026-11-26 at commit `0c5ee1f07d87`. Every verb, flag and field below is
+//! quoted from that file; anything it does not name is not read.
 //!
-//! - `multica issue list --output json`: issues, each with `key` (the
-//!   address of an order), `title`, `status`, `labels`, the assigned agent
-//!   and the agent's `run` (`status`, `stage`). The list is either the
-//!   top-level array or the object's `issues` array.
-//! - `multica issue comment --issue <KEY> --body <text>`: one order, as argv.
-//! - Exit codes 3 (auth), 4 (not found) and 5 (validation) are stable; they
-//!   become the order result's reason word and are never retried.
+//! - `multica issue list --limit 100 --output json`. "With `--output json`
+//!   the envelope carries `total`, `limit`, `offset` and `has_more`"; the page
+//!   is `issues` ("The number of issues in this page is `issues | length`").
+//!   "`--limit` is the page size, 1 to 100": one page, board order.
+//! - Per issue: `identifier` (the doc's `jq '.issues[] | {identifier, …}'`),
+//!   `id` ("canonical UUIDs"), `title`, `status` (`--fields=id,title,status,
+//!   priority`). The assignee is "`assignee_type`/`assignee_id` rather than a
+//!   single `assignee` field" — never read, and never a target. `properties`
+//!   is "a map from definition id to the stored value" — ids, not words, so
+//!   it is not read either. The doc names no labels and no run or stage on
+//!   the list, so there are none here.
+//! - `status`: "Built-in statuses: `backlog`, `todo`, `in_progress`,
+//!   `in_review`, `done`, `blocked`, `cancelled`. A workspace can define
+//!   custom statuses on top of these". `in_review` is `Blocked(Approval)` (our
+//!   reading: review is the human's turn); `in_progress` is `Working` (the
+//!   name only — the list carries no run); `done` is `Done`. The doc does not
+//!   say what `blocked` means for an operator — `--blocked` is "issues waiting
+//!   for unfinished manual blockers or earlier stages", which is neither an
+//!   approval nor a failure — so it is `Idle`, like `backlog`, `todo`,
+//!   `cancelled` and every custom status.
+//! - The address: "Table output shows a routable issue `KEY` such as
+//!   `MUL-123`; copy that key into follow-up commands", so an order goes to
+//!   `identifier`, else to `id` ("Ids may be issue keys or full UUIDs").
+//! - `multica issue comment add <issue-id> --content "…"`: one order, as argv.
+//! - Exit codes, verbatim from the doc's table: `2` network, `3`
+//!   "authentication / authorization (HTTP 401, 403)", `4` "not found (HTTP
+//!   404)", `5` "validation (HTTP 400, 422)". They become the order result's
+//!   reason word and are never retried.
 //!
-//! **The unit is the issue.** A `blocked` or `failed` label (or status) is
-//! `Blocked(Failed)`; `review` is `Blocked(Approval)`; an issue whose run is
-//! active is `Working`, with the run's stage as its activity; `done` is
-//! `Done`; anything else, including any status multica adds later, is
-//! `Idle`. A run's stage is only ever an activity, through
-//! [`activity`](super::activity), so a stage that reads as a command line is
-//! dropped rather than shown.
-use super::{json_payload, run, safe_key, title, Blocked, Orchestrator, Task, TaskState};
+//! **Content.** A `title` goes through [`title`], so one that reads as a
+//! command line is shown by its key.
+use super::{json_payload, run, title, Blocked, Orchestrator, Task, TaskState};
 use crate::config::Config;
 use serde_json::Value;
 use std::ffi::OsString;
@@ -26,10 +44,11 @@ use std::time::Duration;
 
 /// The program, found on `PATH`.
 pub const PROGRAM: &str = "multica";
-/// `issue list` gets this long.
-const LIST_TIMEOUT: Duration = Duration::from_secs(5);
-/// `issue comment` gets this long.
-const COMMENT_TIMEOUT: Duration = Duration::from_secs(10);
+/// `issue list` gets this long ("API requests use a default timeout of 30
+/// seconds"; the deck polls, so it gives up sooner).
+const LIST_TIMEOUT: Duration = Duration::from_secs(10);
+/// `issue comment add` gets this long.
+const COMMENT_TIMEOUT: Duration = Duration::from_secs(15);
 
 pub struct Multica;
 
@@ -37,31 +56,31 @@ pub fn new(_cfg: &Config) -> Option<Box<dyn Orchestrator>> {
     Some(Box::new(Multica))
 }
 
-/// `multica issue list --output json`.
+/// `multica issue list --limit 100 --output json`.
 #[must_use]
 pub fn list_argv() -> Vec<OsString> {
-    ["issue", "list", "--output", "json"]
+    ["issue", "list", "--limit", "100", "--output", "json"]
         .map(OsString::from)
         .to_vec()
 }
 
 impl Multica {
-    /// `multica issue comment --issue <KEY> --body <text>`: the text is one
-    /// argument, whatever it holds.
+    /// `multica issue comment add <issue-id> --content <text>`: the text is
+    /// one argument, whatever it holds.
     #[must_use]
     pub fn order_argv(&self, key: &str, text: &str) -> Vec<OsString> {
         vec![
             "issue".into(),
             "comment".into(),
-            "--issue".into(),
+            "add".into(),
             key.into(),
-            "--body".into(),
+            "--content".into(),
             text.into(),
         ]
     }
 }
 
-/// multica's stable exit codes as reason words; any other failure keeps the
+/// multica's tiered exit codes as reason words; any other failure keeps the
 /// reason [`run`] gave it.
 #[must_use]
 pub fn exit_reason(err: String) -> String {
@@ -70,6 +89,7 @@ pub fn exit_reason(err: String) -> String {
         .and_then(|rest| rest.rsplit_once("exited with "))
         .and_then(|(_, code)| code.trim().parse::<i32>().ok());
     let word = match code {
+        Some(2) => "network",
         Some(3) => "auth",
         Some(4) => "not_found",
         Some(5) => "validation",
@@ -78,82 +98,76 @@ pub fn exit_reason(err: String) -> String {
     format!("{word}: {PROGRAM} exited with {}", code.unwrap_or_default())
 }
 
-/// A label's name: a plain string or an object's `name`.
-fn label_name(label: &Value) -> Option<&str> {
-    label.as_str().or_else(|| label["name"].as_str())
-}
-
-/// Is the issue marked failed: a `blocked`/`failed` label or status.
-fn failed(issue: &Value, status: &str) -> bool {
-    let marks = |w: &str| {
-        let w = w.trim().to_ascii_lowercase();
-        w == "blocked" || w == "failed"
+/// An issue key: `MUL-123` (a prefix of capitals and digits, a dash, digits).
+fn is_identifier(s: &str) -> bool {
+    let Some((prefix, n)) = s.split_once('-') else {
+        return false;
     };
-    marks(status)
-        || issue["labels"]
-            .as_array()
-            .is_some_and(|labels| labels.iter().filter_map(label_name).any(marks))
+    prefix.len() <= 16
+        && prefix
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_uppercase())
+        && prefix
+            .chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+        && !n.is_empty()
+        && n.len() <= 10
+        && n.bytes().all(|b| b.is_ascii_digit())
 }
 
-/// The agent's run, when it is active.
-fn active_run(issue: &Value) -> Option<&Value> {
-    let run = &issue["run"];
-    let status = run["status"].as_str()?.trim().to_ascii_lowercase();
-    matches!(status.as_str(), "running" | "in_progress" | "active").then_some(run)
+/// A canonical UUID: 8-4-4-4-12 hex.
+fn is_uuid(s: &str) -> bool {
+    let parts: Vec<&str> = s.split('-').collect();
+    parts.len() == 5
+        && parts
+            .iter()
+            .zip([8, 4, 4, 4, 12])
+            .all(|(p, n)| p.len() == n && p.bytes().all(|b| b.is_ascii_hexdigit()))
 }
 
-/// One issue's state.
-fn state(issue: &Value, status: &str) -> TaskState {
-    if failed(issue, status) {
-        return TaskState::Blocked(Blocked::Failed);
-    }
-    let status = status.trim().to_ascii_lowercase();
-    if matches!(status.as_str(), "review" | "in_review") {
-        return TaskState::Blocked(Blocked::Approval);
-    }
-    if active_run(issue).is_some() {
-        return TaskState::Working;
-    }
-    match status.as_str() {
+/// What an order to this issue is addressed to: `identifier`, else `id`.
+/// Never an `assignee_*`, which names who works on it, not the issue.
+fn target(issue: &Value) -> Option<&str> {
+    let key = issue["identifier"]
+        .as_str()
+        .map(str::trim)
+        .filter(|k| is_identifier(k));
+    key.or_else(|| issue["id"].as_str().map(str::trim).filter(|k| is_uuid(k)))
+}
+
+/// One issue's `status`.
+fn state(status: &str) -> TaskState {
+    match status {
+        "in_progress" => TaskState::Working,
+        "in_review" => TaskState::Blocked(Blocked::Approval),
         "done" => TaskState::Done,
-        // `backlog`, `todo`, `in_progress` with no run, `cancelled`, and
-        // whatever a later multica adds.
+        // `backlog`, `todo`, `blocked`, `cancelled`, and custom statuses.
         _ => TaskState::Idle,
     }
 }
 
 /// The issues of `multica issue list --output json` as tasks. An issue with
-/// no usable `key` cannot be addressed and is left out.
+/// neither a usable `identifier` nor `id` cannot be addressed and is left out.
 pub fn parse(raw: &str) -> Result<Vec<Task>, String> {
     let value = json_payload(raw)?;
-    let issues = match &value {
-        Value::Array(issues) => issues,
-        Value::Object(map) => map
-            .get("issues")
-            .and_then(Value::as_array)
-            .ok_or_else(|| "malformed: no `issues` array".to_string())?,
-        _ => return Err("malformed: not a list of issues".into()),
-    };
+    let issues = value
+        .get("issues")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "malformed: no `issues` array".to_string())?;
     let mut tasks = Vec::new();
     for issue in issues {
-        let Some(key) = issue["key"].as_str().map(str::trim).filter(|k| safe_key(k)) else {
+        let Some(key) = target(issue) else {
             continue;
         };
         let Some(status) = issue["status"].as_str() else {
             continue;
         };
-        let state = state(issue, status);
-        let activity = match state {
-            TaskState::Working => active_run(issue)
-                .and_then(|run| run["stage"].as_str())
-                .and_then(super::activity),
-            _ => None,
-        };
         tasks.push(Task {
             key: key.to_string(),
             title: title(issue["title"].as_str().unwrap_or_default(), key),
-            state,
-            activity,
+            state: state(status.trim()),
+            activity: None,
         });
     }
     Ok(tasks)
@@ -177,14 +191,14 @@ impl Orchestrator for Multica {
     }
 
     fn send_order(&self, key: &str, text: &str) -> Result<(), String> {
-        if !safe_key(key) {
-            return Err("bad_key: not a multica issue key".into());
+        if !(is_identifier(key) || is_uuid(key)) {
+            return Err("bad_key: not a multica issue key or id".into());
         }
         let text = text.trim();
         if text.is_empty() {
             return Err("empty: nothing to send".into());
         }
-        // multica would read it as an option, not as the body.
+        // multica would read it as an option, not as the content.
         if text.starts_with('-') {
             return Err("bad_text: a comment may not start with '-'".into());
         }
@@ -203,11 +217,18 @@ mod tests {
     };
     use deck_model::AgentState;
 
-    /// Written from the documented shape, not captured from a live multica.
+    /// Doc-derived (CLI_AND_DAEMON.md, 2026-11-26), not captured: the envelope
+    /// and only the issue keys the doc names.
     const FIXTURE: &str = include_str!("../../tests/orchestrators/multica.json");
 
+    fn page(issues: Vec<Value>) -> String {
+        let n = issues.len();
+        serde_json::json!({"total": n, "limit": 100, "offset": 0, "has_more": false, "issues": issues})
+            .to_string()
+    }
+
     #[test]
-    fn the_fixture_parses_into_the_documented_states() {
+    fn the_fixture_parses_into_the_documented_statuses() {
         let tasks = parse(FIXTURE).expect("fixture");
         let got: Vec<(&str, TaskState)> = tasks.iter().map(|t| (t.key.as_str(), t.state)).collect();
         assert_eq!(
@@ -215,22 +236,93 @@ mod tests {
             [
                 ("MUL-12", TaskState::Working),
                 ("MUL-14", TaskState::Blocked(Blocked::Approval)),
-                ("MUL-15", TaskState::Blocked(Blocked::Failed)),
+                ("MUL-15", TaskState::Idle),
                 ("MUL-9", TaskState::Done),
                 ("MUL-16", TaskState::Working),
                 ("MUL-17", TaskState::Idle),
+                ("MUL-18", TaskState::Idle),
+                ("MUL-19", TaskState::Idle),
             ]
         );
         assert_eq!(tasks[0].title, "Refactor the billing API");
-        assert_eq!(tasks[0].activity.as_deref(), Some("writing tests"));
-        assert_eq!(tasks[1].activity, None, "only a working issue has one");
         assert_eq!(tasks[2].title, "Rotate [redacted] in [path]");
         assert_eq!(tasks[4].title, "MUL-16", "a command line is not a title");
-        assert_eq!(tasks[4].activity, None, "a command line is not a stage");
+        assert!(
+            tasks.iter().all(|t| t.activity.is_none()),
+            "the list has no run or stage"
+        );
     }
 
     #[test]
-    fn nothing_from_a_command_path_or_token_reaches_the_json() {
+    fn the_envelope_is_issues_with_paging_fields() {
+        assert_eq!(parse(&page(vec![])).expect("empty page"), []);
+        // The shapes the first version read are not what the doc describes.
+        assert!(parse(r#"[{"key":"MUL-1","status":"done"}]"#).is_err());
+        assert!(parse(r#"{"total":0,"limit":100,"offset":0,"has_more":false}"#).is_err());
+        // `key` is not a field the doc names: an issue addressed only by it is left out.
+        assert_eq!(
+            parse(&page(vec![
+                serde_json::json!({"key": "MUL-1", "status": "done"})
+            ]))
+            .expect("page"),
+            []
+        );
+    }
+
+    #[test]
+    fn each_built_in_status_maps_and_the_rest_are_idle() {
+        for (word, want) in [
+            ("backlog", TaskState::Idle),
+            ("todo", TaskState::Idle),
+            ("in_progress", TaskState::Working),
+            ("in_review", TaskState::Blocked(Blocked::Approval)),
+            ("done", TaskState::Done),
+            ("blocked", TaskState::Idle),
+            ("cancelled", TaskState::Idle),
+            ("review", TaskState::Idle),
+            ("qa_signoff", TaskState::Idle),
+        ] {
+            let tasks = parse(&page(vec![
+                serde_json::json!({"identifier": "MUL-1", "status": word}),
+            ]))
+            .expect(word);
+            assert_eq!(tasks[0].state, want, "{word}");
+        }
+    }
+
+    #[test]
+    fn the_target_is_the_identifier_or_id_never_the_assignee() {
+        let uuid = "5fb87ac7-23b5-4a7a-81fa-ed295a54545d";
+        // No identifier: the canonical id.
+        let tasks = parse(&page(vec![
+            serde_json::json!({"id": uuid, "status": "todo"}),
+        ]))
+        .expect("id");
+        assert_eq!(tasks[0].key, uuid);
+        // Only an assignee: not addressable at all.
+        let tasks = parse(&page(vec![serde_json::json!({
+            "status": "in_review", "assignee_type": "agent", "assignee_id": uuid,
+            "assignee": "Lambda", "key": "Lambda",
+        })]))
+        .expect("assignee only");
+        assert_eq!(tasks, []);
+        // Both: the identifier, and the order addresses it.
+        let tasks = parse(FIXTURE).expect("fixture");
+        for t in &tasks {
+            assert!(is_identifier(&t.key) || is_uuid(&t.key), "{}", t.key);
+        }
+        let argv = Multica.order_argv(&tasks[1].key, "lgtm");
+        assert_eq!(argv[3], OsString::from("MUL-14"));
+        assert!(Multica
+            .send_order("Lambda", "hi")
+            .is_err_and(|e| e.starts_with("bad_key")));
+        assert!(Multica
+            .send_order("agent", "hi")
+            .is_err_and(|e| e.starts_with("bad_key")));
+    }
+
+    #[test]
+    fn nothing_from_a_command_path_token_or_property_reaches_the_json() {
         let tasks = parse(FIXTURE).expect("fixture");
         let out = status_json(&Multica, &tasks, budget(1)).to_string();
         for leak in [
@@ -240,14 +332,13 @@ mod tests {
             "ci.env",
             "ghp_",
             "GITHUB_TOKEN",
-            "cargo",
-            "npm",
-            "run_8f",
+            "5fb87ac7",
+            "member:",
+            "urgent",
         ] {
             assert!(!out.contains(leak), "{leak} leaked into {out}");
         }
         let deck = plan(&Multica, &tasks, budget(1));
-        assert_eq!(deck.len(), 5, "idle is absent");
         assert_eq!(deck[0].key, "MUL-14");
         assert_eq!(
             deck[0].card,
@@ -256,19 +347,6 @@ mod tests {
                 choices: vec!["Approve".into(), "Decline".into()],
             })
         );
-        assert_eq!(
-            (deck[1].state, deck[1].card.clone()),
-            (AgentState::Error, None)
-        );
-        let working = deck.iter().find(|e| e.key == "MUL-16").expect("MUL-16");
-        assert_eq!(working.title, "working");
-    }
-
-    #[test]
-    fn an_empty_fleet_is_no_tasks() {
-        assert_eq!(parse("[]").expect("array"), []);
-        assert_eq!(parse(r#"{"issues":[]}"#).expect("object"), []);
-        assert!(plan(&Multica, &[], budget(1)).is_empty());
     }
 
     #[test]
@@ -276,16 +354,16 @@ mod tests {
         let issues: Vec<Value> = (0..40)
             .map(|i| {
                 serde_json::json!({
-                    "key": format!("MUL-{i}"),
+                    "id": format!("00000000-0000-0000-0000-{i:012}"),
+                    "identifier": format!("MUL-{i}"),
                     "title": format!("Issue {i}"),
-                    "status": if i % 4 == 0 { "in_progress" } else { "review" },
-                    "assignee": { "type": "agent", "name": "claude" },
-                    "run": { "status": "running", "stage": format!("cargo test --shard {i}") },
+                    "status": if i % 4 == 0 { "in_progress" } else { "in_review" },
+                    "assignee_type": "agent",
+                    "assignee_id": "5fb87ac7-23b5-4a7a-81fa-ed295a54545d",
                 })
             })
             .collect();
-        let raw = serde_json::json!({ "issues": issues }).to_string();
-        let tasks = parse(&raw).expect("fleet");
+        let tasks = parse(&page(issues)).expect("fleet");
         assert_eq!(tasks.len(), 40);
         for configured in [1, 2, 5] {
             let deck = plan(&Multica, &tasks, budget(configured));
@@ -313,24 +391,23 @@ mod tests {
             assert!(parse(raw).is_err(), "{raw:?} parsed");
         }
         // Issues multica may grow: missing fields are skipped, not fatal.
-        let tasks = parse(
-            r#"[{"status":"review"},{"key":"../x","status":"done"},{"key":"ok"},
-                {"key":"a","status":"thinking","labels":[3,{"x":1}],"run":"soon"}]"#,
-        )
+        let tasks = parse(&page(vec![
+            serde_json::json!({"status": "in_review"}),
+            serde_json::json!({"identifier": "../x", "status": "done"}),
+            serde_json::json!({"identifier": "MUL-2"}),
+            serde_json::json!({"identifier": "MUL-3", "status": "thinking", "properties": 3}),
+        ]))
         .expect("partial");
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].state, TaskState::Idle);
     }
 
     #[test]
-    fn a_banner_before_the_json_is_skipped() {
-        let raw = "multica v0.9.2 — a newer version is available\n[{\"key\":\"MUL-1\",\"title\":\"x\",\"status\":\"done\"}]";
-        let tasks = parse(raw).expect("banner");
-        assert_eq!(tasks[0].state, TaskState::Done);
-    }
-
-    #[test]
-    fn the_order_is_argv_with_the_text_as_one_argument() {
+    fn the_argv_is_what_the_doc_spells() {
+        assert_eq!(
+            list_argv(),
+            ["issue", "list", "--limit", "100", "--output", "json"].map(OsString::from)
+        );
         let argv = Multica.order_argv("MUL-14", "ship it; rm -rf / && echo $(id)");
         let argv: Vec<&str> = argv.iter().map(|a| a.to_str().unwrap_or("?")).collect();
         assert_eq!(
@@ -338,23 +415,24 @@ mod tests {
             [
                 "issue",
                 "comment",
-                "--issue",
+                "add",
                 "MUL-14",
-                "--body",
+                "--content",
                 "ship it; rm -rf / && echo $(id)"
             ]
-        );
-        assert_eq!(
-            list_argv(),
-            ["issue", "list", "--output", "json"].map(OsString::from)
         );
     }
 
     #[test]
     fn an_order_multica_would_misread_is_refused_before_it_runs() {
-        assert!(Multica
-            .send_order("-x", "hi")
-            .is_err_and(|e| e.starts_with("bad_key")));
+        for key in ["-x", "mul-1", "MUL-", "MUL-1x", "../MUL-1", ""] {
+            assert!(
+                Multica
+                    .send_order(key, "hi")
+                    .is_err_and(|e| e.starts_with("bad_key")),
+                "{key:?}"
+            );
+        }
         assert!(Multica
             .send_order("MUL-1", "  ")
             .is_err_and(|e| e.starts_with("empty")));
@@ -364,8 +442,9 @@ mod tests {
     }
 
     #[test]
-    fn stable_exit_codes_are_reason_words() {
+    fn tiered_exit_codes_are_reason_words() {
         let at = |code: i32| exit_reason(format!("backend_refused: multica exited with {code}"));
+        assert_eq!(reason_word(&at(2)), "network");
         assert_eq!(reason_word(&at(3)), "auth");
         assert_eq!(reason_word(&at(4)), "not_found");
         assert_eq!(reason_word(&at(5)), "validation");
