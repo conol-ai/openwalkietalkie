@@ -165,3 +165,51 @@ Each is what the adapter may rely on; anything else is out of scope for v1.
    command lines in cards or in `--json` output.
 5. The PR description says which real command was verified on a real
    installation, and which was inferred from docs.
+
+## What the merge changed (integration, `feat/orchestrator`)
+
+The five branches each touched only their own module, so they merged without a
+conflict. Three things had to be settled centrally, in `mod.rs` and `cli.rs`:
+
+- **Availability is per product, not per build.** `herdr`, `multica` and `t3`
+  are always registered: an absent binary is a `status` failure with a reason
+  word, which is better than an adapter that silently is not there. `orca` is
+  registered when `orca` is on `PATH`; `cindy` when a discovery file exists.
+  `deckd orchestrators list` prints the difference (`not installed (<branch>)`).
+- **`--from-file` no longer needs the product.** It used to ask the registry for
+  an adapter, which is `None` exactly when the product is absent — the one case
+  a capture exists for. `MODULES` now carries a second, offline constructor and
+  `status --from-file` builds the adapter through it.
+- **The registry test** `the_registry_lists_five_and_they_all_parse_a_capture`
+  replaces the "four are stubs" assertion: it checks the three always-present
+  adapters are there and that all five can parse their own fixture offline.
+
+### Divergences found while merging (adapter ↔ contract)
+
+| Where | What the adapter had to do | Status |
+| --- | --- | --- |
+| t3 | "Done" means **no pending children**, not "no children": under the contract's wording a thread that ever had a child could never be done. | `mod.rs` wording kept, adapter follows the stricter rule |
+| t3 | #25585 (multi-stage stop reported as done) is only covered when the stages appear as child runs. Without a stage field there is nothing to read. | open, needs a field from t3 |
+| t3 | A child's approval surfaces on the parent, but the reply carries the parent's thread id. Whether t3 forwards it is unverified. | open |
+| cindy | The card cannot answer Cindy's native permission prompts (the API does not forward them): they are `Blocked(Failed)` with the raw reason word, never a fake question. | by design |
+| cindy | `Config` has no `[orchestrators.cindy]`, so the token and discovery file come from `DECKD_CINDY_TOKEN`, `DECKD_CINDY_DISCOVERY`, `DECKD_CINDY_PROFILE`. | works, names are ours |
+| multica | Exit codes 3/4/5 are mapped to `auth`/`not_found`/`validation` by reading them back out of `run()`'s error text. | works, `run()` returning a structured code would be cleaner |
+| multica | A run with status `failed` on an otherwise normal issue is `Idle`; only a `blocked`/`failed` label makes it `Blocked(Failed)`. | judgement call, revisit on real output |
+| orca | No MCP server (upstream #13079), so the adapter is CLI + `--json`; the banner before the JSON is already handled by `json_payload`. | works |
+
+### State of verification
+
+| Adapter | Tests | Verified against a real install |
+| --- | --- | --- |
+| herdr | 13 + fixture | no (binary absent) |
+| orca | 9 | no |
+| multica | 10 | no |
+| t3 | 13 | no |
+| cindy | 17, incl. one round trip against a local fake server | no |
+
+Every fixture was written from the product's documented output shape, not
+captured from a live install. What is verified is the code path: argv shape,
+JSON parsing, card mapping, redaction, and — for all five — that
+`deckd orchestrators <name> status --from-file` prints a plan on a machine where
+the product is not installed (`1152` lib tests, `deckd orchestrators list` and
+five `status --from-file` runs, all green).

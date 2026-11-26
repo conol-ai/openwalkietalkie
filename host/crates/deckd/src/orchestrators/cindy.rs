@@ -78,6 +78,18 @@ pub struct Cindy {
     token: Option<String>,
 }
 
+/// The adapter for `status --from-file` on a machine without Cindy: `parse`
+/// works, every request says the client is not paired.
+#[must_use]
+pub fn offline() -> Cindy {
+    Cindy::with(
+        Err(format!(
+            "not_paired: no Cindy discovery file (set {DISCOVERY_ENV})"
+        )),
+        None,
+    )
+}
+
 pub fn new(_cfg: &Config) -> Option<Box<dyn Orchestrator>> {
     // `Config` has no `[orchestrators.cindy]` table; the path comes from the
     // environment or Cindy's default profile.

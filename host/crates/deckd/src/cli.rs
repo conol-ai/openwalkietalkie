@@ -26,7 +26,11 @@ pub const EVENTS_CLIENT: &str = "deckd-events";
 /// `doctor`'s probes give the daemon this long.
 pub const DOCTOR_TIMEOUT: Duration = Duration::from_secs(3);
 /// The synthesiser the system ships, as `deckd tts` names it.
-const SYSTEM_SYNTH: &str = if cfg!(windows) { "Windows' own voice" } else { "Apple's synthesiser" };
+const SYSTEM_SYNTH: &str = if cfg!(windows) {
+    "Windows' own voice"
+} else {
+    "Apple's synthesiser"
+};
 /// The computer the service runs on, as `deckd tts` names it.
 const THIS_COMPUTER: &str = if cfg!(windows) { "this PC" } else { "this Mac" };
 
@@ -749,7 +753,9 @@ pub fn probe_json(found: &[(hidapi::BusType, Option<String>)]) -> serde_json::Va
     let instances: Vec<serde_json::Value> = found
         .iter()
         .map(|(bus, serial)| {
-            let id = serial.as_deref().and_then(crate::device::identity::label_of);
+            let id = serial
+                .as_deref()
+                .and_then(crate::device::identity::label_of);
             serde_json::json!({"bus": bus_name(*bus), "id": id})
         })
         .collect();
@@ -849,7 +855,11 @@ fn run(cli: Cli) -> Result<i32, String> {
         // the probe only looks for it.
         Cmd::Ble { cmd } => return Ok(ble_cmd(cmd)),
         Cmd::Probe { json } => {
-            return probe_cmd(crate::hid::instance_buses(), json, &mut std::io::stdout().lock())
+            return probe_cmd(
+                crate::hid::instance_buses(),
+                json,
+                &mut std::io::stdout().lock(),
+            )
         }
         other => other,
     };
@@ -860,7 +870,11 @@ fn run(cli: Cli) -> Result<i32, String> {
         // socket rather than an error exit; kept so the match is total.
         Cmd::Hook { cli, rest } => Ok(crate::hook::main(&cli, &rest, Some(paths.socket))),
         Cmd::Ble { cmd } => Ok(ble_cmd(cmd)),
-        Cmd::Probe { json } => probe_cmd(crate::hid::instance_buses(), json, &mut std::io::stdout().lock()),
+        Cmd::Probe { json } => probe_cmd(
+            crate::hid::instance_buses(),
+            json,
+            &mut std::io::stdout().lock(),
+        ),
         Cmd::Run {
             foreground,
             demo,
@@ -955,7 +969,11 @@ fn run(cli: Cli) -> Result<i32, String> {
         }
         Cmd::Tts { cmd } => {
             let mut out = std::io::stdout().lock();
-            let provider = Config::load(&paths.config).unwrap_or_default().voice.tts.provider;
+            let provider = Config::load(&paths.config)
+                .unwrap_or_default()
+                .voice
+                .tts
+                .provider;
             let keys = crate::secrets::voice_home(&paths, false, &provider);
             tts_cmd(&paths, cmd, &keys, &mut out)
         }
@@ -1204,10 +1222,10 @@ fn orchestrators(paths: &Paths, cmd: OrchestratorsCmd) -> Result<i32, String> {
     let budget = orch::budget(orch::all(&config).len());
     match cmd {
         OrchestratorsCmd::List => {
-            for (name, branch, new) in orch::MODULES {
+            for (name, branch, new, _) in orch::MODULES {
                 match new(&config) {
                     Some(o) => println!("{name:<8} {}", o.label()),
-                    None => println!("{name:<8} not yet ({branch})"),
+                    None => println!("{name:<8} not installed ({branch})"),
                 }
             }
             Ok(0)
@@ -1225,7 +1243,21 @@ fn orchestrators(paths: &Paths, cmd: OrchestratorsCmd) -> Result<i32, String> {
                     return Ok(if e.use_stderr() { 2 } else { 0 });
                 }
             };
-            let Some(adapter) = orch::by_name(&config, &named.name) else {
+            // A capture is read on machines where the product is absent: then
+            // there is no adapter to ask, so build one that only parses.
+            let capture = matches!(
+                &named.verb,
+                NamedVerb::Status {
+                    from_file: Some(_),
+                    ..
+                }
+            );
+            let adapter = if capture {
+                orch::by_name_offline(&named.name)
+            } else {
+                orch::by_name(&config, &named.name)
+            };
+            let Some(adapter) = adapter else {
                 return Err(format!(
                     "no orchestrator {:?} in this build (deckd orchestrators list)",
                     named.name
@@ -1992,14 +2024,21 @@ fn find_uv() -> Option<PathBuf> {
     });
     on_path.or_else(|| {
         let home = crate::integrations::home_dir().ok()?;
-        [home.join(".local/bin/uv"), PathBuf::from("/opt/homebrew/bin/uv")]
-            .into_iter()
-            .find(|p| p.is_file())
+        [
+            home.join(".local/bin/uv"),
+            PathBuf::from("/opt/homebrew/bin/uv"),
+        ]
+        .into_iter()
+        .find(|p| p.is_file())
     })
 }
 
 /// Run a tool with its output on the terminal, for the install's steps.
-fn run_step(out: &mut dyn std::io::Write, what: &str, cmd: &mut std::process::Command) -> Result<(), String> {
+fn run_step(
+    out: &mut dyn std::io::Write,
+    what: &str,
+    cmd: &mut std::process::Command,
+) -> Result<(), String> {
     let _ = writeln!(out, "tts: {what}");
     let status = cmd
         .stdin(std::process::Stdio::null())
@@ -2017,7 +2056,11 @@ fn hf_cache_dir(model: &str) -> Option<PathBuf> {
     let hub = std::env::var_os("HF_HUB_CACHE")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HF_HOME").map(|h| PathBuf::from(h).join("hub")))
-        .or_else(|| crate::integrations::home_dir().ok().map(|h| h.join(".cache/huggingface/hub")))?;
+        .or_else(|| {
+            crate::integrations::home_dir()
+                .ok()
+                .map(|h| h.join(".cache/huggingface/hub"))
+        })?;
     Some(hub.join(format!("models--{}", model.replace('/', "--"))))
 }
 
@@ -2080,7 +2123,13 @@ fn ancestry_refused(failure: &CtlFailure) -> bool {
 
 /// `config.get` from the running service, if it answers.
 fn published_config(paths: &Paths) -> Option<serde_json::Value> {
-    uds_call(&paths.socket, &["admin"], "config.get", serde_json::json!({})).ok()
+    uds_call(
+        &paths.socket,
+        &["admin"],
+        "config.get",
+        serde_json::json!({}),
+    )
+    .ok()
 }
 
 /// Where `deckd tts key` says the running service keeps the key, from its
@@ -2190,7 +2239,9 @@ fn tts_key_set(
             );
             key_notes(
                 out,
-                voice["tts.engine"].as_str().unwrap_or(crate::audio::cloud::NAME),
+                voice["tts.engine"]
+                    .as_str()
+                    .unwrap_or(crate::audio::cloud::NAME),
                 voice["tts.model"].as_str().unwrap_or_default(),
                 effective,
             );
@@ -2209,19 +2260,26 @@ fn tts_key_set(
             }
             let (next, place) = match keys.store() {
                 Some(store) => {
-                    store
-                        .set(key)
-                        .map_err(|why| format!("{} did not take the key: {why}", crate::secrets::STORE))?;
+                    store.set(key).map_err(|why| {
+                        format!("{} did not take the key: {why}", crate::secrets::STORE)
+                    })?;
                     let config = Config::load(&paths.config).unwrap_or_default();
                     if config.voice.tts.has_key() {
                         file.push(("voice.tts.api_key", serde_json::Value::Null));
                     }
-                    let next = if file.is_empty() { config } else { write_tts_keys(paths, &file)? };
+                    let next = if file.is_empty() {
+                        config
+                    } else {
+                        write_tts_keys(paths, &file)?
+                    };
                     (next, crate::secrets::STORE.to_string())
                 }
                 None => {
                     file.push(("voice.tts.api_key", serde_json::Value::String(key.into())));
-                    (write_tts_keys(paths, &file)?, paths.config.display().to_string())
+                    (
+                        write_tts_keys(paths, &file)?,
+                        paths.config.display().to_string(),
+                    )
                 }
             };
             let _ = writeln!(
@@ -2229,9 +2287,18 @@ fn tts_key_set(
                 "tts: key {} stored in {place} for {}{}",
                 crate::secrets::hint(key),
                 effective.name(),
-                if keys.store().is_some() { "; the service reads it when it starts" } else { "" }
+                if keys.store().is_some() {
+                    "; the service reads it when it starts"
+                } else {
+                    ""
+                }
             );
-            key_notes(out, &next.voice.tts.engine, &next.voice.tts.model, effective);
+            key_notes(
+                out,
+                &next.voice.tts.engine,
+                &next.voice.tts.model,
+                effective,
+            );
             Ok(0)
         }
         Err(failure) if ancestry_refused(&failure) => Err(KEY_ANCESTRY_HINT.into()),
@@ -2276,15 +2343,21 @@ fn tts_key_clear(
             let clear = [("voice.tts.api_key", serde_json::Value::Null)];
             let (next, place) = match keys.store() {
                 Some(store) => {
-                    store
-                        .delete()
-                        .map_err(|why| format!("{} did not remove the key: {why}", crate::secrets::STORE))?;
+                    store.delete().map_err(|why| {
+                        format!("{} did not remove the key: {why}", crate::secrets::STORE)
+                    })?;
                     let config = Config::load(&paths.config).unwrap_or_default();
-                    let next =
-                        if config.voice.tts.has_key() { write_tts_keys(paths, &clear)? } else { config };
+                    let next = if config.voice.tts.has_key() {
+                        write_tts_keys(paths, &clear)?
+                    } else {
+                        config
+                    };
                     (next, crate::secrets::STORE.to_string())
                 }
-                None => (write_tts_keys(paths, &clear)?, paths.config.display().to_string()),
+                None => (
+                    write_tts_keys(paths, &clear)?,
+                    paths.config.display().to_string(),
+                ),
             };
             let _ = writeln!(
                 out,
@@ -2340,7 +2413,10 @@ fn key_line(paths: &Paths, config: &Config, keys: &crate::secrets::KeyHome) -> K
     match keys.store().map(|store| store.exists()) {
         Some(Ok(true)) => KeyLine {
             present: true,
-            line: format!("in {} (start the service to see its last four characters)", crate::secrets::STORE),
+            line: format!(
+                "in {} (start the service to see its last four characters)",
+                crate::secrets::STORE
+            ),
         },
         Some(Err(why)) => KeyLine {
             present: false,
@@ -2363,12 +2439,13 @@ pub fn tts_cmd(
     let config = Config::load(&paths.config).unwrap_or_default();
     let cfg = crate::audio::sidecar_config(&config, paths);
     match cmd {
-        TtsCmd::Key { cmd: KeyCmd::Set { provider } } => {
+        TtsCmd::Key {
+            cmd: KeyCmd::Set { provider },
+        } => {
             let provider = match provider {
-                Some(name) => Some(
-                    cloud::Provider::parse(&name)
-                        .ok_or_else(|| format!("{name:?} is not a provider this build knows: openai, elevenlabs"))?,
-                ),
+                Some(name) => Some(cloud::Provider::parse(&name).ok_or_else(|| {
+                    format!("{name:?} is not a provider this build knows: openai, elevenlabs")
+                })?),
                 None => None,
             };
             let effective = provider
@@ -2400,9 +2477,11 @@ pub fn tts_cmd(
                     "`uv` is not installed; it is one command: curl -LsSf https://astral.sh/uv/install.sh | sh".to_string()
                 })?;
                 if force && venv.exists() {
-                    std::fs::remove_dir_all(&venv).map_err(|e| format!("{}: {e}", venv.display()))?;
+                    std::fs::remove_dir_all(&venv)
+                        .map_err(|e| format!("{}: {e}", venv.display()))?;
                 }
-                std::fs::create_dir_all(&paths.tts).map_err(|e| format!("{}: {e}", paths.tts.display()))?;
+                std::fs::create_dir_all(&paths.tts)
+                    .map_err(|e| format!("{}: {e}", paths.tts.display()))?;
                 if !cfg.python.is_file() {
                     run_step(
                         out,
@@ -2430,7 +2509,11 @@ pub fn tts_cmd(
                     cfg.python.display()
                 ));
             } else {
-                let _ = writeln!(out, "tts: using {} from [voice.tts] python", cfg.python.display());
+                let _ = writeln!(
+                    out,
+                    "tts: using {} from [voice.tts] python",
+                    cfg.python.display()
+                );
             }
             sidecar::write_script(&cfg.script)?;
             let _ = writeln!(out, "tts: loading {model} once (downloads it on first use)");
@@ -2472,20 +2555,35 @@ pub fn tts_cmd(
                 );
             }
             if model != cfg.model {
-                let _ = writeln!(out, "tts: set [voice.tts] model = {model:?} to make the daemon load this one");
+                let _ = writeln!(
+                    out,
+                    "tts: set [voice.tts] model = {model:?} to make the daemon load this one"
+                );
             }
-            let _ = writeln!(out, "tts: restart deckd to speak with it (the engine is built at start)");
+            let _ = writeln!(
+                out,
+                "tts: restart deckd to speak with it (the engine is built at start)"
+            );
             Ok(0)
         }
         TtsCmd::Remove => {
-            match uds_call(&paths.socket, &["admin"], "tts.remove", serde_json::json!({})) {
+            match uds_call(
+                &paths.socket,
+                &["admin"],
+                "tts.remove",
+                serde_json::json!({}),
+            ) {
                 Ok(_) => {
                     let _ = writeln!(out, "tts: removed through the daemon");
                 }
                 Err(_) => {
                     let settings = crate::kokoro::Settings::from_config(&config);
                     crate::kokoro::job(&paths.kokoro, &settings.model).remove()?;
-                    let _ = writeln!(out, "tts: removed {}", crate::kokoro::dir(&paths.kokoro, &settings.model).display());
+                    let _ = writeln!(
+                        out,
+                        "tts: removed {}",
+                        crate::kokoro::dir(&paths.kokoro, &settings.model).display()
+                    );
                 }
             }
             let _ = writeln!(out, "tts: {SYSTEM_SYNTH} speaks from the next utterance");
@@ -2504,8 +2602,10 @@ pub fn tts_cmd(
                 match tts.engine_with_key(key.as_ref().is_some_and(|key| key.present)) {
                     "apple" => format!("{SYSTEM_SYNTH} speaks, on {THIS_COMPUTER}"),
                     sidecar::NAME => "the local model in its sidecar speaks".to_string(),
-                    crate::kokoro::ENGINE if kokoro_present => format!("the Kokoro voice speaks, on {THIS_COMPUTER}"),
-                    crate::kokoro::ENGINE => format!("{SYSTEM_SYNTH}, until the Kokoro voice is downloaded"),
+                    crate::kokoro::ENGINE if kokoro_present =>
+                        format!("the Kokoro voice speaks, on {THIS_COMPUTER}"),
+                    crate::kokoro::ENGINE =>
+                        format!("{SYSTEM_SYNTH}, until the Kokoro voice is downloaded"),
                     provider => format!("{provider}'s model speaks (your key)"),
                 }
             );
@@ -2516,18 +2616,34 @@ pub fn tts_cmd(
                     out,
                     "voice:   {} ({}), voices {}",
                     settings.model,
-                    if kokoro_present { "downloaded" } else { "not downloaded: `deckd tts install`" },
+                    if kokoro_present {
+                        "downloaded"
+                    } else {
+                        "not downloaded: `deckd tts install`"
+                    },
                     settings.pool().join(", ")
                 );
-                let _ = writeln!(out, "package: {} ({:.0} MB)", job.path().display(), job.total as f64 / 1_048_576.0);
-                match uds_call(&paths.socket, &["voice"], "tts.status", serde_json::json!({})) {
+                let _ = writeln!(
+                    out,
+                    "package: {} ({:.0} MB)",
+                    job.path().display(),
+                    job.total as f64 / 1_048_576.0
+                );
+                match uds_call(
+                    &paths.socket,
+                    &["voice"],
+                    "tts.status",
+                    serde_json::json!({}),
+                ) {
                     Ok(v) => {
                         let _ = writeln!(
                             out,
                             "daemon:  loaded {}, loading {}{}{}",
                             v["loaded"].as_bool().unwrap_or(false),
                             v["loading"].as_bool().unwrap_or(false),
-                            v["load_error"].as_str().map_or(String::new(), |e| format!(", load error: {e}")),
+                            v["load_error"]
+                                .as_str()
+                                .map_or(String::new(), |e| format!(", load error: {e}")),
                             v["download"]
                                 .as_object()
                                 .filter(|d| d["running"].as_bool().unwrap_or(false))
@@ -2557,7 +2673,11 @@ pub fn tts_cmd(
                         || " (not one this build knows: openai, elevenlabs)".to_string(),
                         |p| format!(
                             ", model {}, voices {}",
-                            if tts.model.is_empty() { p.default_model() } else { tts.model.as_str() },
+                            if tts.model.is_empty() {
+                                p.default_model()
+                            } else {
+                                tts.model.as_str()
+                            },
                             cloud::Settings::from_config(&config).pool(p).join(", ")
                         )
                     )
@@ -2577,18 +2697,32 @@ pub fn tts_cmd(
                     .filter(|o| o.status.success())
                     .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
                 match version {
-                    Some(v) => format!("{} (Python {})", cfg.python.display(), v.replace(' ', ", mlx-audio ")),
-                    None => format!("{} (mlx-audio is not installed there)", cfg.python.display()),
+                    Some(v) => format!(
+                        "{} (Python {})",
+                        cfg.python.display(),
+                        v.replace(' ', ", mlx-audio ")
+                    ),
+                    None => format!(
+                        "{} (mlx-audio is not installed there)",
+                        cfg.python.display()
+                    ),
                 }
             } else {
-                format!("{} is missing: run `deckd tts install`", cfg.python.display())
+                format!(
+                    "{} is missing: run `deckd tts install`",
+                    cfg.python.display()
+                )
             };
             let _ = writeln!(out, "python:  {python}");
             let cached = hf_cache_dir(&cfg.model).is_some_and(|d| d.join("snapshots").is_dir());
             let _ = writeln!(
                 out,
                 "cache:   {}",
-                if cached { "the model is downloaded" } else { "the model is not downloaded yet (`deckd tts install`)" }
+                if cached {
+                    "the model is downloaded"
+                } else {
+                    "the model is not downloaded yet (`deckd tts install`)"
+                }
             );
             let _ = writeln!(out, "script:  {}", cfg.script.display());
             status_daemon(paths, out)
@@ -2608,23 +2742,43 @@ pub fn stt_cmd(paths: &Paths, cmd: SttCmd, out: &mut dyn std::io::Write) -> Resu
             let Some(entry) = stt::model(&name) else {
                 return Err(format!(
                     "{name} is not a model this build can fetch: {}",
-                    stt::MODELS.iter().map(|m| m.name).collect::<Vec<_>>().join(", ")
+                    stt::MODELS
+                        .iter()
+                        .map(|m| m.name)
+                        .collect::<Vec<_>>()
+                        .join(", ")
                 ));
             };
-            let _ = writeln!(out, "stt: {} — {} ({})", entry.name, entry.about, mb(entry.bytes));
+            let _ = writeln!(
+                out,
+                "stt: {} — {} ({})",
+                entry.name,
+                entry.about,
+                mb(entry.bytes)
+            );
             // Select first, so a daemon that is running loads the model the
             // moment it lands; the keys are hot.
             if !no_select {
-                let mut patch = vec![("voice.stt.engine", serde_json::Value::String(stt::ENGINE.into()))];
+                let mut patch = vec![(
+                    "voice.stt.engine",
+                    serde_json::Value::String(stt::ENGINE.into()),
+                )];
                 if name != stt::model_name(&config.voice.stt.model) {
                     patch.push(("voice.stt.model", serde_json::Value::String(name.clone())));
                 }
                 patch.push(("voice.stt.prompted", serde_json::Value::Bool(true)));
                 write_tts_keys(paths, &patch)?;
-                let _ = writeln!(out, "stt: [voice.stt] engine = \"whisper\", model = {name:?}");
+                let _ = writeln!(
+                    out,
+                    "stt: [voice.stt] engine = \"whisper\", model = {name:?}"
+                );
             }
             if stt::present(&paths.stt, &name) {
-                let _ = writeln!(out, "stt: {} is already downloaded", stt::model_path(&paths.stt, &name).display());
+                let _ = writeln!(
+                    out,
+                    "stt: {} is already downloaded",
+                    stt::model_path(&paths.stt, &name).display()
+                );
                 return Ok(0);
             }
             // Through the daemon when it runs, so its own `stt.status`
@@ -2644,11 +2798,16 @@ pub fn stt_cmd(paths: &Paths, cmd: SttCmd, out: &mut dyn std::io::Write) -> Resu
                 let _ = writeln!(out, "stt: downloading through the daemon");
                 loop {
                     std::thread::sleep(std::time::Duration::from_millis(500));
-                    let status = uds_call(&paths.socket, &["voice"], "stt.status", serde_json::json!({}))
-                        .map_err(|e| match e {
-                            CtlFailure::Unreachable(why) => why,
-                            CtlFailure::Rpc(err) => err.message,
-                        })?;
+                    let status = uds_call(
+                        &paths.socket,
+                        &["voice"],
+                        "stt.status",
+                        serde_json::json!({}),
+                    )
+                    .map_err(|e| match e {
+                        CtlFailure::Unreachable(why) => why,
+                        CtlFailure::Rpc(err) => err.message,
+                    })?;
                     let d = &status["download"];
                     if d.is_null() {
                         return Err("the daemon reports no download".into());
@@ -2665,11 +2824,20 @@ pub fn stt_cmd(paths: &Paths, cmd: SttCmd, out: &mut dyn std::io::Write) -> Resu
                 }
             } else {
                 let _ = writeln!(out, "stt: the daemon is not running; downloading here");
-                crate::download::fetch(&stt::job(&paths.stt, &name), |bytes, total| report(out, bytes, total, &mut last))?;
+                crate::download::fetch(&stt::job(&paths.stt, &name), |bytes, total| {
+                    report(out, bytes, total, &mut last)
+                })?;
             }
-            let _ = writeln!(out, "stt: {} is ready", stt::model_path(&paths.stt, &name).display());
+            let _ = writeln!(
+                out,
+                "stt: {} is ready",
+                stt::model_path(&paths.stt, &name).display()
+            );
             if !no_select {
-                let _ = writeln!(out, "stt: the daemon recognises with it from the next press");
+                let _ = writeln!(
+                    out,
+                    "stt: the daemon recognises with it from the next press"
+                );
             }
             Ok(0)
         }
@@ -2692,18 +2860,38 @@ pub fn stt_cmd(paths: &Paths, cmd: SttCmd, out: &mut dyn std::io::Write) -> Resu
                 out,
                 "model:   {} ({}), language {}",
                 settings.model,
-                if present { "downloaded" } else { "not downloaded: `deckd stt install`" },
-                if settings.language.is_empty() { "from the locale" } else { settings.language.as_str() }
+                if present {
+                    "downloaded"
+                } else {
+                    "not downloaded: `deckd stt install`"
+                },
+                if settings.language.is_empty() {
+                    "from the locale"
+                } else {
+                    settings.language.as_str()
+                }
             );
-            let _ = writeln!(out, "file:    {} ({})", stt::model_path(&paths.stt, &settings.model).display(), mb(total));
-            match uds_call(&paths.socket, &["voice"], "stt.status", serde_json::json!({})) {
+            let _ = writeln!(
+                out,
+                "file:    {} ({})",
+                stt::model_path(&paths.stt, &settings.model).display(),
+                mb(total)
+            );
+            match uds_call(
+                &paths.socket,
+                &["voice"],
+                "stt.status",
+                serde_json::json!({}),
+            ) {
                 Ok(v) => {
                     let _ = writeln!(
                         out,
                         "daemon:  loaded {}, loading {}{}{}",
                         v["loaded"].as_bool().unwrap_or(false),
                         v["loading"].as_bool().unwrap_or(false),
-                        v["load_error"].as_str().map_or(String::new(), |e| format!(", load error: {e}")),
+                        v["load_error"]
+                            .as_str()
+                            .map_or(String::new(), |e| format!(", load error: {e}")),
                         v["download"]
                             .as_object()
                             .filter(|d| d["running"].as_bool().unwrap_or(false))
@@ -2724,13 +2912,22 @@ pub fn stt_cmd(paths: &Paths, cmd: SttCmd, out: &mut dyn std::io::Write) -> Resu
             Ok(0)
         }
         SttCmd::Remove => {
-            match uds_call(&paths.socket, &["admin"], "stt.remove", serde_json::json!({})) {
+            match uds_call(
+                &paths.socket,
+                &["admin"],
+                "stt.remove",
+                serde_json::json!({}),
+            ) {
                 Ok(_) => {
                     let _ = writeln!(out, "stt: removed through the daemon");
                 }
                 Err(_) => {
                     stt::job(&paths.stt, &settings.model).remove()?;
-                    let _ = writeln!(out, "stt: removed {}", stt::model_path(&paths.stt, &settings.model).display());
+                    let _ = writeln!(
+                        out,
+                        "stt: removed {}",
+                        stt::model_path(&paths.stt, &settings.model).display()
+                    );
                 }
             }
             let _ = writeln!(out, "stt: Apple's recogniser takes the next press");
@@ -2745,7 +2942,13 @@ fn progress_line(out: &mut dyn std::io::Write, what: &str, bytes: u64, total: u6
     if bytes != *last && (bytes / (16 * 1_048_576) != *last / (16 * 1_048_576) || bytes == total) {
         *last = bytes;
         if total > 0 {
-            let _ = writeln!(out, "{what}: {} of {} ({}%)", mb(bytes), mb(total), bytes * 100 / total);
+            let _ = writeln!(
+                out,
+                "{what}: {} of {} ({}%)",
+                mb(bytes),
+                mb(total),
+                bytes * 100 / total
+            );
         } else {
             let _ = writeln!(out, "{what}: {}", mb(bytes));
         }
@@ -2768,18 +2971,36 @@ fn tts_install_kokoro(
     let Some(entry) = kokoro::package(&name) else {
         return Err(format!(
             "{name} is not a voice package this build can fetch: {}",
-            kokoro::PACKAGES.iter().map(|p| p.name).collect::<Vec<_>>().join(", ")
+            kokoro::PACKAGES
+                .iter()
+                .map(|p| p.name)
+                .collect::<Vec<_>>()
+                .join(", ")
         ));
     };
-    let _ = writeln!(out, "tts: {} — {} ({:.0} MB)", entry.name, entry.about, entry.bytes as f64 / 1_048_576.0);
+    let _ = writeln!(
+        out,
+        "tts: {} — {} ({:.0} MB)",
+        entry.name,
+        entry.about,
+        entry.bytes as f64 / 1_048_576.0
+    );
     if !no_select {
-        let mut patch = vec![("voice.tts.engine", serde_json::Value::String(kokoro::ENGINE.into()))];
-        if name != kokoro::model_name(&config.voice.tts.model) || !config.voice.tts.model.starts_with("kokoro") {
+        let mut patch = vec![(
+            "voice.tts.engine",
+            serde_json::Value::String(kokoro::ENGINE.into()),
+        )];
+        if name != kokoro::model_name(&config.voice.tts.model)
+            || !config.voice.tts.model.starts_with("kokoro")
+        {
             patch.push(("voice.tts.model", serde_json::Value::String(name.clone())));
         }
         patch.push(("voice.stt.prompted", serde_json::Value::Bool(true)));
         write_tts_keys(paths, &patch)?;
-        let _ = writeln!(out, "tts: [voice.tts] engine = \"kokoro\", model = {name:?}");
+        let _ = writeln!(
+            out,
+            "tts: [voice.tts] engine = \"kokoro\", model = {name:?}"
+        );
     }
     let job = kokoro::job(&paths.kokoro, &name);
     if job.present() {
@@ -2798,16 +3019,27 @@ fn tts_install_kokoro(
         let _ = writeln!(out, "tts: downloading through the daemon");
         loop {
             std::thread::sleep(std::time::Duration::from_millis(500));
-            let status = uds_call(&paths.socket, &["voice"], "tts.status", serde_json::json!({}))
-                .map_err(|e| match e {
-                    CtlFailure::Unreachable(why) => why,
-                    CtlFailure::Rpc(err) => err.message,
-                })?;
+            let status = uds_call(
+                &paths.socket,
+                &["voice"],
+                "tts.status",
+                serde_json::json!({}),
+            )
+            .map_err(|e| match e {
+                CtlFailure::Unreachable(why) => why,
+                CtlFailure::Rpc(err) => err.message,
+            })?;
             let d = &status["download"];
             if d.is_null() {
                 return Err("the daemon reports no download".into());
             }
-            progress_line(out, "tts", d["bytes"].as_u64().unwrap_or(0), d["total"].as_u64().unwrap_or(0), &mut last);
+            progress_line(
+                out,
+                "tts",
+                d["bytes"].as_u64().unwrap_or(0),
+                d["total"].as_u64().unwrap_or(0),
+                &mut last,
+            );
             if !d["running"].as_bool().unwrap_or(false) {
                 if let Some(why) = d["error"].as_str() {
                     return Err(format!("download failed: {why}"));
@@ -2817,18 +3049,28 @@ fn tts_install_kokoro(
         }
     } else {
         let _ = writeln!(out, "tts: the daemon is not running; downloading here");
-        crate::download::fetch(&job, |bytes, total| progress_line(out, "tts", bytes, total, &mut last))?;
+        crate::download::fetch(&job, |bytes, total| {
+            progress_line(out, "tts", bytes, total, &mut last)
+        })?;
     }
     let _ = writeln!(out, "tts: {} is ready", job.path().display());
     if !no_select {
-        let _ = writeln!(out, "tts: the daemon speaks with it from the next announcement");
+        let _ = writeln!(
+            out,
+            "tts: the daemon speaks with it from the next announcement"
+        );
     }
     Ok(0)
 }
 
 /// The last line of `deckd tts status`: what the running daemon says.
 fn status_daemon(paths: &Paths, out: &mut dyn std::io::Write) -> Result<i32, String> {
-    match uds_call(&paths.socket, &["voice"], "voice.engines", serde_json::json!({})) {
+    match uds_call(
+        &paths.socket,
+        &["voice"],
+        "voice.engines",
+        serde_json::json!({}),
+    ) {
         Ok(v) => {
             let engine = &v["tts"][0];
             let _ = writeln!(
@@ -3168,11 +3410,17 @@ pub fn launchd_checks() -> Vec<(String, bool, String)> {
         ])
         .creation_flags(CREATE_NO_WINDOW)
         .output();
-    let registered = query.ok().filter(|out| out.status.success()).and_then(|out| {
-        String::from_utf8_lossy(&out.stdout)
-            .lines()
-            .find_map(|line| line.split_once("REG_SZ").map(|(_, command)| command.trim().to_string()))
-    });
+    let registered = query
+        .ok()
+        .filter(|out| out.status.success())
+        .and_then(|out| {
+            String::from_utf8_lossy(&out.stdout)
+                .lines()
+                .find_map(|line| {
+                    line.split_once("REG_SZ")
+                        .map(|(_, command)| command.trim().to_string())
+                })
+        });
     vec![(
         "startup".into(),
         true,
@@ -3291,7 +3539,10 @@ pub fn launchd_checks() -> Vec<(String, bool, String)> {
             // can say so: a dev binary is expected to differ.
             if let (Some(program), Ok(this)) = (&agent.program, std::env::current_exe()) {
                 let same = |a: &std::path::Path, b: &std::path::Path| {
-                    a.canonicalize().ok().zip(b.canonicalize().ok()).is_some_and(|(a, b)| a == b)
+                    a.canonicalize()
+                        .ok()
+                        .zip(b.canonicalize().ok())
+                        .is_some_and(|(a, b)| a == b)
                 };
                 let bundled = crate::launchd::app_bundle_of(&this).is_some();
                 if bundled && !same(program, &this) {
@@ -4177,7 +4428,10 @@ mod tests {
             json!({"present": true, "instances": [
                 {"bus": "bluetooth", "id": null}, {"bus": "usb", "id": null}]})
         );
-        assert_eq!(probe_json(&[(BusType::Spi, None)])["instances"][0]["bus"], "unknown");
+        assert_eq!(
+            probe_json(&[(BusType::Spi, None)])["instances"][0]["bus"],
+            "unknown"
+        );
         let run = |found, json| {
             let mut out = Vec::new();
             let code = probe_cmd(found, json, &mut out).unwrap();
@@ -4200,7 +4454,9 @@ mod tests {
             (1, "no OpenWalkieTalkie found\n".to_string())
         );
         assert!(matches!(
-            Cli::try_parse_from(["deckd", "probe", "--json"]).unwrap().cmd,
+            Cli::try_parse_from(["deckd", "probe", "--json"])
+                .unwrap()
+                .cmd,
             Cmd::Probe { json: true }
         ));
         assert!(matches!(
@@ -4233,10 +4489,17 @@ mod tests {
             .map(|instance| &instance["id"])
             .collect();
         assert_eq!(ids[0], &serde_json::json!(label));
-        assert_eq!(ids[1], &serde_json::json!(label), "the same deck over Bluetooth");
+        assert_eq!(
+            ids[1],
+            &serde_json::json!(label),
+            "the same deck over Bluetooth"
+        );
         assert!(ids[2..].iter().all(|id| id.is_null()), "{ids:?}");
         let text = json.to_string().to_ascii_lowercase();
-        assert!(!text.contains("a1b2c3d4e5f6") && !text.contains("f6:e5"), "{text}");
+        assert!(
+            !text.contains("a1b2c3d4e5f6") && !text.contains("f6:e5"),
+            "{text}"
+        );
     }
 
     #[test]
@@ -4261,7 +4524,11 @@ mod tests {
             .iter()
             .any(|(n, ok, d)| n == "status.json" && *ok && d.starts_with("absent")));
         // How the service starts: launchd's agent, or Windows' Run value.
-        let start_row = if cfg!(windows) { "startup" } else { "launchd deckd" };
+        let start_row = if cfg!(windows) {
+            "startup"
+        } else {
+            "launchd deckd"
+        };
         assert!(d.checks.iter().any(|(n, _, _)| n == start_row));
         // A status file makes the text report the link; stale only counts while running.
         let live = LiveStatus {
@@ -4672,7 +4939,10 @@ mod tests {
         );
         let (code, text) = said(CtlFailure::Rpc(ApiError::forbidden_trusted()));
         assert_eq!(code, EXIT_NEEDS_TRUST);
-        assert!(text.ends_with(&format!("\ndeckd: {NEEDS_TRUST_HINT}\n")), "{text}");
+        assert!(
+            text.ends_with(&format!("\ndeckd: {NEEDS_TRUST_HINT}\n")),
+            "{text}"
+        );
         let (code, text) = said(CtlFailure::Rpc(ApiError::forbidden_ancestry("admin")));
         assert_eq!(code, EXIT_RPC_ERROR);
         let lines: Vec<&str> = text.lines().collect();
@@ -4949,12 +5219,22 @@ mod tests {
         let mut out = Vec::new();
         assert_eq!(tts_key_clear(&paths, &home, &mut out).unwrap(), 0);
         assert_eq!(store.current(), None);
-        assert_eq!(text(out), "tts: key removed from the Keychain; apple speaks\n");
+        assert_eq!(
+            text(out),
+            "tts: key removed from the Keychain; apple speaks\n"
+        );
         // A store that refuses: an error, and nothing written anywhere.
         store.refuse(Some("locked"));
         let before = std::fs::read_to_string(&paths.config).unwrap();
-        let err = tts_key_set(&paths, Some(Provider::OpenAi), Provider::OpenAi, KEY, &home, &mut Vec::new())
-            .unwrap_err();
+        let err = tts_key_set(
+            &paths,
+            Some(Provider::OpenAi),
+            Provider::OpenAi,
+            KEY,
+            &home,
+            &mut Vec::new(),
+        )
+        .unwrap_err();
         assert_eq!(mac_words(err), "the Keychain did not take the key: locked");
         assert_eq!(std::fs::read_to_string(&paths.config).unwrap(), before);
     }
@@ -5016,21 +5296,30 @@ mod tests {
         let dir = crate::integrations::testdir::TestDir::new("cli-key-file");
         let paths = no_service(&dir);
         let mut out = Vec::new();
-        tts_key_set(&paths, None, Provider::OpenAi, KEY, &KeyHome::File, &mut out).unwrap();
+        tts_key_set(
+            &paths,
+            None,
+            Provider::OpenAi,
+            KEY,
+            &KeyHome::File,
+            &mut out,
+        )
+        .unwrap();
         let file = Config::load(&paths.config).unwrap();
         assert_eq!(file.voice.tts.api_key, KEY);
-        assert!(
-            text(out).starts_with(&format!(
-                "tts: key \u{2026}abcd (22 chars) stored in {} for openai\n",
-                paths.config.display()
-            )),
-        );
+        assert!(text(out).starts_with(&format!(
+            "tts: key \u{2026}abcd (22 chars) stored in {} for openai\n",
+            paths.config.display()
+        )),);
         let mut out = Vec::new();
         tts_key_clear(&paths, &KeyHome::File, &mut out).unwrap();
         assert!(!Config::load(&paths.config).unwrap().voice.tts.has_key());
         assert_eq!(
             text(out),
-            format!("tts: key removed from {}; apple speaks\n", paths.config.display())
+            format!(
+                "tts: key removed from {}; apple speaks\n",
+                paths.config.display()
+            )
         );
     }
 
@@ -5047,9 +5336,15 @@ mod tests {
         let paths = daemon.api.paths.clone();
         let mine = Arc::new(MemoryKeyStore::default());
         let mut out = Vec::new();
-        let code =
-            tts_key_set(&paths, None, Provider::OpenAi, KEY, &KeyHome::Store(mine.clone()), &mut out)
-                .unwrap();
+        let code = tts_key_set(
+            &paths,
+            None,
+            Provider::OpenAi,
+            KEY,
+            &KeyHome::Store(mine.clone()),
+            &mut out,
+        )
+        .unwrap();
         assert_eq!(code, 0);
         assert_eq!(kept.current().as_deref(), Some(KEY));
         assert_eq!(mine.writes(), 0, "the service wrote it, not this process");
@@ -5062,18 +5357,36 @@ mod tests {
         );
         // `deckd tts status` reads it back from the service.
         let mut out = Vec::new();
-        tts_cmd(&paths, TtsCmd::Status, &KeyHome::Store(mine.clone()), &mut out).unwrap();
+        tts_cmd(
+            &paths,
+            TtsCmd::Status,
+            &KeyHome::Store(mine.clone()),
+            &mut out,
+        )
+        .unwrap();
         let status = text(out);
         assert!(
-            status.contains("engine:  [voice.tts] engine = \"cloud\" → openai's model speaks (your key)"),
+            status.contains(
+                "engine:  [voice.tts] engine = \"cloud\" → openai's model speaks (your key)"
+            ),
             "{status}"
         );
-        assert!(status.contains("key:     \u{2026}abcd (22 chars), in the Keychain\n"), "{status}");
-        assert_eq!(mine.reads(), 0, "the service answered; this process asked no store");
+        assert!(
+            status.contains("key:     \u{2026}abcd (22 chars), in the Keychain\n"),
+            "{status}"
+        );
+        assert_eq!(
+            mine.reads(),
+            0,
+            "the service answered; this process asked no store"
+        );
         let mut out = Vec::new();
         tts_key_clear(&paths, &KeyHome::Store(mine.clone()), &mut out).unwrap();
         assert_eq!(kept.current(), None);
-        assert_eq!(text(out), "tts: key removed from the Keychain; apple speaks\n");
+        assert_eq!(
+            text(out),
+            "tts: key removed from the Keychain; apple speaks\n"
+        );
         rt.block_on(served.shutdown());
         drop(rt);
         drop(daemon);
@@ -5095,8 +5408,8 @@ mod tests {
         let paths = daemon.api.paths.clone();
         let mine = Arc::new(MemoryKeyStore::default());
         let home = KeyHome::Store(mine.clone());
-        let err = tts_key_set(&paths, None, Provider::OpenAi, KEY, &home, &mut Vec::new())
-            .unwrap_err();
+        let err =
+            tts_key_set(&paths, None, Provider::OpenAi, KEY, &home, &mut Vec::new()).unwrap_err();
         assert_eq!(err, KEY_ANCESTRY_HINT);
         let err = tts_key_clear(&paths, &home, &mut Vec::new()).unwrap_err();
         assert_eq!(err, KEY_ANCESTRY_HINT);
@@ -5121,7 +5434,10 @@ mod tests {
         };
         let store = Arc::new(MemoryKeyStore::with(KEY));
         let held = status(&KeyHome::Store(store.clone()));
-        assert!(held.contains("→ openai's model speaks (your key)"), "{held}");
+        assert!(
+            held.contains("→ openai's model speaks (your key)"),
+            "{held}"
+        );
         assert!(
             held.contains(
                 "key:     in the Keychain (start the service to see its last four characters)\n"
@@ -5131,7 +5447,10 @@ mod tests {
         assert!(!held.contains("abcd"), "{held}");
         store.set("").unwrap();
         let none = status(&KeyHome::Store(store.clone()));
-        assert!(none.contains(&format!("→ {SYSTEM_SYNTH} speaks, on {THIS_COMPUTER}")), "{none}");
+        assert!(
+            none.contains(&format!("→ {SYSTEM_SYNTH} speaks, on {THIS_COMPUTER}")),
+            "{none}"
+        );
         assert!(
             none.contains("key:     (none) — `deckd tts key set --provider openai|elevenlabs`\n"),
             "{none}"
@@ -5139,7 +5458,10 @@ mod tests {
         // A key still in config.toml is the one shown, store or not.
         std::fs::write(&paths.config, format!("[voice.tts]\napi_key = \"{KEY}\"\n")).unwrap();
         let file = status(&KeyHome::File);
-        assert!(file.contains("key:     \u{2026}abcd (22 chars)\n"), "{file}");
+        assert!(
+            file.contains("key:     \u{2026}abcd (22 chars)\n"),
+            "{file}"
+        );
     }
 
     /// `deckd uninstall --dry-run` names the Keychain item only where a

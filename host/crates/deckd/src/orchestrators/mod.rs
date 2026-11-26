@@ -155,22 +155,38 @@ pub trait Orchestrator {
     }
 }
 
-/// A module's constructor: `None` when it is not available (a stub).
+/// A module's constructor: `None` when the product is not there.
 pub type Constructor = fn(&Config) -> Option<Box<dyn Orchestrator>>;
 
+/// A constructor that does not look for the product at all, for
+/// `status --from-file`: reading a capture must work on a machine where
+/// nothing is installed, which is the only place a capture is worth keeping.
+pub type Offline = fn() -> Box<dyn Orchestrator>;
+
 /// Every adapter, with the branch that owns it.
-pub const MODULES: [(&str, &str, Constructor); 5] = [
-    ("herdr", "feat/orchestrator-herdr", herdr::new),
-    ("orca", "feat/orchestrator-orca", orca::new),
-    ("multica", "feat/orchestrator-multica", multica::new),
-    ("t3", "feat/orchestrator-t3", t3::new),
-    ("cindy", "feat/orchestrator-cindy", cindy::new),
+pub const MODULES: [(&str, &str, Constructor, Offline); 5] = [
+    ("herdr", "feat/orchestrator-herdr", herdr::new, || {
+        Box::new(herdr::Herdr)
+    }),
+    ("orca", "feat/orchestrator-orca", orca::new, || {
+        Box::new(orca::Orca)
+    }),
+    ("multica", "feat/orchestrator-multica", multica::new, || {
+        Box::new(multica::Multica)
+    }),
+    ("t3", "feat/orchestrator-t3", t3::new, || Box::new(t3::T3)),
+    ("cindy", "feat/orchestrator-cindy", cindy::new, || {
+        Box::new(cindy::offline())
+    }),
 ];
 
 /// Every adapter that is available in this build.
 #[must_use]
 pub fn all(cfg: &Config) -> Vec<Box<dyn Orchestrator>> {
-    MODULES.iter().filter_map(|(_, _, new)| new(cfg)).collect()
+    MODULES
+        .iter()
+        .filter_map(|(_, _, new, _)| new(cfg))
+        .collect()
 }
 
 /// The adapter called `name`, if it is available.
@@ -178,8 +194,18 @@ pub fn all(cfg: &Config) -> Vec<Box<dyn Orchestrator>> {
 pub fn by_name(cfg: &Config, name: &str) -> Option<Box<dyn Orchestrator>> {
     MODULES
         .iter()
-        .find(|(n, _, _)| *n == name)
-        .and_then(|(_, _, new)| new(cfg))
+        .find(|(n, _, _, _)| *n == name)
+        .and_then(|(_, _, new, _)| new(cfg))
+}
+
+/// The adapter called `name` whether or not the product is installed: for
+/// `status --from-file`, which only needs `parse`.
+#[must_use]
+pub fn by_name_offline(name: &str) -> Option<Box<dyn Orchestrator>> {
+    MODULES
+        .iter()
+        .find(|(n, _, _, _)| *n == name)
+        .map(|(_, _, _, offline)| offline())
 }
 
 // ---------------------------------------------------------------------------
@@ -756,11 +782,31 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn the_registry_lists_five_and_four_are_stubs() {
+    fn the_registry_lists_five_and_they_all_parse_a_capture() {
         let cfg = Config::default();
         assert_eq!(MODULES.len(), 5);
+        // herdr, multica and t3 are always there: their CLIs are typed, so an
+        // absent binary is a `status` error with a reason word, not a reason
+        // to hide the adapter. orca and cindy are only there when the product
+        // is (the binary on PATH, the discovery file).
         let names: Vec<&str> = all(&cfg).iter().map(|o| o.name()).collect();
-        assert_eq!(names, ["herdr"]);
-        assert!(by_name(&cfg, "orca").is_none());
+        for always in ["herdr", "multica", "t3"] {
+            assert!(names.contains(&always), "{always} missing from {names:?}");
+        }
+        // `status --from-file` must work with nothing installed.
+        for (name, _, _, _) in MODULES {
+            let adapter = by_name_offline(name).unwrap_or_else(|| panic!("{name} offline"));
+            assert_eq!(adapter.name(), name);
+            let raw = std::fs::read_to_string(format!(
+                "{}/../../tests/orchestrators/{name}.json",
+                env!("CARGO_MANIFEST_DIR")
+            ));
+            if let Ok(raw) = raw {
+                let tasks = adapter
+                    .parse(&raw)
+                    .unwrap_or_else(|e| panic!("{name} cannot parse its fixture: {e}"));
+                assert!(!tasks.is_empty(), "{name} parsed nothing");
+            }
+        }
     }
 }
