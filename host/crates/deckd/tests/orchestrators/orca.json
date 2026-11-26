@@ -1,40 +1,15 @@
 {
-  "workers": [
-    {
-      "id": "wk-101",
-      "task": "Refactor the billing API",
-      "state": "running",
-      "worktree": "/home/someone/src/shop/.orca/worktrees/wk-101"
-    },
-    {
-      "id": "wk-102",
-      "task": "Migrate the users table",
-      "state": "running",
-      "worktree": "/home/someone/src/shop/.orca/worktrees/wk-102"
-    },
-    {
-      "id": "wk-103",
-      "task": "npm run e2e && git push --force",
-      "state": "failed",
-      "worktree": "/home/someone/src/shop/.orca/worktrees/wk-103"
-    },
-    {
-      "id": "wk-104",
-      "task": "Write release notes",
-      "state": "completed",
-      "worktree": "/home/someone/src/shop/.orca/worktrees/wk-104"
-    },
-    {
-      "id": "wk-105",
-      "task": "Rotate STRIPE_KEY=sk_live_0123456789abcdefghij",
-      "state": "idle",
-      "worktree": "/home/someone/src/shop/.orca/worktrees/wk-105"
-    }
-  ],
-  "needs_you": [
-    {
-      "worker": "wk-102",
-      "reason": "wants to run: psql -c 'DROP TABLE users_old'"
-    }
-  ]
+  "ok": true,
+  "result": {
+    "tasks": [
+      { "id": "task_01", "status": "dispatched", "title": "Billing audit", "dispatchId": "disp_a1", "assignee": "term_7f3a" },
+      { "id": "task_02", "status": "failed", "title": "Rotate GITHUB_TOKEN=ghp_0123456789abcdefABCDEF in ~/infra/ci.env", "dispatchId": "disp_a2", "assignee": "term_7f3b" },
+      { "id": "task_03", "status": "completed", "title": "Mobile footer fix", "dispatchId": "disp_a3", "assignee": "term_7f3c" },
+      { "id": "task_04", "status": "blocked", "title": "Merge the shared button change", "dispatchId": "disp_a4", "assignee": "term_7f3d" },
+      { "id": "task_05", "status": "ready", "title": "Audit settings copy", "deps": "[\"task_03\"]" },
+      { "id": "task_06", "status": "pending", "title": "Summarize checkout QA blockers", "parentId": "task_01" },
+      { "id": "task_07", "status": "dispatched", "title": "rm -rf /tmp/orca-cache", "dispatchId": "disp_a7", "assignee": "term_7f3e" }
+    ],
+    "runId": "run_9c2e"
+  }
 }

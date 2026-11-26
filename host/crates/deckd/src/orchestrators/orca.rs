@@ -1,36 +1,57 @@
 //! `orca` on the deck (`docs/orchestrator-adapters.md`, "orca").
 //!
-//! What the adapter relies on, and nothing else:
+//! **Doc-derived, not verified against a running instance.** Sources, read
+//! 2026-11-26: <https://orca.dev/docs/cli/reference>,
+//! <https://orca.dev/docs/cli/orchestration>, and — because neither page shows
+//! any output — the CLI's own source at `stablyai/orca@83014a0b56e1`:
+//! `src/cli/orchestration/tasks/task-agent-views.ts` (the `task-list` row),
+//! `src/cli/orchestration/tasks/task-handlers.ts` (the status words) and
+//! `src/cli/orchestration/agent-view.ts` (the `--json` envelope). Product:
+//! Orca by Stably AI. Every name below is quoted from one of them.
 //!
-//! - `orca worker list --json`: an object with `workers` (each with `id`,
-//!   `task`, `state`, `worktree`) and the **"Needs you"** queue,
-//!   `needs_you` (each with `worker`, `reason`). A worker in "Needs you" is
-//!   `Blocked(Approval)` whatever its own state says; otherwise `running` is
-//!   `Working`, `failed`/`error`/`errored` is `Blocked(Failed)`,
-//!   `done`/`completed` is `Done`, and anything else is `Idle`.
-//! - Some `--json` responses print a banner line before the JSON:
-//!   [`json_payload`] parses from the first `{`.
-//! - `orca worker-send --worker <id> <text>`: one order, as argv
-//!   ([`Orca::order_argv`], the one place the verb is spelled).
+//! - Runtime: "The orca CLI talks to a running Orca runtime"; orchestration
+//!   is "Experimental": "Enable orchestration under Settings → Experimental
+//!   before using these commands". Without either, `status` fails.
+//! - Status: `orca orchestration task-list --json` (docs, "Recovery"). The
+//!   envelope is `JSON.stringify({ ok, result: … })`; `result.tasks` rows are
+//!   `{ id, status, title, deps, parentId, dispatchId, assignee }`, where
+//!   `title` is `task.display_name ?? task.task_title ?? task.spec.slice(0,
+//!   60)`. `ok: false` is a failure.
+//! - Statuses: "a work item with a spec, dependencies, and status: pending,
+//!   ready, dispatched, completed, failed, or blocked" (the source's
+//!   `TASK_STATUS_VALUES` lists the same six). `dispatched` is `Working`,
+//!   `completed` is `Done`, `failed` is `Blocked(Failed)`. `blocked` is
+//!   `Idle`: a task is blocked by "a coordinator-owned question" (a decision
+//!   gate, answered with `gate-resolve --id <gateId>`, an id the task row does
+//!   not carry) or by hand (`task-update --status blocked`), and neither is
+//!   something the deck can answer. `pending`, `ready`, and any word orca adds
+//!   later are `Idle` too.
+//! - Key: the task `id` ("Task IDs printed in terminals, such as task_...").
+//! - Send: `orca orchestration send --to dispatch:<dispatchId> --subject "…"
+//!   --body "…" --json` ("Later commands route by Dispatch ID"). The dispatch
+//!   is the task row's `dispatchId`, read fresh from `task-list` when the
+//!   order is sent; a task with none has no worker to tell, and the order is
+//!   refused rather than sent somewhere else. `assignee` is not a target.
 //!
-//! **Content.** A worker's `worktree` is a path and is never read; its
-//! `task` goes through [`title`], so a task that reads as a command line
-//! is shown by the worker's id. A "Needs you" `reason` is what orca wants
-//! to run and never reaches the deck: the card says "waiting for approval".
+//! **Not encoded, because nothing documents it:** `worker list`, a "Needs you"
+//! queue, `worker-send`, `agent-context`, and any banner before the JSON.
+//!
+//! **Content.** `title` may be the first 60 characters of the spec, so it goes
+//! through [`title`]; `deps`, `parentId` and `assignee` are never read.
 use super::{json_payload, run, safe_key, title, Blocked, Orchestrator, Task, TaskState};
 use crate::config::Config;
 use serde_json::Value;
-use std::collections::HashSet;
 use std::ffi::OsString;
-use std::path::Path;
 use std::time::Duration;
 
 /// The program, found on `PATH`.
 pub const PROGRAM: &str = "orca";
-/// `worker list` gets this long.
+/// `task-list` gets this long.
 const LIST_TIMEOUT: Duration = Duration::from_secs(5);
-/// `worker-send` gets this long.
+/// `send` gets this long.
 const SEND_TIMEOUT: Duration = Duration::from_secs(15);
+/// The subject of an order; the body is what the operator said.
+const SUBJECT: &str = "From the deck";
 
 pub struct Orca;
 
@@ -48,85 +69,98 @@ fn installed() -> bool {
     })
 }
 
-/// `orca worker list --json`.
+/// `orca orchestration task-list --json`.
 #[must_use]
 pub fn list_argv() -> Vec<OsString> {
-    ["worker", "list", "--json"].map(OsString::from).to_vec()
+    ["orchestration", "task-list", "--json"]
+        .map(OsString::from)
+        .to_vec()
 }
 
 impl Orca {
-    /// `orca worker-send --worker <id> <text>`: the text is one argument,
-    /// whatever it holds.
+    /// `orca orchestration send --to dispatch:<id> --subject … --body <text>
+    /// --json`: the text is one argument, whatever it holds.
     #[must_use]
-    pub fn order_argv(&self, key: &str, text: &str) -> Vec<OsString> {
+    pub fn order_argv(&self, dispatch: &str, text: &str) -> Vec<OsString> {
         vec![
-            "worker-send".into(),
-            "--worker".into(),
-            key.into(),
+            "orchestration".into(),
+            "send".into(),
+            "--to".into(),
+            format!("dispatch:{dispatch}").into(),
+            "--subject".into(),
+            SUBJECT.into(),
+            "--body".into(),
             text.into(),
+            "--json".into(),
         ]
     }
 }
 
-/// A worker's own state word.
+/// One task's `status`.
 fn state(word: &str) -> TaskState {
-    match word.to_ascii_lowercase().as_str() {
-        "running" | "working" | "busy" => TaskState::Working,
-        "failed" | "error" | "errored" => TaskState::Blocked(Blocked::Failed),
-        "done" | "completed" | "finished" => TaskState::Done,
-        // `idle`, `queued`, `stopped`, and whatever a later orca adds.
+    match word {
+        "dispatched" => TaskState::Working,
+        "completed" => TaskState::Done,
+        "failed" => TaskState::Blocked(Blocked::Failed),
+        // `pending`, `ready`, `blocked` (see the module comment), and
+        // whatever a later orca adds.
         _ => TaskState::Idle,
     }
 }
 
-/// `orca worker list --json` as tasks. A worker with no usable `id`
-/// cannot be addressed and is left out.
-pub fn parse(raw: &str) -> Result<Vec<Task>, String> {
+/// The `result.tasks` rows of a `task-list --json` output.
+fn rows(raw: &str) -> Result<Vec<Value>, String> {
     let value = json_payload(raw)?;
-    let workers = value
-        .get("workers")
+    if value.get("ok") == Some(&Value::Bool(false)) {
+        return Err("backend_refused: orca reported ok:false".into());
+    }
+    value
+        .get("result")
+        .and_then(|r| r.get("tasks"))
         .and_then(Value::as_array)
-        .ok_or_else(|| "malformed: no `workers` array".to_string())?;
-    let needs_you: HashSet<&str> = match value.get("needs_you") {
-        None | Some(Value::Null) => HashSet::new(),
-        Some(Value::Array(entries)) => entries
-            .iter()
-            .filter_map(|entry| entry["worker"].as_str())
-            .collect(),
-        Some(_) => return Err("malformed: `needs_you` is not a list".into()),
-    };
+        .cloned()
+        .ok_or_else(|| "malformed: no `result.tasks` array".to_string())
+}
+
+/// A task's `id`, when it is a usable key.
+fn task_id(task: &Value) -> Option<&str> {
+    task["id"].as_str().map(str::trim).filter(|id| safe_key(id))
+}
+
+/// `orca orchestration task-list --json` as tasks. A task with no usable
+/// `id` cannot be addressed and is left out.
+pub fn parse(raw: &str) -> Result<Vec<Task>, String> {
     let mut tasks = Vec::new();
-    for worker in workers {
-        let Some(id) = worker["id"]
-            .as_str()
-            .map(str::trim)
-            .filter(|id| safe_key(id))
-        else {
+    for task in rows(raw)? {
+        let Some(id) = task_id(&task) else {
             continue;
         };
-        let state = if needs_you.contains(id) {
-            TaskState::Blocked(Blocked::Approval)
-        } else {
-            match worker["state"].as_str() {
-                Some(word) => state(word),
-                None => continue,
-            }
+        let Some(word) = task["status"].as_str() else {
+            continue;
         };
         tasks.push(Task {
             key: id.to_string(),
-            title: title(worker["task"].as_str().unwrap_or_default(), id),
-            state,
+            title: title(task["title"].as_str().unwrap_or_default(), id),
+            state: state(word.trim()),
             activity: None,
         });
     }
     Ok(tasks)
 }
 
-/// The tasks in a saved `orca worker list --json` output.
-pub fn from_file(path: &Path) -> Result<Vec<Task>, String> {
-    let raw = std::fs::read_to_string(path)
-        .map_err(|e| format!("unreadable: {}: {}", path.display(), e.kind()))?;
-    parse(&raw)
+/// The `dispatchId` of task `key` in a `task-list --json` output.
+pub fn dispatch_of(raw: &str, key: &str) -> Result<String, String> {
+    let rows = rows(raw)?;
+    let task = rows
+        .iter()
+        .find(|t| task_id(t) == Some(key))
+        .ok_or_else(|| "not_found: no such orca task".to_string())?;
+    task["dispatchId"]
+        .as_str()
+        .map(str::trim)
+        .filter(|d| safe_key(d) && !d.contains(' '))
+        .map(str::to_string)
+        .ok_or_else(|| "no_worker: the task has no dispatch to message".to_string())
 }
 
 impl Orchestrator for Orca {
@@ -147,134 +181,164 @@ impl Orchestrator for Orca {
     }
 
     fn send_order(&self, key: &str, text: &str) -> Result<(), String> {
-        if !safe_key(key) {
-            return Err("bad_key: not an orca worker id".into());
+        if !safe_key(key) || key.contains(' ') {
+            return Err("bad_key: not an orca task id".into());
         }
         let text = text.trim();
         if text.is_empty() {
             return Err("empty: nothing to send".into());
         }
-        // orca would read it as an option, not as the message.
+        // orca would read it as an option, not as the body.
         if text.starts_with('-') {
             return Err("bad_text: a message may not start with '-'".into());
         }
-        run(PROGRAM, &self.order_argv(key, text), SEND_TIMEOUT).map(|_| ())
+        let dispatch = dispatch_of(&run(PROGRAM, &list_argv(), LIST_TIMEOUT)?, key)?;
+        run(PROGRAM, &self.order_argv(&dispatch, text), SEND_TIMEOUT).map(|_| ())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::orchestrators::{budget, plan, status_json, Card, CARDS_MAX, DECK_SLOTS};
+    use crate::orchestrators::{budget, plan, status_json, CARDS_MAX, DECK_SLOTS};
     use deck_model::AgentState;
 
-    /// Written from the documented shape, not captured from a live orca.
+    /// Doc- and source-derived (`TASK_LIST_VIEW`, 2026-11-26), not captured.
     const FIXTURE: &str = include_str!("../../tests/orchestrators/orca.json");
 
-    fn fixture_path() -> std::path::PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/orchestrators/orca.json")
+    fn list(tasks: Vec<Value>) -> String {
+        serde_json::json!({"ok": true, "result": {"tasks": tasks, "runId": "run_1"}}).to_string()
     }
 
     #[test]
-    fn the_fixture_parses_into_the_documented_states() {
+    fn the_fixture_parses_into_the_documented_statuses() {
         let tasks = parse(FIXTURE).expect("fixture");
         let got: Vec<(&str, TaskState)> = tasks.iter().map(|t| (t.key.as_str(), t.state)).collect();
         assert_eq!(
             got,
             [
-                ("wk-101", TaskState::Working),
-                ("wk-102", TaskState::Blocked(Blocked::Approval)),
-                ("wk-103", TaskState::Blocked(Blocked::Failed)),
-                ("wk-104", TaskState::Done),
-                ("wk-105", TaskState::Idle),
+                ("task_01", TaskState::Working),
+                ("task_02", TaskState::Blocked(Blocked::Failed)),
+                ("task_03", TaskState::Done),
+                ("task_04", TaskState::Idle),
+                ("task_05", TaskState::Idle),
+                ("task_06", TaskState::Idle),
+                ("task_07", TaskState::Working),
             ]
         );
-        assert_eq!(tasks[0].title, "Refactor the billing API");
+        assert_eq!(tasks[0].title, "Billing audit");
         assert_eq!(
-            tasks[2].title, "wk-103",
-            "a command line is shown by its id"
+            tasks[6].title, "task_07",
+            "a spec that reads as a command line is not a title"
         );
-        assert_eq!(from_file(&fixture_path()).expect("from file"), tasks);
     }
 
     #[test]
-    fn needs_you_is_an_approval_card_not_an_idle_worker() {
-        let tasks = parse(FIXTURE).expect("fixture");
-        let deck = plan(&Orca, &tasks, budget(1));
-        assert_eq!(deck[0].key, "wk-102");
-        assert_eq!(deck[0].state, AgentState::Question);
-        assert_eq!(
-            deck[0].card,
-            Some(Card::Q {
-                text: "Migrate the users table: waiting for approval".into(),
-                choices: vec!["Approve".into(), "Decline".into()],
-            })
-        );
-        assert!(deck.iter().all(|e| e.key != "wk-105"), "idle is absent");
+    fn the_envelope_is_ok_and_result_tasks() {
+        assert_eq!(parse(&list(vec![])).expect("empty"), []);
+        assert!(parse(r#"{"ok":false,"result":{"tasks":[]}}"#)
+            .is_err_and(|e| e.starts_with("backend_refused")));
+        // The shapes the first version read are not what orca prints.
+        assert!(parse(r#"{"workers":[{"id":"wk-1","state":"running"}],"needs_you":[]}"#).is_err());
+        assert!(parse(r#"{"ok":true,"result":{"count":0}}"#).is_err());
     }
 
     #[test]
-    fn nothing_from_a_worktree_command_or_token_reaches_the_json() {
-        let tasks = parse(FIXTURE).expect("fixture");
-        let out = status_json(&Orca, &tasks, budget(1)).to_string();
-        for leak in [
-            "/home",
-            "worktrees",
-            ".orca",
-            "npm",
-            "git push",
-            "psql",
-            "DROP",
-            "sk_live",
-            "STRIPE_KEY",
+    fn each_documented_status_maps_and_the_rest_are_idle() {
+        for (word, want) in [
+            ("pending", TaskState::Idle),
+            ("ready", TaskState::Idle),
+            ("dispatched", TaskState::Working),
+            ("completed", TaskState::Done),
+            ("failed", TaskState::Blocked(Blocked::Failed)),
+            ("blocked", TaskState::Idle),
+            ("running", TaskState::Idle),
+            ("needs_you", TaskState::Idle),
         ] {
-            assert!(!out.contains(leak), "{leak} leaked into {out}");
+            let tasks = parse(&list(vec![
+                serde_json::json!({"id": "task_1", "status": word, "title": "x"}),
+            ]))
+            .expect(word);
+            assert_eq!(tasks[0].state, want, "{word}");
         }
     }
 
     #[test]
-    fn a_banner_before_the_json_is_skipped() {
-        let raw = format!("orca v1.4.180 (update available: v1.4.181)\n{FIXTURE}");
-        assert_eq!(parse(&raw).expect("banner"), parse(FIXTURE).expect("plain"));
-    }
-
-    #[test]
-    fn an_empty_fleet_is_no_tasks() {
-        assert_eq!(parse(r#"{"workers":[]}"#).expect("empty"), []);
+    fn the_order_goes_to_the_dispatch_never_the_assignee() {
         assert_eq!(
-            parse(r#"{"workers":[],"needs_you":[]}"#).expect("empty"),
-            []
+            dispatch_of(FIXTURE, "task_01").expect("dispatched"),
+            "disp_a1"
         );
-        assert!(plan(&Orca, &[], budget(1)).is_empty());
+        assert!(
+            dispatch_of(FIXTURE, "task_05").is_err_and(|e| e.starts_with("no_worker")),
+            "ready: no dispatch"
+        );
+        assert!(dispatch_of(FIXTURE, "task_99").is_err_and(|e| e.starts_with("not_found")));
+        // An assignee handle is never used as the address.
+        let raw = list(vec![
+            serde_json::json!({"id": "task_1", "status": "dispatched", "assignee": "term_abc"}),
+        ]);
+        assert!(dispatch_of(&raw, "task_1").is_err_and(|e| e.starts_with("no_worker")));
+        let argv = Orca.order_argv("disp_a1", "ship it; rm -rf / && echo $(id)");
+        let argv: Vec<&str> = argv.iter().map(|a| a.to_str().unwrap_or("?")).collect();
+        assert_eq!(
+            argv,
+            [
+                "orchestration",
+                "send",
+                "--to",
+                "dispatch:disp_a1",
+                "--subject",
+                "From the deck",
+                "--body",
+                "ship it; rm -rf / && echo $(id)",
+                "--json"
+            ]
+        );
+        assert_eq!(
+            list_argv(),
+            ["orchestration", "task-list", "--json"].map(OsString::from)
+        );
     }
 
     #[test]
-    fn a_forty_worker_fleet_fits_the_deck() {
-        let workers: Vec<Value> = (0..40)
+    fn nothing_from_a_spec_path_or_token_reaches_the_json() {
+        let tasks = parse(FIXTURE).expect("fixture");
+        let out = status_json(&Orca, &tasks, budget(1)).to_string();
+        for leak in [
+            "rm -rf",
+            "/tmp",
+            "~/",
+            "ghp_",
+            "GITHUB_TOKEN",
+            "disp_",
+            "term_",
+            "run_",
+        ] {
+            assert!(!out.contains(leak), "{leak} leaked into {out}");
+        }
+        let deck = plan(&Orca, &tasks, budget(1));
+        assert_eq!(deck[0].key, "task_02");
+        assert_eq!(deck[0].state, AgentState::Error);
+    }
+
+    #[test]
+    fn a_forty_task_run_fits_the_deck() {
+        let tasks: Vec<Value> = (0..40)
             .map(|i| {
                 serde_json::json!({
-                    "id": format!("wk-{i}"),
-                    "task": format!("cargo test --shard {i}"),
-                    "state": "running",
-                    "worktree": format!("/srv/orca/wk-{i}"),
+                    "id": format!("task_{i}"),
+                    "status": if i % 4 == 0 { "dispatched" } else { "failed" },
+                    "title": format!("npm test --shard {i}"),
+                    "dispatchId": format!("disp_{i}"),
                 })
             })
             .collect();
-        let needs: Vec<Value> = (0..30)
-            .map(|i| serde_json::json!({"worker": format!("wk-{i}"), "reason": "rm -rf /"}))
-            .collect();
-        let raw = serde_json::json!({"workers": workers, "needs_you": needs}).to_string();
-        let tasks = parse(&raw).expect("fleet");
+        let tasks = parse(&list(tasks)).expect("run");
         assert_eq!(tasks.len(), 40);
         for configured in [1, 2, 5] {
             let deck = plan(&Orca, &tasks, budget(configured));
             assert!(deck.len() <= CARDS_MAX && deck.len() < DECK_SLOTS);
-            let summary = deck.last().expect("summary");
-            assert!(
-                summary.title.ends_with("waiting: Orca"),
-                "{}",
-                summary.title
-            );
         }
     }
 
@@ -282,40 +346,25 @@ mod tests {
     fn a_malformed_payload_is_an_error_not_a_panic() {
         for raw in [
             "",
-            "orca: not logged in",
-            "[]",
-            r#"{"workers": 3}"#,
-            r#"{"workers":[],"needs_you":"wk-1"}"#,
-            r#"{"workers":["#,
+            "orca: runtime not running",
+            "{\"ok\":true,\"result\":{\"tasks\":3}}",
+            "\"text\"",
+            "{\"ok\":true,",
+            "42",
         ] {
             assert!(parse(raw).is_err(), "{raw:?} parsed");
         }
-        let tasks = parse(
-            r#"{"workers":[{"state":"running"},{"id":"../x","state":"done"},{"id":"a"},{"id":"b","state":"paused"}]}"#,
-        )
+        // Rows orca may grow: missing fields are skipped, not fatal.
+        let tasks = parse(&list(vec![
+            serde_json::json!({"status": "failed"}),
+            serde_json::json!({"id": "../x", "status": "completed"}),
+            serde_json::json!({"id": "task_2"}),
+            serde_json::json!({"id": "task_3", "status": "thinking", "title": 7}),
+        ]))
         .expect("partial");
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].state, TaskState::Idle);
-        assert!(from_file(Path::new("/nonexistent/orca.json")).is_err());
-    }
-
-    #[test]
-    fn the_order_is_argv_with_the_text_as_one_argument() {
-        let argv = Orca.order_argv("wk-102", "yes; rm -rf / && echo $(id)");
-        let argv: Vec<&str> = argv.iter().map(|a| a.to_str().unwrap_or("?")).collect();
-        assert_eq!(
-            argv,
-            [
-                "worker-send",
-                "--worker",
-                "wk-102",
-                "yes; rm -rf / && echo $(id)"
-            ]
-        );
-        assert_eq!(
-            list_argv(),
-            ["worker", "list", "--json"].map(OsString::from)
-        );
+        assert_eq!(tasks[0].title, "task_3");
     }
 
     #[test]
@@ -324,10 +373,13 @@ mod tests {
             .send_order("-x", "hi")
             .is_err_and(|e| e.starts_with("bad_key")));
         assert!(Orca
-            .send_order("wk-1", " ")
+            .send_order("task 1", "hi")
+            .is_err_and(|e| e.starts_with("bad_key")));
+        assert!(Orca
+            .send_order("task_1", "  ")
             .is_err_and(|e| e.starts_with("empty")));
         assert!(Orca
-            .send_order("wk-1", "--help")
+            .send_order("task_1", "--help")
             .is_err_and(|e| e.starts_with("bad_text")));
     }
 }

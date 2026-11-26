@@ -154,14 +154,32 @@ to anything.
 
 ### orca (branch `feat/orchestrator-orca`)
 
-- `orca worker list --json`, `orca task-list --json`, `orca dispatch-show --json`
-  (228 commands at v1.4.180, all `--json`).
-- The action queue is **"Needs you"**, one entry per worker: that is a
-  `Blocked(Approval)` card, not an `Idle` worker.
-- Send: `orca worker-send --worker <id> <text>` (verify the exact verb against
-  `orca agent-context --json` on the machine; if it moved, fail loudly).
-- Known trap: some `--json` responses print a banner line before the JSON —
-  parse from the first `{`, and test that case.
+**Doc-derived, not verified against a running instance.** Rewritten
+2026-11-26. The product is Orca by Stably AI (`stablyai/orca`); sources are
+[orca.dev/docs/cli/reference](https://orca.dev/docs/cli/reference),
+[orca.dev/docs/cli/orchestration](https://orca.dev/docs/cli/orchestration), and,
+because neither page shows any output, the CLI source at `83014a0b56e1`
+(`task-agent-views.ts`, `task-handlers.ts`, `agent-view.ts`). Every encoded
+name is quoted in `orca.rs`'s header.
+
+- Needs a running runtime: "The orca CLI talks to a running Orca runtime"
+  (desktop app or `orca serve`), and orchestration is "Experimental" ("Enable
+  orchestration under Settings → Experimental").
+- Status: `orca orchestration task-list --json` → `{"ok":…,"result":{"tasks":[
+  {id, status, title, deps, parentId, dispatchId, assignee}], "runId"}}`.
+- Statuses: "pending, ready, dispatched, completed, failed, or blocked".
+  `dispatched` → `Working`, `completed` → `Done`, `failed` → `Blocked(Failed)`,
+  everything else → `Idle`. `blocked` is `Idle`: it is a decision gate (answered
+  with `gate-resolve --id <gateId>`, not in the row) or a manual mark, and the
+  deck can answer neither.
+- Send: `orca orchestration send --to dispatch:<dispatchId> --subject … --body
+  <text> --json`, the dispatch read fresh from `task-list`; no dispatch → the
+  order is refused (`no_worker`), never sent to `assignee`.
+
+**The first version was wrong in every verb:** `orca worker list --json`,
+`worker-send --worker`, `agent-context`, a `workers`/`needs_you` envelope, the
+"Needs you" approval queue, `running`/`done` state words and a banner before
+the JSON — none of them appears in Orca's docs or CLI source.
 
 ### multica (branch `feat/orchestrator-multica`)
 
@@ -259,14 +277,14 @@ conflict. Three things had to be settled centrally, in `mod.rs` and `cli.rs`:
 | cindy | `Config` has no `[orchestrators.cindy]`, so the token and discovery file come from `DECKD_CINDY_TOKEN`, `DECKD_CINDY_DISCOVERY`, `DECKD_CINDY_PROFILE`. | works, names are ours |
 | multica | Exit codes 2/3/4/5 are mapped to `network`/`auth`/`not_found`/`validation` by reading them back out of `run()`'s error text. | works, `run()` returning a structured code would be cleaner |
 | multica | The `blocked` status is `Idle`, not `Blocked(Failed)`: the doc names it but never says it means failed, and the list has no labels or runs to say more. | open: needs a product decision or a real capture |
-| orca | No MCP server (upstream #13079), so the adapter is CLI + `--json`; the banner before the JSON is already handled by `json_payload`. | works |
+| orca | No approval card: Orca's CLI has no "Needs you" queue, and a `blocked` task's gate id is not in `task-list`. | open: no documented way to read a gate; needs a real capture |
 
 ### State of verification
 
 | Adapter | Tests | Verified against a real install |
 | --- | --- | --- |
 | herdr | 10 + captured fixture | **yes, herdr 0.9.5**: argv, envelope, fields and statuses against a live isolated server; `agent prompt` syntax from `--help` only (nothing sent) |
-| orca | 9 | no |
+| orca | 8, doc/source-derived fixture | no — rewritten from orca.dev + CLI source 2026-11-26; needs the desktop runtime to verify |
 | multica | 10, doc-derived fixture | no — rewritten from `CLI_AND_DAEMON.md` 2026-11-26; needs a logged-in account to verify |
 | t3 | 13 | no |
 | cindy | 17, incl. one round trip against a local fake server | no |
