@@ -1,0 +1,51 @@
+{
+  "issues": [
+    {
+      "key": "MUL-12",
+      "title": "Refactor the billing API",
+      "status": "in_progress",
+      "assignee": { "type": "agent", "name": "claude-backend" },
+      "labels": ["backend"],
+      "run": { "id": "run_8f2c", "status": "running", "stage": "writing tests" }
+    },
+    {
+      "key": "MUL-14",
+      "title": "Docs for the v2 webhooks",
+      "status": "review",
+      "assignee": { "type": "agent", "name": "codex-docs" },
+      "labels": [],
+      "run": { "id": "run_8f11", "status": "completed", "stage": "opened a pull request" }
+    },
+    {
+      "key": "MUL-15",
+      "title": "Rotate GITHUB_TOKEN=ghp_0123456789abcdefABCDEF in ~/infra/ci.env",
+      "status": "todo",
+      "assignee": { "type": "agent", "name": "claude-ops" },
+      "labels": [{ "name": "blocked" }],
+      "run": { "id": "run_8e90", "status": "failed", "stage": "cargo test && git push" }
+    },
+    {
+      "key": "MUL-9",
+      "title": "Release notes for 1.4",
+      "status": "done",
+      "assignee": { "type": "agent", "name": "claude-writer" },
+      "labels": ["docs"],
+      "run": null
+    },
+    {
+      "key": "MUL-16",
+      "title": "rm -rf /tmp/multica-cache",
+      "status": "in_progress",
+      "assignee": { "type": "agent", "name": "codex-ops" },
+      "labels": [],
+      "run": { "id": "run_8f40", "status": "running", "stage": "npm run build -- --prod" }
+    },
+    {
+      "key": "MUL-17",
+      "title": "Spike: vector search",
+      "status": "backlog",
+      "assignee": null,
+      "labels": []
+    }
+  ]
+}
