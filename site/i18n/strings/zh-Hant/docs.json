@@ -15,5 +15,13 @@
   "docs.content.h22": "從可執行的範例開始",
   "docs.content.p9": "<a href=\"/examples/native_companion.py\" download>下載 Python 配套程式範例</a>。在 OpenWalkieTalkie 開啟時，用 Python 3.10+ 執行它。它使用預先寫好的回覆，不需要任何套件、模型 API 金鑰或 Conol 帳號。",
   "docs.content.h23": "查閱介面規格",
-  "docs.content.p10": "<a href=\"/docs/deckd-api.md\">完整的 JSON-RPC API 參考資料（Markdown）</a>，由背景程式的請求結構描述與方法權限產生。<a href=\"https://github.com/conol-ai/openwalkietalkie\">原始碼儲存庫</a>包含此範例與整合測試。"
+  "docs.content.p10": "<a href=\"/docs/deckd-api.md\">完整的 JSON-RPC API 參考資料（Markdown）</a>，由背景程式的請求結構描述與方法權限產生。<a href=\"https://github.com/conol-ai/openwalkietalkie\">原始碼儲存庫</a>包含此範例與整合測試。",
+  "docs.guides.get-started.title": "入門指南",
+  "docs.guides.get-started.blurb": "裝好應用程式、連上裝置、接通一個程式設計 agent。",
+  "docs.guides.claude-code.title": "連接 Claude Code",
+  "docs.guides.claude-code.blurb": "安裝外掛，帶 Channels 啟動工作階段。",
+  "docs.guides.codex.title": "連接 Codex",
+  "docs.guides.codex.blurb": "CLI 走共用 daemon，Desktop 走啟動器。",
+  "docs.guides.grok-bot.title": "連接 Grok Bot",
+  "docs.guides.grok-bot.blurb": "建 routine、貼 webhook、讀懂狀態。"
 }

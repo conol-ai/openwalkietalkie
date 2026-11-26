@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="day">
+<head>
+<script>window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'default', {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+  wait_for_update: 500
+});</script>
+<script defer src="/js/cookie-consent.js"></script>
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Claude Code を接続する · OpenWalkieTalkie</title>
+<meta name="description" content="Claude Code をデバイスにつなぐ：プラグインを入れ、Channels 付きでセッションを起動し、アプリが示す状態を読み取ります。" />
+<link rel="canonical" href="https://openwalkietalkie.org/ja/docs/claude-code/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/claude-code/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/claude-code/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/claude-code/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/claude-code/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/claude-code/" />
+
+<meta property="og:type" content="website" />
+<meta name="owt-api-version" content="0.11.0" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="Claude Code を接続する · OpenWalkieTalkie" />
+<meta property="og:description" content="Claude Code をデバイスにつなぐ：プラグインを入れ、Channels 付きでセッションを起動し、アプリが示す状態を読み取ります。" />
+<meta property="og:url" content="https://openwalkietalkie.org/ja/docs/claude-code/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie ブログ" href="/ja/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<link rel="stylesheet" href="/css/docs.css" />
+<script src="/js/i18n/ja.js"></script>
+<script src="/js/demo-i18n.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">本文へスキップ</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/ja/" aria-label="OpenWalkieTalkie — ホーム">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="セクション">
+      <a href="/ja/#pile">The Pile</a>
+      <a href="/ja/#features">機能</a>
+      <a href="/ja/#demo">試す</a>
+      <a href="/ja/#faces">ページ</a>
+      <a href="/ja/#blueprint">設計図</a>
+      <a href="/ja/docs/" aria-current="true">ドキュメント</a>
+      <a href="/ja/blog/">ブログ</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="昼と夜のテーマを切り替える" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">昼</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="メニューを開く" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main docs-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">チュートリアル · CLAUDE CODE · アプリ 0.17.0</p>
+  <h1>Claude Code を接続する</h1>
+  <p class="post-meta">プラグイン、Channels、生きたセッション 1 つ · 所要時間は 10 分ほど</p>
+</header>
+<article class="post-body">
+<p>デバイスが話しかけるのは、あなたのマシンで既に動いている Claude Code のセッションです。成り立っている必要があるのは 2 つ：プラグインが Claude Code に入っていること、セッションが Channels 付きで起動していること。</p>
+<h2>何がつながるのか</h2>
+<p>アプリの「設定」は Claude Code をインストールしません。<code>~/Library/Application Support/OpenWalkieTalkie/claude-marketplace/</code> にローカルのプラグインマーケットプレイスを書き、それを登録して、このマシンの Claude Code にデバイスの存在を知らせます。</p>
+<ul>
+<li>プラグイン：セッションが自分自身をバックグラウンドサービスに報告するためのフック一式。</li>
+<li>Channels：アプリが読むライブチャネル。セッションがデバイスに並ぶのはこれ経由です。行もスイッチも別です。</li>
+<li>あなたのプロジェクト：触りません。プラグインはユーザースコープに入り、プロジェクト単位では入れません。</li>
+</ul>
+<h2>Linux</h2>
+<p>Linux では、Omarchy ブリッジが Claude Code のセッションをデバイスに表示します。双方向のメッセージを扱う Claude Code Channels はこのバージョンでは使えません。次のバージョンで修正されます。それまでは、以下の手順は macOS と Windows に適用されます。</p>
+<h2>1 · プラグインを入れる</h2>
+<ol>
+<li><strong>連携</strong> を開き、<strong>Claude Code</strong> を探します。行が <strong>設定する</strong> なら押します。</li>
+<li>行に <strong>コマンドをコピー</strong> があれば、下の 2 つのコマンドをターミナルで実行します。どちらも繰り返し実行できます。</li>
+<li>プラグインを入れる前に開いていたセッションは、それを読みません。新しく開くか、その中で <code>/reload-plugins</code> を実行します。</li>
+</ol>
+<pre><code>claude plugin marketplace add '&lt;marketplace path&gt;' --scope user --json
+claude plugin install openwalkietalkie@openwalkietalkie --scope user --json</code></pre>
+<p>ユーザースコープで登録されると、行は <strong>接続済み</strong> になります。これはファイルの話で、動いているセッションの話ではありません。</p>
+<h2>2 · Channels 付きでセッションを起動する</h2>
+<p>Claude Code は、起動時に指名しない限り Channels を読み込みません。</p>
+<pre><code>claude --dangerously-load-development-channels plugin:openwalkietalkie@openwalkietalkie</code></pre>
+<p>アプリではこのコマンドが <strong>連携 → Claude Channels → 接続方法… → コマンドをコピー</strong> の奥にあり、内容は同じです。初回起動時に Claude が確認を求めるので、承認します。</p>
+<h2>3 · 何が見えるはずか</h2>
+<ul>
+<li><strong>Claude Code</strong> の行：接続済み。セッションが開くとセッション数も付きます。</li>
+<li><strong>Claude Channels</strong> の行：独自の状態。Channels のセッションが動くまでは<em>セッション未接続</em>。</li>
+<li>デバイス側：<strong>CANCEL</strong> を押して <em>Agents</em> に入ると、セッションが並んでいます。デバイス側でほかに設定するものはありません。</li>
+</ul>
+<h2>うまくいかないとき</h2>
+<dl>
+<dt>修復が必要</dt>
+<dd>アプリを更新した直後に <strong>修復が必要</strong> と表示されるのは正常です。管理下のプラグインファイルが Claude Code の記録と一致しなくなっています。<strong>修復</strong> を一度押すと、アプリがプラグインを書き直して再登録します。</dd>
+<dt>Claude Channels にセッションが接続されない</dt>
+<dd>セッションが Channels フラグ付きで起動していないか、確認を閉じてしまっています。終了して、コピーしたコマンドでもう一度起動します。</dd>
+<dt>接続済みなのにデバイスに出ない</dt>
+<dd>プロジェクト側の <code>.claude/settings.json</code> が <code>enabledPlugins["openwalkietalkie@openwalkietalkie"]: false</code> でそのリポジトリのプラグインを切っていることがあります。アプリからはそのスイッチが見えません。</dd>
+<dt>更新した直後から動かない</dt>
+<dd>プラグインはセッション起動時に読み込まれます。更新前に開いていたセッションは <code>/reload-plugins</code> か再起動が必要です。</dd>
+</dl>
+<h2>このページの確認方法</h2>
+<p>ラベルとパスはすべてアプリ本体と 0.17.0 のバックグラウンドサービスのソースから取り、2 つのコマンドはアプリがコピーさせるものそのものです。このページは生きた Claude Code セッションで端から端まで実行してはいないので、順序はコードが前提にしている順序として読んでください。実行記録ではありません。</p>
+<h2>次に読むもの</h2>
+<p><a href="/ja/docs/get-started/">はじめかた</a> はアプリの導入とデバイスの接続を扱います。<a href="/ja/manual/">フィールドマニュアル</a> はすべての操作を扱います。<a href="/ja/docs/">開発者向けドキュメント</a> はプラグインが使う API を扱います。</p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL のプロジェクト · ソフトウェアは MIT · ハードウェアは CERN-OHL-P</span>
+    <nav aria-label="フッター">
+      <a href="/ja/#waitlist">ウェイトリストに登録</a>
+      <a href="/ja/privacy/">プライバシーポリシー</a>
+      <a href="/ja/cookies/">Cookie について</a>
+      <a href="#cookie-consent" data-cookie-settings hidden>Cookie の設定</a>
+      <a href="/ja/">ホーム</a>
+      <a href="/ja/#demo">試す</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Discord で CoHDL と OpenWalkieTalkie のコミュニティに参加">Discord</a>
+      <a href="/ja/blog/feed.xml">フィード</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<details class="lang-switch">
+        <summary aria-label="Language — 言語: 日本語">Language</summary>
+        <ul>
+          <li><a href="/docs/claude-code/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/docs/claude-code/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/docs/claude-code/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/docs/claude-code/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
+        </ul>
+      </details>
+<section id="cookie-consent" class="privacy-notice" role="dialog" aria-label="Cookie の設定" aria-describedby="cookie-consent-message" hidden>
+  <div>
+    <p id="cookie-consent-message">これらのドキュメントがどう使われているかを把握するために Google Tag Manager を使用します。同意するまで計測は行いません。</p>
+    <p><a href="/ja/privacy/">プライバシー</a></p>
+  </div>
+  <div class="cookie-consent-actions">
+    <button class="btn btn--primary" type="button" value="granted">同意する</button>
+    <button class="btn" type="button" value="denied">拒否する</button>
+  </div>
+</section>
+</body>
+</html>

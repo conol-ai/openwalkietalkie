@@ -1,6 +1,17 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="day">
 <head>
+<script>window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'default', {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+  wait_for_update: 500
+});</script>
+<script defer src="/js/cookie-consent.js"></script>
+
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>OpenWalkieTalkie — The open-source handheld radio for your AI agents.</title>
@@ -84,6 +95,7 @@
       <a href="#waitlist">Waitlist</a>
       <a href="#demo">Try It</a>
       <a href="#download">Download</a>
+      <a href="/docs/get-started/">Get started</a>
       <a href="/docs/">Docs</a>
       <a href="/blog/">Blog</a>
       <a href="#blueprint">GitHub</a>
@@ -699,7 +711,7 @@
       <a href="/manual/">User Manual</a>
         <a href="/privacy/">Privacy Policy</a>
         <a href="/cookies/">Cookie information</a>
-        <a href="/cookies/" data-privacy-open>Privacy notice</a>
+        <a href="#cookie-consent" data-cookie-settings hidden>Cookie settings</a>
         <a href="https://github.com/conol-ai/openwalkietalkie/tree/main/hardware" target="_blank" rel="noopener">hardware/</a>
         <a href="https://github.com/conol-ai/openwalkietalkie/tree/main/src" target="_blank" rel="noopener">src/</a>
         <a href="https://github.com/conol-ai/openwalkietalkie/tree/main/host" target="_blank" rel="noopener">host/</a>
@@ -718,8 +730,7 @@
 <script src="/js/arcade.js"></script>
 <script src="/js/main.js"></script>
 <script src="/js/waitlist.js"></script>
-<script src="/js/privacy.js"></script>
-      <details class="lang-switch">
+<details class="lang-switch">
         <summary aria-label="Language — Language: English">Language</summary>
         <ul>
           <li><a href="/" hreflang="en" lang="en" aria-current="true">English</a></li>
@@ -728,5 +739,15 @@
           <li><a href="/ja/" hreflang="ja" lang="ja">日本語</a></li>
         </ul>
       </details>
+<section id="cookie-consent" class="privacy-notice" role="dialog" aria-label="Cookie settings" aria-describedby="cookie-consent-message" hidden>
+  <div>
+    <p id="cookie-consent-message">We use Google Tag Manager to understand how these docs are used. Nothing is measured until you accept.</p>
+    <p><a href="/privacy/">Privacy</a></p>
+  </div>
+  <div class="cookie-consent-actions">
+    <button class="btn btn--primary" type="button" value="granted">Accept</button>
+    <button class="btn" type="button" value="denied">Reject</button>
+  </div>
+</section>
 </body>
 </html>

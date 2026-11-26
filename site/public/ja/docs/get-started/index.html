@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="day">
+<head>
+<script>window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'default', {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+  wait_for_update: 500
+});</script>
+<script defer src="/js/cookie-consent.js"></script>
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>はじめかた · OpenWalkieTalkie</title>
+<meta name="description" content="アプリを入れて、デバイスをつないで、コーディングエージェントを 1 つ接続します。" />
+<link rel="canonical" href="https://openwalkietalkie.org/ja/docs/get-started/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/get-started/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/get-started/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/get-started/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/get-started/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/get-started/" />
+
+<meta property="og:type" content="website" />
+<meta name="owt-api-version" content="0.11.0" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="はじめかた · OpenWalkieTalkie" />
+<meta property="og:description" content="アプリを入れて、デバイスをつないで、コーディングエージェントを 1 つ接続します。" />
+<meta property="og:url" content="https://openwalkietalkie.org/ja/docs/get-started/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie ブログ" href="/ja/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<link rel="stylesheet" href="/css/docs.css" />
+<script src="/js/i18n/ja.js"></script>
+<script src="/js/demo-i18n.js"></script>
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">本文へスキップ</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/ja/" aria-label="OpenWalkieTalkie — ホーム">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="セクション">
+      <a href="/ja/#pile">The Pile</a>
+      <a href="/ja/#features">機能</a>
+      <a href="/ja/#demo">試す</a>
+      <a href="/ja/#faces">ページ</a>
+      <a href="/ja/#blueprint">設計図</a>
+      <a href="/ja/docs/" aria-current="true">ドキュメント</a>
+      <a href="/ja/blog/">ブログ</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="昼と夜のテーマを切り替える" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">昼</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="メニューを開く" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main docs-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">はじめかた · アプリ 0.17.0</p>
+  <h1>はじめかた</h1>
+  <p class="post-meta">macOS・Windows・Linux · 所要時間は 10 分ほど</p>
+</header>
+<article class="post-body">
+
+<p>アプリを入れて、デバイスをつないで、コーディングエージェントを 1 つ接続します。3 ステップで、デバイスは既に開いているセッションの 2 台目の画面になります。</p>
+
+<h2>用意するもの</h2>
+<ul>
+<li>充電のあるデバイス。</li>
+<li>macOS 13 以降の Mac、Windows の PC、または Linux（サポートしている構成は Omarchy）。</li>
+<li>USB-C の<strong>データ</strong>ケーブル。給電専用のケーブルでは何もつながりません。</li>
+<li>インストールしてサインイン済みのコーディングエージェントが 1 つ：Claude Code、Codex、Grok Bot。</li>
+</ul>
+
+<h2>1 · アプリを入れる</h2>
+<h3>macOS</h3>
+<ol>
+<li><a href="/ja/#download">ダウンロード欄</a>からチップに合うディスクイメージを入手し、開いて <strong>OpenWalkieTalkie</strong> を <strong>アプリケーション</strong> にドラッグします。</li>
+<li>ディスクイメージからではなく「アプリケーション」から起動します。イメージから実行した複製は macOS に隔離され、バックグラウンドサービスを登録できません。</li>
+</ol>
+<h3>Windows</h3>
+<ol>
+<li>リリースページから <code>OpenWalkieTalkie-0.17.0-windows-x86_64.zip</code> をダウンロードし、残しておくフォルダに展開します。</li>
+<li>このビルドは署名されていません。SmartScreen が <em>Windows によって PC が保護されました</em> と表示します。<strong>詳細情報</strong> を選び、<strong>実行</strong> を選びます。</li>
+</ol>
+<p><a href="/ja/docs/windows/">Windows ガイド</a> はプレビュー版、トレイアイコン、USB-C 経由のファームウェア更新を扱っています。</p>
+<h3>Linux</h3>
+<p>サポートしている構成は Omarchy です。サービスとアプリをビルドしてインストールし、デバイスと仮想キーボードの udev ルールを 2 本読み込みます。コマンドは <a href="/ja/docs/omarchy/">Omarchy ガイド</a> にあります。このページは手順のどこに位置するかだけを示します。</p>
+
+<h2>2 · デバイスをつなぐ</h2>
+<ol>
+<li><strong>まず有線。</strong>USB-C データケーブルをつなぎ、macOS に尋ねられたらアクセサリを許可します。<strong>PTT を 2 秒</strong>押して電源を入れます。</li>
+<li><strong>無線。</strong>Bluetooth で <strong>OpenWalkieTalkie</strong> をペアリングし、<em>プライバシーとセキュリティ → Bluetooth</em> でコンパニオンアプリを許可します。</li>
+<li><strong>確認。</strong><strong>デバイス → お使いのデバイス → 接続</strong> を開きます。<em>ケーブル</em> または <em>Bluetooth</em> の緑の点が出ていれば、サービスから見えています。</li>
+</ol>
+
+<h2>3 · バックグラウンドサービスを起動する</h2>
+<p><strong>サービス</strong> を開きます。最初のカードがバックグラウンドサービスが動いているかを示し、デバイス上のほかのすべてがこれに依存します。</p>
+<ul>
+<li><strong>macOS。</strong>動いていなければ <strong>開始</strong> を押します。行に承認待ちと出ている場合は「システム設定」を開き、<em>ログイン項目</em> で許可します。許可するまで起動しません。</li>
+<li><strong>Windows。</strong>サービスは Run キーでサインイン時に起動し、<strong>ログイン時に起動</strong> の行がそれを表示・切り替えます。</li>
+<li><strong>Linux。</strong><code>systemctl --user status deckd</code>。ユニットが無ければ、Omarchy ガイドのインストーラーがまだ走っていません。</li>
+</ul>
+<p>ウインドウを閉じる前に <strong>ログイン時に起動</strong> をオンにします。サービスが無いデバイスは、オフラインとしか表示されません。</p>
+
+<h2>4 · エージェントを 1 つ接続する</h2>
+<p>まず 1 つで十分です。<strong>連携</strong> の各行が 1 つのエージェントに対応します。手順は各チュートリアルにあります。</p>
+<ul>
+<li><strong>Claude Code</strong> — プラグインを入れ、Channels 付きでセッションを起動します。<a href="/ja/docs/claude-code/">Claude Code チュートリアル</a></li>
+<li><strong>Codex</strong> — CLI は自動でつながります。Codex Desktop はコンパニオンのランチャーが必要です。<a href="/ja/docs/codex/">Codex チュートリアル</a></li>
+<li><strong>Grok Bot</strong> — ルーチンの webhook が入り、コマンドが出ていきます。<a href="/ja/docs/grok-bot/">Grok Bot チュートリアル</a></li>
+</ul>
+<p><em>接続済み</em> は連携のファイルが揃ったという意味です。デバイスに行が出るのは、生きているセッションがあるときです。</p>
+
+<h2>5 · 話しかける</h2>
+<ol>
+<li>デバイスで <strong>CANCEL</strong> を押して <em>Agents</em> に入ります。<strong>LEFT / RIGHT</strong> でプロジェクト、ホイールでハイライト、<strong>ENTER</strong> でセッションを開きます。</li>
+<li><strong>PTT</strong> を押したまま「このプロジェクトを要約して、次に何をすべきか教えて」と言い、離します。録音は Mac で開いているセッションに送られます。</li>
+<li>返答はデバイスで読みます。エージェントが質問したら <strong>ENTER</strong> でカードを開き、ホイールで選び、<strong>ENTER</strong> で答えます。</li>
+</ol>
+
+<h2>うまくいかないとき</h2>
+<dl>
+<dt>サービスが動いていない</dt>
+<dd><strong>サービス → 開始</strong>。macOS で行が承認待ちなら <em>ログイン項目</em> で許可します。「開始」を押しても何も起きないなら、使っているのはインストール済みの複製ではありません。</dd>
+<dt>デバイスにセッションが出ない</dt>
+<dd>連携を設定し、<em>かつ</em> セッションを開いている必要があります。<em>Codex が実行されていません</em> は、生きているローカルセッションがまだ無いという意味です。</dd>
+<dt>音声入力が効かない</dt>
+<dd>選択中のセッション、接続、<strong>音声</strong> で選んだ音声エンジンを確認します。<strong>音声をテスト</strong> を使います。Mac のマイクに切り替わることはありません。</dd>
+<dt>デバイスがオフラインと出る</dt>
+<dd>ケーブルかペアリングを確認し、<strong>サービス → 再起動</strong>。デモデータは実際の接続ではありません。</dd>
+<dt>画面がロックされている</dt>
+<dd>キーを押すか画面に触れ、ホイールを反時計回りに 4 目盛り回します。この 4 目盛りはロックを解くだけで、選択は動きません。</dd>
+<dt>サービスは登録済みなのに起動しない</dt>
+<dd>macOS はバックグラウンド項目を見つけたものの、<code>Contents/MacOS/deckd</code> をアプリバンドルに解決できず、launchd は終了コード 78 で諦めます。Finder でアプリを一度開くか、インストール済みの複製に対して <code>lsregister -f</code> を実行してバンドル索引を更新してから、もう一度「開始」を押します。macOS 自身も再試行します。後から起動に成功しても <code>last exit code = 78</code> は残るので、見るのは <code>state</code> と <code>pid</code> です。</dd>
+</dl>
+
+<h2>このページの確認方法</h2>
+<p>本ページの UI 文言とスクリーンショットは、Mac にインストールした 0.17.0 から取っています。スクリーンショットはアプリ内蔵の合成レンダリングモードで生成したもので、稼働中のサービスには触れません。執筆時点で実機を接続していないため、デバイス接続の手順は端から端まで実行していません。Linux ではサービスのユニットがインストール済みで有効なこと、2 本の udev ルールが配置済みであることを確認しました。Windows の手順は 0.17.0 のパッケージと Windows ガイドに基づいています。</p>
+
+<h2>次に読むもの</h2>
+<p><a href="/ja/manual/">図解フィールドマニュアル</a> はすべての操作、ページ、マクロを扱います。<a href="/ja/docs/">開発者向けドキュメント</a> は API を扱います。<a href="https://github.com/conol-ai/openwalkietalkie">ソース</a> にはバグが住んでいます。</p>
+
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · COHDL のプロジェクト · ソフトウェアは MIT · ハードウェアは CERN-OHL-P</span>
+    <nav aria-label="フッター">
+      <a href="/ja/#waitlist">ウェイトリストに登録</a>
+      <a href="/ja/privacy/">プライバシーポリシー</a>
+      <a href="/ja/cookies/">Cookie について</a>
+      <a href="#cookie-consent" data-cookie-settings hidden>Cookie の設定</a>
+      <a href="/ja/">ホーム</a>
+      <a href="/ja/#demo">試す</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Discord で CoHDL と OpenWalkieTalkie のコミュニティに参加">Discord</a>
+      <a href="/ja/blog/feed.xml">フィード</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<details class="lang-switch">
+        <summary aria-label="Language — 言語: 日本語">Language</summary>
+        <ul>
+          <li><a href="/docs/get-started/" hreflang="en" lang="en">English</a></li>
+          <li><a href="/zh-Hans/docs/get-started/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/docs/get-started/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/docs/get-started/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
+        </ul>
+      </details>
+<section id="cookie-consent" class="privacy-notice" role="dialog" aria-label="Cookie の設定" aria-describedby="cookie-consent-message" hidden>
+  <div>
+    <p id="cookie-consent-message">これらのドキュメントがどう使われているかを把握するために Google Tag Manager を使用します。同意するまで計測は行いません。</p>
+    <p><a href="/ja/privacy/">プライバシー</a></p>
+  </div>
+  <div class="cookie-consent-actions">
+    <button class="btn btn--primary" type="button" value="granted">同意する</button>
+    <button class="btn" type="button" value="denied">拒否する</button>
+  </div>
+</section>
+</body>
+</html>

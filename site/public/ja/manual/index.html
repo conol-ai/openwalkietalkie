@@ -1,5 +1,16 @@
 <!DOCTYPE html>
-<html lang="ja" data-theme="day"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="ja" data-theme="day"><head>
+<script>window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'default', {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+  wait_for_update: 500
+});</script>
+<script defer src="/js/cookie-consent.js"></script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>取扱説明書 · OpenWalkieTalkie</title><meta name="description" content="OpenWalkieTalkie のステップごとの取扱説明書：デバイスのペアリング、Mac のコンパニオンアプリの設定、Codex や Claude Code の接続、すべての操作の使い方。">
 <link rel="canonical" href="https://openwalkietalkie.org/ja/manual/">
 <link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/manual/" />
@@ -156,7 +167,7 @@
 <dl class="troubleshooting"><div><dt>デバイスに「offline」と表示される</dt><dd>OpenWalkieTalkie で<b>Service → Check my setup</b>を開きます。USB のデータケーブルか Bluetooth の接続を確認します。デバイスを接続し直し、必要なら Macアプリで「Service → Restart」を使います。デモデータはライブの接続ではありません。</dd></div><div><dt>エージェントのセッションがない</dt><dd>Codex は <a href="#codex">3 ページ</a>、Claude Code は <a href="#claude">4 ページ</a>に従ってください。「Installed」は連携のファイルがあることを示すだけで、セッションも開いて接続している必要があります。Desktop ではコンパニオンのランチャーを使ってください。</dd></div><div><dt>音声が入力されない</dt><dd>選んだセッション、ホストとの接続、音声認識エンジンを確認します。BLE では Bluetooth のアクセスを許可してください。Mac のマイクに切り替わることはありません。「Voice → Test Voice」で、選んだエンジンと権限を確認してください。BLE のデバイスは macOS の「サウンド」の入力デバイスではありません。</dd></div><div><dt>マクロが動かない</dt><dd>キーに割り当てがあり、ホストにアクセシビリティの権限があることを確認します。目的のデスクトップのアプリを選んで、もう一度ショートカットを試します。</dd></div><div><dt>画面がロックされている</dt><dd>どれかのキーを押すか、ホイールを回すか、画面に触れると点灯します。ホイールを反時計回りに 4 段回すとロックが外れます。その回転で下の画面が操作されることはありません。</dd></div></dl>
 <div class="reference-bottom"><article><h3>ちょっと遊ぶ</h3><p><b>フラッピーバード：</b>PTT をタップして飛ぶ。<br><b>スネーク：</b>ホイールを左 / 右に回す。<br><b>雷電：</b>Left / Right を押し続けて移動。自動で撃ちます。<br>ENTER で一時停止。ベストスコアは再起動まで残ります。</p></article><article><h3>電源と更新</h3><p>PTT を 2 秒間押すと電源が入り、CANCEL を 3 秒間押すと電源が切れます。ファームウェアは Macアプリの「Service」ページから USB で更新します。ファームウェア 0.14.0 からは、デバイスで ENTER を押してインストールを始めます。</p></article></div>
 <aside class="manual-note resources"><strong>次のステップ</strong><p><a href="/ja/#download">アプリを入手</a> · <a href="/ja/#demo">ウェブのデモを試す</a> · <a href="/ja/docs/">開発者向けドキュメント</a> · <a href="https://github.com/conol-ai/openwalkietalkie">ソースとサポート</a><br><small>OpenWalkieTalkie 0.15.0 の Mac での手順で、英語版アプリのスクリーンショットを使っています。USB で接続したファームウェア 0.13.0 の Rev B デバイスで撮影しました。アプリは 0.15.0 です。ファームウェアは別に更新します。基板、ファームウェア、アシスタントのバージョンによって、使える操作が変わることがあります。</small></p></aside>
-<footer class="sheet-footer"><span>OPENWALKIETALKIE.ORG / 説明書</span><span>08 / 08</span></footer></section>
+<footer class="sheet-footer"><span>OPENWALKIETALKIE.ORG / 説明書</span><span>08 / 08</span><a href="#cookie-consent" data-cookie-settings hidden>Cookie の設定</a></footer></section>
 <p class="manual-end">オープンなハードウェア。オープンなファームウェア。自由に探ってください。</p></main>
 <script src="/js/main.js"></script><script src="/js/manual.js"></script>      <details class="lang-switch">
         <summary aria-label="Language — 言語: 日本語">Language</summary>
@@ -167,4 +178,14 @@
           <li><a href="/ja/manual/" hreflang="ja" lang="ja" aria-current="true">日本語</a></li>
         </ul>
       </details>
+<section id="cookie-consent" class="privacy-notice" role="dialog" aria-label="Cookie の設定" aria-describedby="cookie-consent-message" hidden>
+  <div>
+    <p id="cookie-consent-message">これらのドキュメントがどう使われているかを把握するために Google Tag Manager を使用します。同意するまで計測は行いません。</p>
+    <p><a href="/ja/privacy/">プライバシー</a></p>
+  </div>
+  <div class="cookie-consent-actions">
+    <button class="btn btn--primary" type="button" value="granted">同意する</button>
+    <button class="btn" type="button" value="denied">拒否する</button>
+  </div>
+</section>
 </body></html>

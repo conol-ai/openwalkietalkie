@@ -1,5 +1,16 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="day"><head>
+<script>window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'default', {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+  wait_for_update: 500
+});</script>
+<script defer src="/js/cookie-consent.js"></script>
+
 <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Privacy Policy · OpenWalkieTalkie</title><meta name="description" content="How OpenWalkieTalkie handles your device waitlist signup and website data." />
 <link rel="canonical" href="https://openwalkietalkie.org/privacy/" />
@@ -52,10 +63,10 @@
 <h2>What we collect</h2>
 <ul><li><strong>Waitlist:</strong> the email address you submit, the signup date, and the version of the notice shown when you agree to receive device availability updates.</li>
 <li><strong>Connection information:</strong> Cloudflare processes request metadata, including your IP address, to serve and protect the website. Our signup endpoint uses your IP for short-lived rate limiting. We do not store it, your browser details, or referral URLs in the waitlist database.</li>
-<li><strong>Browser preferences:</strong> your chosen day/night theme and acknowledgement of the privacy notice stay in your browser. See <a href="/cookies/">Cookie information</a>.</li></ul>
+<li><strong>Browser preferences:</strong> your chosen day/night theme and cookie consent choice stay in your browser. See <a href="/cookies/">Cookie information</a>.</li></ul>
 <h2>Why we use it</h2>
 <p>With your consent, we use your email to tell you when the device is available to buy and send related availability updates. Joining is not an order, reservation, payment, or guarantee of a delivery date. We do not add you to the Cohdl software waitlist or unrelated mailing lists.</p>
-<p>Connection metadata helps deliver the site, prevent spam, and diagnose failures. Our application logs do not include signup form contents. There are no advertising or analytics scripts in this site.</p>
+<p>Connection metadata helps deliver the site, prevent spam, and diagnose failures. Our application logs do not include signup form contents. We use Google Tag Manager to manage website tags. Google processes requests when the container loads. Depending on which tags are enabled, they can collect page views, referrers, device and browser information, and approximate location inferred from IP addresses. See <a href="https://policies.google.com/privacy" rel="noopener">Google’s Privacy Policy</a> for details.</p>
 <h2>Who processes it</h2>
 <p>The team operating OpenWalkieTalkie can access the list to manage signups and send the updates you requested. Cloudflare hosts the website and stores the list in its D1 database; processing may take place in countries where Cloudflare operates. See <a href="https://www.cloudflare.com/privacypolicy/" rel="noopener">Cloudflare's Privacy Policy</a>. We do not sell your waitlist data.</p>
 <p>Links to GitHub, Discord, and other websites take you to services with their own privacy policies.</p>
@@ -76,7 +87,7 @@
       <a href="/#waitlist">Join the waitlist</a>
       <a href="/privacy/">Privacy Policy</a>
       <a href="/cookies/">Cookie information</a>
-      <a href="/cookies/" data-privacy-open>Privacy notice</a>
+      <a href="#cookie-consent" data-cookie-settings hidden>Cookie settings</a>
       <a href="/">Home</a>
       <a href="/#demo">Try It</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
@@ -88,8 +99,7 @@
 </footer>
 
 <script src="/js/main.js"></script>
-<script src="/js/privacy.js"></script>
-      <details class="lang-switch">
+<details class="lang-switch">
         <summary aria-label="Language — Language: English">Language</summary>
         <ul>
           <li><a href="/privacy/" hreflang="en" lang="en" aria-current="true">English</a></li>
@@ -98,5 +108,15 @@
           <li><a href="/ja/privacy/" hreflang="ja" lang="ja">日本語</a></li>
         </ul>
       </details>
+<section id="cookie-consent" class="privacy-notice" role="dialog" aria-label="Cookie settings" aria-describedby="cookie-consent-message" hidden>
+  <div>
+    <p id="cookie-consent-message">We use Google Tag Manager to understand how these docs are used. Nothing is measured until you accept.</p>
+    <p><a href="/privacy/">Privacy</a></p>
+  </div>
+  <div class="cookie-consent-actions">
+    <button class="btn btn--primary" type="button" value="granted">Accept</button>
+    <button class="btn" type="button" value="denied">Reject</button>
+  </div>
+</section>
 </body>
 </html>

@@ -80,7 +80,7 @@ window.OWT_STRINGS = {
  "Start game": "ゲーム開始",
  "Privacy notice": "プライバシーに関するお知らせ",
  "Your privacy, in plain words": "プライバシーについて、わかりやすく",
- "We remember your day/night theme on this browser. This site has no advertising or analytics cookies. Cloudflare may use security cookies to protect it.": "昼／夜のテーマはこのブラウザーに保存します。このサイトに広告や分析の Cookie はありません。Cloudflare がサイトを守るためにセキュリティ用の Cookie を使うことがあります。",
+ "We remember your day/night theme on this browser. Google Tag Manager loads after you accept in Cookie settings. Cloudflare may use security cookies to protect the site.": "昼／夜のテーマはこのブラウザーに保存します。Cookie の設定で同意すると、Google Tag Manager が読み込まれます。Cloudflare がサイトを守るためにセキュリティ用の Cookie を使うことがあります。",
  "Privacy Policy": "プライバシーポリシー",
  "Cookie information": "Cookie について",
  "Got it": "了解"

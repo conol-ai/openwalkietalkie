@@ -15,5 +15,13 @@
   "docs.content.h22": "先运行一个示例",
   "docs.content.p9": "<a href=\"/examples/native_companion.py\" download>下载 Python 接入示例</a>。保持 OpenWalkieTalkie 运行，用 Python 3.10+ 执行示例。它使用预设回复，无需安装额外依赖、配置模型 API 密钥或登录 Conol。",
   "docs.content.h23": "查阅接口规范",
-  "docs.content.p10": "<a href=\"/docs/deckd-api.md\">完整 JSON-RPC API 参考文档（Markdown）</a>根据守护进程的请求结构和方法权限生成。<a href=\"https://github.com/conol-ai/openwalkietalkie\">源码仓库</a>中还提供示例和集成测试。"
+  "docs.content.p10": "<a href=\"/docs/deckd-api.md\">完整 JSON-RPC API 参考文档（Markdown）</a>根据守护进程的请求结构和方法权限生成。<a href=\"https://github.com/conol-ai/openwalkietalkie\">源码仓库</a>中还提供示例和集成测试。",
+  "docs.guides.get-started.title": "入门指南",
+  "docs.guides.get-started.blurb": "装好应用、连上设备、接通一个编程 agent。",
+  "docs.guides.claude-code.title": "连接 Claude Code",
+  "docs.guides.claude-code.blurb": "装插件，带 Channels 启动会话。",
+  "docs.guides.codex.title": "连接 Codex",
+  "docs.guides.codex.blurb": "CLI 走共享 daemon，Desktop 走启动器。",
+  "docs.guides.grok-bot.title": "连接 Grok Bot",
+  "docs.guides.grok-bot.blurb": "建 routine、粘 webhook、读懂状态。"
 }

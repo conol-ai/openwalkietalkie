@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="day">
+<head>
+<script>window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'default', {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+  wait_for_update: 500
+});</script>
+<script defer src="/js/cookie-consent.js"></script>
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Connect Grok Bot · OpenWalkieTalkie</title>
+<meta name="description" content="Connect Grok Bot to the deck: make the routine in Grok Bot, paste its webhook into the app, and read the states it reports." />
+<link rel="canonical" href="https://openwalkietalkie.org/docs/grok-bot/" />
+<link rel="alternate" hreflang="en" href="https://openwalkietalkie.org/docs/grok-bot/" />
+<link rel="alternate" hreflang="zh-Hans" href="https://openwalkietalkie.org/zh-Hans/docs/grok-bot/" />
+<link rel="alternate" hreflang="zh-Hant" href="https://openwalkietalkie.org/zh-Hant/docs/grok-bot/" />
+<link rel="alternate" hreflang="ja" href="https://openwalkietalkie.org/ja/docs/grok-bot/" />
+<link rel="alternate" hreflang="x-default" href="https://openwalkietalkie.org/docs/grok-bot/" />
+
+<meta property="og:type" content="website" />
+<meta name="owt-api-version" content="0.11.0" />
+<meta property="og:site_name" content="OpenWalkieTalkie" />
+<meta property="og:title" content="Connect Grok Bot · OpenWalkieTalkie" />
+<meta property="og:description" content="Connect Grok Bot to the deck: make the routine in Grok Bot, paste its webhook into the app, and read the states it reports." />
+<meta property="og:url" content="https://openwalkietalkie.org/docs/grok-bot/" />
+<meta property="og:image" content="https://openwalkietalkie.org/assets/og.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2e2bd" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131a3a" />
+
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/assets/favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<link rel="alternate" type="application/atom+xml" title="OpenWalkieTalkie Blog" href="/blog/feed.xml" />
+
+<link rel="preload" href="/fonts/press-start-2p-latin.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="/fonts/vt323-latin.woff2" as="font" type="font/woff2" crossorigin />
+
+<link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/blog.css" />
+<link rel="stylesheet" href="/css/docs.css" />
+<script src="/js/theme-init.js"></script>
+<!-- No optional analytics or advertising scripts. -->
+</head>
+<body>
+
+<a class="skip-link" href="#content">Skip to content</a>
+
+<div class="progress-track" aria-hidden="true"><div class="progress-fill" id="progressFill"></div></div>
+
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="brand" href="/" aria-label="OpenWalkieTalkie — home">
+      <img class="logo-mark pixelated" src="/assets/logo-64.png" alt="" width="26" height="26" />
+      <span class="brand__text">OPEN WALKIE TALKIE</span>
+    </a>
+
+    <nav class="nav__links" aria-label="Sections">
+      <a href="/#pile">The Pile</a>
+      <a href="/#features">Features</a>
+      <a href="/#demo">Try It</a>
+      <a href="/#faces">Faces</a>
+      <a href="/#blueprint">Blueprint</a>
+      <a href="/docs/" aria-current="true">Docs</a>
+      <a href="/blog/">Blog</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle day and night theme" aria-pressed="false">
+      <span class="theme-toggle__track" aria-hidden="true">
+        <span class="theme-toggle__icon theme-toggle__icon--sun"></span>
+        <span class="theme-toggle__icon theme-toggle__icon--moon"></span>
+        <span class="theme-toggle__knob"></span>
+      </span>
+      <span class="theme-toggle__label" id="themeLabel">DAY</span>
+    </button>
+
+    <button class="nav__burger" id="navBurger" type="button" aria-label="Open menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main class="blog-main docs-main" id="content">
+<header class="post-head">
+  <p class="section-kicker">TUTORIAL · GROK BOT · APP 0.17.0</p>
+  <h1>Connect Grok Bot</h1>
+  <p class="post-meta">A routine, a webhook and a key · about ten minutes</p>
+</header>
+<article class="post-body">
+<p>Grok Bot works the other way round from the other two. There is no local session to attach: you make a routine in Grok Bot, point it at this machine, and the deck becomes that bot's microphone and screen.</p>
+<h2>What gets connected</h2>
+<p>A bot is a row in the app's config file plus a key the system keeps for it. The webhook lives in Grok Bot; the app sends to it and reads what comes back.</p>
+<ul>
+<li><strong>The bot</strong> — a <code>[grokbot.bots.&lt;id&gt;]</code> entry in <code>config.toml</code>: its name, webhook URL and settings.</li>
+<li><strong>The key</strong> — kept by the system, not in that file: Keychain on macOS (service <code>ai.cohdl.openwalkietalkie</code>, account <code>grokbot.bots.&lt;id&gt;.key</code>), Credential Manager on Windows, and <code>grokbot-keys.toml</code> on Linux or in an isolated data directory.</li>
+<li><strong>The routine</strong> — made in Grok Bot, not here. It is what gives you the URL and the key.</li>
+</ul>
+<h2>1 · Make the routine in Grok Bot</h2>
+<ol>
+<li>In Grok Bot, open the bot you want and go to <strong>Settings → Computer</strong>. Allow it to run commands: without that the routine can answer but cannot do anything.</li>
+<li>Create a routine, then open the bot's name at the top of the chat → <strong>Details</strong> → <strong>routine</strong> → <strong>Webhook</strong>. It shows a <strong>POST to</strong> URL and a <strong>key</strong>.</li>
+</ol>
+<h2>2 · Add the bot here</h2>
+<ol>
+<li>Open <strong>Integrations → Grok Bot → Bots… → Add Bot</strong>.</li>
+<li>Give it the name you want on the deck, paste the <strong>POST to</strong> URL and the <strong>key</strong>, and press <strong>Add Bot</strong>.</li>
+<li>Press <strong>Test</strong>: it sends one request to the webhook and tells you whether the routine accepted it.</li>
+</ol>
+<p>If the row offers <strong>Copy Prompt</strong>, that is the same routine described in Grok Bot's own words: send it in the bot's chat and Grok Bot writes the routine for you. Either way you end up with a URL and a key.</p>
+<h2>3 · What you should see</h2>
+<ul>
+<li><strong>Grok Bot</strong> row: <em>Set up</em> with a count of bots; <em>Not set up</em> before the first one.</li>
+<li><em>A key is missing</em> means a bot is in the config and the system has no key for it: add the bot again with the routine's current key.</li>
+<li>On the deck: <strong>CANCEL</strong> → <em>Agents</em> lists the bot by name, with no chat open anywhere.</li>
+</ul>
+<h2>When it doesn't work</h2>
+<dl>
+<dt>Grok Bot refused the key (HTTP 401)</dt>
+<dd>The routine was recreated, or its key was rotated. Copy the routine's key again and add the bot again. The same answer applies to HTTP 403.</dd>
+<dt>Grok Bot does not know this webhook (HTTP 404)</dt>
+<dd>The URL points at a routine that no longer exists. Copy the routine's <strong>POST to</strong> URL again and add the bot again.</dd>
+<dt>A key is missing</dt>
+<dd>The config lists the bot and the system has no key for it. Add the bot again: re-adding the same bot keeps its key unless you supply a new one.</dd>
+<dt>The bot answers but cannot use the computer</dt>
+<dd><strong>Settings → Computer</strong> in Grok Bot did not allow it. The routine still runs and the deck still carries the words; nothing gets executed.</dd>
+<dt>Grok Bot did not start a run</dt>
+<dd>The key was accepted, but this run did not start. A paused routine does that — the app asks <em>Is the routine paused?</em> — so resume it in Grok Bot and press <strong>Test</strong> again.</dd>
+</dl>
+<h2>How this page was checked</h2>
+<p>Row states and the error strings come from the app and the service source in 0.17.0, and the storage locations from the service's own documentation. No real Grok Bot routine was created against this build: the HTTP answers above are the app's, not observations of a live routine.</p>
+<h2>Where next</h2>
+<p><a href="/docs/get-started/">Get started</a> covers the app and the deck. <a href="/docs/claude-code/">Claude Code</a> and <a href="/docs/codex/">Codex</a> are the other two integrations. <a href="/manual/">The field manual</a> covers every control.</p>
+</article>
+</main>
+
+<footer class="footer--mini">
+  <div class="inner">
+    <span>OpenWalkieTalkie · A COHDL project · MIT software · CERN-OHL-P hardware</span>
+    <nav aria-label="Footer">
+      <a href="/#waitlist">Join the waitlist</a>
+      <a href="/privacy/">Privacy Policy</a>
+      <a href="/cookies/">Cookie information</a>
+      <a href="#cookie-consent" data-cookie-settings hidden>Cookie settings</a>
+      <a href="/">Home</a>
+      <a href="/#demo">Try It</a>
+      <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
+      <a href="https://cohdl.org/" rel="noopener">CoHDL</a>
+      <a href="https://discord.gg/x7DXPvK66" rel="noopener" aria-label="Join the CoHDL and OpenWalkieTalkie community on Discord">Discord</a>
+      <a href="/blog/feed.xml">Feed</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/js/main.js"></script>
+<details class="lang-switch">
+        <summary aria-label="Language — Language: English">Language</summary>
+        <ul>
+          <li><a href="/docs/grok-bot/" hreflang="en" lang="en" aria-current="true">English</a></li>
+          <li><a href="/zh-Hans/docs/grok-bot/" hreflang="zh-Hans" lang="zh-Hans">简体中文</a></li>
+          <li><a href="/zh-Hant/docs/grok-bot/" hreflang="zh-Hant" lang="zh-Hant">繁體中文</a></li>
+          <li><a href="/ja/docs/grok-bot/" hreflang="ja" lang="ja">日本語</a></li>
+        </ul>
+      </details>
+<section id="cookie-consent" class="privacy-notice" role="dialog" aria-label="Cookie settings" aria-describedby="cookie-consent-message" hidden>
+  <div>
+    <p id="cookie-consent-message">We use Google Tag Manager to understand how these docs are used. Nothing is measured until you accept.</p>
+    <p><a href="/privacy/">Privacy</a></p>
+  </div>
+  <div class="cookie-consent-actions">
+    <button class="btn btn--primary" type="button" value="granted">Accept</button>
+    <button class="btn" type="button" value="denied">Reject</button>
+  </div>
+</section>
+</body>
+</html>

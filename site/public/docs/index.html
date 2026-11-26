@@ -1,6 +1,17 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="day">
 <head>
+<script>window.dataLayer = window.dataLayer || [];
+window.gtag = function () { window.dataLayer.push(arguments); };
+gtag('consent', 'default', {
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'denied',
+  wait_for_update: 500
+});</script>
+<script defer src="/js/cookie-consent.js"></script>
+
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Build for OpenWalkieTalkie · OpenWalkieTalkie</title>
@@ -57,6 +68,7 @@
       <a href="/#demo">Try It</a>
       <a href="/#faces">Faces</a>
       <a href="/#blueprint">Blueprint</a>
+      <a href="/docs/get-started/">Get started</a>
       <a href="/docs/" aria-current="true">Docs</a>
       <a href="/blog/">Blog</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" target="_blank" rel="noopener">GitHub</a>
@@ -86,6 +98,26 @@
 <article class="post-body">
 
 <p>Put your agent’s conversations on the deck. Your app manages sessions and model connections; OpenWalkieTalkie handles the physical controls, voice input and compact display.</p>
+<a class="post-card" href="/docs/get-started/">
+  <h2 class="post-card__title">Get started</h2>
+  <p class="post-card__excerpt">Install the app, connect the deck, connect one coding agent.</p>
+  <span class="post-card__read">READ THE GUIDE →</span>
+</a>
+<a class="post-card" href="/docs/claude-code/">
+  <h2 class="post-card__title">Connect Claude Code</h2>
+  <p class="post-card__excerpt">Install the plugin, start a session with Channels.</p>
+  <span class="post-card__read">READ THE GUIDE →</span>
+</a>
+<a class="post-card" href="/docs/codex/">
+  <h2 class="post-card__title">Connect Codex</h2>
+  <p class="post-card__excerpt">The CLI through the shared daemon, Desktop through the launcher.</p>
+  <span class="post-card__read">READ THE GUIDE →</span>
+</a>
+<a class="post-card" href="/docs/grok-bot/">
+  <h2 class="post-card__title">Connect Grok Bot</h2>
+  <p class="post-card__excerpt">Make the routine, paste its webhook, read its states.</p>
+  <span class="post-card__read">READ THE GUIDE →</span>
+</a>
 <a class="post-card" href="/docs/native-companions/">
   <p class="post-card__date">APP + SERVICE + FIRMWARE 0.11.0+</p>
   <h2 class="post-card__title">Native companion API</h2>
@@ -120,7 +152,7 @@
       <a href="/#waitlist">Join the waitlist</a>
       <a href="/privacy/">Privacy Policy</a>
       <a href="/cookies/">Cookie information</a>
-      <a href="/cookies/" data-privacy-open>Privacy notice</a>
+      <a href="#cookie-consent" data-cookie-settings hidden>Cookie settings</a>
       <a href="/">Home</a>
       <a href="/#demo">Try It</a>
       <a href="https://github.com/conol-ai/openwalkietalkie" rel="noopener">GitHub</a>
@@ -132,8 +164,7 @@
 </footer>
 
 <script src="/js/main.js"></script>
-<script src="/js/privacy.js"></script>
-      <details class="lang-switch">
+<details class="lang-switch">
         <summary aria-label="Language — Language: English">Language</summary>
         <ul>
           <li><a href="/docs/" hreflang="en" lang="en" aria-current="true">English</a></li>
@@ -142,5 +173,15 @@
           <li><a href="/ja/docs/" hreflang="ja" lang="ja">日本語</a></li>
         </ul>
       </details>
+<section id="cookie-consent" class="privacy-notice" role="dialog" aria-label="Cookie settings" aria-describedby="cookie-consent-message" hidden>
+  <div>
+    <p id="cookie-consent-message">We use Google Tag Manager to understand how these docs are used. Nothing is measured until you accept.</p>
+    <p><a href="/privacy/">Privacy</a></p>
+  </div>
+  <div class="cookie-consent-actions">
+    <button class="btn btn--primary" type="button" value="granted">Accept</button>
+    <button class="btn" type="button" value="denied">Reject</button>
+  </div>
+</section>
 </body>
 </html>
