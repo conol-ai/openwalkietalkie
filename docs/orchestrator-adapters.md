@@ -213,13 +213,32 @@ and `issue comment --issue … --body …` instead of `issue comment add <issue-
 
 ### t3 (branch `feat/orchestrator-t3`)
 
-- `t3 thread list --json`, `t3 thread show --json`.
-- **Do not trust its completion state.** It reports Done at every intermediate
-  stop of a multi-stage job and when a child finishes (upstream #25585, #31087).
-  Rules: `hasPendingChildRuns` or an open child → `Working`; a thread with a
-  pending approval → `Blocked(Approval)`; only a thread with no children and no
-  pending approval is `Done`.
-- Send: `t3 thread send --thread <id> --text <text> --json`.
+**Source-derived, not verified against a running instance.** Rewritten
+2026-11-26. T3 Code (`pingdotgg/t3code`, the `t3` bin of `apps/server`, 0.1.12)
+at `147028a26595`: `apps/server/src/cli/thread.ts` for the verbs and
+`packages/contracts/src/orchestratorMcp.ts` / `orchestrationV2.ts` for the
+shapes. Every encoded name is quoted in `t3.rs`'s header.
+
+- List: `t3 thread list --json --project <dir>`, a bare array of
+  `OrchestratorMcpThreadListItem`. `--project` "Defaults to this directory",
+  which for deckd is not the user's project, so it comes from
+  `DECKD_T3_PROJECT` (ours) and `status` fails with `no_project` without it.
+  Needs the running t3 server.
+- Key: `threadId`. Statuses: `idle` + the ten run statuses. `failed` →
+  `Blocked(Failed)`; `preparing|queued|starting|running|waiting` → `Working`;
+  `interrupted|cancelled|rolled_back` → `Idle` with the word as activity;
+  `completed` → `Done` only with no `pendingBackgroundTasks` and no
+  `blockedOnThreadWait` (else `Working`, the #25585/#31087/#5518 rule).
+- Send: `t3 thread send <thread> <message>`, both positional.
+- No approval card: the list carries no approval signal; `thread show --json`
+  has `pendingRequestCount`, but one extra call per thread per poll was not
+  taken.
+
+**The first version was wrong in five places:** `id` instead of `threadId`;
+invented `children`, `hasPendingChildRuns` and `pendingApproval*`; an
+`awaiting_approval`-style status that does not exist; `{"threads":[…]}` as an
+accepted envelope; and `thread send --thread … --text …` instead of positionals.
+It also listed whatever project deckd happened to run in.
 
 ### cindy (branch `feat/orchestrator-cindy`)
 
@@ -270,9 +289,8 @@ conflict. Three things had to be settled centrally, in `mod.rs` and `cli.rs`:
 
 | Where | What the adapter had to do | Status |
 | --- | --- | --- |
-| t3 | "Done" means **no pending children**, not "no children": under the contract's wording a thread that ever had a child could never be done. | `mod.rs` wording kept, adapter follows the stricter rule |
-| t3 | #25585 (multi-stage stop reported as done) is only covered when the stages appear as child runs. Without a stage field there is nothing to read. | open, needs a field from t3 |
-| t3 | A child's approval surfaces on the parent, but the reply carries the parent's thread id. Whether t3 forwards it is unverified. | open |
+| t3 | "Done" means **nothing still open**: `completed` with `pendingBackgroundTasks` or `blockedOnThreadWait` is `Working`. | source-derived; unverified on a live server |
+| t3 | No approval card: needs `thread show --json` (`pendingRequestCount`) per thread. | open: a cost decision |
 | cindy | The card cannot answer Cindy's native permission prompts (the API does not forward them): they are `Blocked(Failed)` with the raw reason word, never a fake question. | by design |
 | cindy | `Config` has no `[orchestrators.cindy]`, so the token and discovery file come from `DECKD_CINDY_TOKEN`, `DECKD_CINDY_DISCOVERY`, `DECKD_CINDY_PROFILE`. | works, names are ours |
 | multica | Exit codes 2/3/4/5 are mapped to `network`/`auth`/`not_found`/`validation` by reading them back out of `run()`'s error text. | works, `run()` returning a structured code would be cleaner |
