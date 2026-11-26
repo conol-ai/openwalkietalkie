@@ -100,13 +100,57 @@ Each is what the adapter may rely on; anything else is out of scope for v1.
 
 ### herdr (branch `feat/orchestrator-herdr`)
 
-- `herdr agent list --json` → panes with `agent`, `state` ∈
-  `idle|working|blocked|done|unknown`, plus `workspace`, `title`.
-- Prompt one agent: `herdr agent prompt <name> <text> --wait --timeout <ms>`.
-- Keeps its own protocol versioned (`pane report-agent --seq`); do **not** scrape
-  the screen — `state` from the CLI only, and `unknown` maps to `Idle`.
-- `blocked` is *not* proof the operator may approve anything: the card says why
-  ("waiting for approval"), never a proposed command.
+**Verified against herdr 0.9.5 (protocol 22)** on Linux x86_64, installed with
+the documented `curl -fsSL https://herdr.dev/install.sh | sh`. The spec is
+`herdr api schema --json` (bundled, works with no server); the fixture
+`tests/orchestrators/herdr.json` is a real `agent list` captured from an
+isolated `herdr --session` server (throwaway `HOME`/`XDG_CONFIG_HOME`) whose
+shell panes self-reported their state with `herdr pane report-agent` and were
+named with `herdr agent rename`. `herdr-empty.json` is the same server before
+any workspace existed.
+
+- `herdr agent list` → `{"id":…,"result":{"type":"agent_list","agents":[…]}}`.
+  JSON is the only output; there is no `--json` (herdr exits 2 on it). With no
+  server it prints `{"id":…,"error":{"code":"server_not_running",…}}` and
+  exits 1.
+- Per agent (`AgentInfo`): `name` (the live name, `[a-z][a-z0-9_-]{0,31}`;
+  **absent** until someone names the agent — the schema says nullable, 0.9.5
+  omits the key), `pane_id` (`w1:p1`), `agent_status` ∈
+  `idle|working|blocked|done|unknown`, `agent` (the **kind**: `claude`,
+  `codex`), `workspace_id` (`w1`), plus `cwd`, `title`, `terminal_title`,
+  `terminal_id`, `tab_id`, `state_labels`, `tokens`, `completion_seq`.
+- The task key and the prompt target are `name`, else `pane_id`. **Never
+  `agent`**: herdr refuses a bare kind as a target, and many panes share one.
+- `done` is herdr's "idle and not yet seen" (a `working → idle` transition sets
+  `completion_seq`); `unknown` maps to `Idle`, never `Done`.
+- `workspace_id` is an id, not a name, so titles carry no workspace. A real
+  label exists only in `herdr workspace list` (`label`, defaulting to the cwd's
+  basename, e.g. `~`); joining it would cost a second call per poll.
+- Prompt one agent: `herdr agent prompt <target> <text> --wait --timeout <ms>`
+  (also `--until <status>`, repeatable). A prompt to an already `blocked` agent
+  is refused by herdr with `agent_blocked` before any input is sent.
+- `pane report-agent` is herdr's own reporting protocol for agents; the adapter
+  never calls it. Do **not** scrape the screen — status from the CLI only.
+- `blocked` means herdr "recognized an approval or question UI"; `AgentInfo`
+  does not say which, nor what is asked (`--message` given to `report-agent`
+  does not appear in `agent list`). The card says "waiting for approval" and
+  never a proposed command.
+
+**The first version was wrong in five places.** It was written from the docs'
+prose before a binary was available, and every one of these was invisible to
+its own tests because the fixture was written to match the code:
+
+| # | First version | herdr 0.9.5 | Now |
+| --- | --- | --- | --- |
+| 1 | `agent list --json` | no `--json`; exit 2 | `agent list` — verified |
+| 2 | top-level array or `{"panes":[…]}` | `result.agents` | verified (captured) |
+| 3 | key and prompt target from `agent` | `agent` is the kind; target is `name` or `pane_id` | verified (captured; `name` absent when unnamed) |
+| 4 | status from `state` | `agent_status` | verified, all five words captured |
+| 5 | `workspace` as a plain-word name | `workspace_id`, an id | suffix dropped — verified the field; the label join is not done |
+
+Still inferred: that a *real* agent (not a self-reported shell pane) lists the
+same way, and how herdr answers `agent prompt` end to end — no prompt was sent
+to anything.
 
 ### orca (branch `feat/orchestrator-orca`)
 
@@ -201,14 +245,16 @@ conflict. Three things had to be settled centrally, in `mod.rs` and `cli.rs`:
 
 | Adapter | Tests | Verified against a real install |
 | --- | --- | --- |
-| herdr | 13 + fixture | no (binary absent) |
+| herdr | 10 + captured fixture | **yes, herdr 0.9.5**: argv, envelope, fields and statuses against a live isolated server; `agent prompt` syntax from `--help` only (nothing sent) |
 | orca | 9 | no |
 | multica | 10 | no |
 | t3 | 13 | no |
 | cindy | 17, incl. one round trip against a local fake server | no |
 
-Every fixture was written from the product's documented output shape, not
-captured from a live install. What is verified is the code path: argv shape,
+Except herdr's, every fixture was written from the product's documented output
+shape, not captured from a live install — and herdr's first fixture, written the
+same way, was wrong in five places (see the herdr section). Treat the other four
+as unverified until each gets the same audit. What is verified is the code path: argv shape,
 JSON parsing, card mapping, redaction, and — for all five — that
 `deckd orchestrators <name> status --from-file` prints a plan on a machine where
 the product is not installed (`1152` lib tests, `deckd orchestrators list` and
