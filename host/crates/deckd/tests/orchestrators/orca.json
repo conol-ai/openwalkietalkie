@@ -1,0 +1,40 @@
+{
+  "workers": [
+    {
+      "id": "wk-101",
+      "task": "Refactor the billing API",
+      "state": "running",
+      "worktree": "/home/someone/src/shop/.orca/worktrees/wk-101"
+    },
+    {
+      "id": "wk-102",
+      "task": "Migrate the users table",
+      "state": "running",
+      "worktree": "/home/someone/src/shop/.orca/worktrees/wk-102"
+    },
+    {
+      "id": "wk-103",
+      "task": "npm run e2e && git push --force",
+      "state": "failed",
+      "worktree": "/home/someone/src/shop/.orca/worktrees/wk-103"
+    },
+    {
+      "id": "wk-104",
+      "task": "Write release notes",
+      "state": "completed",
+      "worktree": "/home/someone/src/shop/.orca/worktrees/wk-104"
+    },
+    {
+      "id": "wk-105",
+      "task": "Rotate STRIPE_KEY=sk_live_0123456789abcdefghij",
+      "state": "idle",
+      "worktree": "/home/someone/src/shop/.orca/worktrees/wk-105"
+    }
+  ],
+  "needs_you": [
+    {
+      "worker": "wk-102",
+      "reason": "wants to run: psql -c 'DROP TABLE users_old'"
+    }
+  ]
+}
