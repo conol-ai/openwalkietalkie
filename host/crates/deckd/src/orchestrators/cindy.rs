@@ -1,51 +1,59 @@
 //! `cindy` on the deck (`docs/orchestrator-adapters.md`, "cindy").
 //!
-//! Cindy is the one adapter that is not a CLI shell-out: its surface is the
-//! **Local Agent API v1**, `POST http://127.0.0.1:<port>/rpc`. What the
-//! adapter relies on, and nothing else:
+//! **Not implementable as a fleet source.** Doc-derived, not verified against
+//! a running instance. Source: `makecindy/cindy` `docs/local-agent-api.md`
+//! ("Cindy 本机 Agent API v1"), read in full 2026-11-26 at `9f570bf508fe`.
 //!
-//! - Discovery: `<profile>/local-agent/discovery.json`, `{"protocol":1,
-//!   "port":…, "instance":…}`. No file, no adapter ([`new`] is `None`).
-//! - A request is `{"version":1,"instance":…,"id":"…","method":…,
-//!   "params":{…}}` ([`Cindy::rpc_body`]). It is **not** JSON-RPC (no
-//!   `jsonrpc` field), and Cindy rejects any request carrying an `Origin`
-//!   header, so [`http_request`] never writes one.
-//! - [`LIST_METHOD`] gives the sessions: each with `id` (the address of an
-//!   order), `parent_session_id` (a worker is a full session; this, or a
-//!   nested `orca_workers` array, shapes the tree), `agent`, `state` and
-//!   `title`. Any state not named in [`state`] is `Idle`.
-//! - `send` with the session id and the text: one order
-//!   ([`Cindy::order_body`]).
+//! The Local Agent API v1's methods are `capabilities`, `connect/start`,
+//! `connect/poll`, `connect/cancel`, `connect/revoke`, `models`,
+//! `session/open`, `send`, `steer`, `interrupt`, `instructions`, `events`,
+//! `tool/reply` and `session/close`. There is **no list method**: a session's
+//! `sessionId` "是客户端自定的" (is chosen by the client) and the API "不暴露跨应用
+//! 列举接口" (exposes no cross-application listing). So Cindy cannot report on
+//! sessions deckd did not open, and [`Orchestrator::status`] always fails with
+//! [`NO_FLEET`] without touching the network. No cards, no invented sessions.
 //!
-//! **Pairing.** The client token comes from `connect/start` and a person
-//! approving it in Cindy's UI. This adapter never pairs: with no token
-//! ([`TOKEN_ENV`]) `status` and `send_order` fail with `not_paired`, and a
-//! token Cindy refuses is `not_paired` too. The token travels in a header
-//! only, never in a body, a title or `--json` output.
+//! What is kept, because the doc states it and a later list path would need
+//! it:
 //!
-//! **Approvals.** Cindy's native permission prompts are not forwarded by the
-//! API: a worker that needs one surfaces as a `RESUME_UNAVAILABLE`-class
-//! failure. That is `Blocked(Failed)` with the raw reason word as the
-//! activity; there is no approval card, because nothing here could answer it.
+//! - Discovery: `<profile>/local-agent/discovery.json`,
+//!   `{"protocol":1,"port":12345,"instance":"<opaque-instance>"}`. No file, no
+//!   adapter ([`new`] is `None`).
+//! - `POST http://127.0.0.1:<port>/rpc` with
+//!   `{"version":1,"instance":…,"id":…,"method":…,"params":{}}`; "RPC 不使用
+//!   JSON-RPC 的 `jsonrpc` 字段" and "任何带 Origin 的请求都拒绝", so
+//!   [`http_request`] writes no `Origin`. Success is `{"result":…}`, failure
+//!   `{"error":{"code":"...","message":"..."}}`; only the code is read.
+//! - Request ids: "有副作用的请求编号必须是 `<process-nonce>:<counter>`，nonce 为
+//!   8–64 位 `[A-Za-z0-9_-]`，counter 从 1 单调递增、最多 15 位" ([`next_id`]).
+//! - `send`: `{sessionId,parts}`, `parts` being `{type:"text",text}` objects
+//!   ([`Cindy::order_body`]). It only reaches sessions this grant opened.
+//! - Auth: "后续请求带 `Authorization: Bearer <token>`". The token comes from
+//!   `connect/start` and a person approving it in Cindy; this adapter never
+//!   pairs: with no token ([`TOKEN_ENV`]) an order fails with `not_paired`.
+//! - Approvals: "当前协议不转发原生人机确认：原生提问/计划批准会产生明确失败" — they end
+//!   a turn as `turn_end {status:"failed"}` on `events`. `RESUME_UNAVAILABLE`
+//!   is a resume error ("新会话并交接上下文"), never an approval.
 //!
 //! **Transport.** Hand-written HTTP/1.1 over a blocking
 //! [`std::net::TcpStream`] to `127.0.0.1` only, as `crate::cli::info_probe`
 //! does: no HTTP client crate.
-use super::{json_payload, redact, safe_key, title, Blocked, Orchestrator, Task, TaskState};
+use super::{json_payload, safe_key, Orchestrator, Task};
 use crate::config::Config;
 use serde_json::{json, Value};
 use std::io::{Read, Write as _};
 use std::net::{SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::OnceLock;
 use std::time::Duration;
 
+/// Why Cindy cannot be a fleet source.
+pub const NO_FLEET: &str = "no_fleet_api: Cindy's Local Agent API v1 has no list method; it cannot report on sessions deckd did not open";
 /// The protocol a discovery file must name.
 pub const PROTOCOL: u64 = 1;
 /// The `version` of every request.
 pub const VERSION: u64 = 1;
-/// The method that lists sessions and their workers.
-pub const LIST_METHOD: &str = "session/list";
 /// The method that sends a session one message.
 pub const SEND_METHOD: &str = "send";
 /// The client token Cindy's UI approved (deckd's convention, not Cindy's).
@@ -56,11 +64,9 @@ pub const DISCOVERY_ENV: &str = "DECKD_CINDY_DISCOVERY";
 pub const PROFILE_ENV: &str = "DECKD_CINDY_PROFILE";
 /// Connecting to a local port gets this long.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(2);
-/// A session list gets this long.
-const LIST_TIMEOUT: Duration = Duration::from_secs(5);
 /// An order gets this long.
 const SEND_TIMEOUT: Duration = Duration::from_secs(15);
-/// The most of a reply that is read; a fleet's list is far smaller.
+/// The most of a reply that is read.
 const REPLY_MAX: u64 = 4 * 1024 * 1024;
 
 /// Where Cindy listens, from its discovery file.
@@ -78,8 +84,7 @@ pub struct Cindy {
     token: Option<String>,
 }
 
-/// The adapter for `status --from-file` on a machine without Cindy: `parse`
-/// works, every request says the client is not paired.
+/// The adapter for `status --from-file` on a machine without Cindy.
 #[must_use]
 pub fn offline() -> Cindy {
     Cindy::with(
@@ -131,16 +136,31 @@ pub fn parse_discovery(raw: &str) -> Result<Endpoint, String> {
     Ok(Endpoint { port, instance })
 }
 
-/// A request id, unique within this process.
-fn next_id(prefix: &str) -> String {
+/// This process's nonce: 8–64 of `[A-Za-z0-9_-]`, new on every start.
+fn process_nonce() -> &'static str {
+    static NONCE: OnceLock<String> = OnceLock::new();
+    NONCE.get_or_init(|| {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos());
+        format!("deckd-{:x}-{:x}", std::process::id(), nanos)
+    })
+}
+
+/// A request id, `<process-nonce>:<counter>`, the counter from 1 up.
+fn next_id() -> String {
     static NEXT: AtomicU64 = AtomicU64::new(1);
-    format!("deckd-{prefix}-{}", NEXT.fetch_add(1, Ordering::Relaxed))
+    format!(
+        "{}:{}",
+        process_nonce(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    )
 }
 
 impl Cindy {
     /// The adapter for this discovery file: `None` when there is no file.
     /// A file that is there but unusable still gives an adapter, whose
-    /// `status` says why.
+    /// orders say why.
     pub fn from_discovery_file(path: &Path, token: Option<String>) -> Option<Cindy> {
         if !path.is_file() {
             return None;
@@ -180,14 +200,14 @@ impl Cindy {
         })
     }
 
-    /// The `send` request for one order: `text` is one field, whatever it
-    /// holds, and nothing else carries it.
+    /// The `send` request for one order: `{sessionId, parts:[{type:"text",
+    /// text}]}`; the text is one field, whatever it holds.
     #[must_use]
     pub fn order_body(&self, key: &str, text: &str) -> Value {
         self.rpc_body(
-            &next_id("send"),
+            &next_id(),
             SEND_METHOD,
-            json!({ "session_id": key, "text": text }),
+            json!({ "sessionId": key, "parts": [{ "type": "text", "text": text }] }),
         )
     }
 
@@ -301,8 +321,8 @@ fn dechunk(mut rest: &str) -> Result<String, String> {
     }
 }
 
-/// A raw reason word Cindy gave (`RESUME_UNAVAILABLE`): one word of letters,
-/// digits and `_`. Free text (it may hold paths or commands) is dropped.
+/// An error `code` as Cindy documents them (`UNAUTHORIZED`): one word of
+/// letters, digits and `_`. Free text (it may hold paths) is dropped.
 fn reason_code(raw: &str) -> Option<&str> {
     let raw = raw.trim();
     let ok = (2..=40).contains(&raw.len())
@@ -311,154 +331,33 @@ fn reason_code(raw: &str) -> Option<&str> {
     ok.then_some(raw)
 }
 
-/// The code of an `error` that is a word or `{"code": …}`.
-fn error_code(error: &Value) -> Option<&str> {
-    error
-        .as_str()
-        .or_else(|| error["code"].as_str())
-        .and_then(reason_code)
-}
-
-/// The reply's `error`, as an adapter `Err`; `Ok` when there is none. The
-/// message is never quoted (it may hold paths).
+/// The reply's `{"error":{"code","message"}}`, as an adapter `Err`; `Ok` when
+/// there is none. The message is never quoted (it may hold paths).
 fn reply_error(reply: &Value) -> Result<(), String> {
     let Some(error) = reply.get("error").filter(|e| !e.is_null()) else {
         return Ok(());
     };
-    let code = error_code(error).unwrap_or("UNKNOWN");
-    let upper = code.to_ascii_uppercase();
-    let word = if [
-        "NOT_PAIRED",
-        "UNPAIRED",
-        "UNAUTHORIZED",
-        "UNAUTHENTICATED",
-        "FORBIDDEN",
-        "INVALID_TOKEN",
-        "TOKEN_REVOKED",
-    ]
-    .contains(&upper.as_str())
-    {
-        "not_paired"
-    } else if upper.ends_with("_UNAVAILABLE") {
-        "unavailable"
-    } else if upper.contains("NOT_FOUND") || upper.starts_with("UNKNOWN_SESSION") {
-        "no_such_task"
-    } else {
-        "backend_refused"
+    let code = error["code"]
+        .as_str()
+        .and_then(reason_code)
+        .unwrap_or("UNKNOWN");
+    // The documented codes with a meaning for an order; the rest is a refusal.
+    let word = match code {
+        "UNAUTHORIZED" => "not_paired",
+        "INSTANCE_CHANGED" => "instance_changed",
+        "SESSION_UNAVAILABLE" => "no_such_task",
+        _ => "backend_refused",
     };
     Err(format!("{word}: Cindy answered {code}"))
 }
 
-/// One session's state, and the raw reason when it failed.
-///
-/// A session carrying an error code, or whose state is itself a code
-/// (`RESUME_UNAVAILABLE`), has failed: that is how a native permission
-/// prompt surfaces, and it is never an approval card.
-#[must_use]
-pub fn state(session: &Value) -> (TaskState, Option<String>) {
-    let word = session["state"].as_str().unwrap_or_default().trim();
-    let code = session
-        .get("error")
-        .and_then(error_code)
-        .or_else(|| session["reason"].as_str().and_then(reason_code))
-        .or_else(|| {
-            // An upper-case state is a reason code, not a state word.
-            reason_code(word).filter(|w| w.chars().any(|c| c.is_ascii_uppercase()))
-        });
-    if let Some(code) = code {
-        return (TaskState::Blocked(Blocked::Failed), Some(code.to_string()));
-    }
-    let state = match word {
-        "running" | "working" | "busy" | "streaming" => TaskState::Working,
-        "completed" | "complete" | "done" | "finished" => TaskState::Done,
-        "failed" | "error" | "errored" => TaskState::Blocked(Blocked::Failed),
-        // `idle`, `ready`, and whatever a later Cindy adds.
-        _ => TaskState::Idle,
-    };
-    let reason = state.is_blocked().then(|| word.to_string());
-    (state, reason)
-}
-
-/// The agent's name, when it is a plain word.
-fn agent(session: &Value) -> Option<&str> {
-    session["agent"]
-        .as_str()
-        .map(str::trim)
-        .filter(|a| !a.is_empty() && safe_key(a) && !a.contains(' '))
-}
-
-/// A session's own title, unless it says nothing once paths and secrets
-/// are masked (then the name stands in, see [`title`]).
-fn own_title(session: &Value) -> &str {
-    let raw = session["title"].as_str().unwrap_or_default();
-    let says_something = redact(raw)
-        .split(' ')
-        .any(|w| !w.is_empty() && w != "[path]" && w != "[redacted]");
-    if says_something {
-        raw
-    } else {
-        ""
-    }
-}
-
-/// The sessions of a reply: the envelope's `result`, a `sessions` array, or
-/// the bare array. An error envelope is an `Err`.
-fn sessions(value: &Value) -> Result<&Vec<Value>, String> {
-    reply_error(value)?;
-    let value = value.get("result").unwrap_or(value);
-    match value {
-        Value::Array(list) => Ok(list),
-        Value::Object(map) => map
-            .get("sessions")
-            .and_then(Value::as_array)
-            .ok_or_else(|| "malformed: no `sessions` array".to_string()),
-        _ => Err("malformed: not a list of sessions".into()),
-    }
-}
-
-/// `session` and its nested `orca_workers`, depth first.
-fn flatten<'a>(session: &'a Value, out: &mut Vec<&'a Value>) {
-    out.push(session);
-    if let Some(workers) = session["orca_workers"].as_array() {
-        for worker in workers {
-            flatten(worker, out);
-        }
-    }
-}
-
-/// A [`LIST_METHOD`] reply as tasks: one per session, workers included. A
-/// session with no usable `id` cannot be addressed and is left out.
+/// What `status --from-file` reads: a documented error envelope is that
+/// error; anything else is [`NO_FLEET`], because no reply lists a fleet.
 pub fn parse(raw: &str) -> Result<Vec<Task>, String> {
-    let value = json_payload(raw)?;
-    let mut all = Vec::new();
-    for session in sessions(&value)? {
-        flatten(session, &mut all);
+    if let Ok(value) = json_payload(raw) {
+        reply_error(&value)?;
     }
-    let mut tasks = Vec::new();
-    for session in all {
-        let Some(id) = session["id"]
-            .as_str()
-            .map(str::trim)
-            .filter(|i| safe_key(i))
-        else {
-            continue;
-        };
-        if session["state"].is_null() && session.get("error").is_none() {
-            continue;
-        }
-        let (state, reason) = state(session);
-        let name = match agent(session) {
-            Some(agent) => format!("{agent} · {id}"),
-            None => id.to_string(),
-        };
-        tasks.push(Task {
-            key: id.to_string(),
-            title: title(own_title(session), &name),
-            state,
-            activity: reason,
-        });
-    }
-    Ok(tasks)
+    Err(NO_FLEET.into())
 }
 
 impl Orchestrator for Cindy {
@@ -471,8 +370,7 @@ impl Orchestrator for Cindy {
     }
 
     fn status(&self) -> Result<Vec<Task>, String> {
-        let body = self.rpc_body(&next_id("list"), LIST_METHOD, json!({}));
-        parse(&self.call(&body, LIST_TIMEOUT)?)
+        Err(NO_FLEET.into())
     }
 
     fn parse(&self, raw: &str) -> Result<Vec<Task>, String> {
@@ -480,6 +378,7 @@ impl Orchestrator for Cindy {
     }
 
     fn send_order(&self, key: &str, text: &str) -> Result<(), String> {
+        // "sessionId 是客户端自定的非空字符串，最多 128 字符"; ours are argv-safe too.
         if !safe_key(key) {
             return Err("bad_key: not a Cindy session id".into());
         }
@@ -495,13 +394,9 @@ impl Orchestrator for Cindy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::orchestrators::{budget, plan, status_json, CARDS_MAX, DECK_SLOTS};
-    use deck_model::AgentState;
     use std::io::{Read, Write};
     use std::net::TcpListener;
 
-    /// Written from the documented shape, not captured from a live Cindy.
-    const FIXTURE: &str = include_str!("../../tests/orchestrators/cindy.json");
     const TOKEN: &str = "cindy-client-token-0123456789abcdef";
 
     fn endpoint(port: u16) -> Endpoint {
@@ -516,206 +411,107 @@ mod tests {
     }
 
     #[test]
-    fn the_fixture_parses_into_the_documented_states() {
-        let tasks = parse(FIXTURE).expect("fixture");
-        let got: Vec<(&str, TaskState)> = tasks.iter().map(|t| (t.key.as_str(), t.state)).collect();
-        assert_eq!(
-            got,
-            [
-                ("s-01", TaskState::Working),
-                ("s-02", TaskState::Working),
-                ("s-03", TaskState::Blocked(Blocked::Failed)),
-                ("s-04", TaskState::Done),
-                ("s-05", TaskState::Idle),
-                ("s-06", TaskState::Idle),
-            ]
-        );
-        assert_eq!(tasks[0].title, "Refactor the session store");
-        assert_eq!(
-            tasks[1].title, "codex · s-02",
-            "a command line is not a title"
-        );
-        assert_eq!(tasks[2].title, "Migrate [path]");
-        assert_eq!(tasks[2].activity.as_deref(), Some("RESUME_UNAVAILABLE"));
-        assert_eq!(tasks[5].title, "gemini · s-06", "a bare path says nothing");
-    }
-
-    #[test]
-    fn a_permission_prompt_is_a_failure_with_its_reason_never_an_approval() {
-        let tasks = parse(
-            r#"[{"id":"a","state":"RESUME_UNAVAILABLE"},
-                {"id":"b","state":"running","error":"PERMISSION_UNAVAILABLE"},
-                {"id":"c","state":"idle","reason":"RESUME_UNAVAILABLE"},
-                {"id":"d","state":"failed","reason":"could not open /etc/x"}]"#,
-        )
-        .expect("list");
-        for task in &tasks {
-            assert_eq!(task.state, TaskState::Blocked(Blocked::Failed), "{task:?}");
-        }
-        let reasons: Vec<_> = tasks.iter().map(|t| t.activity.as_deref()).collect();
-        assert_eq!(
-            reasons,
-            [
-                Some("RESUME_UNAVAILABLE"),
-                Some("PERMISSION_UNAVAILABLE"),
-                Some("RESUME_UNAVAILABLE"),
-                Some("failed"),
-            ]
-        );
-        let deck = plan(&paired(1), &tasks, budget(1));
-        assert!(deck
-            .iter()
-            .all(|e| e.state == AgentState::Error && e.card.is_none()));
-    }
-
-    #[test]
-    fn nothing_from_a_title_path_or_token_reaches_the_json() {
-        let tasks = parse(FIXTURE).expect("fixture");
-        let cindy = paired(4100);
-        let out = status_json(&cindy, &tasks, budget(1)).to_string();
-        for leak in [
-            "cargo", "rm -rf", "/tmp", "~/", "/home", "sk-live", "OPENAI", "db.rs", TOKEN,
+    fn status_is_no_fleet_api_and_touches_no_network() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        listener.set_nonblocking(true).expect("nonblocking");
+        let port = listener.local_addr().expect("addr").port();
+        for cindy in [
+            paired(port),
+            Cindy::with(Ok(endpoint(port)), None),
+            offline(),
         ] {
-            assert!(!out.contains(leak), "{leak} leaked into {out}");
+            assert_eq!(cindy.status(), Err(NO_FLEET.to_string()));
         }
-        let deck = plan(&cindy, &tasks, budget(1));
-        assert_eq!(deck.len(), 4, "idle sessions are absent");
-        assert_eq!(deck[0].key, "s-03");
-        assert_eq!(deck[0].state, AgentState::Error);
-        assert_eq!(deck[0].card, None, "no approval card Cindy cannot answer");
+        assert!(listener.accept().is_err(), "status must not connect");
+        assert_eq!(super::super::reason_word(NO_FLEET), "no_fleet_api");
     }
 
     #[test]
-    fn workers_nested_or_flat_are_tasks_of_their_own() {
-        let raw = json!({"result": {"sessions": [{
-            "id": "root", "state": "running", "title": "Plan",
-            "orca_workers": [
-                {"id": "w1", "parent_session_id": "root", "state": "completed", "agent": "codex"},
-                {"id": "w2", "parent_session_id": "root", "state": "running",
-                 "orca_workers": [{"id": "w3", "state": "failed"}]},
-            ],
-        }]}})
-        .to_string();
-        let keys: Vec<String> = parse(&raw)
-            .expect("tree")
-            .into_iter()
-            .map(|t| t.key)
-            .collect();
-        assert_eq!(keys, ["root", "w1", "w2", "w3"]);
-    }
-
-    #[test]
-    fn an_empty_fleet_is_no_tasks() {
-        assert_eq!(parse("[]").expect("array"), []);
-        assert_eq!(parse(r#"{"sessions":[]}"#).expect("object"), []);
-        assert_eq!(
-            parse(r#"{"version":1,"id":"x","result":{"sessions":[]}}"#).expect("envelope"),
-            []
-        );
-        assert!(plan(&paired(1), &[], budget(1)).is_empty());
-    }
-
-    #[test]
-    fn a_banner_before_the_json_is_skipped() {
-        let raw = format!("cindy local agent v1\n{FIXTURE}");
-        assert_eq!(parse(&raw).expect("banner").len(), 6);
-    }
-
-    #[test]
-    fn a_forty_session_fleet_fits_the_deck() {
-        let sessions: Vec<Value> = (0..40)
-            .map(|i| {
-                json!({
-                    "id": format!("s-{i}"),
-                    "parent_session_id": if i == 0 { Value::Null } else { json!("s-0") },
-                    "agent": "claude",
-                    "state": if i % 4 == 0 { "running" } else { "RESUME_UNAVAILABLE" },
-                    "title": format!("npm test --shard {i}"),
-                })
-            })
-            .collect();
-        let raw = json!({ "result": { "sessions": sessions } }).to_string();
-        let tasks = parse(&raw).expect("fleet");
-        assert_eq!(tasks.len(), 40);
-        for configured in [1, 2, 5] {
-            let deck = plan(&paired(1), &tasks, budget(configured));
-            assert!(deck.len() <= CARDS_MAX && deck.len() < DECK_SLOTS);
-            let summary = deck.last().expect("summary");
-            assert_eq!(summary.state, AgentState::Question);
-            assert!(
-                summary.title.ends_with("waiting: Cindy"),
-                "{}",
-                summary.title
-            );
-        }
-    }
-
-    #[test]
-    fn a_malformed_payload_is_an_error_not_a_panic() {
+    fn no_reply_is_read_as_a_fleet() {
+        // The session list the first version invented: not a fleet either.
+        let invented =
+            r#"{"result":{"sessions":[{"id":"s-1","state":"running","orca_workers":[]}]}}"#;
         for raw in [
             "",
-            "cindy: not running",
-            "{\"sessions\": 3}",
-            "{\"result\": 3}",
-            "\"text\"",
-            "{\"sessions\":[",
-            "42",
+            "[]",
+            invented,
+            r#"{"result":{"protocol":1,"methods":[]}}"#,
         ] {
-            assert!(parse(raw).is_err(), "{raw:?} parsed");
+            assert_eq!(parse(raw), Err(NO_FLEET.to_string()), "{raw:?}");
         }
-        // Sessions Cindy may grow: missing fields are skipped, not fatal.
-        let tasks = parse(
-            r#"[{"state":"running"},{"id":"../x","state":"done"},{"id":"ok"},{"id":"a","state":"thinking"}]"#,
-        )
-        .expect("partial");
-        assert_eq!(tasks.len(), 1);
-        assert_eq!(tasks[0].state, TaskState::Idle);
     }
 
     #[test]
     fn an_error_envelope_is_a_reason_word_without_the_message() {
-        let err = parse(r#"{"version":1,"id":"x","error":{"code":"NOT_PAIRED","message":"see ~/.cindy/token"}}"#)
+        let err = parse(r#"{"error":{"code":"UNAUTHORIZED","message":"see ~/.cindy/token"}}"#)
             .expect_err("error");
-        assert!(err.starts_with("not_paired"), "{err}");
-        assert!(!err.contains("~/"), "{err}");
-        let err = parse(r#"{"error":{"code":"RESUME_UNAVAILABLE"}}"#).expect_err("error");
-        assert!(err.starts_with("unavailable"), "{err}");
-        let err = parse(r#"{"error":"rm -rf / please"}"#).expect_err("error");
+        assert_eq!(err, "not_paired: Cindy answered UNAUTHORIZED");
+        let err =
+            parse(r#"{"error":{"code":"SESSION_UNAVAILABLE","message":"x"}}"#).expect_err("error");
+        assert!(err.starts_with("no_such_task"), "{err}");
+        // A resume error is a refusal, not an approval.
+        let err =
+            parse(r#"{"error":{"code":"RESUME_UNAVAILABLE","message":"x"}}"#).expect_err("error");
+        assert!(err.starts_with("backend_refused"), "{err}");
+        let err = parse(r#"{"error":{"code":"rm -rf / please"}}"#).expect_err("error");
         assert_eq!(err, "backend_refused: Cindy answered UNKNOWN");
     }
 
     #[test]
-    fn with_no_token_status_and_orders_fail_as_not_paired() {
-        for token in [None, Some(String::new()), Some("   ".to_string())] {
-            // Port 1: were a request made, it would fail as not_running.
-            let cindy = Cindy::with(Ok(endpoint(1)), token);
-            let err = cindy.status().expect_err("unpaired");
-            assert!(err.starts_with("not_paired"), "{err}");
-            let err = cindy.send_order("s-01", "hi").expect_err("unpaired");
-            assert!(err.starts_with("not_paired"), "{err}");
+    fn request_ids_are_nonce_colon_counter() {
+        let (a, b) = (next_id(), next_id());
+        for id in [&a, &b] {
+            let (nonce, counter) = id.split_once(':').expect("colon");
+            assert!((8..=64).contains(&nonce.len()), "{nonce}");
+            assert!(
+                nonce
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'),
+                "{nonce}"
+            );
+            assert!(
+                !counter.is_empty()
+                    && counter.len() <= 15
+                    && counter.bytes().all(|c| c.is_ascii_digit())
+            );
         }
+        let n = |id: &str| {
+            id.rsplit(':')
+                .next()
+                .and_then(|c| c.parse::<u64>().ok())
+                .expect("n")
+        };
+        assert!(n(&b) > n(&a), "the counter only goes up");
+        assert_eq!(
+            a.split(':').next(),
+            b.split(':').next(),
+            "one nonce per process"
+        );
     }
 
     #[test]
-    fn the_order_text_lands_in_exactly_one_field_and_never_the_token() {
+    fn the_send_body_is_session_id_and_text_parts() {
         let text = "ship it\"; rm -rf / && echo $(id) {\"method\":\"x\"}";
-        let body = paired(4100).order_body("s-03", text);
+        let body = paired(4100).order_body("notes-1", text);
         assert_eq!(body["version"], 1);
         assert_eq!(body["instance"], "inst-7");
         assert_eq!(body["method"], SEND_METHOD);
-        assert_eq!(body["params"]["session_id"], "s-03");
-        assert_eq!(body["params"]["text"], text);
+        assert_eq!(
+            body["params"],
+            json!({"sessionId": "notes-1", "parts": [{"type": "text", "text": text}]})
+        );
         assert!(body.get("jsonrpc").is_none(), "not JSON-RPC");
-        fn count(value: &Value, text: &str) -> usize {
-            match value {
-                Value::String(s) => usize::from(s.contains(text)),
-                Value::Array(a) => a.iter().map(|v| count(v, text)).sum(),
-                Value::Object(m) => m.values().map(|v| count(v, text)).sum(),
-                _ => 0,
-            }
-        }
-        assert_eq!(count(&body, "rm -rf"), 1);
+        assert!(body["params"].get("session_id").is_none());
         assert!(!body.to_string().contains(TOKEN));
+    }
+
+    #[test]
+    fn with_no_token_orders_fail_as_not_paired() {
+        for token in [None, Some(String::new()), Some("   ".to_string())] {
+            let cindy = Cindy::with(Ok(endpoint(1)), token);
+            let err = cindy.send_order("s-01", "hi").expect_err("unpaired");
+            assert!(err.starts_with("not_paired"), "{err}");
+        }
     }
 
     #[test]
@@ -756,10 +552,15 @@ mod tests {
         assert!(Cindy::from_discovery_file(&file, None).is_none());
         std::fs::write(&file, r#"{"protocol":1,"port":4100,"instance":"i"}"#).expect("write");
         let cindy = Cindy::from_discovery_file(&file, None).expect("adapter");
-        assert!(cindy.status().is_err_and(|e| e.starts_with("not_paired")));
+        assert_eq!(cindy.status(), Err(NO_FLEET.to_string()));
+        assert!(cindy
+            .send_order("s", "hi")
+            .is_err_and(|e| e.starts_with("not_paired")));
         std::fs::write(&file, r#"{"protocol":9}"#).expect("write");
         let cindy = Cindy::from_discovery_file(&file, Some(TOKEN.into())).expect("adapter");
-        assert!(cindy.status().is_err_and(|e| e.starts_with("unsupported")));
+        assert!(cindy
+            .send_order("s", "hi")
+            .is_err_and(|e| e.starts_with("unsupported")));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -777,11 +578,11 @@ mod tests {
 
     #[test]
     fn replies_plain_and_chunked_are_read() {
-        let plain = b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{\"result\":[]}";
-        assert_eq!(http_response(plain), Ok((200, "{\"result\":[]}".into())));
+        let plain = b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{\"result\":{}}";
+        assert_eq!(http_response(plain), Ok((200, "{\"result\":{}}".into())));
         let chunked =
-            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n{\"res\r\n8\r\nult\":[]}\r\n0\r\n\r\n";
-        assert_eq!(http_response(chunked), Ok((200, "{\"result\":[]}".into())));
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\n{\"res\r\n8\r\nult\":{}}\r\n0\r\n\r\n";
+        assert_eq!(http_response(chunked), Ok((200, "{\"result\":{}}".into())));
         for bad in [
             &b"garbage"[..],
             b"SSH-2.0\r\n\r\n",
@@ -826,28 +627,31 @@ mod tests {
     }
 
     #[test]
-    fn status_and_send_go_over_local_http() {
-        let (port, server) = serve(
-            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{\"version\":1,\"id\":\"x\",\"result\":{\"sessions\":[{\"id\":\"s-1\",\"state\":\"running\",\"title\":\"Plan\"}]}}",
-        );
-        let tasks = paired(port).status().expect("status");
-        assert_eq!(tasks.len(), 1);
+    fn send_goes_over_local_http_with_the_documented_body() {
+        let (port, server) = serve("HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n{\"result\":{}}");
+        paired(port).send_order("notes-1", "go on").expect("send");
         let got = server.join().expect("server");
         assert!(got.starts_with("POST /rpc HTTP/1.1\r\n"));
         assert!(!got.to_ascii_lowercase().contains("origin:"));
         let (_, body) = got.split_once("\r\n\r\n").expect("body");
         let body: Value = serde_json::from_str(body).expect("json");
-        assert_eq!(body["method"], LIST_METHOD);
-        assert_eq!(body["instance"], "inst-7");
+        assert_eq!(body["method"], "send");
+        assert_eq!(body["params"]["parts"][0]["text"], "go on");
+        assert!(body["id"].as_str().is_some_and(|id| id.contains(':')));
 
-        let (port, server) =
-            serve("HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n{\"version\":1,\"id\":\"x\",\"result\":{}}");
-        paired(port).send_order("s-1", "go on").expect("send");
-        let got = server.join().expect("server");
-        assert!(got.contains("\"text\":\"go on\""), "{got}");
+        let (port, server) = serve(
+            "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n{\"error\":{\"code\":\"SESSION_UNAVAILABLE\",\"message\":\"/home/x\"}}",
+        );
+        let err = paired(port)
+            .send_order("someone-elses", "hi")
+            .expect_err("not ours");
+        assert_eq!(err, "no_such_task: Cindy answered SESSION_UNAVAILABLE");
+        let _ = server.join();
 
         let (port, server) = serve("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n{}");
-        let err = paired(port).status().expect_err("refused");
+        let err = paired(port)
+            .send_order("notes-1", "hi")
+            .expect_err("refused");
         assert!(err.starts_with("not_paired"), "{err}");
         let _ = server.join();
     }

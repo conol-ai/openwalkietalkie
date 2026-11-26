@@ -242,17 +242,35 @@ It also listed whatever project deckd happened to run in.
 
 ### cindy (branch `feat/orchestrator-cindy`)
 
-- Local Agent API v1 on `127.0.0.1` only: discovery at
-  `<profile>/local-agent/discovery.json` (`{protocol, port, instance}`), then
-  `POST /rpc` with `{"version":1,"instance":…,"id":"…","method":…,"params":{…}}`.
-  It is **not** JSON-RPC and it rejects any request carrying an `Origin` header.
-- A worker is a full session; `orca_workers`/`session.parent_session_id` shape
-  the tree. Its native permission prompts are not forwarded by the API, so a
-  worker needing approval surfaces as `RESUME_UNAVAILABLE`-class failures, not as
-  a question: map those to `Blocked(Failed)` and keep the raw reason.
-- Send: `send` with the session id; the client token comes from `connect/start`
-  + user approval in Cindy's UI, so the adapter must fail with "not paired"
-  instead of trying to pair.
+**Not implementable as a fleet source.** Doc-derived from
+[`docs/local-agent-api.md`](https://github.com/makecindy/cindy/blob/main/docs/local-agent-api.md)
+(`makecindy/cindy` at `9f570bf508fe`), read in full 2026-11-26.
+
+- The Local Agent API v1 has **no list method**: its methods are
+  `capabilities`, `connect/*`, `models`, `session/open`, `send`, `steer`,
+  `interrupt`, `instructions`, `events`, `tool/reply`, `session/close`. A
+  `sessionId` is chosen by the client, and the API "不暴露跨应用列举接口" (exposes no
+  cross-application listing). So Cindy cannot report on sessions deckd did not
+  open. `status` always fails with `no_fleet_api: Cindy's Local Agent API v1
+  has no list method; it cannot report on sessions deckd did not open`, without
+  touching the network. No cards, no fixture.
+- Kept and corrected, so a later list path does not start from a landmine:
+  discovery `<profile>/local-agent/discovery.json` (`{protocol, port,
+  instance}`); `POST /rpc` with `{"version":1,"instance",…,"id","method",
+  "params"}`, not JSON-RPC, no `Origin`; `Authorization: Bearer <token>` from
+  `connect/start` + approval in Cindy (never paired by deckd); request ids
+  `<process-nonce>:<counter>` (nonce 8–64 of `[A-Za-z0-9_-]`); `send` with
+  `{sessionId, parts:[{type:"text",text}]}`, which only reaches sessions this
+  grant opened (`SESSION_UNAVAILABLE` otherwise).
+- Native approvals are not forwarded ("原生提问/计划批准会产生明确失败"): they end a
+  turn as `turn_end {status:"failed"}` on `events`. `RESUME_UNAVAILABLE` is a
+  resume error, not an approval.
+
+**The first version was wrong in five places:** an invented `session/list`
+method; invented session fields (`orca_workers`, `parent_session_id`, `agent`,
+`state`, `title`); a `send` body of `{session_id, text}`; request ids
+(`deckd-send-1`) Cindy rejects for any call with side effects; and
+`RESUME_UNAVAILABLE` read as a stand-in for an approval.
 
 ## Definition of done (every branch)
 
@@ -291,7 +309,7 @@ conflict. Three things had to be settled centrally, in `mod.rs` and `cli.rs`:
 | --- | --- | --- |
 | t3 | "Done" means **nothing still open**: `completed` with `pendingBackgroundTasks` or `blockedOnThreadWait` is `Working`. | source-derived; unverified on a live server |
 | t3 | No approval card: needs `thread show --json` (`pendingRequestCount`) per thread. | open: a cost decision |
-| cindy | The card cannot answer Cindy's native permission prompts (the API does not forward them): they are `Blocked(Failed)` with the raw reason word, never a fake question. | by design |
+| cindy | No list method in the Local Agent API v1: `status` is always `no_fleet_api`. | by design until Cindy ships a list method |
 | cindy | `Config` has no `[orchestrators.cindy]`, so the token and discovery file come from `DECKD_CINDY_TOKEN`, `DECKD_CINDY_DISCOVERY`, `DECKD_CINDY_PROFILE`. | works, names are ours |
 | multica | Exit codes 2/3/4/5 are mapped to `network`/`auth`/`not_found`/`validation` by reading them back out of `run()`'s error text. | works, `run()` returning a structured code would be cleaner |
 | multica | The `blocked` status is `Idle`, not `Blocked(Failed)`: the doc names it but never says it means failed, and the list has no labels or runs to say more. | open: needs a product decision or a real capture |
@@ -299,19 +317,31 @@ conflict. Three things had to be settled centrally, in `mod.rs` and `cli.rs`:
 
 ### State of verification
 
-| Adapter | Tests | Verified against a real install |
+| Adapter | Tests | Status |
 | --- | --- | --- |
-| herdr | 10 + captured fixture | **yes, herdr 0.9.5**: argv, envelope, fields and statuses against a live isolated server; `agent prompt` syntax from `--help` only (nothing sent) |
-| orca | 8, doc/source-derived fixture | no — rewritten from orca.dev + CLI source 2026-11-26; needs the desktop runtime to verify |
-| multica | 10, doc-derived fixture | no — rewritten from `CLI_AND_DAEMON.md` 2026-11-26; needs a logged-in account to verify |
-| t3 | 13 | no |
-| cindy | 17, incl. one round trip against a local fake server | no |
+| herdr | 10 + captured fixture | **Verified against a binary** (herdr 0.9.5): argv, envelope, fields and statuses against a live isolated server; `agent prompt` syntax from `--help` only (nothing sent). |
+| multica | 10, doc-derived fixture | **Doc-derived, unverified.** From `CLI_AND_DAEMON.md` (2026-11-26); verifying needs a logged-in account. |
+| orca | 8, doc/source-derived fixture | **Doc/source-derived, unverified.** From orca.dev and the CLI source (2026-11-26); verifying needs the desktop runtime or `orca serve` with orchestration on. |
+| t3 | 11, source-derived fixture | **Source-derived, unverified.** From `thread.ts` and the contracts (2026-11-26); verifying needs a running t3 server and `DECKD_T3_PROJECT`. |
+| cindy | 12, incl. a round trip against a local fake server | **Not implementable as a fleet source**: the Local Agent API v1 has no list method, so `status` is `no_fleet_api`. Transport and `send` are doc-correct but never driven by the deck. |
 
-Except herdr's, every fixture was written from the product's documented output
-shape, not captured from a live install — and herdr's first fixture, written the
-same way, was wrong in five places (see the herdr section). Treat the other four
-as unverified until each gets the same audit. What is verified is the code path: argv shape,
-JSON parsing, card mapping, redaction, and — for all five — that
-`deckd orchestrators <name> status --from-file` prints a plan on a machine where
-the product is not installed (`1152` lib tests, `deckd orchestrators list` and
-five `status --from-file` runs, all green).
+Only herdr's fixture is a capture. The first versions of all five were written
+from prose and checked by fixtures written to match the code; each was wrong in
+five or more places (see each adapter's section). What the tests prove for the
+other three is the code path against each product's own spec or source: argv,
+envelope, field names, status words, redaction, and that `deckd orchestrators
+<name> status --from-file` prints a deck from the fixture.
+
+### Deliberate `Idle` mappings (a visibility choice, not a bug)
+
+`Idle` means "not on the deck". Two statuses a person may care about are mapped
+there on purpose, because neither product says the deck could act on them:
+
+- **multica `blocked`.** The doc names it as a built-in status but never says
+  it means failed, and `--blocked` describes "issues waiting for unfinished
+  manual blockers or earlier stages".
+- **orca `blocked`.** A decision gate (answered with `gate-resolve --id
+  <gateId>`, an id `task-list` does not carry) or a manual mark.
+
+Showing them would need a new card kind ("blocked, nothing to answer here"),
+not a different mapping.
