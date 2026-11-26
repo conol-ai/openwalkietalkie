@@ -31,6 +31,7 @@ pub mod integrations;
 pub mod kokoro;
 pub mod launchd;
 pub mod liveness;
+pub mod orchestrators;
 pub mod metrics;
 pub mod reader;
 pub mod secrets;

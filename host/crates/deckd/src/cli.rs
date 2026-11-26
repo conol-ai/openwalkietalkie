@@ -381,6 +381,15 @@ pub enum Cmd {
         #[command(subcommand)]
         cmd: crate::verbs::grokbot::GrokbotCmd,
     },
+    /// Fleet tools on the deck (`docs/orchestrator-adapters.md`): `list`,
+    /// `<name> status [--json] [--from-file <path>]` (no daemon needed),
+    /// and `sync [--once]` / `<name> sync [--once]`, which puts the fleets'
+    /// blocked, finished and working tasks on the deck and carries orders
+    /// back.
+    Orchestrators {
+        #[command(subcommand)]
+        cmd: OrchestratorsCmd,
+    },
     /// The deck's firmware: what the service knows, a check for a release,
     /// and an install by cable.
     Firmware {
@@ -1019,6 +1028,7 @@ fn run(cli: Cli) -> Result<i32, String> {
         },
         Cmd::Care { cmd } => verb(&paths, cmd, crate::verbs::care::run),
         Cmd::Grokbot { cmd } => verb(&paths, cmd, crate::verbs::grokbot::run),
+        Cmd::Orchestrators { cmd } => orchestrators(&paths, cmd),
         Cmd::Firmware { cmd } => verb(&paths, cmd, crate::verbs::firmware::run),
         Cmd::Config { cmd } => verb(&paths, cmd, crate::verbs::config::run),
         Cmd::Providers { cmd } => {
@@ -1134,6 +1144,546 @@ fn verb<C>(paths: &Paths, cmd: C, run: crate::verbs::Run<C>) -> Result<i32, Stri
         &mut out,
         &mut err,
     )
+}
+
+// ---------------------------------------------------------------------------
+// `deckd orchestrators` (docs/orchestrator-adapters.md)
+// ---------------------------------------------------------------------------
+
+/// The client name `orchestrators sync` announces.
+pub const ORCHESTRATORS_CLIENT: &str = "deckd-orchestrators";
+/// How often `orchestrators sync` reads the fleets and the deck's orders.
+const ORCHESTRATORS_POLL: Duration = Duration::from_secs(3);
+
+#[derive(Subcommand, Debug)]
+pub enum OrchestratorsCmd {
+    /// Every adapter, and whether this build has it or it is a stub.
+    List,
+    /// Put every available fleet on the deck and carry orders back, until
+    /// stopped (`--once`: one pass).
+    Sync {
+        #[arg(long)]
+        once: bool,
+    },
+    /// `<name> status [--json] [--from-file <path>]` or `<name> sync [--once]`.
+    #[command(external_subcommand)]
+    Named(Vec<String>),
+}
+
+/// `deckd orchestrators <name> …`.
+#[derive(Parser, Debug)]
+#[command(name = "deckd orchestrators")]
+struct NamedOrchestrator {
+    /// The adapter (`deckd orchestrators list`).
+    name: String,
+    #[command(subcommand)]
+    verb: NamedVerb,
+}
+
+#[derive(Subcommand, Debug)]
+enum NamedVerb {
+    /// The fleet now, and what the deck would show. Needs no daemon.
+    Status {
+        #[arg(long)]
+        json: bool,
+        /// Read the CLI's `--json` output from this file instead of running it.
+        #[arg(long)]
+        from_file: Option<PathBuf>,
+    },
+    /// This fleet alone on the deck.
+    Sync {
+        #[arg(long)]
+        once: bool,
+    },
+}
+
+fn orchestrators(paths: &Paths, cmd: OrchestratorsCmd) -> Result<i32, String> {
+    use crate::orchestrators as orch;
+    let config = Config::load(&paths.config).unwrap_or_default();
+    // Each fleet's share of the deck counts every adapter that could be on it.
+    let budget = orch::budget(orch::all(&config).len());
+    match cmd {
+        OrchestratorsCmd::List => {
+            for (name, branch, new) in orch::MODULES {
+                match new(&config) {
+                    Some(o) => println!("{name:<8} {}", o.label()),
+                    None => println!("{name:<8} not yet ({branch})"),
+                }
+            }
+            Ok(0)
+        }
+        OrchestratorsCmd::Sync { once } => {
+            orchestrators_sync(paths, orch::all(&config), budget, once)
+        }
+        OrchestratorsCmd::Named(args) => {
+            let named = match NamedOrchestrator::try_parse_from(
+                std::iter::once("deckd orchestrators".to_string()).chain(args),
+            ) {
+                Ok(named) => named,
+                Err(e) => {
+                    let _ = e.print();
+                    return Ok(if e.use_stderr() { 2 } else { 0 });
+                }
+            };
+            let Some(adapter) = orch::by_name(&config, &named.name) else {
+                return Err(format!(
+                    "no orchestrator {:?} in this build (deckd orchestrators list)",
+                    named.name
+                ));
+            };
+            match named.verb {
+                NamedVerb::Status { json, from_file } => {
+                    let tasks = match from_file {
+                        Some(path) => {
+                            let raw = std::fs::read_to_string(&path)
+                                .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+                            adapter.parse(&raw)
+                        }
+                        None => adapter.status(),
+                    }
+                    .map_err(|e| format!("{}: {e}", adapter.name()))?;
+                    if json {
+                        let value = orch::status_json(adapter.as_ref(), &tasks, budget);
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?
+                        );
+                    } else {
+                        for entry in orch::plan(adapter.as_ref(), &tasks, budget) {
+                            println!(
+                                "{:<9} {:<32} {}",
+                                format!("{:?}", entry.state).to_lowercase(),
+                                entry.name,
+                                entry.title
+                            );
+                        }
+                        let idle = tasks
+                            .iter()
+                            .filter(|t| t.state == orch::TaskState::Idle)
+                            .count();
+                        println!("{} tasks, {idle} idle", tasks.len());
+                    }
+                    Ok(0)
+                }
+                NamedVerb::Sync { once } => orchestrators_sync(paths, vec![adapter], budget, once),
+            }
+        }
+    }
+}
+
+/// `orchestrators sync`: every task the plan shows is a poll agent of this
+/// session (§4.15), as `crate::grokbot`'s bots are of its own; its orders
+/// and answers come back through `agent.wait` and go to the adapter's
+/// `send_order`, and each order's outcome is reported with
+/// `agent.order.result`.
+fn orchestrators_sync(
+    paths: &Paths,
+    adapters: Vec<Box<dyn crate::orchestrators::Orchestrator>>,
+    budget: usize,
+    once: bool,
+) -> Result<i32, String> {
+    if adapters.is_empty() {
+        return Err("no orchestrator is available (deckd orchestrators list)".into());
+    }
+    let rt = runtime().map_err(|f| format!("{f:?}"))?;
+    rt.block_on(async {
+        // The UDS door grants nothing by default: `agent` must be asked for.
+        let scopes = parse_scopes(&["agent".to_string()])?;
+        let config = ctl_config(&paths.socket, ORCHESTRATORS_CLIENT, scopes);
+        let client = match Client::connect(config).await {
+            Ok(client) => client,
+            Err(e) => return Ok(ctl_failure(CtlFailure::of(e, &paths.socket))),
+        };
+        let names: Vec<&str> = adapters.iter().map(|a| a.name()).collect();
+        eprintln!(
+            "orchestrators: {} on the deck, {budget} places each",
+            names.join(", ")
+        );
+        let mut sync = FleetSync {
+            client,
+            live: std::collections::BTreeMap::new(),
+        };
+        let outcome = async {
+            loop {
+                for adapter in &adapters {
+                    sync.fleet(adapter.as_ref(), budget).await?;
+                }
+                for adapter in &adapters {
+                    sync.orders(adapter.as_ref()).await?;
+                }
+                if once {
+                    return Ok::<(), ClientError>(());
+                }
+                tokio::time::sleep(ORCHESTRATORS_POLL).await;
+            }
+        }
+        .await;
+        sync.client.close().await;
+        Ok(match outcome {
+            Ok(()) => 0,
+            Err(e) => ctl_failure(CtlFailure::of(e, &paths.socket)),
+        })
+    })
+}
+
+/// A summary's tasks as one sentence short enough to be read out.
+fn spoken_list(list: &[String]) -> String {
+    const SPOKEN: usize = 5;
+    let mut text = list
+        .iter()
+        .take(SPOKEN)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(", ");
+    if list.len() > SPOKEN {
+        text.push_str(&format!(", and {} more", list.len() - SPOKEN));
+    }
+    text
+}
+
+/// One agent `orchestrators sync` keeps on the deck.
+struct LiveEntry {
+    orchestrator: &'static str,
+    agent: deck_model::AgentId,
+    /// What was last applied; `None` right after the register.
+    shown: Option<crate::orchestrators::Entry>,
+    card: Option<deck_model::CardId>,
+}
+
+struct FleetSync {
+    client: Client,
+    /// By agent key (`orch:<name>:<task>`).
+    live: std::collections::BTreeMap<String, LiveEntry>,
+}
+
+impl FleetSync {
+    /// One request, its refusal as it came.
+    async fn send(&self, req: deck_model::Request) -> Result<serde_json::Value, ClientError> {
+        let value = serde_json::to_value(&req).map_err(|e| ClientError::Protocol(e.to_string()))?;
+        let method = value["method"].as_str().unwrap_or_default();
+        self.client.call(method, value["params"].clone()).await
+    }
+
+    /// One request. `Ok(None)` is a refusal, said on stderr and survived;
+    /// `Err` is a connection that is gone.
+    async fn call(
+        &self,
+        req: deck_model::Request,
+    ) -> Result<Option<serde_json::Value>, ClientError> {
+        let method = serde_json::to_value(&req)
+            .ok()
+            .and_then(|v| v["method"].as_str().map(str::to_string))
+            .unwrap_or_default();
+        self.answer(&method, self.send(req).await)
+    }
+
+    fn answer(
+        &self,
+        method: &str,
+        result: Result<serde_json::Value, ClientError>,
+    ) -> Result<Option<serde_json::Value>, ClientError> {
+        match result {
+            Ok(value) => Ok(Some(value)),
+            Err(ClientError::Rpc {
+                code,
+                message,
+                data,
+            }) => {
+                let data = data.unwrap_or_default();
+                eprintln!("orchestrators: {method} refused: {code} {message} {data}");
+                Ok(None)
+            }
+            Err(ClientError::Refused(e)) => {
+                eprintln!(
+                    "orchestrators: {method} refused: {} {} {}",
+                    e.code, e.message, e.data
+                );
+                Ok(None)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Make the deck match `adapter`'s fleet now.
+    async fn fleet(
+        &mut self,
+        adapter: &dyn crate::orchestrators::Orchestrator,
+        budget: usize,
+    ) -> Result<(), ClientError> {
+        use crate::orchestrators::{agent_key, plan};
+        let tasks = match adapter.status() {
+            Ok(tasks) => tasks,
+            Err(why) => {
+                // The deck keeps what it had: one failed read is not an empty fleet.
+                eprintln!("orchestrators: {}: {why}", adapter.name());
+                return Ok(());
+            }
+        };
+        let entries = plan(adapter, &tasks, budget);
+        let keys: Vec<String> = entries
+            .iter()
+            .map(|e| agent_key(adapter.name(), &e.key))
+            .collect();
+        for (key, entry) in keys.iter().zip(entries) {
+            self.apply(adapter.name(), key, entry).await?;
+        }
+        let gone: Vec<String> = self
+            .live
+            .iter()
+            .filter(|(key, live)| live.orchestrator == adapter.name() && !keys.contains(key))
+            .map(|(key, _)| key.clone())
+            .collect();
+        for key in gone {
+            if let Some(live) = self.live.remove(&key) {
+                self.call(deck_model::Request::AgentRelease {
+                    agent: live.agent,
+                    reason: Some("released".into()),
+                })
+                .await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Register `entry` if it is new, then send only what changed.
+    async fn apply(
+        &mut self,
+        orchestrator: &'static str,
+        key: &str,
+        entry: crate::orchestrators::Entry,
+    ) -> Result<(), ClientError> {
+        use crate::orchestrators::Card;
+        use deck_model::{
+            AgentRegister, AgentUpdate, AnswerCap, Caps, CardClear, CardId, CardKind, CardSet,
+            Choice, Deliver, Kind, OrderCap, Origin, Request, TitleSource,
+        };
+        if !self.live.contains_key(key) {
+            let register = AgentRegister {
+                kind: Kind::Other,
+                name: entry.name.clone(),
+                key: Some(key.to_string()),
+                cwd: None,
+                pid: None,
+                pid_kind: None,
+                terminal: None,
+                lease_ttl_s: 30,
+                caps: Caps {
+                    answer: AnswerCap::Poll,
+                    order: OrderCap::Poll,
+                    focus: false,
+                    transcribe: Default::default(),
+                },
+                slot_hint: None,
+                voice: None,
+                meta: Some(
+                    serde_json::json!({"via": "orchestrators", "orchestrator": orchestrator}),
+                ),
+            };
+            let result = match self.send(Request::AgentRegister(register)).await {
+                Ok(result) => result,
+                // The key is still held by an earlier sync (a `--once`, or one
+                // that stopped). Once its lease runs out the agent is an orphan
+                // that `agent.claim` takes over; until then, the next pass.
+                Err(ClientError::Rpc {
+                    code: ApiError::CONFLICT,
+                    ..
+                }) => match self
+                    .send(Request::AgentClaim {
+                        key: key.to_string(),
+                    })
+                    .await
+                {
+                    Ok(result) => result,
+                    Err(ClientError::Rpc { .. }) => return Ok(()),
+                    Err(e) => return Err(e),
+                },
+                Err(e) => match self.answer("agent.register", Err(e))? {
+                    Some(result) => result,
+                    None => return Ok(()),
+                },
+            };
+            let Some(agent) = result["agent"].as_str() else {
+                return Ok(());
+            };
+            let agent = deck_model::AgentId(agent.to_string());
+            self.live.insert(
+                key.to_string(),
+                LiveEntry {
+                    orchestrator,
+                    agent,
+                    shown: None,
+                    card: None,
+                },
+            );
+        }
+        let Some(live) = self.live.get(key) else {
+            return Ok(());
+        };
+        let agent = live.agent.clone();
+        let shown = live.shown.clone();
+        let old_card = live.card;
+        if shown.as_ref().map(|s| (&s.state, &s.title, &s.name))
+            != Some((&entry.state, &entry.title, &entry.name))
+        {
+            self.call(Request::AgentUpdate(AgentUpdate {
+                agent: agent.clone(),
+                state: Some(entry.state),
+                title: Some(entry.title.clone()),
+                title_source: Some(TitleSource::Api),
+                since: None,
+                name: Some(entry.name.clone()),
+                meta: None,
+                task: None,
+                subagents: None,
+            }))
+            .await?;
+        }
+        let mut card = old_card;
+        if shown.as_ref().map(|s| &s.card) != Some(&entry.card) {
+            if let Some(id) = card.take() {
+                self.call(Request::CardClear(CardClear {
+                    agent: agent.clone(),
+                    card: id,
+                    delivered: false,
+                    reason: Some("resolved".into()),
+                }))
+                .await?;
+            }
+            let set = match &entry.card {
+                Some(Card::Q { text, choices }) => Some((CardKind::Q, text, choices.clone())),
+                Some(Card::R { text }) => Some((CardKind::R, text, Vec::new())),
+                None => None,
+            };
+            if let Some((kind, text, choices)) = set {
+                let result = self
+                    .call(Request::CardSet(CardSet {
+                        agent: agent.clone(),
+                        id: None,
+                        kind,
+                        text: text.clone(),
+                        choices: choices
+                            .into_iter()
+                            .map(|label| Choice {
+                                label,
+                                detail: None,
+                            })
+                            .collect(),
+                        rec: None,
+                        free_text: true,
+                        deliver: Deliver::Poll,
+                        timeout_s: None,
+                        origin: Origin::custom(),
+                    }))
+                    .await?;
+                card = result
+                    .and_then(|r| r["card"]["id"].as_u64())
+                    .and_then(|id| u16::try_from(id).ok())
+                    .map(CardId);
+            }
+        }
+        if let Some(live) = self.live.get_mut(key) {
+            live.shown = Some(entry);
+            live.card = card;
+        }
+        Ok(())
+    }
+
+    /// Everything the deck said to `adapter`'s agents since the last pass.
+    async fn orders(
+        &mut self,
+        adapter: &dyn crate::orchestrators::Orchestrator,
+    ) -> Result<(), ClientError> {
+        use crate::orchestrators::{reason_word, SUMMARY_KEY};
+        use deck_model::{OrderOutcome, ReplySet, Request};
+        let mine: Vec<(String, deck_model::AgentId)> = self
+            .live
+            .iter()
+            .filter(|(_, live)| live.orchestrator == adapter.name())
+            .map(|(key, live)| (key.clone(), live.agent.clone()))
+            .collect();
+        for (key, agent) in mine {
+            let task = key
+                .strip_prefix(&crate::orchestrators::agent_key(adapter.name(), ""))
+                .unwrap_or_default()
+                .to_string();
+            loop {
+                let params = serde_json::json!({"agent": agent.0, "timeout_s": 0});
+                let waited = self.client.call("agent.wait", params).await;
+                let Some(mail) = self.answer("agent.wait", waited)? else {
+                    // The agent is gone from the store: registered again next pass.
+                    self.live.remove(&key);
+                    break;
+                };
+                let kind = mail["kind"].as_str().unwrap_or_default();
+                if kind != "order" && kind != "answer" {
+                    break;
+                }
+                // A typed or dictated text, else the label of the choice pressed.
+                let text = mail["text"]
+                    .as_str()
+                    .or_else(|| mail["label"].as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                if kind == "answer" {
+                    // The card is used up; the plan's next change brings a new one.
+                    if let Some(live) = self.live.get_mut(&key) {
+                        live.card = None;
+                    }
+                }
+                let sent = if task == SUMMARY_KEY {
+                    let list = self
+                        .live
+                        .get(&key)
+                        .and_then(|l| l.shown.as_ref())
+                        .map(|e| spoken_list(&e.list))
+                        .unwrap_or_default();
+                    self.call(Request::Reply(ReplySet {
+                        agent: agent.clone(),
+                        text: format!("Waiting: {list}"),
+                        message: None,
+                        speak: true,
+                        announce: None,
+                        lane: None,
+                    }))
+                    .await?;
+                    Err("summary_card: say it to one task".to_string())
+                } else {
+                    adapter.send_order(&task, &text)
+                };
+                if let Err(why) = &sent {
+                    eprintln!(
+                        "orchestrators: {}: an order to {task} failed: {why}",
+                        adapter.name()
+                    );
+                }
+                match mail["order"].as_str() {
+                    Some(order) => {
+                        self.call(Request::OrderOutcome(OrderOutcome {
+                            agent: agent.clone(),
+                            order: order.to_string(),
+                            ok: sent.is_ok(),
+                            reason: sent.err().map(|why| reason_word(&why)),
+                        }))
+                        .await?;
+                    }
+                    // An answer has no order to report on: say it on the deck.
+                    None if sent.is_err() && task != SUMMARY_KEY => {
+                        self.call(Request::Reply(ReplySet {
+                            agent: agent.clone(),
+                            text: "Not delivered".into(),
+                            message: None,
+                            speak: true,
+                            announce: None,
+                            lane: None,
+                        }))
+                        .await?;
+                    }
+                    None => {}
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 /// "What this removes", before anything is removed — the same sentence the

@@ -1,0 +1,34 @@
+{
+  "panes": [
+    {
+      "agent": "api-refactor",
+      "state": "working",
+      "workspace": "owt",
+      "title": "cargo test -p deckd --features ble"
+    },
+    {
+      "agent": "docs",
+      "state": "blocked",
+      "workspace": "owt",
+      "title": "Allow: rm -rf /tmp/owt-build?"
+    },
+    {
+      "agent": "release-notes",
+      "state": "done",
+      "workspace": "site",
+      "title": "~/src/site/CHANGELOG.md"
+    },
+    {
+      "agent": "scratch",
+      "state": "idle",
+      "workspace": "/home/someone/scratch",
+      "title": ""
+    },
+    {
+      "agent": "reviewer",
+      "state": "unknown",
+      "workspace": "owt",
+      "title": "export OPENAI_API_KEY=sk-live-0123456789abcdef"
+    }
+  ]
+}
