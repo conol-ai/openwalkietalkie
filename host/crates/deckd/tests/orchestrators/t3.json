@@ -1,0 +1,55 @@
+{
+  "threads": [
+    {
+      "id": "thr_review",
+      "title": "Review PR 41",
+      "status": "completed",
+      "hasPendingChildRuns": true,
+      "children": []
+    },
+    {
+      "id": "thr_migrate",
+      "title": "Migrate the deck schema",
+      "status": "completed",
+      "hasPendingChildRuns": false,
+      "children": [
+        { "id": "thr_migrate_a", "title": "npm test --shard 1", "status": "completed" },
+        { "id": "thr_migrate_b", "title": "npm test --shard 2", "status": "running" }
+      ]
+    },
+    {
+      "id": "thr_docs",
+      "title": "Docs pass",
+      "status": "running",
+      "hasPendingChildRuns": false,
+      "children": [],
+      "pendingApproval": {
+        "kind": "command",
+        "command": "rm -rf /tmp/owt-build"
+      }
+    },
+    {
+      "id": "thr_release",
+      "title": "Release notes ~/src/site/CHANGELOG.md",
+      "status": "completed",
+      "hasPendingChildRuns": false,
+      "children": [
+        { "id": "thr_release_a", "title": "cargo build --release", "status": "completed" }
+      ]
+    },
+    {
+      "id": "thr_build",
+      "title": "cargo build -p deckd --features ble",
+      "status": "failed",
+      "hasPendingChildRuns": false,
+      "children": []
+    },
+    {
+      "id": "thr_scratch",
+      "title": "export OPENAI_API_KEY=sk-live-0123456789abcdef",
+      "status": "idle",
+      "hasPendingChildRuns": false,
+      "children": []
+    }
+  ]
+}
